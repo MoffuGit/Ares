@@ -6,13 +6,8 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		F486162B2E9B5DCD001C9066 /* AresKit 2.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = F486162A2E9B5DCD001C9066 /* AresKit 2.xcframework */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXFileReference section */
 		F48616162E99DB58001C9066 /* ares.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ares.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		F486162A2E9B5DCD001C9066 /* AresKit 2.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = "AresKit 2.xcframework"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -28,7 +23,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F486162B2E9B5DCD001C9066 /* AresKit 2.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -40,7 +34,6 @@
 			children = (
 				F48616182E99DB58001C9066 /* ares */,
 				F48616172E99DB58001C9066 /* Products */,
-				F486162A2E9B5DCD001C9066 /* AresKit 2.xcframework */,
 			);
 			sourceTree = "<group>";
 		};
