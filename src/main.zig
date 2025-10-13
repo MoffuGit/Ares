@@ -3,7 +3,7 @@ const std = @import("std");
 var counter: i32 = 0;
 
 export fn zig_increment_counter() void {
-    counter += 1;
+    counter += 2;
     std.debug.print("Zig: Counter incremented to {}\n", .{counter});
 }
 

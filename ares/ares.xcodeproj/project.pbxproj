@@ -6,8 +6,26 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F486163D2E9CBA1C001C9066 /* AresKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = F486163C2E9CBA1C001C9066 /* AresKit.xcframework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		F486163B2E9CB99C001C9066 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		F48616162E99DB58001C9066 /* ares.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ares.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F486163C2E9CBA1C001C9066 /* AresKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = AresKit.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -23,6 +41,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F486163D2E9CBA1C001C9066 /* AresKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -33,6 +52,7 @@
 			isa = PBXGroup;
 			children = (
 				F48616182E99DB58001C9066 /* ares */,
+				F48616372E9CB99C001C9066 /* Frameworks */,
 				F48616172E99DB58001C9066 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -45,6 +65,14 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		F48616372E9CB99C001C9066 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F486163C2E9CBA1C001C9066 /* AresKit.xcframework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -55,6 +83,7 @@
 				F48616122E99DB58001C9066 /* Sources */,
 				F48616132E99DB58001C9066 /* Frameworks */,
 				F48616142E99DB58001C9066 /* Resources */,
+				F486163B2E9CB99C001C9066 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
