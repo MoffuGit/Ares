@@ -1,5 +1,5 @@
 const std = @import("std");
-const XCFrameworkStep = @import("CXFramerworkStep.zig");
+const XCFrameworkStep = @import("src/build/CXFramerworkStep.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
