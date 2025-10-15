@@ -5,11 +5,19 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const exe = b.addExecutable(.{ .name = "ares", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    b.installArtifact(exe);
+    b.default_step.dependOn(&exe.step);
+
     const lib = b.addLibrary(.{
         .name = "Ares",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("src/main_c.zig"),
             .target = target,
             .optimize = optimize,
         }),
