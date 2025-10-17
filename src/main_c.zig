@@ -1,4 +1,5 @@
 const std = @import("std");
+const state = &@import("global.zig").state;
 
 var counter: i32 = 0;
 
@@ -56,4 +57,14 @@ export fn zig_process_file_path(path_c_str: [*c]const u8) void {
     }
 
     std.debug.print("Zig: File content from '{s}':\n```\n{s}\n```\n", .{ path_slice, content.items });
+}
+
+pub export fn ares_init(argc: usize, argv: [*][*:0]u8) c_int {
+    std.os.argv = argv[0..argc];
+    state.init() catch |err| {
+        std.log.err("failed to initialize ghostty error={}", .{err});
+        return 1;
+    };
+
+    return 0;
 }

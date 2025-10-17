@@ -1,11 +1,13 @@
-#ifndef ZIG_COUNTER_H
-#define ZIG_COUNTER_H
+#ifndef ARES_H
+#define ARES_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include <stdint.h>
+
+int ares_init(uintptr_t, char**);
 
 void zig_increment_counter(void);
 void zig_decrement_counter(void);
@@ -19,4 +21,4 @@ void zig_process_file_path(const char* path);
 }
 #endif
 
-#endif // ZIG_COUNTER_H
+#endif // ARES_H
