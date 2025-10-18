@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		F48616312E9B6895001C9066 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F486162E2E9B6895001C9066 /* ContentView.swift */; };
 		F486163D2E9CBA1C001C9066 /* AresKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = F486163C2E9CBA1C001C9066 /* AresKit.xcframework */; };
 /* End PBXBuildFile section */
 
@@ -26,7 +25,6 @@
 
 /* Begin PBXFileReference section */
 		F48616162E99DB58001C9066 /* ares.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ares.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		F486162E2E9B6895001C9066 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		F486163C2E9CBA1C001C9066 /* AresKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = AresKit.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -53,7 +51,6 @@
 		F486160D2E99DB58001C9066 = {
 			isa = PBXGroup;
 			children = (
-				F486162E2E9B6895001C9066 /* ContentView.swift */,
 				F48616592EA2140F001C9066 /* Sources */,
 				F48616372E9CB99C001C9066 /* Frameworks */,
 				F48616172E99DB58001C9066 /* Products */,
@@ -151,7 +148,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F48616312E9B6895001C9066 /* ContentView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -288,7 +284,9 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "ares-Info.plist";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainNibFile = MainMenu;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -318,7 +316,9 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "ares-Info.plist";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainNibFile = MainMenu;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

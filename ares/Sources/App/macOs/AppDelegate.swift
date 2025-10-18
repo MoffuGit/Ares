@@ -7,20 +7,13 @@ import OSLog
 
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    var window: NSWindow!
+    static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier!,
+        category: String(describing: AppDelegate.self)
+    )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let contentView = ContentView()
-
-        window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered, defer: false)
-        window.center()
-        window.setFrameAutosaveName("Main Window")
-        // Corrected line: Access the .view property of the NSHostingController
-        window.contentView = NSHostingController(rootView: contentView).view
-        window.makeKeyAndOrderFront(nil)
+        Self.logger.info("this run (from OSLog)")
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
