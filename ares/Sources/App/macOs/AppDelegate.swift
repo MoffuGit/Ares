@@ -7,6 +7,8 @@ import OSLog
 
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    let ares = Ares.App()
+
     static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier!,
         category: String(describing: AppDelegate.self)

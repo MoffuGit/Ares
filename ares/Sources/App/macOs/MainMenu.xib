@@ -21,7 +21,7 @@
                 <rect key="frame" x="0.0" y="0.0" width="480" height="270"/>
                 <autoresizingMask key="autoresizingMask"/>
             </view>
-            <point key="canvasLocation" x="148" y="27"/>
+            <point key="canvasLocation" x="-125" y="3"/>
         </window>
         <customObject id="gWx-DD-ccp" customClass="AppDelegate" customModule="ares" customModuleProvider="target"/>
     </objects>
