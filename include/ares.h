@@ -7,15 +7,10 @@ extern "C" {
 
 #include <stdint.h>
 
+typedef void* ares_app_t;
+
+ares_app_t ares_app_new();
 int ares_init(uintptr_t, char**);
-
-void zig_increment_counter(void);
-void zig_decrement_counter(void);
-int32_t zig_get_counter(void);
-void zig_init_counter(void);
-void zig_deinit_counter(void);
-
-void zig_process_file_path(const char* path);
 
 #ifdef __cplusplus
 }

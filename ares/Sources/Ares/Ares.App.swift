@@ -1,25 +1,22 @@
 import SwiftUI
-internal import Combine
+import Combine
+import AresKit
+import os
 
 extension Ares {
     class App: ObservableObject {
-        @Published var isLoggedIn: Bool = false
-        @Published var username: String = ""
+        @Published var app: ares_app_t? = nil
 
         init() {
-            print("Ares.App initialized.")
+            guard let app = ares_app_new() else {
+                logger.critical("ares_app_new failed")
+                return
+            }
+            self.app = app
         }
 
-        func login(user: String) {
-            self.isLoggedIn = true
-            self.username = user
-            print("\(user) logged in.")
-        }
-
-        func logout() {
-            self.isLoggedIn = false
-            self.username = ""
-            print("Logged out.")
+        deinit {
+            self.app = nil
         }
     }
 }
