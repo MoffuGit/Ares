@@ -5,7 +5,13 @@ import os
 
 extension Ares {
     class App: ObservableObject {
-        @Published var app: ares_app_t? = nil
+        @Published var app: ares_app_t? = nil {
+            didSet {
+                guard let old = oldValue else { return }
+                ares_app_free(old)
+            }
+        }
+
 
         init() {
             guard let app = ares_app_new() else {

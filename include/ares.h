@@ -10,6 +10,7 @@ extern "C" {
 typedef void* ares_app_t;
 
 ares_app_t ares_app_new();
+void ares_app_free(ares_app_t);
 int ares_init(uintptr_t, char**);
 
 #ifdef __cplusplus

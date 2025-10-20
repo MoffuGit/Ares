@@ -13,6 +13,12 @@ pub const App = struct {
 pub const CAPI = struct {
     const global = &@import("../global.zig").state;
 
+    export fn ares_app_free(app: *App) void {
+        const core_app = app.core_app;
+        global.alloc.destroy(app);
+        core_app.destroy();
+    }
+
     export fn ares_app_new() ?*App {
         return app_new() catch {
             log.err("error initializing app", .{});
