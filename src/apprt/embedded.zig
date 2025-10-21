@@ -1,5 +1,6 @@
 const std = @import("std");
 const CoreApp = @import("../App.zig");
+const CoreSurface = @import("../Surface.zig");
 const log = std.log;
 
 pub const App = struct {
@@ -7,6 +8,41 @@ pub const App = struct {
 
     pub fn init(self: *App, core_app: *CoreApp) !void {
         self.* = .{ .core_app = core_app };
+    }
+
+    pub fn newSurface(self: *App) !*Surface {
+        var surface = try self.core_app.alloc.create(Surface);
+        errdefer self.core_app.alloc.destroy(surface);
+
+        try surface.init(self);
+        errdefer surface.deinit();
+
+        return surface;
+    }
+
+    pub fn closeSurface(self: *App, surface: *Surface) void {
+        surface.deinit();
+        self.core_app.alloc.destroy(surface);
+    }
+};
+
+pub const Surface = struct {
+    app: *App,
+    core_surface: CoreSurface,
+
+    pub fn init(self: *Surface, app: *App) !void {
+        self.* = .{ .app = app, .core_surface = undefined };
+
+        try app.core_app.addSurface(self);
+        errdefer app.core_app.deleteSurface(self);
+
+        try self.core_surface.init(app.core_app.alloc, app.core_app, app, self);
+        errdefer self.core_surface.deinit();
+    }
+
+    pub fn deinit(self: *Surface) void {
+        self.app.core_app.deleteSurface(self);
+        self.core_surface.deinit();
     }
 };
 
@@ -36,5 +72,20 @@ pub const CAPI = struct {
         errdefer app.terminate();
 
         return app;
+    }
+
+    export fn ares_surface_new(app: *App) ?*Surface {
+        return surface_new(app) catch {
+            log.err("error initializing surface", .{});
+            return null;
+        };
+    }
+
+    fn surface_new(app: *App) !*Surface {
+        return try app.newSurface();
+    }
+
+    export fn ares_surface_free(ptr: *Surface) void {
+        ptr.app.closeSurface(ptr);
     }
 };
