@@ -3,11 +3,11 @@ import SwiftUI
 import CoreText
 import UserNotifications
 import AresKit
-import AppKit
 
 extension Ares {
     /// The NSView implementation for a terminal surface.
     class SurfaceView: NSView, Identifiable {
+
         typealias ID = UUID
 
         /// Unique ID per surface
@@ -47,5 +47,10 @@ extension Ares {
 
         deinit {
         }
+
+        func sizeDidChange(_ newSize: CGSize) {
+            print("Ares.SurfaceView size changed to: \(newSize)")
+        }
+
     }
 }

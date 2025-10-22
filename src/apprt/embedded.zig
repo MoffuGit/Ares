@@ -71,6 +71,7 @@ pub const CAPI = struct {
         try app.init(core_app);
         errdefer app.terminate();
 
+        log.info("app initialized", .{});
         return app;
     }
 
@@ -82,6 +83,7 @@ pub const CAPI = struct {
     }
 
     fn surface_new(app: *App) !*Surface {
+        log.info("surface initialized", .{});
         return try app.newSurface();
     }
 
