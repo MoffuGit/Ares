@@ -14,6 +14,21 @@ app: *App,
 rt_app: *apprt.App,
 rt_surface: *apprt.Surface,
 
+render_thread: ?std.Thread,
+render_count: usize,
+running: bool,
+
+// New function for the rendering thread
+fn renderLoop(surface_ptr: *Surface) void {
+    var self = surface_ptr;
+    while (self.running) {
+        self.render_count += 1;
+        log.info("Render count: {d}", .{self.render_count});
+        std.Thread.sleep(std.time.ns_per_s);
+    }
+    log.info("Render thread stopped for surface addr={x}", .{@intFromPtr(self)});
+}
+
 pub fn init(
     self: *Surface,
     alloc: Allocator,
@@ -26,9 +41,21 @@ pub fn init(
         .app = app,
         .rt_app = rt_app,
         .rt_surface = rt_surface,
+        .render_thread = null,
+        .render_count = 0,
+        .running = true,
     };
+
+    self.render_thread = try std.Thread.spawn(.{}, renderLoop, .{self});
 }
 
 pub fn deinit(self: *Surface) void {
     log.info("surface closed addr={x}", .{@intFromPtr(self)});
+
+    self.running = false;
+
+    if (self.render_thread) |thread_id| {
+        thread_id.join();
+        log.info("Render thread joined for surface addr={x}", .{@intFromPtr(self)});
+    }
 }
