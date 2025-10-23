@@ -4,6 +4,7 @@ const std = @import("std");
 const App = @import("App.zig");
 const Allocator = std.mem.Allocator;
 const apprt = @import("./apprt/embedded.zig");
+const objc = @import("objc");
 
 const log = std.log.scoped(.surface);
 
@@ -18,7 +19,6 @@ render_thread: ?std.Thread,
 render_count: usize,
 running: bool,
 
-// New function for the rendering thread
 fn renderLoop(surface_ptr: *Surface) void {
     var self = surface_ptr;
     while (self.running) {

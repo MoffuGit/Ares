@@ -33,8 +33,12 @@ extension Ares {
             super.init(frame: NSMakeRect(0, 0, 800, 600))
 
             // Setup our surface. This will also initialize all the terminal IO.
+            var config = ares_surface_config_s()
+            config.platform.macos.nsview = Unmanaged.passUnretained(self).toOpaque()
 
-            let surface = ares_surface_new(app)
+            let surface = ares_surface_new(app, config)
+
+
             guard let surface = surface else {
                 return
             }

@@ -1,4 +1,5 @@
 const std = @import("std");
+const objc = @import("objc");
 const CoreApp = @import("../App.zig");
 const CoreSurface = @import("../Surface.zig");
 const log = std.log;
@@ -10,11 +11,11 @@ pub const App = struct {
         self.* = .{ .core_app = core_app };
     }
 
-    pub fn newSurface(self: *App) !*Surface {
+    pub fn newSurface(self: *App, opts: Surface.Options) !*Surface {
         var surface = try self.core_app.alloc.create(Surface);
         errdefer self.core_app.alloc.destroy(surface);
 
-        try surface.init(self);
+        try surface.init(self, opts);
         errdefer surface.deinit();
 
         return surface;
@@ -26,12 +27,32 @@ pub const App = struct {
     }
 };
 
+pub const Platform = struct {
+    macos: MacOs,
+
+    pub const MacOs = struct { nsview: objc.Object };
+
+    pub const C = extern struct {
+        macos: extern struct { nsview: ?*anyopaque },
+    };
+
+    pub fn init(c_platform: C) !Platform {
+        const nsview = objc.Object.fromId(c_platform.macos.nsview);
+        return .{ .macos = .{ .nsview = nsview } };
+    }
+};
+
 pub const Surface = struct {
     app: *App,
     core_surface: CoreSurface,
+    platform: Platform,
 
-    pub fn init(self: *Surface, app: *App) !void {
-        self.* = .{ .app = app, .core_surface = undefined };
+    pub const Options = extern struct {
+        platform: Platform.C = undefined,
+    };
+
+    pub fn init(self: *Surface, app: *App, opts: Options) !void {
+        self.* = .{ .app = app, .core_surface = undefined, .platform = try .init(opts.platform) };
 
         try app.core_app.addSurface(self);
         errdefer app.core_app.deleteSurface(self);
@@ -75,16 +96,16 @@ pub const CAPI = struct {
         return app;
     }
 
-    export fn ares_surface_new(app: *App) ?*Surface {
-        return surface_new(app) catch {
+    export fn ares_surface_new(app: *App, opts: Surface.Options) ?*Surface {
+        return surface_new(app, opts) catch {
             log.err("error initializing surface", .{});
             return null;
         };
     }
 
-    fn surface_new(app: *App) !*Surface {
+    fn surface_new(app: *App, opts: Surface.Options) !*Surface {
         log.info("surface initialized", .{});
-        return try app.newSurface();
+        return try app.newSurface(opts);
     }
 
     export fn ares_surface_free(ptr: *Surface) void {

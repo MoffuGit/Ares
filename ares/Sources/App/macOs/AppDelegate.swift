@@ -47,10 +47,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let surfaceView = Ares.SurfaceView(aresCValue)
         surfaceView.translatesAutoresizingMaskIntoConstraints = false
 
-        // Create a button
-        let button = NSButton(title: "Do Something", target: nil, action: nil)
-        button.translatesAutoresizingMaskIntoConstraints = false
-
         // Create a vertical stack view to arrange the surface view and the button
         let stackView = NSStackView()
         stackView.orientation = .vertical
@@ -60,7 +56,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
         stackView.addView(surfaceView, in: .center)
-        stackView.addView(button, in: .center)
 
         // Set the stack view as the window's content view
         newWindow.contentView = stackView

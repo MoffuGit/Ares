@@ -10,8 +10,20 @@ extern "C" {
 typedef void* ares_app_t;
 typedef void* ares_surface_t;
 
+typedef struct {
+  void* nsview;
+} ares_platform_macos_s;
+
+typedef struct {
+  ares_platform_macos_s macos;
+} ares_platform_u;
+
+typedef struct {
+  ares_platform_u platform;
+} ares_surface_config_s;
+
 ares_app_t ares_app_new();
-ares_surface_t ares_surface_new(ares_app_t);
+ares_surface_t ares_surface_new(ares_app_t, ares_surface_config_s);
 void ares_app_free(ares_app_t);
 
 void ares_surface_free(ares_surface_t);

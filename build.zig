@@ -23,6 +23,11 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    lib.root_module.addImport("objc", b.dependency("zig_objc", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("objc"));
+
     lib.bundle_compiler_rt = true;
     lib.linkLibC();
     b.default_step.dependOn(&lib.step);
