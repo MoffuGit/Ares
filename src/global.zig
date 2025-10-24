@@ -3,6 +3,8 @@ const builtin = @import("builtin");
 
 pub var state: GlobalState = undefined;
 
+pub const xev = @import("xev").Dynamic;
+
 pub const GlobalState = struct {
     const GPA = std.heap.GeneralPurposeAllocator(.{});
 

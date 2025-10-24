@@ -13,6 +13,10 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
     b.default_step.dependOn(&exe.step);
 
+    const xev = b.dependency("libxev", .{ .target = target, .optimize = optimize });
+
+    exe.root_module.addImport("xev", xev.module("xev"));
+
     const lib = b.addLibrary(.{
         .name = "Ares",
         .linkage = .static,
@@ -27,6 +31,13 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }).module("objc"));
+
+    lib.root_module.addImport("macos", b.dependency("macos", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("macos"));
+
+    lib.root_module.addImport("xev", xev.module("xev"));
 
     lib.bundle_compiler_rt = true;
     lib.linkLibC();

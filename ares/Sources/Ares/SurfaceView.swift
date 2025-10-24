@@ -1,8 +1,9 @@
 import AppKit
-import SwiftUI
-import CoreText
-import UserNotifications
 import AresKit
+import CoreText
+import SwiftUI
+import UserNotifications
+import os
 
 extension Ares {
     /// The NSView implementation for a terminal surface.
@@ -38,7 +39,6 @@ extension Ares {
 
             let surface = ares_surface_new(app, config)
 
-
             guard let surface = surface else {
                 return
             }
@@ -49,12 +49,13 @@ extension Ares {
             fatalError("init(coder:) is not supported for this view")
         }
 
-        deinit {
-        }
+        //NOTE:
+        //this depend on another classes
+        //one is a wrapper that uses a geosomething
+        //and anohter uses some protocols that i need to chekc
 
         func sizeDidChange(_ newSize: CGSize) {
-            print("Ares.SurfaceView size changed to: \(newSize)")
+            Ares.logger.info("Ares.SurfaceView size changed to:")
         }
-
     }
 }

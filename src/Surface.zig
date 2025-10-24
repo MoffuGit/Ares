@@ -3,6 +3,7 @@ const std = @import("std");
 
 const App = @import("App.zig");
 const Allocator = std.mem.Allocator;
+const Renderer = @import("renderer.zig").Renderer;
 const apprt = @import("./apprt/embedded.zig");
 const objc = @import("objc");
 
@@ -15,19 +16,7 @@ app: *App,
 rt_app: *apprt.App,
 rt_surface: *apprt.Surface,
 
-render_thread: ?std.Thread,
-render_count: usize,
-running: bool,
-
-fn renderLoop(surface_ptr: *Surface) void {
-    var self = surface_ptr;
-    while (self.running) {
-        self.render_count += 1;
-        log.info("Render count: {d}", .{self.render_count});
-        std.Thread.sleep(std.time.ns_per_s);
-    }
-    log.info("Render thread stopped for surface addr={x}", .{@intFromPtr(self)});
-}
+renderer: Renderer,
 
 pub fn init(
     self: *Surface,
@@ -36,26 +25,18 @@ pub fn init(
     rt_app: *apprt.App,
     rt_surface: *apprt.Surface,
 ) !void {
+    const renderer = try Renderer.init(rt_surface);
+
     self.* = .{
+        .renderer = renderer,
         .alloc = alloc,
         .app = app,
         .rt_app = rt_app,
         .rt_surface = rt_surface,
-        .render_thread = null,
-        .render_count = 0,
-        .running = true,
     };
-
-    self.render_thread = try std.Thread.spawn(.{}, renderLoop, .{self});
 }
 
 pub fn deinit(self: *Surface) void {
+    self.renderer.deinit();
     log.info("surface closed addr={x}", .{@intFromPtr(self)});
-
-    self.running = false;
-
-    if (self.render_thread) |thread_id| {
-        thread_id.join();
-        log.info("Render thread joined for surface addr={x}", .{@intFromPtr(self)});
-    }
 }

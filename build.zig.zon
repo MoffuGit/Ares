@@ -36,6 +36,12 @@
             .url = "git+https://github.com/mitchellh/zig-objc#f356ed02833f0f1b8e84d50bed9e807bf7cdc0ae",
             .hash = "zig_objc-0.0.0-Ir_Sp5gTAQCvxxR7oVIrPXxXwsfKgVP7_wqoOQrZjFeK",
         },
+        .libxev = .{
+            .url = "git+https://github.com/mitchellh/libxev#9b6634b6229be5f2c8fb22db1f6f652bac5c5040",
+            .hash = "libxev-0.0.0-86vtc2MaEwCW3jbbEvhCl_Mx1_XgunToEOq2KWiuIH6t",
+        },
+        .macos = .{ .path = "./pkg/macos" },
+        .apple_sdk = .{ .path = "./pkg/apple-sdk" },
     },
     .paths = .{""},
 }
