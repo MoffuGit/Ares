@@ -42,17 +42,28 @@ pub const Platform = struct {
     }
 };
 
+pub const SurfaceSize = struct {
+    width: u32,
+    height: u32,
+};
+
 pub const Surface = struct {
     app: *App,
     core_surface: CoreSurface,
     platform: Platform,
+    size: SurfaceSize,
 
     pub const Options = extern struct {
         platform: Platform.C = undefined,
     };
 
     pub fn init(self: *Surface, app: *App, opts: Options) !void {
-        self.* = .{ .app = app, .core_surface = undefined, .platform = try .init(opts.platform) };
+        self.* = .{
+            .app = app,
+            .core_surface = undefined,
+            .platform = try .init(opts.platform),
+            .size = .{ .width = 800, .height = 600 },
+        };
 
         try app.core_app.addSurface(self);
         errdefer app.core_app.deleteSurface(self);
@@ -64,6 +75,17 @@ pub const Surface = struct {
     pub fn deinit(self: *Surface) void {
         self.app.core_app.deleteSurface(self);
         self.core_surface.deinit();
+    }
+
+    pub fn updateSize(self: *Surface, width: u32, height: u32) void {
+        if (self.size.width == width and self.size.height == height) return;
+
+        self.size = .{
+            .width = width,
+            .height = height,
+        };
+
+        log.info("surface size: x{} y {}", .{ self.size.width, self.size.height });
     }
 };
 
@@ -110,5 +132,9 @@ pub const CAPI = struct {
 
     export fn ares_surface_free(ptr: *Surface) void {
         ptr.app.closeSurface(ptr);
+    }
+
+    export fn ares_surface_set_size(surface: *Surface, w: u32, h: u32) void {
+        surface.updateSize(w, h);
     }
 };

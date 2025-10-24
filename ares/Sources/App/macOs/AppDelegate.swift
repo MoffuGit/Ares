@@ -1,10 +1,9 @@
 import AppKit
-import Cocoa
-import SwiftUI
 import AresKit
-import UserNotifications
+import Cocoa
 import OSLog
-
+import SwiftUI
+import UserNotifications
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     let ares = Ares.App()
@@ -16,18 +15,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         category: String(describing: AppDelegate.self)
     )
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
-
-    }
-
     func applicationDidBecomeActive(_ notification: Notification) {
-        // Create the window only once when the application first becomes active
-
-        // Define the initial window size and style
-        let controller = WindowController.init(ares)
-        DispatchQueue.main.async {
-            controller.showWindow(self)
-        }
+        _ = WindowController.newWindow(ares)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

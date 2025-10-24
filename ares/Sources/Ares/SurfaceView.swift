@@ -49,13 +49,42 @@ extension Ares {
             fatalError("init(coder:) is not supported for this view")
         }
 
-        //NOTE:
-        //this depend on another classes
-        //one is a wrapper that uses a geosomething
-        //and anohter uses some protocols that i need to chekc
-
         func sizeDidChange(_ newSize: CGSize) {
-            Ares.logger.info("Ares.SurfaceView size changed to:")
+            let scaledSize = self.convertToBacking(newSize)
+            setSurfaceSize(width: UInt32(scaledSize.width), height: UInt32(scaledSize.height))
+
+        }
+        private func setSurfaceSize(width: UInt32, height: UInt32) {
+            guard let surface = self.surface else { return }
+
+            ares_surface_set_size(surface, width, height)
+        }
+
+    }
+
+    struct SurfaceWrapper: View {
+        let surfaceView: SurfaceView
+        @EnvironmentObject private var ghostty: Ares.App
+
+        var body: some View {
+            ZStack {
+                GeometryReader { geo in
+                    SurfaceRepresentable(view: self.surfaceView, size: geo.size)
+                }
+            }
+        }
+    }
+
+    struct SurfaceRepresentable: NSViewRepresentable {
+        let view: SurfaceView
+        let size: CGSize
+
+        func makeNSView(context: Context) -> SurfaceView {
+            return view
+        }
+
+        func updateNSView(_ nsView: SurfaceView, context: Context) {
+            nsView.sizeDidChange(size)
         }
     }
 }

@@ -8,10 +8,11 @@ import AresKit
 import Cocoa
 import Combine
 import SwiftUI
+import os
 
-class WindowController: NSWindowController, NSWindowDelegate {
+class BaseWindowController: NSWindowController, NSWindowDelegate {
     let ares: Ares.App
-    @Published var surface: Ares.SurfaceView? = nil
+    let surface: Ares.SurfaceView
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported for this view")
@@ -30,13 +31,22 @@ class WindowController: NSWindowController, NSWindowDelegate {
         newWindow.center()
         newWindow.title = "Ares"
 
-        super.init(window: newWindow)
+        newWindow.contentView = NSHostingView(
+            rootView: Ares.SurfaceWrapper(surfaceView: self.surface))
 
-        if let surface = self.surface {
-            surface.autoresizingMask = [.width, .height]
-            newWindow.contentView = surface
+        super.init(window: newWindow)
+    }
+}
+
+class WindowController: BaseWindowController {
+    static func newWindow(_ ares: Ares.App) -> WindowController {
+        let controller = WindowController.init(ares)
+        DispatchQueue.main.async {
+
+            controller.showWindow(self)
+            NSApp.activate(ignoringOtherApps: true)
         }
 
-        self.windowDidLoad()
+        return controller
     }
 }
