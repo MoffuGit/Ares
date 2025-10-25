@@ -9,6 +9,7 @@ const IOSurfaceLayer = @import("./metal/IOSurfaceLayer.zig");
 const mtl = @import("./metal/api.zig");
 
 const log = std.log.scoped(.metal);
+const Renderer = @import("../renderer.zig").Renderer;
 
 layer: IOSurfaceLayer,
 /// MTLDevice
@@ -75,6 +76,19 @@ pub fn deinit(self: *Metal) void {
     self.queue.release();
     self.device.release();
     self.layer.release();
+}
+pub fn loopEnter(self: *Metal) void {
+    const renderer: *align(1) Renderer = @fieldParentPtr("api", self);
+    self.layer.setDisplayCallback(
+        @ptrCast(&displayCallback),
+        @ptrCast(renderer),
+    );
+}
+
+fn displayCallback(renderer: *Renderer) align(8) void {
+    renderer.drawFrame(true) catch |err| {
+        log.warn("Error drawing frame in display callback, err={}", .{err});
+    };
 }
 
 fn chooseDevice() error{NoMetalDevice}!objc.Object {

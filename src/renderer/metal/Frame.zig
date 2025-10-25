@@ -8,7 +8,7 @@ const builtin = @import("builtin");
 const objc = @import("objc");
 
 const mtl = @import("api.zig");
-const Renderer = @import("../generic.zig").Renderer(Metal);
+const Renderer = @import("../../renderer.zig").Renderer;
 const Metal = @import("../Metal.zig");
 const Target = @import("Target.zig");
 const Pipeline = @import("Pipeline.zig");

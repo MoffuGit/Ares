@@ -84,8 +84,6 @@ pub const Surface = struct {
             .width = width,
             .height = height,
         };
-
-        log.info("surface size: x{} y {}", .{ self.size.width, self.size.height });
     }
 };
 
