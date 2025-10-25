@@ -35,7 +35,8 @@ pub fn init(
 
     const size = rt_surface.size;
 
-    const renderer_thread = try rendererpkg.Thread.init(alloc, rt_surface, &self.renderer);
+    var renderer_thread = try rendererpkg.Thread.init(alloc, rt_surface, &self.renderer);
+    errdefer renderer_thread.deinit();
 
     self.* = .{ .renderer = renderer, .alloc = alloc, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .renderer_thr = undefined };
 
@@ -43,9 +44,12 @@ pub fn init(
 }
 
 pub fn deinit(self: *Surface) void {
+    {
+        self.renderer_thread.stop.notify() catch |err|
+            log.err("error notifying renderer thread to stop, may stall err={}", .{err});
+        self.renderer_thr.join();
+    }
     self.renderer.deinit();
-    self.renderer_thread.stop();
-    std.Thread.join(self.renderer_thr);
     log.info("surface closed addr={x}", .{@intFromPtr(self)});
 }
 

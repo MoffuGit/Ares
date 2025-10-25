@@ -3,6 +3,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const size = @import("apprt/embedded.zig").SurfaceSize;
 const Options = @import("renderer/Options.zig");
+const objc = @import("objc");
+const mtl = @import("./renderer/metal/api.zig");
 
 pub const Renderer = struct {
     pub const API = Metal;
@@ -27,8 +29,45 @@ pub const Renderer = struct {
         self: *Renderer,
         sync: bool,
     ) !void {
-        _ = self;
         _ = sync;
+        // const MTLRenderPassDescriptor = objc.getClass("MTLRenderPassDescriptor").?;
+        // const desc = MTLRenderPassDescriptor.msgSend(
+        //     objc.Object,
+        //     objc.sel("renderPassDescriptor"),
+        //     .{},
+        // );
+
+        // _ = desc;
+        _ = self;
+
+        // const attachments = objc.Object.fromId(
+        //     desc.getProperty(?*anyopaque, "colorAttachments"),
+        // );
+        //
+        // attachments.setProperty(
+        //     "clearColor",
+        //     mtl.MTLClearColor{
+        //         .red = 0.0,
+        //         .green = 0.0,
+        //         .blue = 0.0,
+        //         .alpha = 1.0,
+        //     },
+        // );
+        //
+        // const buffer = self.api.queue.msgSend(
+        //     objc.Object,
+        //     objc.sel("commandBuffer"),
+        //     .{},
+        // );
+        //
+        // const encoder = buffer.msgSend(
+        //     objc.Object,
+        //     objc.sel("renderCommandEncoderWithDescriptor:"),
+        //     .{desc.value},
+        // );
+        // encoder.msgSend(void, objc.sel("endEncoding"), .{});
+        //
+        // buffer.msgSend(void, objc.sel("commit"), .{});
     }
 };
 

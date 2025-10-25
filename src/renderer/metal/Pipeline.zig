@@ -159,3 +159,50 @@ fn autoAttribute(T: type, attrs: objc.Object) void {
     inline for (@typeInfo(T).@"struct".fields, 0..) |field, i| {
         const offset = @offsetOf(T, field.name);
 
+        const FT = switch (@typeInfo(field.type)) {
+            .@"struct" => |e| e.backing_integer.?,
+            .@"enum" => |e| e.tag_type,
+            else => field.type,
+        };
+
+        // Very incomplete list, expand as necessary.
+        const format = switch (FT) {
+            [4]u8 => mtl.MTLVertexFormat.uchar4,
+            [2]u16 => mtl.MTLVertexFormat.ushort2,
+            [2]i16 => mtl.MTLVertexFormat.short2,
+            f32 => mtl.MTLVertexFormat.float,
+            [2]f32 => mtl.MTLVertexFormat.float2,
+            [4]f32 => mtl.MTLVertexFormat.float4,
+            i32 => mtl.MTLVertexFormat.int,
+            [2]i32 => mtl.MTLVertexFormat.int2,
+            [4]i32 => mtl.MTLVertexFormat.int2,
+            u32 => mtl.MTLVertexFormat.uint,
+            [2]u32 => mtl.MTLVertexFormat.uint2,
+            [4]u32 => mtl.MTLVertexFormat.uint4,
+            u8 => mtl.MTLVertexFormat.uchar,
+            i8 => mtl.MTLVertexFormat.char,
+            else => comptime unreachable,
+        };
+
+        const attr = attrs.msgSend(
+            objc.Object,
+            objc.sel("objectAtIndexedSubscript:"),
+            .{@as(c_ulong, i)},
+        );
+
+        attr.setProperty("format", @intFromEnum(format));
+        attr.setProperty("offset", @as(c_ulong, offset));
+        attr.setProperty("bufferIndex", @as(c_ulong, 0));
+    }
+}
+
+fn checkError(err_: ?*anyopaque) !void {
+    const nserr = objc.Object.fromId(err_ orelse return);
+    const str = @as(
+        *macos.foundation.String,
+        @ptrCast(nserr.getProperty(?*anyopaque, "localizedDescription").?),
+    );
+
+    log.err("metal error={s}", .{str.cstringPtr(.ascii).?});
+    return error.MetalFailed;
+}
