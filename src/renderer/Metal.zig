@@ -12,6 +12,8 @@ const IOSurfaceLayer = @import("./metal/IOSurfaceLayer.zig");
 const mtl = @import("./metal/api.zig");
 
 pub const Target = @import("./metal/Target.zig");
+pub const shaders = @import("./metal/shaders.zig");
+pub const Buffer = @import("./metal/buffer.zig").Buffer;
 
 const log = std.log.scoped(.metal);
 const Renderer = @import("../renderer.zig").Renderer;
@@ -171,4 +173,10 @@ pub inline fn present(self: *Metal, target: Target, sync: bool) !void {
     } else {
         try self.layer.setSurface(target.surface);
     }
+}
+
+pub fn initShaders(
+    self: *const Metal,
+) !shaders.Shaders {
+    return try shaders.Shaders.init(self.device, mtl.MTLPixelFormat.bgra8unorm);
 }

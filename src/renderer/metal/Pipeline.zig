@@ -172,6 +172,7 @@ fn autoAttribute(T: type, attrs: objc.Object) void {
             [2]i16 => mtl.MTLVertexFormat.short2,
             f32 => mtl.MTLVertexFormat.float,
             [2]f32 => mtl.MTLVertexFormat.float2,
+            [3]f32 => mtl.MTLVertexFormat.float3,
             [4]f32 => mtl.MTLVertexFormat.float4,
             i32 => mtl.MTLVertexFormat.int,
             [2]i32 => mtl.MTLVertexFormat.int2,

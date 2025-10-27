@@ -10,13 +10,15 @@ const Pipeline = @import("Pipeline.zig");
 
 const log = std.log.scoped(.metal);
 
+pub const VertexInput = extern struct {
+    position: [3]f32 align(16), // Corresponds to float3 position [[attribute(0)]]
+    color: [4]f32 align(16), // Corresponds to float4 color [[attribute(1)]]
+
+};
+
 const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
     &.{
-        .{ "bg_color", .{
-            .vertex_fn = "full_screen_vertex",
-            .fragment_fn = "bg_color_fragment",
-            .blending_enabled = false,
-        } },
+        .{ "bg_color", .{ .vertex_fn = "vertexShader", .fragment_fn = "fragmentShader", .blending_enabled = false, .vertex_attributes = VertexInput } },
     };
 
 /// All the comptime-known info about a pipeline, so that
@@ -76,11 +78,6 @@ pub const Shaders = struct {
     /// Collection of available render pipelines.
     pipelines: PipelineCollection,
 
-    /// Custom shaders to run against the final drawable texture. This
-    /// can be used to apply a lot of effects. Each shader is run in sequence
-    /// against the output of the previous shader.
-    post_pipelines: []const Pipeline,
-
     /// Set to true when deinited, if you try to deinit a defunct set
     /// of shaders it will just be ignored, to prevent double-free.
     defunct: bool = false,
@@ -91,9 +88,7 @@ pub const Shaders = struct {
     /// against the final drawable texture. This is an array of shader source
     /// code, not file paths.
     pub fn init(
-        alloc: Allocator,
         device: objc.Object,
-        post_shaders: []const [:0]const u8,
         pixel_format: mtl.MTLPixelFormat,
     ) !Shaders {
         const library = try initLibrary(device);
@@ -118,32 +113,13 @@ pub const Shaders = struct {
             initialized_pipelines += 1;
         }
 
-        const post_pipelines: []const Pipeline = initPostPipelines(
-            alloc,
-            device,
-            library,
-            post_shaders,
-            pixel_format,
-        ) catch |err| err: {
-            // If an error happens while building postprocess shaders we
-            // want to just not use any postprocess shaders since we don't
-            // want to block Ghostty from working.
-            log.warn("error initializing postprocess shaders err={}", .{err});
-            break :err &.{};
-        };
-        errdefer if (post_pipelines.len > 0) {
-            for (post_pipelines) |pipeline| pipeline.deinit();
-            alloc.free(post_pipelines);
-        };
-
         return .{
             .library = library,
             .pipelines = pipelines,
-            .post_pipelines = post_pipelines,
         };
     }
 
-    pub fn deinit(self: *Shaders, alloc: Allocator) void {
+    pub fn deinit(self: *Shaders) void {
         if (self.defunct) return;
         self.defunct = true;
 
@@ -152,14 +128,6 @@ pub const Shaders = struct {
             @field(self.pipelines, pipeline[0]).deinit();
         }
         self.library.msgSend(void, objc.sel("release"), .{});
-
-        // Release our postprocess shaders
-        if (self.post_pipelines.len > 0) {
-            for (self.post_pipelines) |pipeline| {
-                pipeline.deinit();
-            }
-            alloc.free(self.post_pipelines);
-        }
     }
 };
 
@@ -310,7 +278,7 @@ fn initLibrary(device: objc.Object) !objc.Object {
     const start = try std.time.Instant.now();
 
     const data = try macos.dispatch.Data.create(
-        @embedFile("ghostty_metallib"),
+        @embedFile("ares_metallib"),
         macos.dispatch.queue.getMain(),
         macos.dispatch.Data.DESTRUCTOR_DEFAULT,
     );

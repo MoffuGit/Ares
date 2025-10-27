@@ -1,5 +1,6 @@
 const std = @import("std");
 const XCFrameworkStep = @import("src/build/CXFramerworkStep.zig");
+const MetallibStep = @import("src/build/MetallibStep.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -51,4 +52,13 @@ pub fn build(b: *std.Build) void {
     });
     xcframework.step.dependOn(&lib.step);
     b.default_step.dependOn(xcframework.step);
+
+    const metallib = MetallibStep.create(b, .{
+        .name = "Ares",
+        .sources = &.{b.path("src/renderer/shaders/shaders.metal")},
+    });
+    lib.step.dependOn(metallib.?.step);
+    lib.root_module.addAnonymousImport("ares_metallib", .{
+        .root_source_file = metallib.?.output,
+    });
 }
