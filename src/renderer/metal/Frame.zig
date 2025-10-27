@@ -91,7 +91,9 @@ fn bufferCompleted(
         };
     }
 
-    block.renderer.frameCompleted(health);
+    //WARN:
+    //this should set the health but right now i don't have it
+    // block.renderer.frameCompleted(health);
 }
 
 /// Add a render pass to this frame with the provided attachments.

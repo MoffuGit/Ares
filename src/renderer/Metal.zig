@@ -1,12 +1,17 @@
 const Metal = @This();
 
+const assert = std.debug.assert;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const objc = @import("objc");
 const macos = @import("macos");
+const graphics = macos.graphics;
 const apprt = @import("../apprt/embedded.zig");
+const Frame = @import("./metal/Frame.zig");
 const IOSurfaceLayer = @import("./metal/IOSurfaceLayer.zig");
 const mtl = @import("./metal/api.zig");
+
+pub const Target = @import("./metal/Target.zig");
 
 const log = std.log.scoped(.metal);
 const Renderer = @import("../renderer.zig").Renderer;
@@ -23,6 +28,9 @@ queue: objc.Object,
 /// discrete GPUs do not have unified memory and therefore do not support
 /// the "shared" storage mode, instead we have to use the "managed" mode.
 default_storage_mode: mtl.MTLResourceOptions.StorageMode,
+
+/// We start an AutoreleasePool before `drawFrame` and end it afterwards.
+autorelease_pool: ?*objc.AutoreleasePool = null,
 
 pub fn init(rt_surface: *apprt.Surface) !Metal {
     // Choose our MTLDevice and create a MTLCommandQueue for that device.
@@ -77,6 +85,46 @@ pub fn deinit(self: *Metal) void {
     self.device.release();
     self.layer.release();
 }
+
+/// Actions taken before doing anything in `drawFrame`.
+///
+/// Right now we use this to start an AutoreleasePool.
+pub fn drawFrameStart(self: *Metal) void {
+    assert(self.autorelease_pool == null);
+    self.autorelease_pool = .init();
+}
+
+/// Actions taken after `drawFrame` is done.
+///
+/// Right now we use this to end our AutoreleasePool.
+pub fn drawFrameEnd(self: *Metal) void {
+    assert(self.autorelease_pool != null);
+    self.autorelease_pool.?.deinit();
+    self.autorelease_pool = null;
+}
+
+/// Begin a frame.
+pub inline fn beginFrame(
+    self: *const Metal,
+    /// Once the frame has been completed, the `frameCompleted` method
+    /// on the renderer is called with the health status of the frame.
+    renderer: *Renderer,
+    /// The target is presented via the provided renderer's API when completed.
+    target: *Target,
+) !Frame {
+    return try Frame.begin(.{ .queue = self.queue }, renderer, target);
+}
+
+/// Get the current size of the runtime surface.
+pub fn surfaceSize(self: *const Metal) !struct { width: u32, height: u32 } {
+    const bounds = self.layer.layer.getProperty(graphics.Rect, "bounds");
+    const scale = self.layer.layer.getProperty(f64, "contentsScale");
+    return .{
+        .width = @intFromFloat(bounds.size.width * scale),
+        .height = @intFromFloat(bounds.size.height * scale),
+    };
+}
+
 pub fn loopEnter(self: *Metal) void {
     const renderer: *align(1) Renderer = @fieldParentPtr("api", self);
     self.layer.setDisplayCallback(
@@ -86,7 +134,7 @@ pub fn loopEnter(self: *Metal) void {
 }
 
 fn displayCallback(renderer: *Renderer) align(8) void {
-    renderer.drawFrame(true) catch |err| {
+    renderer.drawFrame(false) catch |err| {
         log.warn("Error drawing frame in display callback, err={}", .{err});
     };
 }
@@ -111,4 +159,16 @@ fn chooseDevice() error{NoMetalDevice}!objc.Object {
 
     const device = chosen_device orelse return error.NoMetalDevice;
     return device.retain();
+}
+
+pub fn initTarget(self: *Metal, width: usize, height: usize) !Target {
+    return Target.init(.{ .device = self.device, .pixel_format = .bgra8unorm, .storage_mode = self.default_storage_mode, .width = width, .height = height });
+}
+
+pub inline fn present(self: *Metal, target: Target, sync: bool) !void {
+    if (sync) {
+        self.layer.setSurfaceSync(target.surface);
+    } else {
+        try self.layer.setSurface(target.surface);
+    }
 }

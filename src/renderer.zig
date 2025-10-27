@@ -8,20 +8,26 @@ const mtl = @import("./renderer/metal/api.zig");
 
 pub const Renderer = struct {
     pub const API = Metal;
+    const Target = API.Target;
 
     alloc: Allocator,
     size: size,
     api: Metal,
+    target: Target,
 
     pub fn init(alloc: Allocator, opts: Options) !Renderer {
         var api = try Metal.init(opts.rt_surface);
         errdefer api.deinit();
 
-        return .{ .alloc = alloc, .size = opts.size, .api = api };
+        var target = try api.initTarget(800, 600);
+        errdefer target.deinit();
+
+        return .{ .alloc = alloc, .size = opts.size, .api = api, .target = target };
     }
 
     pub fn deinit(self: *Renderer) void {
         self.api.deinit();
+        self.target.deinit();
         self.* = undefined;
     }
 
@@ -29,45 +35,25 @@ pub const Renderer = struct {
         self: *Renderer,
         sync: bool,
     ) !void {
-        _ = sync;
-        // const MTLRenderPassDescriptor = objc.getClass("MTLRenderPassDescriptor").?;
-        // const desc = MTLRenderPassDescriptor.msgSend(
-        //     objc.Object,
-        //     objc.sel("renderPassDescriptor"),
-        //     .{},
-        // );
+        self.api.drawFrameStart();
+        defer self.api.drawFrameEnd();
 
-        // _ = desc;
-        _ = self;
+        const surface_size = try self.api.surfaceSize();
 
-        // const attachments = objc.Object.fromId(
-        //     desc.getProperty(?*anyopaque, "colorAttachments"),
-        // );
-        //
-        // attachments.setProperty(
-        //     "clearColor",
-        //     mtl.MTLClearColor{
-        //         .red = 0.0,
-        //         .green = 0.0,
-        //         .blue = 0.0,
-        //         .alpha = 1.0,
-        //     },
-        // );
-        //
-        // const buffer = self.api.queue.msgSend(
-        //     objc.Object,
-        //     objc.sel("commandBuffer"),
-        //     .{},
-        // );
-        //
-        // const encoder = buffer.msgSend(
-        //     objc.Object,
-        //     objc.sel("renderCommandEncoderWithDescriptor:"),
-        //     .{desc.value},
-        // );
-        // encoder.msgSend(void, objc.sel("endEncoding"), .{});
-        //
-        // buffer.msgSend(void, objc.sel("commit"), .{});
+        self.size = .{ .height = surface_size.height, .width = surface_size.width };
+
+        var frame_ctx = try self.api.beginFrame(self, &self.target);
+        defer frame_ctx.complete(sync);
+
+        var render_pass = frame_ctx.renderPass(&.{
+            .{
+                .target = .{
+                    .target = self.target,
+                },
+                .clear_color = .{ 0.0, 0.0, 1.0, 1.0 }, // Red color
+            },
+        });
+        render_pass.complete();
     }
 };
 
