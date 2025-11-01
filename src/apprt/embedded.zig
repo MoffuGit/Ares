@@ -47,14 +47,21 @@ pub const SurfaceSize = struct {
     height: u32,
 };
 
+pub const ContentScale = struct {
+    x: f32,
+    y: f32,
+};
+
 pub const Surface = struct {
     app: *App,
     core_surface: CoreSurface,
     platform: Platform,
     size: SurfaceSize,
+    content_scale: ContentScale,
 
     pub const Options = extern struct {
         platform: Platform.C = undefined,
+        scale_factor: f64 = 1,
     };
 
     pub fn init(self: *Surface, app: *App, opts: Options) !void {
@@ -62,6 +69,10 @@ pub const Surface = struct {
             .app = app,
             .core_surface = undefined,
             .platform = try .init(opts.platform),
+            .content_scale = .{
+                .x = @floatCast(opts.scale_factor),
+                .y = @floatCast(opts.scale_factor),
+            },
             .size = .{ .width = 800, .height = 600 },
         };
 
@@ -84,6 +95,21 @@ pub const Surface = struct {
             .width = width,
             .height = height,
         };
+
+        self.core_surface.sizeCallback(self.size);
+    }
+
+    pub fn updateContentScale(self: *Surface, x: f64, y: f64) void {
+        const x_scaled = @max(1, if (std.math.isNan(x)) 1 else x);
+        const y_scaled = @max(1, if (std.math.isNan(y)) 1 else y);
+
+        const scale = ContentScale{ .x = @floatCast(x_scaled), .y = @floatCast(y_scaled) };
+
+        if (std.meta.eql(scale, self.content_scale)) return;
+
+        self.content_scale = scale;
+
+        self.core_surface.contentScaleCallback(self.content_scale);
     }
 };
 
@@ -134,5 +160,11 @@ pub const CAPI = struct {
 
     export fn ares_surface_set_size(surface: *Surface, w: u32, h: u32) void {
         surface.updateSize(w, h);
+    }
+
+    export fn ares_surface_set_content_scale(surface: *Surface, x: f64, y: f64) void {
+        surface.updateContentScale(x, y);
+
+        surface.core_surface.contentScaleCallback(surface.content_scale);
     }
 };

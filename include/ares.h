@@ -20,6 +20,7 @@ typedef struct {
 
 typedef struct {
   ares_platform_u platform;
+  double scale_factor;
 } ares_surface_config_s;
 
 ares_app_t ares_app_new();
@@ -29,6 +30,7 @@ void ares_app_free(ares_app_t);
 void ares_surface_free(ares_surface_t);
 
 void ares_surface_set_size(ares_surface_t, uint32_t, uint32_t);
+void ares_surface_set_content_scale(ares_surface_t, double, double);
 
 int ares_init(uintptr_t, char**);
 

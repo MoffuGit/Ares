@@ -1,11 +1,13 @@
 const Metal = @import("renderer/Metal.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const size = @import("apprt/embedded.zig").SurfaceSize;
+const apprt = @import("apprt/embedded.zig");
 const Options = @import("renderer/Options.zig");
 const ArenaAllocator = std.heap.ArenaAllocator;
 const objc = @import("objc");
 const mtl = @import("./renderer/metal/api.zig");
+
+const log = std.log.scoped(.renderer);
 
 pub const Renderer = struct {
     pub const API = Metal;
@@ -17,12 +19,14 @@ pub const Renderer = struct {
     const VertexBuffer = Buffer(shaderpkg.VertexInput);
 
     alloc: Allocator,
-    size: size,
+    size: apprt.SurfaceSize,
     api: Metal,
     target: Target,
     vertexBuffer: VertexBuffer,
     frame_count: usize = 0,
     shaders: Shaders,
+    mutex: std.Thread.Mutex = .{},
+    health: std.atomic.Value(Health) = .{ .raw = .healthy },
 
     pub fn init(alloc: Allocator, opts: Options) !Renderer {
         var api = try Metal.init(opts.rt_surface);
@@ -69,6 +73,9 @@ pub const Renderer = struct {
         self: *Renderer,
         sync: bool,
     ) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         self.api.drawFrameStart();
         defer self.api.drawFrameEnd();
 

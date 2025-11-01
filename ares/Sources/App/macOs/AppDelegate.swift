@@ -16,7 +16,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     )
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        _ = WindowController.newWindow(ares)
+        if !applicationHasBecomeActive {
+            _ = WindowController.newWindow(ares)
+            applicationHasBecomeActive = true
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
