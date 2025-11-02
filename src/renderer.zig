@@ -30,6 +30,7 @@ shaders: Shaders,
 mutex: std.Thread.Mutex = .{},
 health: std.atomic.Value(Health) = .{ .raw = .healthy },
 swap_chain: SwapChain,
+first: bool = true,
 
 pub fn init(alloc: Allocator, opts: Options) !Renderer {
     var api = try Metal.init(opts.rt_surface);
@@ -82,7 +83,9 @@ pub fn drawFrame(
         self.size.height != surface_size.height;
 
     const needs_redraw =
-        size_changed;
+        size_changed or sync or self.first;
+
+    self.*.first = false;
 
     if (!needs_redraw) return;
 
