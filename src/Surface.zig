@@ -6,7 +6,7 @@ const Allocator = std.mem.Allocator;
 const Renderer = @import("renderer.zig").Renderer;
 const apprt = @import("./apprt/embedded.zig");
 const objc = @import("objc");
-const font = @import("./font/main.zig");
+const font = @import("./font/mod.zig");
 
 const Thread = @import("./renderer/Thread.zig");
 
