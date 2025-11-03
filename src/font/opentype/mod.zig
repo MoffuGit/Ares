@@ -1,10 +1,10 @@
-pub const sfnt = @import("opentype/sfnt.zig");
+pub const sfnt = @import("sfnt.zig");
 
-const svg = @import("opentype/svg.zig");
-const os2 = @import("opentype/os2.zig");
-const post = @import("opentype/post.zig");
-const hhea = @import("opentype/hhea.zig");
-const head = @import("opentype/head.zig");
+const svg = @import("svg.zig");
+const os2 = @import("os2.zig");
+const post = @import("post.zig");
+const hhea = @import("hhea.zig");
+const head = @import("head.zig");
 
 pub const SVG = svg.SVG;
 pub const OS2 = os2.OS2;

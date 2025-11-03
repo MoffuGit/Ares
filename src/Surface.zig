@@ -6,7 +6,9 @@ const Allocator = std.mem.Allocator;
 const Renderer = @import("renderer.zig").Renderer;
 const apprt = @import("./apprt/embedded.zig");
 const objc = @import("objc");
-const font = @import("./font/mod.zig");
+const fontpkg = @import("font/mod.zig");
+const facepkg = fontpkg.facepkg;
+const Face = facepkg.Face;
 
 const Thread = @import("./renderer/Thread.zig");
 
@@ -20,7 +22,7 @@ rt_app: *apprt.App,
 rt_surface: *apprt.Surface,
 
 size: apprt.SurfaceSize,
-font_size: font.DesiredSize,
+font_size: facepkg.DesiredSize,
 
 renderer: Renderer,
 renderer_thread: Thread,
@@ -54,8 +56,8 @@ pub fn init(
     errdefer renderer_thread.deinit();
 
     const content_scale = rt_surface.content_scale;
-    const x_dpi = content_scale.x * font.default_dpi;
-    const y_dpi = content_scale.y * font.default_dpi;
+    const x_dpi = content_scale.x * facepkg.default_dpi;
+    const y_dpi = content_scale.y * facepkg.default_dpi;
     log.debug("xscale={} yscale={} xdpi={} ydpi={}", .{
         content_scale.x,
         content_scale.y,
@@ -63,7 +65,7 @@ pub fn init(
         y_dpi,
     });
 
-    const font_size: font.DesiredSize = .{
+    const font_size: facepkg.DesiredSize = .{
         .points = 12,
         .xdpi = @intFromFloat(x_dpi),
         .ydpi = @intFromFloat(y_dpi),
@@ -91,8 +93,8 @@ pub fn sizeCallback(self: *Surface, size: apprt.SurfaceSize) void {
 }
 
 pub fn contentScaleCallback(self: *Surface, scale: apprt.ContentScale) void {
-    const x_dpi = scale.x * font.default_dpi;
-    const y_dpi = scale.y * font.default_dpi;
+    const x_dpi = scale.x * facepkg.default_dpi;
+    const y_dpi = scale.y * facepkg.default_dpi;
 
     // Update our font size which is dependent on the DPI
     const size = size: {
@@ -110,7 +112,7 @@ pub fn contentScaleCallback(self: *Surface, scale: apprt.ContentScale) void {
     self.setFontSize(size);
 }
 
-pub fn setFontSize(self: *Surface, size: font.DesiredSize) void {
+pub fn setFontSize(self: *Surface, size: facepkg.DesiredSize) void {
     log.debug("set font size size={}", .{size.points});
 
     // Update our font size so future changes work

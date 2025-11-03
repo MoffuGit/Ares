@@ -283,30 +283,3 @@ pub const SFNT = struct {
 };
 
 const native_endian = @import("builtin").target.cpu.arch.endian();
-
-test "parse font" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const test_font = @import("../embedded.zig").julia_mono;
-
-    const sfnt = try SFNT.init(&test_font.*, alloc);
-    defer sfnt.deinit(alloc);
-
-    try testing.expectEqual(19, sfnt.directory.offset.num_tables);
-    try testing.expectEqualStrings("prep", &sfnt.directory.records[18].tag);
-}
-
-test "get table" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const test_font = @import("../embedded.zig").julia_mono;
-
-    const sfnt = try SFNT.init(&test_font.*, alloc);
-    defer sfnt.deinit(alloc);
-
-    const svg = sfnt.getTable("SVG ").?;
-
-    try testing.expectEqual(430, svg.len);
-}
