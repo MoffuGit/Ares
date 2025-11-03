@@ -26,6 +26,19 @@ renderer: Renderer,
 renderer_thread: Thread,
 renderer_thr: std.Thread,
 
+//NOTE:
+//first, i need to add a font grid
+//second, i need to get the cell size from the metrics of the grid
+//third, i need to calculate the number of rows and cols that my surface can contain in base of the cell widht and height
+//four, i need to repeat the prev step every time my surface change his size
+//five, i need to create an atlas
+//six, i need to create a texuter in base of the atlas
+//seven, i need to create a buffer that store all the data needed for render my char
+//  position on the surface
+//  position on the atlas
+//  size
+//eight, this should happen for my message
+
 pub fn init(
     self: *Surface,
     alloc: Allocator,

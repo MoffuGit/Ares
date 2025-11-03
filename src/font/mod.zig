@@ -1,4 +1,5 @@
 pub const default_dpi = 72;
+
 pub const DesiredSize = struct {
     // Desired size in points
     points: f32,
