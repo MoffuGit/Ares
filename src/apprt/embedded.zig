@@ -111,6 +111,10 @@ pub const Surface = struct {
 
         self.core_surface.contentScaleCallback(self.content_scale);
     }
+
+    pub fn getSize(self: *Surface) SurfaceSize {
+        return self.size;
+    }
 };
 
 pub const CAPI = struct {

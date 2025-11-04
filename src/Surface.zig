@@ -9,6 +9,8 @@ const objc = @import("objc");
 const fontpkg = @import("font/mod.zig");
 const facepkg = fontpkg.facepkg;
 const Face = facepkg.Face;
+const sizepkg = @import("size.zig");
+const Grid = fontpkg.Grid;
 
 const Thread = @import("./renderer/Thread.zig");
 
@@ -21,28 +23,14 @@ app: *App,
 rt_app: *apprt.App,
 rt_surface: *apprt.Surface,
 
-size: apprt.SurfaceSize,
-font_size: facepkg.DesiredSize,
+size: sizepkg.Size,
 
 renderer: Renderer,
 renderer_thread: Thread,
 renderer_thr: std.Thread,
 
-grid: *fontpkg.Grid,
-
-//NOTE:
-//first, i need to add a font grid
-//second, i need to get the cell size from the metrics of the grid
-//third, i need to calculate the number of rows and cols that my surface can contain in base of the cell widht and height
-//four, i need to repeat the prev step every time my surface change his size
-//five, i need to create an atlas
-//six, i need to create a texuter in base of the atlas
-//seven, i need to create a buffer that store all the data needed for render my char
-//  position on the surface
-//  position on the atlas
-//  size
-//eight, this should happen for my message
-//nine, i need to add a shaper
+font_size: facepkg.DesiredSize,
+grid: Grid,
 
 pub fn init(
     self: *Surface,
@@ -51,10 +39,6 @@ pub fn init(
     rt_app: *apprt.App,
     rt_surface: *apprt.Surface,
 ) !void {
-    const renderer = try Renderer.init(alloc, .{ .size = rt_surface.size, .rt_surface = rt_surface });
-
-    const size = rt_surface.size;
-
     var renderer_thread = try Thread.init(alloc, rt_surface, &self.renderer);
     errdefer renderer_thread.deinit();
 
@@ -74,7 +58,26 @@ pub fn init(
         .ydpi = @intFromFloat(y_dpi),
     };
 
-    self.* = .{ .renderer = renderer, .grid = &app.grid, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .renderer_thr = undefined };
+    var grid = try Grid.init(alloc, .{ .size = font_size });
+
+    const size: sizepkg.Size = size: {
+        const size: sizepkg.Size = .{
+            .screen = screen: {
+                const surface_size = rt_surface.getSize();
+                break :screen .{
+                    .width = surface_size.width,
+                    .height = surface_size.height,
+                };
+            },
+
+            .cell = grid.cellSize(),
+        };
+        break :size size;
+    };
+
+    const renderer = try Renderer.init(alloc, .{ .size = size, .rt_surface = rt_surface });
+
+    self.* = .{ .renderer = renderer, .grid = grid, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .renderer_thr = undefined };
 
     self.renderer_thr = try std.Thread.spawn(.{}, Thread.Thread.threadMain, .{&self.renderer_thread});
 }
@@ -90,9 +93,15 @@ pub fn deinit(self: *Surface) void {
 }
 
 pub fn sizeCallback(self: *Surface, size: apprt.SurfaceSize) void {
-    if (size.width == self.size.width and size.height == self.size.height) return;
+    const curr_size = self.size.screen;
+    const new_size: sizepkg.ScreenSize = .{
+        .width = size.width,
+        .height = size.height,
+    };
 
-    self.size = size;
+    if (curr_size.height == new_size.height and curr_size.width == new_size.width) return;
+
+    self.size.screen = new_size;
 }
 
 pub fn contentScaleCallback(self: *Surface, scale: apprt.ContentScale) void {

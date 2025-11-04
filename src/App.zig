@@ -9,7 +9,6 @@ const Grid = fontpkg.Grid;
 
 alloc: Allocator,
 surfaces: SurfaceList,
-grid: Grid,
 
 pub fn create(alloc: Allocator) !*App {
     var app = try alloc.create(App);
@@ -20,7 +19,10 @@ pub fn create(alloc: Allocator) !*App {
 }
 
 pub fn init(self: *App, alloc: Allocator) !void {
-    self.* = .{ .alloc = alloc, .surfaces = .{}, .grid = try Grid.init(alloc, .{ .size = .{ .points = 12 } }) };
+    self.* = .{
+        .alloc = alloc,
+        .surfaces = .{},
+    };
 }
 
 pub fn deinit(self: *App) void {

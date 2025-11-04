@@ -3,7 +3,6 @@ pub const Renderer = @This();
 const Metal = @import("renderer/Metal.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const apprt = @import("apprt/embedded.zig");
 const Options = @import("renderer/Options.zig");
 const ArenaAllocator = std.heap.ArenaAllocator;
 const objc = @import("objc");
@@ -12,6 +11,7 @@ const SwapChain = @import("./renderer/SwapChain.zig");
 const macos = @import("macos");
 const Thread = @import("renderer/Thread.zig");
 const xev = @import("global.zig").xev;
+const sizepkg = @import("size.zig");
 
 const log = std.log.scoped(.renderer);
 
@@ -27,7 +27,7 @@ pub const Health = enum(c_int) {
 };
 
 alloc: Allocator,
-size: apprt.SurfaceSize,
+size: sizepkg.Size,
 api: Metal,
 shaders: Shaders,
 mutex: std.Thread.Mutex = .{},
@@ -90,8 +90,8 @@ pub fn drawFrame(
     if (surface_size.width == 0 or surface_size.height == 0) return;
 
     const size_changed =
-        self.size.width != surface_size.width or
-        self.size.height != surface_size.height;
+        self.size.screen.width != surface_size.width or
+        self.size.screen.height != surface_size.height;
 
     const needs_redraw =
         size_changed or sync or self.first;
@@ -104,19 +104,19 @@ pub fn drawFrame(
     errdefer self.swap_chain.releaseFrame();
 
     if (size_changed) {
-        self.size = .{
+        self.size.screen = .{
             .width = surface_size.width,
             .height = surface_size.height,
         };
     }
 
-    if (frame.target.width != self.size.width or
-        frame.target.height != self.size.height)
+    if (frame.target.width != self.size.screen.width or
+        frame.target.height != self.size.screen.height)
     {
         try frame.resize(
             &self.api,
-            self.size.width,
-            self.size.height,
+            self.size.screen.width,
+            self.size.screen.height,
         );
     }
 
