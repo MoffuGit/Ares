@@ -7,7 +7,7 @@ pub const Size = struct {
     screen: ScreenSize,
     cell: CellSize,
     pub fn grid(self: Size) GridSize {
-        return .init(self.screen.subPadding(self.padding), self.cell);
+        return .init(self.screen, self.cell);
     }
 };
 

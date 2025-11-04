@@ -11,8 +11,10 @@ const facepkg = fontpkg.facepkg;
 const Face = facepkg.Face;
 const sizepkg = @import("size.zig");
 const Grid = fontpkg.Grid;
+const Editor = @import("editor/mod.zig");
 
-const Thread = @import("./renderer/Thread.zig");
+const EditorThread = @import("editor/Thread.zig");
+const RenderThread = @import("./renderer/Thread.zig");
 
 const log = std.log.scoped(.surface);
 
@@ -26,8 +28,12 @@ rt_surface: *apprt.Surface,
 size: sizepkg.Size,
 
 renderer: Renderer,
-renderer_thread: Thread,
+renderer_thread: RenderThread,
 renderer_thr: std.Thread,
+
+editor: Editor,
+editor_thread: EditorThread,
+editor_thr: std.Thread,
 
 font_size: facepkg.DesiredSize,
 metrics: facepkg.Metrics,
@@ -41,8 +47,11 @@ pub fn init(
     rt_app: *apprt.App,
     rt_surface: *apprt.Surface,
 ) !void {
-    var renderer_thread = try Thread.init(alloc, rt_surface, &self.renderer);
+    var renderer_thread = try RenderThread.init(alloc, rt_surface, &self.renderer);
     errdefer renderer_thread.deinit();
+
+    var editor_thread = try EditorThread.init(alloc, &self.editor);
+    errdefer editor_thread.deinit();
 
     const content_scale = rt_surface.content_scale;
     const x_dpi = content_scale.x * facepkg.default_dpi;
@@ -78,10 +87,12 @@ pub fn init(
     };
 
     const renderer = try Renderer.init(alloc, .{ .size = size, .rt_surface = rt_surface });
+    const editor = Editor.init(size);
 
-    self.* = .{ .renderer = renderer, .metrics = grid.metrics, .grid = grid, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .renderer_thr = undefined };
+    self.* = .{ .renderer = renderer, .metrics = grid.metrics, .grid = grid, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .editor = editor, .editor_thread = editor_thread, .renderer_thr = undefined, .editor_thr = undefined };
 
-    self.renderer_thr = try std.Thread.spawn(.{}, Thread.Thread.threadMain, .{&self.renderer_thread});
+    self.renderer_thr = try std.Thread.spawn(.{}, RenderThread.Thread.threadMain, .{&self.renderer_thread});
+    self.editor_thr = try std.Thread.spawn(.{}, EditorThread.Thread.threadMain, .{&self.editor_thread});
 }
 
 pub fn deinit(self: *Surface) void {
@@ -90,7 +101,13 @@ pub fn deinit(self: *Surface) void {
             log.err("error notifying renderer thread to stop, may stall err={}", .{err});
         self.renderer_thr.join();
     }
+    {
+        self.editor_thread.stop.notify() catch |err|
+            log.err("error notifying editor thread to stop, may stall err={}", .{err});
+        self.editor_thr.join();
+    }
     self.renderer.deinit();
+    self.editor.deinit();
     log.info("surface closed addr={x}", .{@intFromPtr(self)});
 }
 

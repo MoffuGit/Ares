@@ -3,9 +3,11 @@ pub const Thread = @This();
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const xev = @import("../global.zig").xev;
-const log = std.log.scoped(.editor_thread);
 const BlockingQueue = @import("../datastruct/blocking_queue.zig").BlockingQueue;
 const messagepkg = @import("./Message.zig");
+const Editor = @import("../editor/mod.zig");
+
+const log = std.log.scoped(.editor_thread);
 
 pub const Mailbox = BlockingQueue(messagepkg.Message, 64);
 
@@ -21,8 +23,11 @@ stop_c: xev.Completion = .{},
 
 mailbox: *Mailbox,
 
+editor: *Editor,
+
 pub fn init(
     alloc: Allocator,
+    editor: *Editor,
 ) !Thread {
     var loop = try xev.Loop.init(.{});
     errdefer loop.deinit();
@@ -36,13 +41,7 @@ pub fn init(
     var mailbox = try Mailbox.create(alloc);
     errdefer mailbox.destroy(alloc);
 
-    return .{
-        .alloc = alloc,
-        .loop = loop,
-        .stop = stop_h,
-        .wakeup = wakeup_h,
-        .mailbox = mailbox,
-    };
+    return .{ .alloc = alloc, .loop = loop, .stop = stop_h, .wakeup = wakeup_h, .mailbox = mailbox, .editor = editor };
 }
 
 pub fn deinit(self: *Thread) void {
