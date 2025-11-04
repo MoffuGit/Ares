@@ -30,6 +30,8 @@ renderer_thread: Thread,
 renderer_thr: std.Thread,
 
 font_size: facepkg.DesiredSize,
+metrics: facepkg.Metrics,
+
 grid: Grid,
 
 pub fn init(
@@ -77,7 +79,7 @@ pub fn init(
 
     const renderer = try Renderer.init(alloc, .{ .size = size, .rt_surface = rt_surface });
 
-    self.* = .{ .renderer = renderer, .grid = grid, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .renderer_thr = undefined };
+    self.* = .{ .renderer = renderer, .metrics = grid.metrics, .grid = grid, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .renderer_thr = undefined };
 
     self.renderer_thr = try std.Thread.spawn(.{}, Thread.Thread.threadMain, .{&self.renderer_thread});
 }
