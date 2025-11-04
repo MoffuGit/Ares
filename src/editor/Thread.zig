@@ -93,7 +93,11 @@ fn wakeupCallback(
 
 fn drainMailbox(self: *Thread) !void {
     while (self.mailbox.pop()) |message| {
-        log.debug("mailbox message={}", .{message});
+        switch (message) {
+            .size => |size| {
+                self.editor.resize(size);
+            },
+        }
     }
 }
 

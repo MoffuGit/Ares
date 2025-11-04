@@ -22,3 +22,14 @@ pub fn init(size: sizepkg.Size) Editor {
 pub fn deinit(self: *Editor) void {
     _ = self;
 }
+
+pub fn resize(self: *Editor, size: sizepkg.Size) void {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    self.size = size;
+    const grid_size = self.size.grid();
+
+    self.rows = grid_size.rows;
+    self.cols = grid_size.columns;
+}

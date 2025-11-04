@@ -121,6 +121,11 @@ pub fn sizeCallback(self: *Surface, size: apprt.SurfaceSize) void {
     if (curr_size.height == new_size.height and curr_size.width == new_size.width) return;
 
     self.size.screen = new_size;
+
+    _ = self.editor_thread.mailbox.push(.{ .size = self.size }, .instant);
+    self.editor_thread.wakeup.notify() catch {
+        log.err("dam, you cant wakeup the editor thread", .{});
+    };
 }
 
 pub fn contentScaleCallback(self: *Surface, scale: apprt.ContentScale) void {
