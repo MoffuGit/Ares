@@ -10,6 +10,7 @@ const embedpkg = @import("embedded/mod.zig");
 
 atlas_grayscale: Atlas,
 resolver: CodePointResolver,
+lock: std.Thread.RwLock = .{},
 // glyphs: void,
 // codepoints: void,
 

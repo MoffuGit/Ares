@@ -28,6 +28,8 @@ renderer: Renderer,
 renderer_thread: Thread,
 renderer_thr: std.Thread,
 
+grid: *fontpkg.Grid,
+
 //NOTE:
 //first, i need to add a font grid
 //second, i need to get the cell size from the metrics of the grid
@@ -72,7 +74,7 @@ pub fn init(
         .ydpi = @intFromFloat(y_dpi),
     };
 
-    self.* = .{ .renderer = renderer, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .renderer_thr = undefined };
+    self.* = .{ .renderer = renderer, .grid = &app.grid, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .renderer_thr = undefined };
 
     self.renderer_thr = try std.Thread.spawn(.{}, Thread.Thread.threadMain, .{&self.renderer_thread});
 }
