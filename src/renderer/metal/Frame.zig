@@ -91,8 +91,6 @@ fn bufferCompleted(
         };
     }
 
-    //WARN:
-    //this should set the health but right now i don't have it
     block.renderer.frameCompleted(health);
 }
 

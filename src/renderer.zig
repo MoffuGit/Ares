@@ -9,6 +9,9 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const objc = @import("objc");
 const mtl = @import("./renderer/metal/api.zig");
 const SwapChain = @import("./renderer/SwapChain.zig");
+const macos = @import("macos");
+const Thread = @import("renderer/Thread.zig");
+const xev = @import("global.zig").xev;
 
 const log = std.log.scoped(.renderer);
 
@@ -29,6 +32,7 @@ api: Metal,
 shaders: Shaders,
 mutex: std.Thread.Mutex = .{},
 health: std.atomic.Value(Health) = .{ .raw = .healthy },
+display_link: ?*macos.video.DisplayLink = null,
 swap_chain: SwapChain,
 first: bool = true,
 
@@ -39,7 +43,10 @@ pub fn init(alloc: Allocator, opts: Options) !Renderer {
     var swap_chain = try SwapChain.init(&api);
     errdefer swap_chain.deinit();
 
-    var renderer = Renderer{ .alloc = alloc, .size = opts.size, .api = api, .shaders = undefined, .swap_chain = swap_chain };
+    const display_link = try macos.video.DisplayLink.createWithActiveCGDisplays();
+    errdefer display_link.release();
+
+    var renderer = Renderer{ .alloc = alloc, .size = opts.size, .api = api, .shaders = undefined, .swap_chain = swap_chain, .display_link = display_link };
 
     try renderer.initShaders();
 
@@ -49,6 +56,10 @@ pub fn init(alloc: Allocator, opts: Options) !Renderer {
 pub fn deinit(self: *Renderer) void {
     self.api.deinit();
     self.swap_chain.deinit();
+    if (self.display_link) |link| {
+        link.stop() catch {};
+        link.release();
+    }
     self.deinitShaders();
     self.* = undefined;
 }
@@ -143,4 +154,41 @@ pub fn frameCompleted(
 
     // Always release our semaphore
     self.swap_chain.releaseFrame();
+}
+
+pub fn hasVsync(self: *const Renderer) bool {
+    const display_link = self.display_link orelse return false;
+    return display_link.isRunning();
+}
+
+pub fn loopEnter(self: *Renderer, thr: *Thread) !void {
+    self.api.loopEnter();
+    // This is when we know our "self" pointer is stable so we can
+    // setup the display link. To setup the display link we set our
+    // callback and we can start it immediately.
+    const display_link = self.display_link orelse return;
+    try display_link.setOutputCallback(
+        xev.Async,
+        &displayLinkCallback,
+        &thr.draw_now,
+    );
+    display_link.start() catch {};
+}
+
+pub fn loopExit(self: *Renderer) void {
+    // Stop our display link. If this fails its okay it just means
+    // that we either never started it or the view its attached to
+    // is gone which is fine.
+    const display_link = self.display_link orelse return;
+    display_link.stop() catch {};
+}
+
+fn displayLinkCallback(
+    _: *macos.video.DisplayLink,
+    ud: ?*xev.Async,
+) void {
+    const draw_now = ud orelse return;
+    draw_now.notify() catch |err| {
+        log.err("error notifying draw_now err={}", .{err});
+    };
 }

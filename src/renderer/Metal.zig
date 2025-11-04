@@ -136,7 +136,7 @@ pub fn loopEnter(self: *Metal) void {
 }
 
 fn displayCallback(renderer: *Renderer) align(8) void {
-    renderer.drawFrame(false) catch |err| {
+    renderer.drawFrame(true) catch |err| {
         log.warn("Error drawing frame in display callback, err={}", .{err});
     };
 }

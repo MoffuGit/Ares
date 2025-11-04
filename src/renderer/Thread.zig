@@ -26,6 +26,9 @@ draw_c: xev.Completion = .{},
 stop: xev.Async,
 stop_c: xev.Completion = .{},
 
+draw_now: xev.Async,
+draw_now_c: xev.Completion = .{},
+
 surface: *apprt.Surface,
 renderer: *rendererpkg.Renderer,
 
@@ -45,18 +48,22 @@ pub fn init(
     var wakeup_h = try xev.Async.init();
     errdefer wakeup_h.deinit();
 
+    var draw_now = try xev.Async.init();
+    errdefer draw_now.deinit();
+
     var stop_h = try xev.Async.init();
     errdefer stop_h.deinit();
 
     var mailbox = try Mailbox.create(alloc);
     errdefer mailbox.destroy(alloc);
 
-    return .{ .alloc = alloc, .surface = surface, .renderer = renderer_impl, .loop = loop, .draw_h = draw_h, .stop = stop_h, .mailbox = mailbox, .wakeup = wakeup_h };
+    return .{ .alloc = alloc, .draw_now = draw_now, .surface = surface, .renderer = renderer_impl, .loop = loop, .draw_h = draw_h, .stop = stop_h, .mailbox = mailbox, .wakeup = wakeup_h };
 }
 
 pub fn deinit(self: *Thread) void {
     self.draw_h.deinit();
     self.stop.deinit();
+    self.draw_now.deinit();
     self.wakeup.deinit();
     self.mailbox.destroy(self.alloc);
 }
@@ -70,20 +77,40 @@ pub fn threadMain(self: *Thread) void {
 fn threadMain_(self: *Thread) !void {
     defer log.debug("renderer thread exited", .{});
 
-    const has_loop = @hasDecl(rendererpkg.Renderer, "loopEnter");
-    if (has_loop) try self.renderer.api.loopEnter(self);
+    try self.renderer.loopEnter(self);
+    defer self.renderer.loopExit();
 
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
+    self.draw_now.wait(&self.loop, &self.draw_now_c, Thread, self, drawNowCallback);
 
-    try self.startDrawTimer();
+    try self.wakeup.notify();
+    self.startDrawTimer();
 
     log.debug("starting renderer thread", .{});
     defer log.debug("starting renderer thread shutdown", .{});
     _ = try self.loop.run(.until_done);
 }
 
-fn startDrawTimer(self: *Thread) !void {
+fn drawNowCallback(
+    self_: ?*Thread,
+    _: *xev.Loop,
+    _: *xev.Completion,
+    r: xev.Async.WaitError!void,
+) xev.CallbackAction {
+    _ = r catch |err| {
+        log.err("error in draw now err={}", .{err});
+        return .rearm;
+    };
+
+    // Draw immediately
+    const t = self_.?;
+    t.drawFrame(true);
+
+    return .rearm;
+}
+
+fn startDrawTimer(self: *Thread) void {
     self.draw_h.run(
         &self.loop,
         &self.draw_c,
@@ -107,14 +134,16 @@ fn drawCallback(
         return .disarm;
     };
 
-    t.drawFrame();
+    t.drawFrame(false);
 
     t.draw_h.run(&t.loop, &t.draw_c, DRAW_INTERVAL, Thread, t, drawCallback);
 
     return .disarm;
 }
 
-fn drawFrame(self: *Thread) void {
+fn drawFrame(self: *Thread, now: bool) void {
+    if (!now and self.renderer.hasVsync()) return;
+
     self.renderer.drawFrame(false) catch |err|
         log.warn("error drawing err={}", .{err});
 }
@@ -146,6 +175,8 @@ fn wakeupCallback(
     // wake up our thread after publishing.
     t.drainMailbox() catch |err|
         log.err("error draining mailbox err={}", .{err});
+
+    t.drawFrame(false);
 
     return .rearm;
 }

@@ -90,7 +90,7 @@ pub fn deinit(self: *Surface) void {
 }
 
 pub fn sizeCallback(self: *Surface, size: apprt.SurfaceSize) void {
-    if (std.meta.eql(size, self.size)) return;
+    if (size.width == self.size.width and size.height == self.size.height) return;
 
     self.size = size;
 }
