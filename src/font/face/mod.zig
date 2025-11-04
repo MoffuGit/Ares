@@ -1,5 +1,5 @@
-const Face = @import("coretext.zig");
-const Metrics = @import("../Metrics.zig");
+pub const Face = @import("coretext.zig");
+pub const Metrics = @import("../Metrics.zig");
 
 pub const default_dpi = 72;
 
@@ -8,6 +8,32 @@ pub const GlyphSize = struct {
     height: f64,
     x: f64,
     y: f64,
+};
+
+pub const Options = struct {
+    size: DesiredSize,
+};
+
+pub const Variation = struct {
+    id: Id,
+    value: f64,
+
+    pub const Id = packed struct(u32) {
+        d: u8,
+        c: u8,
+        b: u8,
+        a: u8,
+
+        pub fn init(v: *const [4]u8) Id {
+            return .{ .a = v[0], .b = v[1], .c = v[2], .d = v[3] };
+        }
+
+        /// Converts the ID to a string. The return value is only valid
+        /// for the lifetime of the self pointer.
+        pub fn str(self: Id) [4]u8 {
+            return .{ self.a, self.b, self.c, self.d };
+        }
+    };
 };
 
 pub const DesiredSize = struct {

@@ -6,6 +6,7 @@ const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const macos = @import("macos");
 const fontpkg = @import("../mod.zig");
+const facepkg = @import("mod.zig");
 const ColorState = @import("colorstate.zig");
 const opentype = @import("../opentype/mod.zig");
 
@@ -19,7 +20,7 @@ synthetic_bold: ?f64 = null,
 
 color: ?ColorState = null,
 
-size: fontpkg.DesiredSize,
+size: facepkg.DesiredSize,
 
 /// The matrix applied to a regular font to auto-italicize it.
 pub const italic_skew = macos.graphics.AffineTransform{
@@ -34,7 +35,7 @@ pub const italic_skew = macos.graphics.AffineTransform{
 /// Initialize a CoreText-based font from a TTF/TTC in memory.
 pub fn init(
     source: [:0]const u8,
-    opts: fontpkg.face.Options,
+    opts: facepkg.Options,
 ) !Face {
     const data = try macos.foundation.Data.createWithBytesNoCopy(source);
     defer data.release();
@@ -53,7 +54,7 @@ pub fn init(
 /// but with a new size. This is often how CoreText fonts are initialized
 /// because the font is loaded at a default size during discovery, and then
 /// adjusted to the final size for final load.
-pub fn initFontCopy(base: *macos.text.Font, opts: fontpkg.face.Options) !Face {
+pub fn initFontCopy(base: *macos.text.Font, opts: facepkg.Options) !Face {
     // Create a copy. The copyWithAttributes docs say the size is in points,
     // but we need to scale the points by the DPI and to do that we use our
     // function called "pixels".
@@ -69,7 +70,7 @@ pub fn initFontCopy(base: *macos.text.Font, opts: fontpkg.face.Options) !Face {
 
 /// Initialize a face with a CTFont. This will take ownership over
 /// the CTFont. This does NOT copy or retain the CTFont.
-pub fn initFont(ct_font: *macos.text.Font, opts: fontpkg.face.Options) !Face {
+pub fn initFont(ct_font: *macos.text.Font, opts: facepkg.Options) !Face {
     const traits = ct_font.getSymbolicTraits();
 
     const color: ?ColorState = if (traits.color_glyphs)
@@ -107,7 +108,7 @@ pub fn initFont(ct_font: *macos.text.Font, opts: fontpkg.face.Options) !Face {
 
                 var id_raw: c_int = 0;
                 _ = cf_id.getValue(.int, &id_raw);
-                const id: fontpkg.face.Variation.Id = @bitCast(id_raw);
+                const id: facepkg.Variation.Id = @bitCast(id_raw);
 
                 var min: f64 = 0;
                 _ = cf_min.getValue(.double, &min);
@@ -140,7 +141,7 @@ pub fn deinit(self: *Face) void {
 
 /// Return a new face that is the same as this but has a transformation
 /// matrix applied to italicize it.
-pub fn syntheticItalic(self: *const Face, opts: fontpkg.face.Options) !Face {
+pub fn syntheticItalic(self: *const Face, opts: facepkg.Options) !Face {
     const ct_font = try self.font.copyWithAttributes(0.0, &italic_skew, null);
     errdefer ct_font.release();
     return try initFont(ct_font, opts);
@@ -149,7 +150,7 @@ pub fn syntheticItalic(self: *const Face, opts: fontpkg.face.Options) !Face {
 /// Return a new face that is the same as this but applies a synthetic
 /// bold effect to it. This is useful for fonts that don't have a bold
 /// variant.
-pub fn syntheticBold(self: *const Face, opts: fontpkg.face.Options) !Face {
+pub fn syntheticBold(self: *const Face, opts: facepkg.Options) !Face {
     const ct_font = try self.font.copyWithAttributes(0.0, null, null);
     errdefer ct_font.release();
     var face = try initFont(ct_font, opts);
@@ -182,7 +183,7 @@ pub fn name(self: *const Face, buf: []u8) Allocator.Error![]const u8 {
 
 /// Resize the font in-place. If this succeeds, the caller is responsible
 /// for clearing any glyph caches, font atlas data, etc.
-pub fn setSize(self: *Face, opts: fontpkg.face.Options) !void {
+pub fn setSize(self: *Face, opts: facepkg.Options) !void {
     // We just create a copy and replace ourself
     const face = try initFontCopy(self.font, opts);
     self.deinit();
@@ -193,8 +194,8 @@ pub fn setSize(self: *Face, opts: fontpkg.face.Options) !void {
 /// in-place.
 pub fn setVariations(
     self: *Face,
-    vs: []const fontpkg.face.Variation,
-    opts: fontpkg.face.Options,
+    vs: []const facepkg.Variation,
+    opts: facepkg.Options,
 ) !void {
     // If we have no variations, we don't need to do anything.
     if (vs.len == 0) return;

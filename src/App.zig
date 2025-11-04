@@ -4,9 +4,12 @@ const std = @import("std");
 const apprt = @import("apprt/embedded.zig");
 const Allocator = std.mem.Allocator;
 const SurfaceList = std.ArrayListUnmanaged(*apprt.Surface);
+const fontpkg = @import("font/mod.zig");
+const Grid = fontpkg.Grid;
 
 alloc: Allocator,
 surfaces: SurfaceList,
+grid: Grid,
 
 pub fn create(alloc: Allocator) !*App {
     var app = try alloc.create(App);
@@ -17,7 +20,7 @@ pub fn create(alloc: Allocator) !*App {
 }
 
 pub fn init(self: *App, alloc: Allocator) !void {
-    self.* = .{ .alloc = alloc, .surfaces = .{} };
+    self.* = .{ .alloc = alloc, .surfaces = .{}, .grid = try Grid.init(alloc, .{ .size = .{ .points = 12 } }) };
 }
 
 pub fn deinit(self: *App) void {

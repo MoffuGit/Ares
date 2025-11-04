@@ -40,6 +40,7 @@ renderer_thr: std.Thread,
 //  position on the atlas
 //  size
 //eight, this should happen for my message
+//nine, i need to add a shaper
 
 pub fn init(
     self: *Surface,
