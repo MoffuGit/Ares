@@ -8,6 +8,7 @@ const log = std.log.scoped(.renderer_thread);
 const xev = @import("../global.zig").xev;
 const BlockingQueue = @import("../datastruct/blocking_queue.zig").BlockingQueue;
 const messagepkg = @import("./Message.zig");
+const SharedState = @import("../SharedState.zig");
 
 pub const Mailbox = BlockingQueue(messagepkg.Message, 64);
 
@@ -34,11 +35,9 @@ renderer: *rendererpkg.Renderer,
 
 mailbox: *Mailbox,
 
-pub fn init(
-    alloc: Allocator,
-    surface: *apprt.Surface,
-    renderer_impl: *rendererpkg.Renderer,
-) !Thread {
+shared_state: *SharedState,
+
+pub fn init(alloc: Allocator, surface: *apprt.Surface, renderer_impl: *rendererpkg.Renderer, state: *SharedState) !Thread {
     var loop = try xev.Loop.init(.{});
     errdefer loop.deinit();
 
@@ -57,7 +56,7 @@ pub fn init(
     var mailbox = try Mailbox.create(alloc);
     errdefer mailbox.destroy(alloc);
 
-    return .{ .alloc = alloc, .draw_now = draw_now, .surface = surface, .renderer = renderer_impl, .loop = loop, .draw_h = draw_h, .stop = stop_h, .mailbox = mailbox, .wakeup = wakeup_h };
+    return .{ .alloc = alloc, .shared_state = state, .draw_now = draw_now, .surface = surface, .renderer = renderer_impl, .loop = loop, .draw_h = draw_h, .stop = stop_h, .mailbox = mailbox, .wakeup = wakeup_h };
 }
 
 pub fn deinit(self: *Thread) void {
@@ -176,9 +175,34 @@ fn wakeupCallback(
     t.drainMailbox() catch |err|
         log.err("error draining mailbox err={}", .{err});
 
-    t.drawFrame(false);
+    _ = renderCallback(t, undefined, undefined, {});
 
     return .rearm;
+}
+
+fn renderCallback(
+    self_: ?*Thread,
+    _: *xev.Loop,
+    _: *xev.Completion,
+    r: xev.Timer.RunError!void,
+) xev.CallbackAction {
+    _ = r catch unreachable;
+    const t: *Thread = self_ orelse {
+        // This shouldn't happen so we log it.
+        log.warn("render callback fired without data set", .{});
+        return .disarm;
+    };
+
+    // Update our frame data
+    t.renderer.updateFrame(
+        t.shared_state,
+    ) catch |err|
+        log.warn("error rendering err={}", .{err});
+
+    // Draw
+    t.drawFrame(false);
+
+    return .disarm;
 }
 
 fn drainMailbox(self: *Thread) !void {

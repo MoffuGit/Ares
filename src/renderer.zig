@@ -12,6 +12,8 @@ const macos = @import("macos");
 const Thread = @import("renderer/Thread.zig");
 const xev = @import("global.zig").xev;
 const sizepkg = @import("size.zig");
+const fontpkg = @import("font/mod.zig");
+const SharedState = @import("SharedState.zig");
 
 const log = std.log.scoped(.renderer);
 
@@ -27,14 +29,23 @@ pub const Health = enum(c_int) {
 };
 
 alloc: Allocator,
-size: sizepkg.Size,
+
 api: Metal,
 shaders: Shaders,
+
 mutex: std.Thread.Mutex = .{},
+
 health: std.atomic.Value(Health) = .{ .raw = .healthy },
 display_link: ?*macos.video.DisplayLink = null,
 swap_chain: SwapChain,
+
 first: bool = true,
+
+size: sizepkg.Size,
+
+grid_size: sizepkg.GridSize = .{},
+
+grid: *fontpkg.Grid,
 
 pub fn init(alloc: Allocator, opts: Options) !Renderer {
     var api = try Metal.init(opts.rt_surface);
@@ -46,7 +57,7 @@ pub fn init(alloc: Allocator, opts: Options) !Renderer {
     const display_link = try macos.video.DisplayLink.createWithActiveCGDisplays();
     errdefer display_link.release();
 
-    var renderer = Renderer{ .alloc = alloc, .size = opts.size, .api = api, .shaders = undefined, .swap_chain = swap_chain, .display_link = display_link };
+    var renderer = Renderer{ .alloc = alloc, .size = opts.size, .api = api, .shaders = undefined, .swap_chain = swap_chain, .display_link = display_link, .grid = opts.grid };
 
     try renderer.initShaders();
 
@@ -94,11 +105,11 @@ pub fn drawFrame(
         self.size.screen.height != surface_size.height;
 
     const needs_redraw =
-        size_changed or sync or self.first;
-
-    self.*.first = false;
+        size_changed or sync;
 
     if (!needs_redraw) return;
+
+    log.debug("grid_size: {}", .{self.grid_size});
 
     const frame = try self.swap_chain.nextFrame();
     errdefer self.swap_chain.releaseFrame();
@@ -191,4 +202,32 @@ fn displayLinkCallback(
     draw_now.notify() catch |err| {
         log.err("error notifying draw_now err={}", .{err});
     };
+}
+
+pub fn updateFrame(self: *Renderer, state: *SharedState) !void {
+    const Critical = struct { row: u16, col: u16 };
+    const critical: Critical = critical: {
+        state.mutex.lock();
+        defer state.mutex.unlock();
+
+        break :critical .{ .col = state.editor.cols, .row = state.editor.rows };
+    };
+
+    try self.rebuildCells(critical.row, critical.col);
+}
+
+fn rebuildCells(self: *Renderer, row: u16, col: u16) !void {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    const grid_size_diff =
+        self.grid_size.rows != row or
+        self.grid_size.columns != col;
+
+    if (grid_size_diff) {
+        var new_size = self.grid_size;
+        new_size.rows = row;
+        new_size.columns = col;
+        self.grid_size = new_size;
+    }
 }

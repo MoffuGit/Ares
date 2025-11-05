@@ -17,6 +17,7 @@ const EditorThread = @import("editor/Thread.zig");
 const RenderThread = @import("./renderer/Thread.zig");
 
 const log = std.log.scoped(.surface);
+const SharedState = @import("SharedState.zig");
 
 alloc: Allocator,
 
@@ -40,6 +41,8 @@ metrics: facepkg.Metrics,
 
 grid: Grid,
 
+shared_state: SharedState,
+
 pub fn init(
     self: *Surface,
     alloc: Allocator,
@@ -47,7 +50,7 @@ pub fn init(
     rt_app: *apprt.App,
     rt_surface: *apprt.Surface,
 ) !void {
-    var renderer_thread = try RenderThread.init(alloc, rt_surface, &self.renderer);
+    var renderer_thread = try RenderThread.init(alloc, rt_surface, &self.renderer, &self.shared_state);
     errdefer renderer_thread.deinit();
 
     var editor_thread = try EditorThread.init(alloc, &self.editor);
@@ -86,13 +89,14 @@ pub fn init(
         break :size size;
     };
 
-    const renderer = try Renderer.init(alloc, .{ .size = size, .rt_surface = rt_surface });
-    const editor = Editor.init(size);
+    const renderer = try Renderer.init(alloc, .{ .size = size, .rt_surface = rt_surface, .grid = &self.grid });
+    const mutex: std.Thread.Mutex = .{};
+    const editor = Editor.init(size, mutex, &self.renderer_thread);
 
-    self.* = .{ .renderer = renderer, .metrics = grid.metrics, .grid = grid, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .editor = editor, .editor_thread = editor_thread, .renderer_thr = undefined, .editor_thr = undefined };
+    self.* = .{ .renderer = renderer, .metrics = grid.metrics, .grid = grid, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .editor = editor, .editor_thread = editor_thread, .renderer_thr = undefined, .editor_thr = undefined, .shared_state = .{ .editor = &self.editor, .mutex = mutex } };
 
-    self.renderer_thr = try std.Thread.spawn(.{}, RenderThread.Thread.threadMain, .{&self.renderer_thread});
     self.editor_thr = try std.Thread.spawn(.{}, EditorThread.Thread.threadMain, .{&self.editor_thread});
+    self.renderer_thr = try std.Thread.spawn(.{}, RenderThread.Thread.threadMain, .{&self.renderer_thread});
 }
 
 pub fn deinit(self: *Surface) void {
