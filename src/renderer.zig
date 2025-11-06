@@ -22,6 +22,7 @@ pub const GraphicsAPI = Metal;
 const shaderpkg = GraphicsAPI.shaders;
 const Shaders = shaderpkg.Shaders;
 const Buffer = GraphicsAPI.Buffer;
+const Uniforms = shaderpkg.Uniforms;
 
 pub const Health = enum(c_int) {
     healthy = 0,
@@ -32,6 +33,7 @@ alloc: Allocator,
 
 api: Metal,
 shaders: Shaders,
+uniforms: Uniforms,
 
 mutex: std.Thread.Mutex = .{},
 
@@ -57,11 +59,33 @@ pub fn init(alloc: Allocator, opts: Options) !Renderer {
     const display_link = try macos.video.DisplayLink.createWithActiveCGDisplays();
     errdefer display_link.release();
 
-    var renderer = Renderer{ .alloc = alloc, .size = opts.size, .api = api, .shaders = undefined, .swap_chain = swap_chain, .display_link = display_link, .grid = opts.grid };
+    var renderer = Renderer{ .alloc = alloc, .size = opts.size, .api = api, .shaders = undefined, .swap_chain = swap_chain, .display_link = display_link, .grid = opts.grid, .uniforms = .{ .grid_size = undefined, .cell_size = undefined, .screen_size = undefined } };
 
     try renderer.initShaders();
+    renderer.updateFontGridUniforms();
+    renderer.updateScreenSizeUniforms();
 
     return renderer;
+}
+
+fn updateFontGridUniforms(self: *Renderer) void {
+    self.uniforms.cell_size = .{
+        @floatFromInt(self.size.cell.width),
+        @floatFromInt(self.size.cell.height),
+    };
+}
+
+fn updateScreenSizeUniforms(self: *Renderer) void {
+    // self.uniforms.projection_matrix = math.ortho2d(
+    //     -1 * @as(f32, @floatFromInt(self.size.padding.left)),
+    //     @floatFromInt(terminal_size.width + self.size.padding.right),
+    //     @floatFromInt(terminal_size.height + self.size.padding.bottom),
+    //     -1 * @as(f32, @floatFromInt(self.size.padding.top)),
+    // );
+    self.uniforms.screen_size = .{
+        @floatFromInt(self.size.screen.width),
+        @floatFromInt(self.size.screen.height),
+    };
 }
 
 pub fn deinit(self: *Renderer) void {
@@ -109,8 +133,6 @@ pub fn drawFrame(
 
     if (!needs_redraw) return;
 
-    log.debug("grid_size: {}", .{self.grid_size});
-
     const frame = try self.swap_chain.nextFrame();
     errdefer self.swap_chain.releaseFrame();
 
@@ -119,6 +141,7 @@ pub fn drawFrame(
             .width = surface_size.width,
             .height = surface_size.height,
         };
+        self.updateScreenSizeUniforms();
     }
 
     if (frame.target.width != self.size.screen.width or
@@ -131,6 +154,8 @@ pub fn drawFrame(
         );
     }
 
+    try frame.uniforms.sync(&.{self.uniforms});
+
     var frame_ctx = try self.api.beginFrame(self, &frame.target);
     defer frame_ctx.complete(sync);
 
@@ -140,9 +165,16 @@ pub fn drawFrame(
                 .target = .{
                     .target = frame.target,
                 },
-                .clear_color = .{ 1.0, 0.0, 0.0, 1.0 },
+                .clear_color = .{ 0.0, 0.0, 0.0, 0.0 },
             },
         });
+        render_pass.step(.{
+            .pipeline = self.shaders.pipelines.grid, // Assuming 'grid' pipeline is created
+            .uniforms = frame.uniforms.buffer,
+            .buffers = &.{frame.vertex.buffer}, // Use the same full-screen quad for the grid
+            .draw = .{ .vertex_count = 4, .type = .triangle_strip },
+        });
+
         defer render_pass.complete();
     }
 }
@@ -229,5 +261,6 @@ fn rebuildCells(self: *Renderer, row: u16, col: u16) !void {
         new_size.rows = row;
         new_size.columns = col;
         self.grid_size = new_size;
+        self.uniforms.grid_size = .{ new_size.columns, new_size.rows };
     }
 }

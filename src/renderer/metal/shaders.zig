@@ -11,14 +11,13 @@ const Pipeline = @import("Pipeline.zig");
 const log = std.log.scoped(.metal);
 
 pub const VertexInput = extern struct {
-    position: [3]f32 align(16), // Corresponds to float3 position [[attribute(0)]]
-    color: [4]f32 align(16), // Corresponds to float4 color [[attribute(1)]]
-
+    position: [4]f32 align(16),
+    color: [4]f32 align(16),
 };
 
 const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
     &.{
-        .{ "bg_color", .{ .vertex_fn = "vertexShader", .fragment_fn = "fragmentShader", .blending_enabled = false, .vertex_attributes = VertexInput } },
+        .{ "grid", .{ .vertex_fn = "vertexShader", .fragment_fn = "fragmentShader", .blending_enabled = false, .vertex_attributes = VertexInput } },
     };
 
 /// All the comptime-known info about a pipeline, so that
@@ -139,7 +138,7 @@ pub const Uniforms = extern struct {
 
     /// The projection matrix for turning world coordinates to normalized.
     /// This is calculated based on the size of the screen.
-    projection_matrix: math.Mat align(16),
+    // projection_matrix: math.Mat align(16),
 
     /// Size of the screen (render target) in pixels.
     screen_size: [2]f32 align(8),
@@ -150,58 +149,58 @@ pub const Uniforms = extern struct {
     /// Size of the grid in columns and rows.
     grid_size: [2]u16 align(4),
 
-    /// The padding around the terminal grid in pixels. In order:
-    /// top, right, bottom, left.
-    grid_padding: [4]f32 align(16),
+    // /// The padding around the terminal grid in pixels. In order:
+    // /// top, right, bottom, left.
+    // grid_padding: [4]f32 align(16),
 
-    /// Bit mask defining which directions to
-    /// extend cell colors in to the padding.
-    /// Order, LSB first: left, right, up, down
-    padding_extend: PaddingExtend align(1),
+    // /// Bit mask defining which directions to
+    // /// extend cell colors in to the padding.
+    // /// Order, LSB first: left, right, up, down
+    // padding_extend: PaddingExtend align(1),
 
-    /// The minimum contrast ratio for text. The contrast ratio is calculated
-    /// according to the WCAG 2.0 spec.
-    min_contrast: f32 align(4),
+    //    /// The minimum contrast ratio for text. The contrast ratio is calculated
+    //   /// according to the WCAG 2.0 spec.
+    // min_contrast: f32 align(4),
 
-    /// The cursor position and color.
-    cursor_pos: [2]u16 align(4),
-    cursor_color: [4]u8 align(4),
+    //   /// The cursor position and color.
+    // cursor_pos: [2]u16 align(4),
+    // cursor_color: [4]u8 align(4),
 
-    /// The background color for the whole surface.
-    bg_color: [4]u8 align(4),
+    //  /// The background color for the whole surface.
+    // bg_color: [4]u8 align(4),
 
-    /// Various booleans.
-    ///
-    /// TODO: Maybe put these in a packed struct, like for OpenGL.
-    bools: extern struct {
-        /// Whether the cursor is 2 cells wide.
-        cursor_wide: bool align(1),
+    //  /// Various booleans.
+    //  ///
+    //  /// TODO: Maybe put these in a packed struct, like for OpenGL.
+    // bools: extern struct {
+    //     /// Whether the cursor is 2 cells wide.
+    //     cursor_wide: bool align(1),
+    //
+    //     /// Indicates that colors provided to the shader are already in
+    //     /// the P3 color space, so they don't need to be converted from
+    //     /// sRGB.
+    //     use_display_p3: bool align(1),
+    //
+    //     /// Indicates that the color attachments for the shaders have
+    //     /// an `*_srgb` pixel format, which means the shaders need to
+    //     /// output linear RGB colors rather than gamma encoded colors,
+    //     /// since blending will be performed in linear space and then
+    //     /// Metal itself will re-encode the colors for storage.
+    //     use_linear_blending: bool align(1),
+    //
+    //     /// Enables a weight correction step that makes text rendered
+    //     /// with linear alpha blending have a similar apparent weight
+    //     /// (thickness) to gamma-incorrect blending.
+    //     use_linear_correction: bool align(1) = false,
+    // },
 
-        /// Indicates that colors provided to the shader are already in
-        /// the P3 color space, so they don't need to be converted from
-        /// sRGB.
-        use_display_p3: bool align(1),
-
-        /// Indicates that the color attachments for the shaders have
-        /// an `*_srgb` pixel format, which means the shaders need to
-        /// output linear RGB colors rather than gamma encoded colors,
-        /// since blending will be performed in linear space and then
-        /// Metal itself will re-encode the colors for storage.
-        use_linear_blending: bool align(1),
-
-        /// Enables a weight correction step that makes text rendered
-        /// with linear alpha blending have a similar apparent weight
-        /// (thickness) to gamma-incorrect blending.
-        use_linear_correction: bool align(1) = false,
-    },
-
-    const PaddingExtend = packed struct(u8) {
-        left: bool = false,
-        right: bool = false,
-        up: bool = false,
-        down: bool = false,
-        _padding: u4 = 0,
-    };
+    // const PaddingExtend = packed struct(u8) {
+    //     left: bool = false,
+    //     right: bool = false,
+    //     up: bool = false,
+    //     down: bool = false,
+    //     _padding: u4 = 0,
+    // };
 };
 
 /// This is a single parameter for the terminal cell shader.

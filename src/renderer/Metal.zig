@@ -13,10 +13,24 @@ const mtl = @import("./metal/api.zig");
 
 pub const Target = @import("./metal/Target.zig");
 pub const shaders = @import("./metal/shaders.zig");
-pub const Buffer = @import("./metal/buffer.zig").Buffer;
+const bufferpkg = @import("metal/buffer.zig");
+pub const Buffer = bufferpkg.Buffer;
 
 const log = std.log.scoped(.metal);
 const Renderer = @import("../renderer.zig").Renderer;
+
+pub inline fn bufferOptions(self: Metal) bufferpkg.Options {
+    return .{
+        .device = self.device,
+        .resource_options = .{
+            // Indicate that the CPU writes to this resource but never reads it.
+            .cpu_cache_mode = .write_combined,
+            .storage_mode = self.default_storage_mode,
+        },
+    };
+}
+
+pub const uniformBufferOptions = bufferOptions;
 
 layer: IOSurfaceLayer,
 /// MTLDevice
