@@ -89,9 +89,11 @@ pub fn init(
         break :size size;
     };
 
-    const renderer = try Renderer.init(alloc, .{ .size = size, .rt_surface = rt_surface, .grid = &self.grid });
+    var renderer = try Renderer.init(alloc, .{ .size = size, .rt_surface = rt_surface, .grid = &self.grid });
+    errdefer renderer.deinit();
     const mutex: std.Thread.Mutex = .{};
-    const editor = Editor.init(size, mutex, &self.renderer_thread);
+    var editor = try Editor.init(size, mutex, &self.renderer_thread);
+    errdefer editor.deinit();
 
     self.* = .{ .renderer = renderer, .metrics = grid.metrics, .grid = grid, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .editor = editor, .editor_thread = editor_thread, .renderer_thr = undefined, .editor_thr = undefined, .shared_state = .{ .editor = &self.editor, .mutex = mutex } };
 
