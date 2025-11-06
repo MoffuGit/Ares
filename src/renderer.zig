@@ -46,6 +46,7 @@ first: bool = true,
 size: sizepkg.Size,
 
 grid_size: sizepkg.GridSize = .{},
+cells: []shaderpkg.CellText,
 
 grid: *fontpkg.Grid,
 
@@ -59,7 +60,7 @@ pub fn init(alloc: Allocator, opts: Options) !Renderer {
     const display_link = try macos.video.DisplayLink.createWithActiveCGDisplays();
     errdefer display_link.release();
 
-    var renderer = Renderer{ .alloc = alloc, .size = opts.size, .api = api, .shaders = undefined, .swap_chain = swap_chain, .display_link = display_link, .grid = opts.grid, .uniforms = .{ .grid_size = undefined, .cell_size = undefined, .screen_size = undefined } };
+    var renderer = Renderer{ .alloc = alloc, .size = opts.size, .api = api, .shaders = undefined, .swap_chain = swap_chain, .display_link = display_link, .grid = opts.grid, .uniforms = .{ .grid_size = undefined, .cell_size = undefined, .screen_size = undefined }, .cells = undefined };
 
     try renderer.initShaders();
     renderer.updateFontGridUniforms();
@@ -96,6 +97,7 @@ pub fn deinit(self: *Renderer) void {
         link.release();
     }
     self.deinitShaders();
+    self.alloc.free(self.cells);
     self.* = undefined;
 }
 
@@ -237,18 +239,24 @@ fn displayLinkCallback(
 }
 
 pub fn updateFrame(self: *Renderer, state: *SharedState) !void {
-    const Critical = struct { row: u16, col: u16 };
+    const Critical = struct { row: u16, col: u16, cells: []u32 };
     const critical: Critical = critical: {
         state.mutex.lock();
         defer state.mutex.unlock();
 
-        break :critical .{ .col = state.editor.cols, .row = state.editor.rows };
+        const editor_cells = state.editor.cells;
+        const cloned_cells = try self.alloc.alloc(u32, editor_cells.len);
+        @memcpy(cloned_cells, &editor_cells);
+
+        break :critical .{ .col = state.editor.cols, .row = state.editor.rows, .cells = cloned_cells };
     };
 
-    try self.rebuildCells(critical.row, critical.col);
+    defer self.alloc.free(critical.cells);
+
+    self.rebuildCells(critical.row, critical.col, critical.cells) catch {};
 }
 
-fn rebuildCells(self: *Renderer, row: u16, col: u16) !void {
+fn rebuildCells(self: *Renderer, row: u16, col: u16, cells: []u32) !void {
     self.mutex.lock();
     defer self.mutex.unlock();
 
@@ -262,5 +270,9 @@ fn rebuildCells(self: *Renderer, row: u16, col: u16) !void {
         new_size.columns = col;
         self.grid_size = new_size;
         self.uniforms.grid_size = .{ new_size.columns, new_size.rows };
+
+        for (cells) |cell| {
+            _ = self.grid.renderCodepoint(self.alloc, cell) catch {};
+        }
     }
 }

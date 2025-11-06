@@ -44,3 +44,10 @@ pub fn deinit(self: *Grid, alloc: Allocator) void {
     self.atlas_grayscale.deinit(alloc);
     self.resolver.deinit();
 }
+
+pub fn renderCodepoint(self: *Grid, alloc: Allocator, cp: u32) !?void {
+    _ = alloc;
+    const index = self.resolver.face.glyphIndex(cp) orelse return null;
+
+    std.log.debug("index: {}", .{index});
+}
