@@ -115,6 +115,12 @@ pub const Surface = struct {
     pub fn getSize(self: *Surface) SurfaceSize {
         return self.size;
     }
+
+    pub fn updateFilePwd(self: *Surface, pwd: [:0]const u8) void {
+        self.core_surface.setFilePwd(pwd) catch |err| {
+            log.err("error with new pwd: {}", .{err});
+        };
+    }
 };
 
 pub const CAPI = struct {
@@ -173,7 +179,6 @@ pub const CAPI = struct {
     }
 
     export fn ares_surface_set_file(surface: *Surface, pwd: [*:0]const u8) void {
-        log.debug("new file pwd: {s}", .{pwd});
-        _ = surface;
+        surface.updateFilePwd(std.mem.sliceTo(pwd, 0));
     }
 };
