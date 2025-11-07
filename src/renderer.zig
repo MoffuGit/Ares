@@ -60,7 +60,7 @@ pub fn init(alloc: Allocator, opts: Options) !Renderer {
     const display_link = try macos.video.DisplayLink.createWithActiveCGDisplays();
     errdefer display_link.release();
 
-    var renderer = Renderer{ .alloc = alloc, .size = opts.size, .api = api, .shaders = undefined, .swap_chain = swap_chain, .display_link = display_link, .grid = opts.grid, .uniforms = .{ .grid_size = undefined, .cell_size = undefined, .screen_size = undefined }, .cells = undefined };
+    var renderer = Renderer{ .alloc = alloc, .size = opts.size, .api = api, .shaders = undefined, .swap_chain = swap_chain, .display_link = display_link, .grid = opts.grid, .uniforms = .{ .grid_size = undefined, .cell_size = undefined, .screen_size = undefined }, .cells = &.{} };
 
     try renderer.initShaders();
     renderer.updateFontGridUniforms();
@@ -157,6 +157,7 @@ pub fn drawFrame(
     }
 
     try frame.uniforms.sync(&.{self.uniforms});
+    try frame.cells.sync(self.cells);
 
     var frame_ctx = try self.api.beginFrame(self, &frame.target);
     defer frame_ctx.complete(sync);
@@ -271,8 +272,31 @@ fn rebuildCells(self: *Renderer, row: u16, col: u16, cells: []u32) !void {
         self.grid_size = new_size;
         self.uniforms.grid_size = .{ new_size.columns, new_size.rows };
 
+        var glyphs = try self.alloc.alloc(shaderpkg.CellText, cells.len);
+
+        var idx: usize = 0;
+
         for (cells) |cell| {
-            _ = self.grid.renderCodepoint(self.alloc, cell) catch {};
+            defer idx += 1;
+
+            const glyph = self.grid.renderCodepoint(self.alloc, cell) catch {
+                continue;
+            };
+
+            glyphs[idx] = shaderpkg.CellText{
+                .atlas = @enumFromInt(0),
+                .grid_pos = .{ @intCast(idx), 0 },
+                .color = .{ 0.0, 0.0, 0.0, 0.0 },
+                .glyph_pos = .{ glyph.atlas_x, glyph.atlas_y },
+                .glyph_size = .{ glyph.width, glyph.height },
+                .bearings = .{
+                    @intCast(glyph.offset_x),
+                    @intCast(glyph.offset_y),
+                },
+            };
         }
+
+        self.alloc.free(self.cells);
+        self.cells = glyphs;
     }
 }

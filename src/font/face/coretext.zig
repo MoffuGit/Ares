@@ -261,7 +261,7 @@ pub fn renderGlyph(
     alloc: Allocator,
     atlas: *fontpkg.Atlas,
     glyph_index: u32,
-    opts: fontpkg.face.RenderOptions,
+    opts: facepkg.RenderOptions,
 ) !fontpkg.Glyph {
     var glyphs = [_]macos.graphics.Glyph{@intCast(glyph_index)};
 

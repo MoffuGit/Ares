@@ -4,6 +4,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Atlas = @import("Atlas.zig");
 const CodePointResolver = @import("CodePointResolver.zig");
+const fontpkg = @import("../font/mod.zig");
 const facepkg = @import("face/mod.zig");
 const Face = facepkg.Face;
 const embedpkg = @import("embedded/mod.zig");
@@ -45,9 +46,19 @@ pub fn deinit(self: *Grid, alloc: Allocator) void {
     self.resolver.deinit();
 }
 
-pub fn renderCodepoint(self: *Grid, alloc: Allocator, cp: u32) !?void {
-    _ = alloc;
-    const index = self.resolver.face.glyphIndex(cp) orelse return null;
+pub fn renderCodepoint(self: *Grid, alloc: Allocator, cp: u32) !fontpkg.Glyph {
+    const index = self.resolver.face.glyphIndex(cp) orelse return error.CpWithoutIndex;
 
-    std.log.debug("index: {}", .{index});
+    return try self.renderGlyph(alloc, index);
+}
+
+pub fn renderGlyph(self: *Grid, alloc: Allocator, index: u32) !fontpkg.Glyph {
+    self.lock.lock();
+    defer self.lock.unlock();
+
+    const atlas = &self.atlas_grayscale;
+
+    return try self.resolver.face.renderGlyph(alloc, atlas, index, .{
+        .grid_metrics = self.metrics,
+    });
 }
