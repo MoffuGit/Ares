@@ -14,6 +14,7 @@ const xev = @import("global.zig").xev;
 const sizepkg = @import("size.zig");
 const fontpkg = @import("font/mod.zig");
 const SharedState = @import("SharedState.zig");
+const math = @import("math.zig");
 
 const log = std.log.scoped(.renderer);
 
@@ -22,6 +23,7 @@ pub const GraphicsAPI = Metal;
 const shaderpkg = GraphicsAPI.shaders;
 const Shaders = shaderpkg.Shaders;
 const Buffer = GraphicsAPI.Buffer;
+const Texture = GraphicsAPI.Texture;
 const Uniforms = shaderpkg.Uniforms;
 
 pub const Health = enum(c_int) {
@@ -60,7 +62,7 @@ pub fn init(alloc: Allocator, opts: Options) !Renderer {
     const display_link = try macos.video.DisplayLink.createWithActiveCGDisplays();
     errdefer display_link.release();
 
-    var renderer = Renderer{ .alloc = alloc, .size = opts.size, .api = api, .shaders = undefined, .swap_chain = swap_chain, .display_link = display_link, .grid = opts.grid, .uniforms = .{ .grid_size = undefined, .cell_size = undefined, .screen_size = undefined }, .cells = &.{} };
+    var renderer = Renderer{ .alloc = alloc, .size = opts.size, .api = api, .shaders = undefined, .swap_chain = swap_chain, .display_link = display_link, .grid = opts.grid, .uniforms = .{ .grid_size = undefined, .cell_size = undefined, .screen_size = undefined, .projection_matrix = undefined }, .cells = &.{} };
 
     try renderer.initShaders();
     renderer.updateFontGridUniforms();
@@ -77,12 +79,12 @@ fn updateFontGridUniforms(self: *Renderer) void {
 }
 
 fn updateScreenSizeUniforms(self: *Renderer) void {
-    // self.uniforms.projection_matrix = math.ortho2d(
-    //     -1 * @as(f32, @floatFromInt(self.size.padding.left)),
-    //     @floatFromInt(terminal_size.width + self.size.padding.right),
-    //     @floatFromInt(terminal_size.height + self.size.padding.bottom),
-    //     -1 * @as(f32, @floatFromInt(self.size.padding.top)),
-    // );
+    self.uniforms.projection_matrix = math.ortho2d(
+        0,
+        @floatFromInt(self.size.screen.width),
+        @floatFromInt(self.size.screen.height),
+        0,
+    );
     self.uniforms.screen_size = .{
         @floatFromInt(self.size.screen.width),
         @floatFromInt(self.size.screen.height),
@@ -159,6 +161,8 @@ pub fn drawFrame(
     try frame.uniforms.sync(&.{self.uniforms});
     try frame.cells.sync(self.cells);
 
+    try self.syncAtlasTexture(&self.grid.atlas_grayscale, &frame.grayscale);
+
     var frame_ctx = try self.api.beginFrame(self, &frame.target);
     defer frame_ctx.complete(sync);
 
@@ -171,12 +175,28 @@ pub fn drawFrame(
                 .clear_color = .{ 0.0, 0.0, 0.0, 0.0 },
             },
         });
+        // render_pass.step(.{
+        //     .pipeline = self.shaders.pipelines.grid, // Assuming 'grid' pipeline is created
+        //     .uniforms = frame.uniforms.buffer,
+        //     .buffers = &.{frame.vertex.buffer}, // Use the same full-screen quad for the grid
+        //     .draw = .{ .vertex_count = 4, .type = .triangle_strip },
+        // });
         render_pass.step(.{
-            .pipeline = self.shaders.pipelines.grid, // Assuming 'grid' pipeline is created
+            .pipeline = self.shaders.pipelines.cell,
             .uniforms = frame.uniforms.buffer,
-            .buffers = &.{frame.vertex.buffer}, // Use the same full-screen quad for the grid
-            .draw = .{ .vertex_count = 4, .type = .triangle_strip },
+            .buffers = &.{
+                frame.cells.buffer,
+            },
+            .textures = &.{
+                frame.grayscale,
+            },
+            .draw = .{
+                .type = .triangle_strip,
+                .vertex_count = 4,
+                .instance_count = self.cells.len,
+            },
         });
+        //
 
         defer render_pass.complete();
     }
@@ -284,9 +304,8 @@ fn rebuildCells(self: *Renderer, row: u16, col: u16, cells: []u32) !void {
             };
 
             glyphs[idx] = shaderpkg.CellText{
-                .atlas = @enumFromInt(0),
                 .grid_pos = .{ @intCast(idx), 0 },
-                .color = .{ 0.0, 0.0, 0.0, 0.0 },
+                .color = .{ 1.0, 1.0, 1.0, 1.0 },
                 .glyph_pos = .{ glyph.atlas_x, glyph.atlas_y },
                 .glyph_size = .{ glyph.width, glyph.height },
                 .bearings = .{
@@ -299,4 +318,20 @@ fn rebuildCells(self: *Renderer, row: u16, col: u16, cells: []u32) !void {
         self.alloc.free(self.cells);
         self.cells = glyphs;
     }
+}
+
+fn syncAtlasTexture(
+    self: *const Renderer,
+    atlas: *const fontpkg.Atlas,
+    texture: *Texture,
+) !void {
+    if (atlas.size > texture.width) {
+        // Free our old texture
+        texture.*.deinit();
+
+        // Reallocate
+        texture.* = try self.api.initAtlasTexture(atlas);
+    }
+
+    try texture.replaceRegion(0, 0, atlas.size, atlas.size, atlas.data);
 }

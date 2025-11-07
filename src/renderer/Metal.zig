@@ -15,6 +15,8 @@ pub const Target = @import("./metal/Target.zig");
 pub const shaders = @import("./metal/shaders.zig");
 const bufferpkg = @import("metal/buffer.zig");
 pub const Buffer = bufferpkg.Buffer;
+pub const Texture = @import("metal/Texture.zig");
+const fontpkg = @import("../font/mod.zig");
 
 const log = std.log.scoped(.metal);
 const Renderer = @import("../renderer.zig").Renderer;
@@ -193,4 +195,34 @@ pub fn initShaders(
     self: *const Metal,
 ) !shaders.Shaders {
     return try shaders.Shaders.init(self.device, mtl.MTLPixelFormat.bgra8unorm);
+}
+
+pub fn initAtlasTexture(
+    self: *const Metal,
+    atlas: *const fontpkg.Atlas,
+) Texture.Error!Texture {
+    const pixel_format: mtl.MTLPixelFormat = switch (atlas.format) {
+        .grayscale => .r8unorm,
+        .bgra => .bgra8unorm_srgb,
+        else => @panic("unsupported atlas format for Metal texture"),
+    };
+
+    return try Texture.init(
+        .{
+            .device = self.device,
+            .pixel_format = pixel_format,
+            .resource_options = .{
+                // Indicate that the CPU writes to this resource but never reads it.
+                .cpu_cache_mode = .write_combined,
+                .storage_mode = self.default_storage_mode,
+            },
+            .usage = .{
+                // We only need to read from this texture from a shader.
+                .shader_read = true,
+            },
+        },
+        atlas.size,
+        atlas.size,
+        null,
+    );
 }

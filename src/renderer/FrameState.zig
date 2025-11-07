@@ -5,6 +5,7 @@ const GraphicsAPI = rendererpkg.GraphicsAPI;
 const Target = GraphicsAPI.Target;
 const shaderpkg = GraphicsAPI.shaders;
 const Buffer = GraphicsAPI.Buffer;
+const Texture = GraphicsAPI.Texture;
 
 const UniformBuffer = Buffer(shaderpkg.Uniforms);
 const VertexBuffer = Buffer(shaderpkg.VertexInput);
@@ -14,6 +15,7 @@ target: Target,
 uniforms: UniformBuffer,
 vertex: VertexBuffer,
 cells: CellBuffer,
+grayscale: Texture,
 
 pub fn init(api: *GraphicsAPI) !FrameState {
     // Initialize the target. Just as with the other resources,
@@ -30,6 +32,13 @@ pub fn init(api: *GraphicsAPI) !FrameState {
     var cells = try CellBuffer.init(api.uniformBufferOptions(), 1);
     errdefer cells.deinit();
 
+    const grayscale = try api.initAtlasTexture(&.{
+        .data = undefined,
+        .size = 1,
+        .format = .grayscale,
+    });
+    errdefer grayscale.deinit();
+
     const quad_vertices: [4]shaderpkg.VertexInput = .{
         .{ .position = .{ -1.0, -1.0, 0.0, 1.0 }, .color = .{ 1.0, 0.0, 0.0, 0.0 } }, // Bottom-left
         .{ .position = .{ 1.0, -1.0, 0.0, 1.0 }, .color = .{ 1.0, 0.0, 0.0, 0.0 } }, // Bottom-right
@@ -39,7 +48,7 @@ pub fn init(api: *GraphicsAPI) !FrameState {
 
     try vertex.sync(&quad_vertices);
 
-    return .{ .target = target, .uniforms = uniforms, .vertex = vertex, .cells = cells };
+    return .{ .target = target, .uniforms = uniforms, .vertex = vertex, .cells = cells, .grayscale = grayscale };
 }
 
 pub fn deinit(self: *FrameState) void {

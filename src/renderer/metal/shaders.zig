@@ -18,6 +18,7 @@ pub const VertexInput = extern struct {
 const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
     &.{
         .{ "grid", .{ .vertex_fn = "vertexShader", .fragment_fn = "fragmentShader", .blending_enabled = false, .vertex_attributes = VertexInput } },
+        .{ "cell", .{ .vertex_fn = "cell_text_vertex", .fragment_fn = "cell_text_fragment", .step_fn = .per_instance, .blending_enabled = true, .vertex_attributes = CellText } },
     };
 
 /// All the comptime-known info about a pipeline, so that
@@ -138,7 +139,7 @@ pub const Uniforms = extern struct {
 
     /// The projection matrix for turning world coordinates to normalized.
     /// This is calculated based on the size of the screen.
-    // projection_matrix: math.Mat align(16),
+    projection_matrix: math.Mat align(16),
 
     /// Size of the screen (render target) in pixels.
     screen_size: [2]f32 align(8),
@@ -210,23 +211,6 @@ pub const CellText = extern struct {
     bearings: [2]i16 align(4) = .{ 0, 0 },
     grid_pos: [2]u16 align(4),
     color: [4]u8 align(4),
-    atlas: Atlas align(1),
-    bools: packed struct(u8) {
-        no_min_contrast: bool = false,
-        is_cursor_glyph: bool = false,
-        _padding: u6 = 0,
-    } align(1) = .{},
-
-    pub const Atlas = enum(u8) {
-        grayscale = 0,
-        color = 1,
-    };
-
-    test {
-        // Minimizing the size of this struct is important,
-        // so we test it in order to be aware of any changes.
-        try std.testing.expectEqual(32, @sizeOf(CellText));
-    }
 };
 
 /// This is a single parameter for the cell bg shader.
