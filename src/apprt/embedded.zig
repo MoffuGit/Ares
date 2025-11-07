@@ -105,7 +105,7 @@ pub const Surface = struct {
 
         const scale = ContentScale{ .x = @floatCast(x_scaled), .y = @floatCast(y_scaled) };
 
-        if (std.meta.eql(scale, self.content_scale)) return;
+        if (self.content_scale.x == scale.x and self.content_scale.y == scale.y) return;
 
         self.content_scale = scale;
 
@@ -170,5 +170,10 @@ pub const CAPI = struct {
         surface.updateContentScale(x, y);
 
         surface.core_surface.contentScaleCallback(surface.content_scale);
+    }
+
+    export fn ares_surface_set_file(surface: *Surface, pwd: [*:0]const u8) void {
+        log.debug("new file pwd: {s}", .{pwd});
+        _ = surface;
     }
 };

@@ -32,6 +32,8 @@ void ares_surface_free(ares_surface_t);
 void ares_surface_set_size(ares_surface_t, uint32_t, uint32_t);
 void ares_surface_set_content_scale(ares_surface_t, double, double);
 
+void ares_surface_set_file(ares_surface_t, const char*);
+
 int ares_init(uintptr_t, char**);
 
 #ifdef __cplusplus

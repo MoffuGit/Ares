@@ -4,6 +4,8 @@ const std = @import("std");
 const sizepkg = @import("../size.zig");
 const RendererThread = @import("../renderer/Thread.zig");
 
+//NOTE:
+//Store data from a file that you select using swift
 const msg = "Hello world!";
 
 size: sizepkg.Size,
