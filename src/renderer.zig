@@ -296,8 +296,12 @@ fn rebuildCells(self: *Renderer, row: u16, col: u16, cells: []u32) !void {
 
         var idx: usize = 0;
 
+        const max_cells = @min(self.grid_size.columns, cells.len);
+
         for (cells) |cell| {
             defer idx += 1;
+
+            if (idx > max_cells) break;
 
             const glyph = self.grid.renderCodepoint(self.alloc, cell) catch {
                 continue;
