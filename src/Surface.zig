@@ -91,10 +91,11 @@ pub fn init(
         break :size size;
     };
 
+    const mutex: std.Thread.Mutex = .{};
+
     var renderer = try Renderer.init(alloc, .{ .size = size, .rt_surface = rt_surface, .grid = &self.grid });
     errdefer renderer.deinit();
-    const mutex: std.Thread.Mutex = .{};
-    var editor = try Editor.init(size, mutex, &self.renderer_thread);
+    var editor = try Editor.init(alloc, .{ .size = size, .mutex = mutex, .thread = &self.renderer_thread });
     errdefer editor.deinit();
 
     self.* = .{ .renderer = renderer, .metrics = grid.metrics, .grid = grid, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .editor = editor, .editor_thread = editor_thread, .renderer_thr = undefined, .editor_thr = undefined, .shared_state = .{ .editor = &self.editor, .mutex = mutex } };
@@ -198,9 +199,11 @@ pub fn setFontSize(self: *Surface, size: facepkg.DesiredSize) void {
 }
 
 pub fn setFilePwd(self: *Surface, pwd: [:0]const u8) !void {
+    log.debug("set file pwd: {s}", .{pwd});
     if (self.pwd) |old_pwd| {
         self.alloc.free(old_pwd);
     }
     self.pwd = try self.alloc.dupe(u8, pwd);
-    log.debug("file pwd: {?s}", .{self.pwd});
+    _ = self.editor_thread.mailbox.push(.{ .pwd = try self.alloc.dupe(u8, pwd) }, .instant);
+    self.editor_thread.wakeup.notify() catch {};
 }

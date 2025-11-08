@@ -3,46 +3,34 @@ const Editor = @This();
 const std = @import("std");
 const sizepkg = @import("../size.zig");
 const RendererThread = @import("../renderer/Thread.zig");
-
-//NOTE:
-//Store data from a file that you select using swift
-const msg = "Hello world!";
-
-size: sizepkg.Size,
-
-rows: u16,
-cols: u16,
+const Screen = @import("Screen.zig");
+const Allocator = std.mem.Allocator;
 
 mutex: std.Thread.Mutex,
+screen: Screen,
 
 renderer_thread: *RendererThread,
-cells: [msg.len]u32,
 
-pub fn init(size: sizepkg.Size, mutex: std.Thread.Mutex, thread: *RendererThread) !Editor {
-    const grid_size = size.grid();
-    var cells_array: [msg.len]u32 = undefined;
-    var i: usize = 0;
+const Options = struct { size: sizepkg.Size, mutex: std.Thread.Mutex, thread: *RendererThread };
 
-    var utf8 = (try std.unicode.Utf8View.init(msg)).iterator();
-    while (utf8.nextCodepoint()) |codepoint| : (i += 1) {
-        cells_array[i] = @intCast(codepoint);
-    }
-    return .{ .size = size, .cols = grid_size.columns, .rows = grid_size.rows, .mutex = mutex, .renderer_thread = thread, .cells = cells_array };
+pub fn init(alloc: Allocator, opts: Options) !Editor {
+    const screen = try Screen.init(alloc, opts.size);
+    const cells_slice = alloc.alloc(u8, 1) catch {
+        return .{ .screen = screen, .mutex = opts.mutex, .renderer_thread = opts.thread };
+    };
+    defer alloc.free(cells_slice);
+    return .{ .screen = screen, .mutex = opts.mutex, .renderer_thread = opts.thread };
 }
 
 pub fn deinit(self: *Editor) void {
-    _ = self;
+    self.screen.deinit();
 }
 
 pub fn resize(self: *Editor, size: sizepkg.Size) void {
-    self.size = size;
-    const grid_size = self.size.grid();
-
     self.mutex.lock();
     defer self.mutex.unlock();
 
-    self.rows = grid_size.rows;
-    self.cols = grid_size.columns;
+    self.screen.resize(size);
 
     self.renderer_thread.wakeup.notify() catch {};
 }

@@ -1,3 +1,3 @@
 const sizepkg = @import("../size.zig");
 
-pub const Message = union(enum) { size: sizepkg.Size };
+pub const Message = union(enum) { size: sizepkg.Size, pwd: []u8 };

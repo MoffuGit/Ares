@@ -260,24 +260,31 @@ fn displayLinkCallback(
 }
 
 pub fn updateFrame(self: *Renderer, state: *SharedState) !void {
-    const Critical = struct { row: u16, col: u16, cells: []u32 };
+    const Critical = struct { row: u16, col: u16, cells: ?[]u32 };
     const critical: Critical = critical: {
         state.mutex.lock();
         defer state.mutex.unlock();
 
-        const editor_cells = state.editor.cells;
-        const cloned_cells = try self.alloc.alloc(u32, editor_cells.len);
-        @memcpy(cloned_cells, &editor_cells);
+        const screen = state.editor.screen;
 
-        break :critical .{ .col = state.editor.cols, .row = state.editor.rows, .cells = cloned_cells };
+        var new_cells_data: ?[]u32 = null;
+
+        if (screen.cells) |cells| {
+            const allocated_slice = try self.alloc.alloc(u32, cells.len);
+            @memcpy(allocated_slice, cells);
+            new_cells_data = allocated_slice;
+        }
+
+        break :critical .{ .col = screen.cols, .row = screen.rows, .cells = new_cells_data };
     };
 
-    defer self.alloc.free(critical.cells);
+    // Defer the free operation, only if critical.cells is not null
+    defer if (critical.cells) |c| self.alloc.free(c); // This is line 280
 
     self.rebuildCells(critical.row, critical.col, critical.cells) catch {};
 }
 
-fn rebuildCells(self: *Renderer, row: u16, col: u16, cells: []u32) !void {
+fn rebuildCells(self: *Renderer, row: u16, col: u16, new_cells: ?[]u32) !void {
     self.mutex.lock();
     defer self.mutex.unlock();
 
@@ -291,7 +298,9 @@ fn rebuildCells(self: *Renderer, row: u16, col: u16, cells: []u32) !void {
         new_size.columns = col;
         self.grid_size = new_size;
         self.uniforms.grid_size = .{ new_size.columns, new_size.rows };
+    }
 
+    if (new_cells) |cells| {
         var glyphs = try self.alloc.alloc(shaderpkg.CellText, cells.len);
 
         var idx: usize = 0;
