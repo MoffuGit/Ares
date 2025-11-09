@@ -98,7 +98,7 @@ fn drainMailbox(self: *Thread) !void {
                 self.editor.resize(size);
             },
             .pwd => |pwd| {
-                log.info("new pwd: {s}", .{pwd});
+                try self.editor.openFile(pwd);
                 self.alloc.free(pwd);
             },
         }

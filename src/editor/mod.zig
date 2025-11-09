@@ -11,15 +11,13 @@ screen: Screen,
 
 renderer_thread: *RendererThread,
 
+alloc: Allocator,
+
 const Options = struct { size: sizepkg.Size, mutex: std.Thread.Mutex, thread: *RendererThread };
 
 pub fn init(alloc: Allocator, opts: Options) !Editor {
     const screen = try Screen.init(alloc, opts.size);
-    const cells_slice = alloc.alloc(u8, 1) catch {
-        return .{ .screen = screen, .mutex = opts.mutex, .renderer_thread = opts.thread };
-    };
-    defer alloc.free(cells_slice);
-    return .{ .screen = screen, .mutex = opts.mutex, .renderer_thread = opts.thread };
+    return .{ .alloc = alloc, .screen = screen, .mutex = opts.mutex, .renderer_thread = opts.thread };
 }
 
 pub fn deinit(self: *Editor) void {
@@ -33,4 +31,19 @@ pub fn resize(self: *Editor, size: sizepkg.Size) void {
     self.screen.resize(size);
 
     self.renderer_thread.wakeup.notify() catch {};
+}
+
+pub fn openFile(self: *Editor, pwd: []u8) !void {
+    const cwd = std.fs.cwd();
+    const file = try cwd.openFile(pwd, .{});
+    defer file.close();
+
+    const buf = try self.alloc.alloc(u8, 60 * 1024 * 1024);
+    defer self.alloc.free(buf);
+
+    var reader = file.reader(buf);
+
+    while (reader.interface.takeDelimiterExclusive('\n')) |line| {
+        std.debug.print("pwd: {s} \n {s}", .{ pwd, line });
+    } else |err| if (err != error.EndOfStream) return err;
 }
