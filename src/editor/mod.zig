@@ -6,6 +6,8 @@ const RendererThread = @import("../renderer/Thread.zig");
 const Screen = @import("Screen.zig");
 const Allocator = std.mem.Allocator;
 
+const log = std.log.scoped(.screen);
+
 mutex: std.Thread.Mutex,
 screen: Screen,
 
@@ -44,6 +46,6 @@ pub fn openFile(self: *Editor, pwd: []u8) !void {
     var reader = file.reader(buf);
 
     while (reader.interface.takeDelimiterExclusive('\n')) |line| {
-        std.debug.print("pwd: {s} \n {s}", .{ pwd, line });
+        log.debug("pwd: {s} \n {s}", .{ pwd, line });
     } else |err| if (err != error.EndOfStream) return err;
 }
