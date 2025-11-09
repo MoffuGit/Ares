@@ -45,7 +45,14 @@ pub fn openFile(self: *Editor, pwd: []u8) !void {
 
     var reader = file.reader(buf);
 
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    self.screen.resetCells();
+
     while (reader.interface.takeDelimiterExclusive('\n')) |line| {
-        log.debug("pwd: {s} \n {s}", .{ pwd, line });
+        self.screen.addNewLine(line) catch |err| {
+            log.err("error when adding anew line: {}", .{err});
+        };
     } else |err| if (err != error.EndOfStream) return err;
 }

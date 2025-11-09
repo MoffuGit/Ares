@@ -100,6 +100,8 @@ fn drainMailbox(self: *Thread) !void {
             .pwd => |pwd| {
                 try self.editor.openFile(pwd);
                 self.alloc.free(pwd);
+
+                try self.editor.renderer_thread.wakeup.notify();
             },
         }
     }
