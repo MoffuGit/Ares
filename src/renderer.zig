@@ -27,6 +27,11 @@ const Buffer = GraphicsAPI.Buffer;
 const Texture = GraphicsAPI.Texture;
 const Uniforms = shaderpkg.Uniforms;
 
+//NOTE:
+//i need to move some things,
+//first, my cells should rebuild not only when the content change,but when the size of the iwndow change
+//as well
+
 pub const Health = enum(c_int) {
     healthy = 0,
     unhealthy = 1,
@@ -266,48 +271,41 @@ fn displayLinkCallback(
 }
 
 pub fn updateFrame(self: *Renderer, state: *SharedState) !void {
-    const Critical = struct { row: u16, col: u16, cells: ?ArrayList([]u32) };
+    const Critical = struct { row: u16, col: u16, cells: ArrayList([]u32) };
     var critical: Critical = critical: {
         state.mutex.lock();
         defer state.mutex.unlock();
 
         const screen = state.editor.screen;
 
-        var new_cells_data: ?ArrayList([]u32) = null;
-
-        if (screen.rebuild_cells) {
-            var temp_cells_list = try ArrayList([]u32).initCapacity(self.alloc, screen.cells.items.len);
-            errdefer {
-                for (temp_cells_list.items) |slice| {
-                    self.alloc.free(slice);
-                }
-                temp_cells_list.deinit(self.alloc);
+        var new_cells = try ArrayList([]u32).initCapacity(self.alloc, screen.cells.items.len);
+        errdefer {
+            for (new_cells.items) |slice| {
+                self.alloc.free(slice);
             }
-
-            for (screen.cells.items) |row_slice| {
-                const allocated_row = try self.alloc.alloc(u32, row_slice.len);
-                @memcpy(allocated_row, row_slice);
-                try temp_cells_list.append(self.alloc, allocated_row);
-            }
-            new_cells_data = temp_cells_list;
-
-            state.editor.screen.rebuild_cells = false;
+            new_cells.deinit(self.alloc);
         }
 
-        break :critical .{ .col = screen.cols, .row = screen.rows, .cells = new_cells_data };
+        for (screen.cells.items) |row_slice| {
+            const allocated_row = try self.alloc.alloc(u32, row_slice.len);
+            @memcpy(allocated_row, row_slice);
+            try new_cells.append(self.alloc, allocated_row);
+        }
+
+        break :critical .{ .col = screen.cols, .row = screen.rows, .cells = new_cells };
     };
 
-    defer if (critical.cells) |c| {
-        for (c.items) |slice| {
+    defer {
+        for (critical.cells.items) |slice| {
             self.alloc.free(slice);
         }
-        critical.cells.?.deinit(self.alloc);
-    };
+        critical.cells.deinit(self.alloc);
+    }
 
     self.rebuildCells(critical.row, critical.col, critical.cells) catch {};
 }
 
-fn rebuildCells(self: *Renderer, row: u16, col: u16, new_cells_data: ?ArrayList([]u32)) !void {
+fn rebuildCells(self: *Renderer, row: u16, col: u16, new_cells: ArrayList([]u32)) !void {
     self.mutex.lock();
     defer self.mutex.unlock();
 
@@ -323,44 +321,42 @@ fn rebuildCells(self: *Renderer, row: u16, col: u16, new_cells_data: ?ArrayList(
         self.uniforms.grid_size = .{ new_size.columns, new_size.rows };
     }
 
-    if (new_cells_data) |cells_list| {
-        self.rebuild_cells = true;
+    self.rebuild_cells = true;
 
-        var total_cells: usize = 0;
-        for (cells_list.items) |row_cells| {
-            total_cells += row_cells.len;
-        }
-
-        var glyphs = try self.alloc.alloc(shaderpkg.CellText, total_cells);
-
-        var glyphs_idx: usize = 0;
-        for (cells_list.items, 0..) |row_cells, row_idx| {
-            if (row_idx >= self.grid_size.rows) break;
-
-            for (row_cells, 0..) |cell_codepoint, col_idx| {
-                if (col_idx >= self.grid_size.columns) break;
-
-                const glyph = self.grid.renderCodepoint(self.alloc, cell_codepoint) catch {
-                    continue;
-                };
-
-                glyphs[glyphs_idx] = shaderpkg.CellText{
-                    .grid_pos = .{ @intCast(col_idx), @intCast(row_idx) },
-                    .color = .{ 1.0, 0.0, 0.0, 1.0 },
-                    .glyph_pos = .{ glyph.atlas_x, glyph.atlas_y },
-                    .glyph_size = .{ glyph.width, glyph.height },
-                    .bearings = .{
-                        @intCast(glyph.offset_x),
-                        @intCast(glyph.offset_y),
-                    },
-                };
-                glyphs_idx += 1;
-            }
-        }
-
-        self.alloc.free(self.cells);
-        self.cells = glyphs;
+    var total_cells: usize = 0;
+    for (new_cells.items) |row_cells| {
+        total_cells += row_cells.len;
     }
+
+    var glyphs = try self.alloc.alloc(shaderpkg.CellText, total_cells);
+
+    var glyphs_idx: usize = 0;
+    for (new_cells.items, 0..) |row_cells, row_idx| {
+        if (row_idx >= self.grid_size.rows) break;
+
+        for (row_cells, 0..) |cell_codepoint, col_idx| {
+            if (col_idx >= self.grid_size.columns) break;
+
+            const glyph = self.grid.renderCodepoint(self.alloc, cell_codepoint) catch {
+                continue;
+            };
+
+            glyphs[glyphs_idx] = shaderpkg.CellText{
+                .grid_pos = .{ @intCast(col_idx), @intCast(row_idx) },
+                .color = .{ 1.0, 0.0, 0.0, 1.0 },
+                .glyph_pos = .{ glyph.atlas_x, glyph.atlas_y },
+                .glyph_size = .{ glyph.width, glyph.height },
+                .bearings = .{
+                    @intCast(glyph.offset_x),
+                    @intCast(glyph.offset_y),
+                },
+            };
+            glyphs_idx += 1;
+        }
+    }
+
+    self.alloc.free(self.cells);
+    self.cells = glyphs;
 }
 
 fn syncAtlasTexture(

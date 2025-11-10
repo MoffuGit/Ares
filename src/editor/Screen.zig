@@ -15,8 +15,6 @@ size: sizepkg.Size,
 
 cells: std.ArrayList([]u32),
 
-rebuild_cells: bool = false,
-
 pub fn init(alloc: Allocator, size: sizepkg.Size) !Screen {
     const grid_size = size.grid();
     const cells = try std.ArrayList([]u32).initCapacity(alloc, 0);
@@ -45,8 +43,6 @@ pub fn deinit(self: *Screen) void {
 }
 
 pub fn resetCells(self: *Screen) void {
-    self.rebuild_cells = true;
-
     for (self.cells.items) |line_cells| {
         self.alloc.free(line_cells);
     }
@@ -55,8 +51,6 @@ pub fn resetCells(self: *Screen) void {
 }
 
 pub fn addNewLine(self: *Screen, line_bytes: []const u8) !void {
-    self.rebuild_cells = true;
-
     var codepoints_list = try std.ArrayList(u32).initCapacity(self.alloc, 0);
     errdefer codepoints_list.deinit(self.alloc);
 

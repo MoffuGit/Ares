@@ -15,16 +15,22 @@ atlas_grayscale: Atlas,
 resolver: CodePointResolver,
 lock: std.Thread.RwLock = .{},
 metrics: Metrics,
-// glyphs: void,
-// codepoints: void,
+glyphs: std.AutoHashMap(u32, fontpkg.Glyph),
+codepoints: std.AutoHashMap(u32, u32),
 
 pub fn init(alloc: Allocator, opts: facepkg.Options) !Grid {
     var atlas_grayscale = try Atlas.init(alloc, 512, .grayscale);
     errdefer atlas_grayscale.deinit(alloc);
 
-    var grid = Grid{ .atlas_grayscale = atlas_grayscale, .resolver = .{
-        .face = try Face.init(embedpkg.JetBrainsMono, opts),
-    }, .metrics = undefined };
+    var grid = Grid{
+        .atlas_grayscale = atlas_grayscale,
+        .resolver = .{ .face = try Face.init(embedpkg.JetBrainsMono, opts) },
+        .metrics = undefined,
+        .glyphs = std.AutoHashMap(u32, fontpkg.Glyph).init(alloc),
+        .codepoints = std.AutoHashMap(u32, u32).init(alloc),
+    };
+    errdefer grid.glyphs.deinit();
+    errdefer grid.codepoints.deinit();
 
     try grid.reloadMetrics();
 
@@ -44,21 +50,33 @@ pub fn cellSize(self: *Grid) sizepkg.CellSize {
 pub fn deinit(self: *Grid, alloc: Allocator) void {
     self.atlas_grayscale.deinit(alloc);
     self.resolver.deinit();
+    self.glyphs.deinit();
+    self.codepoints.deinit();
 }
 
 pub fn renderCodepoint(self: *Grid, alloc: Allocator, cp: u32) !fontpkg.Glyph {
+    if (self.codepoints.get(cp)) |cached_index| {
+        return self.renderGlyph(alloc, cached_index);
+    }
+
     const index = self.resolver.face.glyphIndex(cp) orelse return error.CpWithoutIndex;
+
+    try self.codepoints.put(cp, index);
 
     return try self.renderGlyph(alloc, index);
 }
 
 pub fn renderGlyph(self: *Grid, alloc: Allocator, index: u32) !fontpkg.Glyph {
-    self.lock.lock();
-    defer self.lock.unlock();
+    if (self.glyphs.get(index)) |cached_glyph| {
+        return cached_glyph;
+    }
 
     const atlas = &self.atlas_grayscale;
 
-    return try self.resolver.face.renderGlyph(alloc, atlas, index, .{
+    const glyph = try self.resolver.face.renderGlyph(alloc, atlas, index, .{
         .grid_metrics = self.metrics,
     });
+    try self.glyphs.put(index, glyph);
+
+    return glyph;
 }
