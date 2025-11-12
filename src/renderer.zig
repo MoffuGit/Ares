@@ -27,11 +27,6 @@ const Buffer = GraphicsAPI.Buffer;
 const Texture = GraphicsAPI.Texture;
 const Uniforms = shaderpkg.Uniforms;
 
-//NOTE:
-//i need to move some things,
-//first, my cells should rebuild not only when the content change,but when the size of the iwndow change
-//as well
-
 pub const Health = enum(c_int) {
     healthy = 0,
     unhealthy = 1,
