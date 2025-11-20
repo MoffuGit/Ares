@@ -120,7 +120,7 @@ extension Ares {
         private func presentFilePicker() {
             let panel = NSOpenPanel()
             panel.canChooseFiles = true  // Allow selecting files
-            panel.canChooseDirectories = false  // Disallow selecting directories
+            panel.canChooseDirectories = true  // Disallow selecting directories
             panel.allowsMultipleSelection = false  // Only allow single file selection
             panel.prompt = "Select File"  // Custom prompt for the panel
 

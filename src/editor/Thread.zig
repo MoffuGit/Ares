@@ -21,9 +21,6 @@ wakeup_c: xev.Completion = .{},
 stop: xev.Async,
 stop_c: xev.Completion = .{},
 
-worktree: ?xev.FsEvents,
-worktree_x: xev.Completion = . {},
-
 mailbox: *Mailbox,
 
 editor: *Editor,
@@ -44,40 +41,14 @@ pub fn init(
     var mailbox = try Mailbox.create(alloc);
     errdefer mailbox.destroy(alloc);
 
-    return .{ .alloc = alloc, .loop = loop, .stop = stop_h, .wakeup = wakeup_h, .mailbox = mailbox, .editor = editor, .worktree = null};
+    return .{ .alloc = alloc, .loop = loop, .stop = stop_h, .wakeup = wakeup_h, .mailbox = mailbox, .editor = editor};
 }
 
 pub fn deinit(self: *Thread) void {
     self.stop.deinit();
     self.wakeup.deinit();
     self.loop.deinit();
-    if(self.worktree != null) {
-        self.worktree.?.deinit();
-    }
     self.mailbox.destroy(self.alloc);
-}
-
-fn worktreeCallback(
-    self: ?*Thread,
-    _: *xev.Loop,
-    _: *xev.Completion,
-    r: xev.FsEventError!xev.FsEvent,
-) xev.CallbackAction {
-    _ = self;
-    const event = r catch |err| {
-        log.err("FsEvent error for worktree path: {}", .{err});
-        // If the event itself failed, rearm to try again.
-        return .rearm;
-    };
-
-    // Log the event type and path.
-    log.info("FsEvent triggered in worktree: type='{}'", .{
-        event
-    });
-
-    // To keep watching for events, return .rearm.
-    // The wait call itself re-arms the handler.
-    return .rearm;
 }
 
 pub fn threadMain(self: *Thread) void {
@@ -127,13 +98,6 @@ fn drainMailbox(self: *Thread) !void {
                 self.editor.resize(size);
             },
             .pwd => |pwd| {
-                if (self.worktree != null) {
-                    self.worktree.?.deinit();
-                }
-
-                self.worktree = try xev.FsEvents.init(pwd);
-                try self.worktree.?.wait(&self.loop, &self.worktree_x, Thread, self, worktreeCallback);
-
                 try self.editor.openFile(pwd);
                 self.alloc.free(pwd);
 

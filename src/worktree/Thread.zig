@@ -50,8 +50,8 @@ pub fn init(alloc: Allocator) !Thread {
 }
 
 pub fn deinit(self: *Thread) void {
-    if (self.fs_events) |fs| {
-        fs.deinit();
+    if (self.fs_events != null)  {
+        self.fs_events.?.deinit();
     }
     if (self.current_path.len > 0) {
         self.alloc.free(self.current_path);
@@ -102,16 +102,14 @@ fn fsEventsCallback(
 ) xev.CallbackAction {
     const t = self.?;
     const event = r catch |err| {
-        log.err("FsEvent error for worktree path '{}': {}", .{ t.current_path, err });
+        log.err("FsEvent error for worktree path '{s}': {}", .{ t.current_path, err });
         return .rearm;
     };
 
-    log.info("FsEvent triggered in worktree path '{}': type='{}'", .{ t.current_path, event });
+    log.info("FsEvent triggered in worktree path '{s}': type='{}'", .{ t.current_path, event });
 
     // Push the event to the mailbox for processing.
-    t.mailbox.put(messagepkg.Message{ .fs_event = event }) catch |err| {
-        log.err("Failed to put FsEvent message into mailbox: {}", .{err});
-    };
+    _ = t.mailbox.push(messagepkg.Message{ .fs_event = event }, .instant);
 
     // Notify the wakeup handle to drain the mailbox
     t.wakeup.notify() catch |err| {
@@ -137,7 +135,7 @@ fn wakeupCallback(
     const t = self_.?;
 
     // Drain the mailbox.
-    t.drainMailbox() catch |err| {
+    _ = t.drainMailbox() catch |err| {
         log.err("error draining mailbox err={}", .{err});
     };
 
@@ -157,16 +155,10 @@ fn drainMailbox(self: *Thread) !bool {
                 log.info("Processing FsEvent: type='{}'", .{event});
                 // Add actual worktree logic: e.g., invalidate caches, refresh file lists, etc.
             },
-            .stop => {
-                // Received a stop message, stop the event loop.
-                log.debug("Received stop message, stopping worktree loop", .{});
-                self.loop.stop();
-                return true; // Indicate message processed.
-            },
-            .set_path => |path_bytes| {
-                log.debug("Received set_path message: '{}'", .{path_bytes});
+            .pwd => |path_bytes| {
+                log.debug("Received set_path message: '{s}'", .{path_bytes});
                 self.setWorktreePath(path_bytes) catch |err| {
-                    log.err("Failed to set worktree path to '{}': {}", .{path_bytes, err});
+                    log.err("Failed to set worktree path to '{s}': {}", .{path_bytes, err});
                 };
                 self.alloc.free(path_bytes);
             },
@@ -179,8 +171,8 @@ fn drainMailbox(self: *Thread) !bool {
 /// This function takes ownership of the `path` slice.
 fn setWorktreePath(self: *Thread, path: []const u8) !void {
     // Deinitialize existing FsEvents watcher if one is active.
-    if (self.fs_events) |fs| {
-        fs.deinit();
+    if (self.fs_events != null) {
+        self.fs_events.?.deinit();
         self.fs_events = null;
     }
     // Free the old owned path string if one was set.
@@ -199,5 +191,5 @@ fn setWorktreePath(self: *Thread, path: []const u8) !void {
     // Arm the new FsEvents watcher to begin monitoring events.
     try self.fs_events.?.wait(&self.loop, &self.fs_events_c, Thread, self, fsEventsCallback);
 
-    log.info("Worktree path set to: '{}'", .{self.current_path});
+    log.info("Worktree path set to: '{s}'", .{self.current_path});
 }
