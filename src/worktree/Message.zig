@@ -1,6 +1,6 @@
 const xev = @import("../global.zig").xev;
 
 pub const Message = union(enum) {
-    fs_event: xev.FsEvent,
+    fsevent: u32,
     pwd: []u8,
 };

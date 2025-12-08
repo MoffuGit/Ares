@@ -37,8 +37,8 @@
             .hash = "zig_objc-0.0.0-Ir_Sp5gTAQCvxxR7oVIrPXxXwsfKgVP7_wqoOQrZjFeK",
         },
         .libxev = .{
-            .url = "git+https://github.com/MoffuGit/libxev#main",
-            .hash = "libxev-0.0.0-86vtc-PDEwAXGerwT9C3wz1CdvgOmUQ-fbyCZ4Sxh8te",
+            .url = "git+https://github.com/MoffuGit/libxev#mac",
+            .hash = "libxev-0.0.0-86vtc5kjFADr3alc9B41Or6RZsvP7zN0TZgVc2J6Q9S6",
         },
         .macos = .{ .path = "./pkg/macos" },
         .apple_sdk = .{ .path = "./pkg/apple-sdk" },
