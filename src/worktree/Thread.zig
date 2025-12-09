@@ -4,22 +4,6 @@ const xev = @import("../global.zig").xev;
 const BlockingQueue = @import("../datastruct/blocking_queue.zig").BlockingQueue;
 const messagepkg = @import("./Message.zig");
 
-//WARN:
-//i forgot to give me access to
-//the FS completions
-//and probably watch can accept more data like the callback and the userdata
-//and set that for me into the completion
-//
-//then, once this is done,
-//i need to store the fs completion for the directory or file we are waching
-//and using it for cancelling when changing the watched directory
-//any of that is hard
-//after that
-//i need to check what zed do for this worktree and try to make something similar
-//on my case every time an event is triggered i will call for a file system pass and check what change
-//from my prev snapshot to the new state, once that finish i need to pass the new data to the ui
-//and update whatever my ui is
-
 const log = std.log.scoped(.worktree_thread);
 
 pub const Thread = @This();
@@ -30,6 +14,9 @@ alloc: Allocator,
 loop: xev.Loop,
 
 mailbox: *Mailbox,
+
+fs: xev.FileSystem,
+fs_c: xev.FileSystem.Completion = .{},
 
 wakeup: xev.Async,
 wakeup_c: xev.Completion = .{},
@@ -52,19 +39,17 @@ pub fn init(alloc: Allocator) !Thread {
     var stop_h = try xev.Async.init();
     errdefer stop_h.deinit();
 
-    return .{
-        .alloc = alloc,
-        .loop = loop,
-        .mailbox = mailbox,
-        .wakeup = wakeup_h,
-        .stop = stop_h,
-    };
+    var fs_h = xev.FileSystem.init();
+    errdefer fs_h.deinit();
+
+    return .{ .alloc = alloc, .loop = loop, .mailbox = mailbox, .wakeup = wakeup_h, .stop = stop_h, .fs = fs_h };
 }
 
 pub fn deinit(self: *Thread) void {
     if (self.current_path.len > 0) {
         self.alloc.free(self.current_path);
     }
+    self.fs.deinit();
     self.wakeup.deinit();
     self.stop.deinit();
     self.loop.deinit();
@@ -99,28 +84,24 @@ fn stopCallback(
     return .disarm;
 }
 
-// fn fsEventsCallback(
-//     self: ?*Thread,
-//     _: *xev.Loop,
-//     _: *xev.Completion,
-//     r: u32,
-// ) xev.CallbackAction {
-//     const t = self.?;
-//     const event = r catch |err| {
-//         log.err("FsEvent error for worktree path '{s}': {}", .{ t.current_path, err });
-//         return .rearm;
-//     };
-//
-//     log.info("FsEvent triggered in worktree path '{s}': type='{}'", .{ t.current_path, event });
-//
-//     _ = t.mailbox.push(messagepkg.Message{ .fsevent = event }, .instant);
-//
-//     t.wakeup.notify() catch |err| {
-//         log.err("Failed to notify worktree wakeup handle: {}", .{err});
-//     };
-//
-//     return .rearm;
-// }
+fn fsEventsCallback(
+    self: ?*Thread,
+    _: *xev.FileSystem.Completion,
+    r: u32,
+) xev.CallbackAction {
+    const t = self.?;
+    const event = r;
+
+    log.info("FsEvent triggered in worktree path '{s}': type='{}'", .{ t.current_path, event });
+
+    _ = t.mailbox.push(messagepkg.Message{ .fsevent = event }, .instant);
+
+    t.wakeup.notify() catch |err| {
+        log.err("Failed to notify worktree wakeup handle: {}", .{err});
+    };
+
+    return .rearm;
+}
 
 fn wakeupCallback(
     self_: ?*Thread,
@@ -168,7 +149,13 @@ fn setWorktreePath(self: *Thread, path: []const u8) !void {
         self.current_path = "";
     }
 
+    if (self.fs_c.state() == .active) {
+        self.fs.cancel(&self.fs_c);
+        self.fs_c = .{};
+    }
+
     self.current_path = try self.alloc.dupe(u8, path);
+    try self.fs.watch(&self.loop, self.current_path, &self.fs_c, Thread, self, fsEventsCallback);
 
     log.info("Worktree path set to: '{s}'", .{self.current_path});
 }
