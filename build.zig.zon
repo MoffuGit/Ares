@@ -38,7 +38,7 @@
         },
         .libxev = .{
             .url = "git+https://github.com/MoffuGit/libxev#mac",
-            .hash = "libxev-0.0.0-86vtc9EMFABnecS6w1lzIEkKGTzwP1HhqUpG6l-4XIlw",
+            .hash = "libxev-0.0.0-86vtc_MjFAA2eP9BcUAnJIMbq5HdMSSH39lTI3OyRr97",
         },
         .macos = .{ .path = "./pkg/macos" },
         .apple_sdk = .{ .path = "./pkg/apple-sdk" },

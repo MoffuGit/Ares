@@ -87,6 +87,7 @@ fn stopCallback(
 fn fsEventsCallback(
     self: ?*Thread,
     _: *xev.FileSystem.Completion,
+    _: []const u8,
     r: u32,
 ) xev.CallbackAction {
     const t = self.?;
