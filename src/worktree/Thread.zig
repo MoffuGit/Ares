@@ -16,7 +16,8 @@ loop: xev.Loop,
 mailbox: *Mailbox,
 
 fs: xev.FileSystem,
-fs_c: xev.FileSystem.Completion = .{},
+fs_watchers: [2]xev.Watcher = .{ .{}, .{} },
+watcher: usize = 0,
 
 wakeup: xev.Async,
 wakeup_c: xev.Completion = .{},
@@ -86,7 +87,7 @@ fn stopCallback(
 
 fn fsEventsCallback(
     self: ?*Thread,
-    _: *xev.FileSystem.Completion,
+    _: *xev.FileSystem.Watcher,
     _: []const u8,
     r: u32,
 ) xev.CallbackAction {
@@ -145,18 +146,24 @@ fn drainMailbox(self: *Thread) !bool {
 }
 
 fn setWorktreePath(self: *Thread, path: []const u8) !void {
+    const old_idx = self.watcher;
+    const idx = (self.watcher + 1) % 2;
+    self.watcher = idx;
+
+    if (self.fs_watchers[old_idx].state() == .active) {
+        self.fs.cancel(&self.loop, &self.fs_watchers[old_idx]);
+        std.debug.print("fs cancelled for {s}", .{self.current_path});
+    }
+
     if (self.current_path.len > 0) {
         self.alloc.free(self.current_path);
         self.current_path = "";
     }
 
-    if (self.fs_c.state() == .active) {
-        self.fs.cancel(&self.fs_c);
-        self.fs_c = .{};
-    }
+    self.fs_watchers[idx] = .{};
 
     self.current_path = try self.alloc.dupe(u8, path);
-    try self.fs.watch(&self.loop, self.current_path, &self.fs_c, Thread, self, fsEventsCallback);
+    try self.fs.watch(&self.loop, self.current_path, &self.fs_watchers[idx], Thread, self, fsEventsCallback);
 
     log.info("Worktree path set to: '{s}'", .{self.current_path});
 }
