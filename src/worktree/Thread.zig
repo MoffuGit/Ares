@@ -10,6 +10,30 @@ pub const Thread = @This();
 
 pub const Mailbox = BlockingQueue(messagepkg.Message, 64);
 
+//NOTE:
+//pub struct Worktree {
+//     snapshot: Snapshot,
+//     path: String,
+// }
+//
+// pub struct Snapshot {
+//     entries_by_path: SumTree<Entry>,
+//     entries_by_id: SumTree<PathEntry>,
+// }
+//
+//Entry {
+//  path: String,
+//  node_type: {
+//      File,
+//      Dir : {
+//          watcher: xev.Watcher,
+//      }
+//  }
+//}
+//
+//i will follow the impl from: https://github.com/dayvster/zig-bplus-tree/tree/main
+//and of couse the impl from zed, on their sum_tree crate
+
 alloc: Allocator,
 loop: xev.Loop,
 
@@ -68,6 +92,7 @@ fn threadMain_(self: *Thread) !void {
 
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
+    try self.fs.start(&self.loop);
 
     log.debug("starting worktree thread", .{});
     defer log.debug("starting worktree thread shutdown", .{});
@@ -151,7 +176,7 @@ fn setWorktreePath(self: *Thread, path: []const u8) !void {
     self.watcher = idx;
 
     if (self.fs_watchers[old_idx].state() == .active) {
-        self.fs.cancel(&self.loop, &self.fs_watchers[old_idx]);
+        self.fs.cancel(&self.fs_watchers[old_idx]);
         std.debug.print("fs cancelled for {s}", .{self.current_path});
     }
 
@@ -163,7 +188,7 @@ fn setWorktreePath(self: *Thread, path: []const u8) !void {
     self.fs_watchers[idx] = .{};
 
     self.current_path = try self.alloc.dupe(u8, path);
-    try self.fs.watch(&self.loop, self.current_path, &self.fs_watchers[idx], Thread, self, fsEventsCallback);
+    try self.fs.watch(self.current_path, &self.fs_watchers[idx], Thread, self, fsEventsCallback);
 
     log.info("Worktree path set to: '{s}'", .{self.current_path});
 }
