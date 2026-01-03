@@ -9,6 +9,7 @@ const CAPACITY: usize = 2 * BASE;
 pub const Error = error{
     OutOfMemory,
     DuplicateKey,
+    NotFound,
 } || Allocator.Error;
 
 pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K) std.math.Order) type {
@@ -22,7 +23,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             switch (self.*) {
                 .Internal => panic("items can be only added to leaf nodes", .{}),
                 .Leaf => |*leaf| {
-                    if (leaf.len == leaf.items.len) {
+                    if (leaf.len == CAPACITY) {
                         return error.OutOfMemory;
                     }
 
@@ -123,15 +124,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
         }
 
         pub fn is_underflowing(self: Self) bool {
-            switch (self) {
-                .Internal => |int| {
-                    return int.len < BASE;
-                },
-                .Leaf => |leaf| {
-                    return leaf.len <
-                        BASE;
-                },
-            }
+            return self.len() < BASE;
         }
 
         pub fn childs(self: Self) *const [CAPACITY]*Self {
@@ -155,174 +148,318 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             alloc.destroy(self);
         }
 
-        // pub fn append(self: *Self, other: Self, alloc: Allocator) Error!void {
-        //     if (self.is_empty()) {
-        //         self.* = other;
-        //     } else if (!other.is_leaf() or other.items().len != 0) {
-        //         if (self.height() < other.height()) {
-        //             for (other.childs()) |node| {
-        //                 try self.append(node.*, alloc);
-        //             }
-        //         } else if (try self.append_recursive(other, alloc)) |right| {
-        //             const left = try alloc.create(Self);
-        //             left.* = self.*;
-        //             self.* = try Self.from_child_nodes(left, right);
-        //         }
-        //     }
-        // }
-        //
-        // pub fn from_child_nodes(left: *Self, right: *Self) !Self {
-        //     var childrens: [CAPACITY]*Self = undefined;
-        //     childrens[0] = left;
-        //     childrens[1] = right;
-        //
-        //     var _keys: [CAPACITY]K = undefined;
-        //     _keys[0] = right.keys()[0];
-        //
-        //     return .{ .Internal = .{ .height = left.height() + 1, .len = 2, .childs = childrens, .keys = _keys } };
-        // }
-        //
-        // pub fn append_recursive(self: *Self, other: Self, alloc: Allocator) Error!?*Self {
-        //     switch (self.*) {
-        //         .Internal => |*internal| {
-        //             const height_delta = internal.height - other.height();
-        //             var keys_to_append: [CAPACITY]K = undefined;
-        //             var childs_to_append: [CAPACITY]*Self = undefined;
-        //             var len_to_append: u16 = 0;
-        //
-        //             if (height_delta == 0) {
-        //                 @memcpy(&keys_to_append, other.keys());
-        //                 @memcpy(&childs_to_append, other.childs());
-        //                 len_to_append = other.len();
-        //             } else if (height_delta == 1 and !other.is_underflowing()) {
-        //                 keys_to_append[0] = other.keys()[0];
-        //                 const new_other_node = try alloc.create(Self);
-        //                 new_other_node.* = other;
-        //                 childs_to_append[0] = new_other_node;
-        //                 len_to_append = 1;
-        //             } else {
-        //                 const node_to_append = try internal.childs[internal.len - 1].append_recursive(other, alloc);
-        //                 internal.keys[internal.len - 1] = internal.childs[internal.len - 1].keys()[0];
-        //                 if (node_to_append) |split| {
-        //                     keys_to_append[0] = split.keys()[0];
-        //                     childs_to_append[0] = split;
-        //                     len_to_append = 1;
-        //                 }
-        //             }
-        //
-        //             const childs_len = internal.len + len_to_append;
-        //
-        //             if (childs_len > CAPACITY) {
-        //                 var left_childs: [CAPACITY]*Self = undefined;
-        //                 var right_childs: [CAPACITY]*Self = undefined;
-        //
-        //                 var left_keys: [CAPACITY]K = undefined;
-        //                 var right_keys: [CAPACITY]K = undefined;
-        //
-        //                 const mid: u16 = (childs_len + childs_len % 2) / 2;
-        //
-        //                 var p: usize = 0;
-        //                 var c: usize = 0;
-        //
-        //                 for (0..childs_len) |idx| {
-        //                     if (p < internal.len - 1 and (c >= len_to_append or comp(internal.keys[p], keys_to_append[c]) == .lt)) {
-        //                         if (idx < mid) {
-        //                             left_childs[idx] = internal.childs[p];
-        //                             left_keys[idx] = internal.keys[p];
-        //                         } else {
-        //                             right_childs[idx - mid] = internal.childs[p];
-        //                             right_keys[idx - mid] = internal.keys[p];
-        //                         }
-        //                         p += 1;
-        //                     } else if (c < len_to_append and (p >= internal.len - 1 or comp(internal.keys[p], keys_to_append[c]) == .gt)) {
-        //                         if (idx < mid) {
-        //                             left_childs[idx] = childs_to_append[c];
-        //                             left_keys[idx] = keys_to_append[c];
-        //                         } else {
-        //                             right_childs[idx - mid] = childs_to_append[c];
-        //                             right_keys[idx - mid] = keys_to_append[c];
-        //                         }
-        //                         c += 1;
-        //                     }
-        //                 }
-        //
-        //                 internal.childs = left_childs;
-        //                 internal.keys = left_keys;
-        //                 internal.len = mid;
-        //
-        //                 const right_node = try alloc.create(Self);
-        //                 right_node.* = .{ .Internal = .{ .childs = right_childs, .keys = right_keys, .len = childs_len - mid } };
-        //                 return right_node;
-        //             } else {
-        //                 var idx: u16 = 0;
-        //                 while (idx < len_to_append) : (idx += 1) {
-        //                     const item = childs_to_append[idx];
-        //                     const key = keys_to_append[idx];
-        //
-        //                     try self.add_child(key, item);
-        //                 }
-        //                 return null;
-        //             }
-        //         },
-        //         .Leaf => |*leaf| {
-        //             const other_leaf = other.Leaf;
-        //
-        //             const items_len = leaf.len + other_leaf.len;
-        //
-        //             if (items_len > CAPACITY) {
-        //                 var left_items: [CAPACITY]V = undefined;
-        //                 var right_items: [CAPACITY]V = undefined;
-        //
-        //                 var left_keys: [CAPACITY]K = undefined;
-        //                 var right_keys: [CAPACITY]K = undefined;
-        //
-        //                 const mid = (items_len + items_len % 2) / 2;
-        //
-        //                 var p: usize = 0;
-        //                 var c: usize = 0;
-        //
-        //                 for (0..items_len) |idx| {
-        //                     if (p < leaf.len and (c >= other_leaf.len or comp(leaf.keys[p], other_leaf.keys[c]) == .lt)) {
-        //                         if (idx < mid) {
-        //                             left_items[idx] = leaf.items[p];
-        //                             left_keys[idx] = leaf.keys[p];
-        //                         } else {
-        //                             right_items[idx - mid] = leaf.items[p];
-        //                             right_keys[idx - mid] = leaf.keys[p];
-        //                         }
-        //                         p += 1;
-        //                     } else if (c < other_leaf.len and (p >= leaf.len or comp(leaf.keys[p], other_leaf.keys[c]) == .gt)) {
-        //                         if (idx < mid) {
-        //                             left_items[idx] = other_leaf.items[c];
-        //                             left_keys[idx] = other_leaf.keys[c];
-        //                         } else {
-        //                             right_items[idx - mid] = other_leaf.items[c];
-        //                             right_keys[idx - mid] = other_leaf.keys[c];
-        //                         }
-        //                         c += 1;
-        //                     }
-        //                 }
-        //
-        //                 leaf.items = left_items;
-        //                 leaf.keys = left_keys;
-        //                 leaf.len = mid;
-        //
-        //                 const right_node = try alloc.create(Self);
-        //                 right_node.* = .{ .Leaf = .{ .items = right_items, .keys = right_keys, .len = items_len - mid } };
-        //                 return right_node;
-        //             } else {
-        //                 var idx: u16 = 0;
-        //                 while (idx < other_leaf.len) : (idx += 1) {
-        //                     const item = other_leaf.items[idx];
-        //                     const key = other_leaf.keys[idx];
-        //
-        //                     try self.add_item(key, item);
-        //                 }
-        //                 return null;
-        //             }
-        //         },
-        //     }
-        // }
+        pub fn append(self: *Self, other: Self, alloc: Allocator) Error!void {
+            if (self.is_empty()) {
+                self.* = other;
+            } else if (!other.is_leaf() or other.items().len != 0) {
+                if (self.height() < other.height()) {
+                    for (other.childs()) |node| {
+                        try self.append(node.*, alloc);
+                    }
+                } else if (try self.append_recursive(other, alloc)) |right| {
+                    const left = try alloc.create(Self);
+                    left.* = self.*;
+                    self.* = try Self.from_child_nodes(left, right);
+                }
+            }
+        }
+
+        pub fn from_child_nodes(left: *Self, right: *Self) !Self {
+            var childrens: [CAPACITY]*Self = undefined;
+            childrens[0] = left;
+            childrens[1] = right;
+
+            var _keys: [CAPACITY]K = undefined;
+            _keys[0] = left.keys()[0];
+            _keys[1] = right.keys()[0];
+
+            return .{ .Internal = .{ .height = left.height() + 1, .len = 2, .childs = childrens, .keys = _keys } };
+        }
+
+        pub fn append_recursive(self: *Self, other: Self, alloc: Allocator) Error!?*Self {
+            switch (self.*) {
+                .Internal => |*internal| {
+                    const height_delta = internal.height - other.height();
+
+                    var keys_to_append: [CAPACITY]K = undefined;
+                    var childs_to_append: [CAPACITY]*Self = undefined;
+
+                    var len_to_append: u16 = 0;
+
+                    if (height_delta == 0) {
+                        @memcpy(&keys_to_append, other.keys());
+                        @memcpy(&childs_to_append, other.childs());
+                        len_to_append = other.len();
+                    } else if (height_delta == 1 and !other.is_underflowing()) {
+                        keys_to_append[0] = other.keys()[0];
+                        const new_other_node = try alloc.create(Self);
+                        new_other_node.* = other;
+                        childs_to_append[0] = new_other_node;
+                        len_to_append = 1;
+                    } else {
+                        var child_idx: u16 = 0;
+                        const other_node_min_key = other.keys()[0];
+                        while (child_idx < internal.len - 1) {
+                            if (comp(other_node_min_key, internal.keys[child_idx]) == .lt) {
+                                break;
+                            }
+                            child_idx += 1;
+                        }
+                        const node_to_append = try internal.childs[child_idx].append_recursive(other, alloc);
+
+                        internal.keys[child_idx] = internal.childs[child_idx].keys()[0];
+                        if (node_to_append) |split| {
+                            keys_to_append[0] = split.keys()[0];
+                            childs_to_append[0] = split;
+                            len_to_append = 1;
+                        }
+                    }
+
+                    const childs_len = internal.len + len_to_append;
+                    if (childs_len > CAPACITY) {
+                        const temp_keys = try alloc.alloc(K, childs_len);
+                        defer alloc.free(temp_keys);
+
+                        const temp_items = try alloc.alloc(*Self, childs_len);
+                        defer alloc.free(temp_items);
+
+                        var idx: usize = 0;
+                        var other_idx: usize = 0;
+                        var temp: usize = 0;
+
+                        while (idx < internal.len and other_idx < len_to_append) {
+                            if (comp(internal.keys[idx], keys_to_append[other_idx]) != .gt) {
+                                temp_keys[temp] = internal.keys[idx];
+                                temp_items[temp] = internal.childs[idx];
+                                idx += 1;
+                            } else {
+                                temp_keys[temp] = keys_to_append[other_idx];
+                                temp_items[temp] = childs_to_append[other_idx];
+                                other_idx += 1;
+                            }
+                            temp += 1;
+                        }
+
+                        while (idx < internal.len) {
+                            temp_keys[temp] = internal.keys[idx];
+                            temp_items[temp] = internal.childs[idx];
+                            idx += 1;
+                            temp += 1;
+                        }
+
+                        while (other_idx < len_to_append) {
+                            temp_keys[temp] = keys_to_append[other_idx];
+                            temp_items[temp] = childs_to_append[other_idx];
+                            other_idx += 1;
+                            temp += 1;
+                        }
+
+                        var left_keys: [CAPACITY]K = undefined;
+                        var left_items: [CAPACITY]*Self = undefined;
+
+                        var right_keys: [CAPACITY]K = undefined;
+                        var right_items: [CAPACITY]*Self = undefined;
+
+                        const mid = (childs_len + childs_len % 2) / 2;
+
+                        @memcpy(left_keys[0..mid], temp_keys[0..mid]);
+                        @memcpy(left_items[0..mid], temp_items[0..mid]);
+
+                        @memcpy(right_keys[0 .. childs_len - mid], temp_keys[mid..childs_len]);
+                        @memcpy(right_items[0 .. childs_len - mid], temp_items[mid..childs_len]);
+
+                        internal.childs = left_items;
+                        internal.keys = left_keys;
+                        internal.len = mid;
+
+                        const right_node = try alloc.create(Self);
+                        right_node.* = .{ .Internal = .{ .childs = right_items, .keys = right_keys, .len = childs_len - mid } };
+                        return right_node;
+                    } else {
+                        var target: usize = childs_len;
+                        var idx: usize = internal.len;
+                        var append_idx: usize = len_to_append;
+
+                        while (target > 0) {
+                            target -= 1;
+
+                            if (append_idx > 0 and (idx == 0 or comp(keys_to_append[append_idx - 1], internal.keys[idx - 1]) == .gt)) {
+                                append_idx -= 1;
+                                internal.keys[target] = keys_to_append[append_idx];
+                                internal.childs[target] = childs_to_append[append_idx];
+                            } else {
+                                idx -= 1;
+                                internal.keys[target] = internal.keys[idx];
+                                internal.childs[target] = internal.childs[idx];
+                            }
+                        }
+
+                        internal.len = childs_len;
+                    }
+                },
+                .Leaf => |*leaf| {
+                    assert(other.is_leaf());
+                    const other_leaf = other.Leaf;
+
+                    const new_len = leaf.len + other_leaf.len;
+
+                    if (new_len > CAPACITY) {
+                        const temp_keys = try alloc.alloc(K, new_len);
+                        defer alloc.free(temp_keys);
+
+                        const temp_items = try alloc.alloc(V, new_len);
+                        defer alloc.free(temp_items);
+
+                        var idx: usize = 0;
+                        var other_idx: usize = 0;
+                        var temp: usize = 0;
+
+                        while (idx < leaf.len and other_idx < other_leaf.len) {
+                            if (comp(leaf.keys[idx], other_leaf.keys[other_idx]) != .gt) {
+                                temp_keys[temp] = leaf.keys[idx];
+                                temp_items[temp] = leaf.items[idx];
+                                idx += 1;
+                            } else {
+                                temp_keys[temp] = other_leaf.keys[other_idx];
+                                temp_items[temp] = other_leaf.items[other_idx];
+                                other_idx += 1;
+                            }
+                            temp += 1;
+                        }
+
+                        while (idx < leaf.len) {
+                            temp_keys[temp] = leaf.keys[idx];
+                            temp_items[temp] = leaf.items[idx];
+                            idx += 1;
+                            temp += 1;
+                        }
+
+                        while (other_idx < other_leaf.len) {
+                            temp_keys[temp] = other_leaf.keys[other_idx];
+                            temp_items[temp] = other_leaf.items[other_idx];
+                            other_idx += 1;
+                            temp += 1;
+                        }
+
+                        var left_keys: [CAPACITY]K = undefined;
+                        var left_items: [CAPACITY]V = undefined;
+
+                        var right_keys: [CAPACITY]K = undefined;
+                        var right_items: [CAPACITY]V = undefined;
+
+                        const mid = (new_len + new_len % 2) / 2;
+
+                        @memcpy(left_keys[0..mid], temp_keys[0..mid]);
+                        @memcpy(left_items[0..mid], temp_items[0..mid]);
+
+                        @memcpy(right_keys[0 .. new_len - mid], temp_keys[mid..new_len]);
+                        @memcpy(right_items[0 .. new_len - mid], temp_items[mid..new_len]);
+
+                        leaf.items = left_items;
+                        leaf.keys = left_keys;
+                        leaf.len = mid;
+
+                        const right_node = try alloc.create(Self);
+                        right_node.* = .{ .Leaf = .{ .items = right_items, .keys = right_keys, .len = new_len - mid } };
+                        return right_node;
+                    } else {
+                        var target: usize = new_len;
+                        var idx: usize = leaf.len;
+                        var other_idx: usize = other_leaf.len;
+
+                        while (target > 0) {
+                            target -= 1;
+
+                            if (other_idx > 0 and (idx == 0 or comp(other_leaf.keys[other_idx - 1], leaf.keys[idx - 1]) == .gt)) {
+                                other_idx -= 1;
+                                leaf.keys[target] = other_leaf.keys[other_idx];
+                                leaf.items[target] = other_leaf.items[other_idx];
+                            } else {
+                                idx -= 1;
+                                leaf.keys[target] = leaf.keys[idx];
+                                leaf.items[target] = leaf.items[idx];
+                            }
+                        }
+
+                        leaf.len = new_len;
+                    }
+                },
+            }
+
+            return null;
+        }
+
+        pub fn find(self: *Self, key: K) Error!V {
+            switch (self.*) {
+                .Leaf => |*leaf| {
+                    var i: u16 = 0;
+                    while (i < leaf.len) {
+                        switch (comp(key, leaf.keys[i])) {
+                            .eq => return leaf.items[i],
+                            .lt => break,
+                            .gt => i += 1,
+                        }
+                    }
+                    return error.NotFound;
+                },
+                .Internal => |*internal| {
+                    var idx: u16 = 1;
+
+                    while (idx < internal.len) {
+                        switch (comp(key, internal.keys[idx])) {
+                            .eq => {
+                                idx += 1;
+                                break;
+                            },
+                            .gt => {
+                                idx += 1;
+                            },
+                            .lt => {
+                                break;
+                            },
+                        }
+                    }
+
+                    return internal.childs[idx - 1].find(key);
+                },
+            }
+        }
+
+        pub fn find_mut(self: *Self, key: K) Error!*V {
+            switch (self.*) {
+                .Leaf => |*leaf| {
+                    var i: u16 = 0;
+                    while (i < leaf.len) {
+                        switch (comp(key, leaf.keys[i])) {
+                            .eq => return &leaf.items[i],
+                            .lt => break,
+                            .gt => i += 1,
+                        }
+                    }
+                    return error.NotFound;
+                },
+                .Internal => |*internal| {
+                    var idx: u16 = 1;
+
+                    while (idx < internal.len) {
+                        switch (comp(key, internal.keys[idx])) {
+                            .eq => {
+                                idx += 1;
+                                break;
+                            },
+                            .gt => {
+                                idx += 1;
+                            },
+                            .lt => {
+                                break;
+                            },
+                        }
+                    }
+
+                    return internal.childs[idx - 1].find_mut(key);
+                },
+            }
+        }
     };
 }
 
@@ -346,62 +483,108 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             self.root.destroy(self.alloc);
         }
 
-        // pub fn push(self: *Self, key: K, value: V) Error!void {
-        //     var node: Node = Node{ .Leaf = .{} };
-        //
-        //     try node.add_item(key, value);
-        //
-        //     try self.root.append(node, self.alloc);
-        // }
+        pub fn push(self: *Self, key: K, value: V) Error!void {
+            var node: Node = Node{ .Leaf = .{} };
+
+            try node.add_item(key, value);
+
+            try self.root.append(node, self.alloc);
+        }
+
+        pub fn get(self: *Self, key: K) !V {
+            return self.root.find(key);
+        }
+
+        pub fn get_ref(self: *Self, key: K) !*V {
+            return self.root.find_mut(key);
+        }
     };
 }
-//
-// fn test_comp(a: usize, b: usize) std.math.Order {
-//     return std.math.order(a, b);
-// }
-//
-// test "B+ Tree push operation and splitting" {
-//     const testing = std.testing;
-//     const alloc = testing.allocator;
-//
-//     const rand = std.crypto.random;
-//
-//     const T = BPlusTree(usize, usize, test_comp);
-//     var tree = try T.init(alloc);
-//     defer tree.deinit();
-//
-//     try tree.push(0, 1);
-//
-//     try testing.expect(!tree.root.is_empty());
-//     try testing.expect(tree.root.is_leaf());
-//
-//     for (1..13) |key| {
-//         try tree.push(key, rand.int(usize));
-//     }
-//
-//     try testing.expect(!tree.root.is_leaf());
-//
-//     for (13..19) |key| {
-//         try tree.push(key, rand.int(usize));
-//     }
-//
-//     try tree.push(19, 113);
-// }
-//
-// test "B+ Tree push operation until height is 2" {
-//     const testing = std.testing;
-//     const alloc = testing.allocator;
-//
-//     const rand = std.crypto.random;
-//
-//     const T = BPlusTree(usize, usize, test_comp);
-//     var tree = try T.init(alloc);
-//     defer tree.deinit();
-//
-//     for (0..89) |key| {
-//         try tree.push(key, rand.int(usize));
-//     }
-//     for (0..12) |idx| {
-//         std.log.err("\n{}\n", .{tree.root.childs()[idx]});
-//     }
-// }
+
+fn test_comp(a: usize, b: usize) std.math.Order {
+    return std.math.order(a, b);
+}
+
+test "B+ Tree push operation and splitting" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    try tree.push(0, 1);
+
+    try testing.expect(!tree.root.is_empty());
+    try testing.expect(tree.root.is_leaf());
+
+    for (1..13) |key| {
+        try tree.push(key, key + 1);
+    }
+
+    try testing.expect(!tree.root.is_leaf());
+
+    try testing.expectEqual(12, tree.get(11));
+
+    for (13..20) |key| {
+        try tree.push(key, key + 1);
+    }
+
+    try testing.expectEqual(tree.root.len(), 3);
+    try testing.expectEqual(12, tree.get(11));
+}
+
+test "B+ Tree push operation until height is 2" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    for (0..89) |key| {
+        try tree.push(key, key + 1);
+    }
+
+    try testing.expectEqual(tree.root.height(), 1);
+
+    try tree.push(89, 90);
+
+    try testing.expectEqual(tree.root.height(), 2);
+}
+
+test "B+ Tree get operation" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    for (0..90) |key| {
+        try tree.push(key, key + 1);
+    }
+
+    for (0..90) |key| {
+        try testing.expectEqual(key + 1, tree.get(key));
+    }
+}
+
+test "B+ Tree get ref operation" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    for (0..90) |key| {
+        try tree.push(key, key + 1);
+    }
+
+    for (0..90) |key| {
+        const value = try tree.get_ref(key);
+        value.* = key * 4;
+        try testing.expectEqual(key * 4, tree.get(key));
+    }
+}
