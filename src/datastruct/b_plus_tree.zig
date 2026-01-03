@@ -483,7 +483,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             self.root.destroy(self.alloc);
         }
 
-        pub fn push(self: *Self, key: K, value: V) Error!void {
+        pub fn insert(self: *Self, key: K, value: V) Error!void {
             var node: Node = Node{ .Leaf = .{} };
 
             try node.add_item(key, value);
@@ -513,13 +513,13 @@ test "B+ Tree push operation and splitting" {
     var tree = try T.init(alloc);
     defer tree.deinit();
 
-    try tree.push(0, 1);
+    try tree.insert(0, 1);
 
     try testing.expect(!tree.root.is_empty());
     try testing.expect(tree.root.is_leaf());
 
     for (1..13) |key| {
-        try tree.push(key, key + 1);
+        try tree.insert(key, key + 1);
     }
 
     try testing.expect(!tree.root.is_leaf());
@@ -527,7 +527,7 @@ test "B+ Tree push operation and splitting" {
     try testing.expectEqual(12, tree.get(11));
 
     for (13..20) |key| {
-        try tree.push(key, key + 1);
+        try tree.insert(key, key + 1);
     }
 
     try testing.expectEqual(tree.root.len(), 3);
@@ -543,12 +543,12 @@ test "B+ Tree push operation until height is 2" {
     defer tree.deinit();
 
     for (0..89) |key| {
-        try tree.push(key, key + 1);
+        try tree.insert(key, key + 1);
     }
 
     try testing.expectEqual(tree.root.height(), 1);
 
-    try tree.push(89, 90);
+    try tree.insert(89, 90);
 
     try testing.expectEqual(tree.root.height(), 2);
 }
@@ -562,7 +562,7 @@ test "B+ Tree get operation" {
     defer tree.deinit();
 
     for (0..90) |key| {
-        try tree.push(key, key + 1);
+        try tree.insert(key, key + 1);
     }
 
     for (0..90) |key| {
@@ -579,7 +579,7 @@ test "B+ Tree get ref operation" {
     defer tree.deinit();
 
     for (0..90) |key| {
-        try tree.push(key, key + 1);
+        try tree.insert(key, key + 1);
     }
 
     for (0..90) |key| {
