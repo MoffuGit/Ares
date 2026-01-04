@@ -47,34 +47,6 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             }
         }
 
-        pub fn add_child(self: *Self, key: K, child: *Self) Error!void {
-            switch (self.*) {
-                .Internal => |*int| {
-                    if (int.len == int.childs.len) {
-                        return error.OutOfMemory;
-                    }
-
-                    var idx: u16 = int.len;
-
-                    while (idx > 0) : (idx -= 1) {
-                        switch (comp(key, int.keys[idx - 1])) {
-                            .gt => break,
-                            .lt => {
-                                int.keys[idx] = int.keys[idx - 1];
-                                int.childs[idx] = int.childs[idx - 1];
-                            },
-                            .eq => return error.DuplicateKey,
-                        }
-                    }
-
-                    int.keys[idx] = key;
-                    int.childs[idx] = child;
-                    int.len += 1;
-                },
-                .Leaf => panic("childs can be only added to internal nodes", .{}),
-            }
-        }
-
         pub fn items(self: Self) *const [CAPACITY]V {
             switch (self) {
                 .Internal => panic("Internal nodes have not items", .{}),
@@ -197,17 +169,26 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         childs_to_append[0] = new_other_node;
                         len_to_append = 1;
                     } else {
-                        var child_idx: u16 = 0;
-                        const other_node_min_key = other.keys()[0];
-                        while (child_idx < internal.len - 1) {
-                            if (comp(other_node_min_key, internal.keys[child_idx]) == .lt) {
-                                break;
-                            }
-                            child_idx += 1;
-                        }
-                        const node_to_append = try internal.childs[child_idx].append_recursive(other, alloc);
+                        var idx: u16 = 1;
 
-                        internal.keys[child_idx] = internal.childs[child_idx].keys()[0];
+                        while (idx < internal.len) {
+                            switch (comp(other.keys()[0], internal.keys[idx])) {
+                                .eq => {
+                                    return error.DuplicateKey;
+                                },
+                                .gt => {
+                                    idx += 1;
+                                },
+                                .lt => {
+                                    break;
+                                },
+                            }
+                        }
+
+                        const node_to_append = try internal.childs[idx - 1].append_recursive(other, alloc);
+
+                        internal.keys[idx - 1] = internal.childs[idx - 1].keys()[0];
+
                         if (node_to_append) |split| {
                             keys_to_append[0] = split.keys()[0];
                             childs_to_append[0] = split;
@@ -273,7 +254,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         internal.len = mid;
 
                         const right_node = try alloc.create(Self);
-                        right_node.* = .{ .Internal = .{ .childs = right_items, .keys = right_keys, .len = childs_len - mid } };
+                        right_node.* = .{ .Internal = .{ .childs = right_items, .keys = right_keys, .len = childs_len - mid, .height = internal.height } };
                         return right_node;
                     } else {
                         var target: usize = childs_len;
@@ -298,7 +279,6 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                     }
                 },
                 .Leaf => |*leaf| {
-                    assert(other.is_leaf());
                     const other_leaf = other.Leaf;
 
                     const new_len = leaf.len + other_leaf.len;
@@ -315,14 +295,20 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         var temp: usize = 0;
 
                         while (idx < leaf.len and other_idx < other_leaf.len) {
-                            if (comp(leaf.keys[idx], other_leaf.keys[other_idx]) != .gt) {
-                                temp_keys[temp] = leaf.keys[idx];
-                                temp_items[temp] = leaf.items[idx];
-                                idx += 1;
-                            } else {
-                                temp_keys[temp] = other_leaf.keys[other_idx];
-                                temp_items[temp] = other_leaf.items[other_idx];
-                                other_idx += 1;
+                            switch (comp(leaf.keys[idx], other_leaf.keys[other_idx])) {
+                                .lt => {
+                                    temp_keys[temp] = leaf.keys[idx];
+                                    temp_items[temp] = leaf.items[idx];
+                                    idx += 1;
+                                },
+                                .gt => {
+                                    temp_keys[temp] = other_leaf.keys[other_idx];
+                                    temp_items[temp] = other_leaf.items[other_idx];
+                                    other_idx += 1;
+                                },
+                                .eq => {
+                                    return error.DuplicateKey;
+                                },
                             }
                             temp += 1;
                         }
@@ -368,24 +354,57 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
 
                         return right_node;
                     } else {
-                        var target: usize = new_len;
-                        var idx: usize = leaf.len;
-                        var other_idx: usize = other_leaf.len;
+                        const temp_keys = try alloc.alloc(K, new_len);
+                        defer alloc.free(temp_keys);
 
-                        while (target > 0) {
-                            target -= 1;
+                        const temp_items = try alloc.alloc(V, new_len);
+                        defer alloc.free(temp_items);
 
-                            if (other_idx > 0 and (idx == 0 or comp(other_leaf.keys[other_idx - 1], leaf.keys[idx - 1]) == .gt)) {
-                                other_idx -= 1;
-                                leaf.keys[target] = other_leaf.keys[other_idx];
-                                leaf.items[target] = other_leaf.items[other_idx];
-                            } else {
-                                idx -= 1;
-                                leaf.keys[target] = leaf.keys[idx];
-                                leaf.items[target] = leaf.items[idx];
+                        var idx: usize = 0;
+                        var other_idx: usize = 0;
+                        var temp_ptr: usize = 0;
+
+                        while (idx < leaf.len and other_idx < other_leaf.len) {
+                            switch (comp(leaf.keys[idx], other_leaf.keys[other_idx])) {
+                                .lt => {
+                                    temp_keys[temp_ptr] = leaf.keys[idx];
+                                    temp_items[temp_ptr] = leaf.items[idx];
+                                    idx += 1;
+                                },
+                                .gt => {
+                                    temp_keys[temp_ptr] = other_leaf.keys[other_idx];
+                                    temp_items[temp_ptr] = other_leaf.items[other_idx];
+                                    other_idx += 1;
+                                },
+                                .eq => {
+                                    return error.DuplicateKey;
+                                },
+                            }
+                            temp_ptr += 1;
+                        }
+
+                        while (idx < leaf.len) {
+                            temp_keys[temp_ptr] = leaf.keys[idx];
+                            temp_items[temp_ptr] = leaf.items[idx];
+                            idx += 1;
+                            temp_ptr += 1;
+                        }
+
+                        while (other_idx < other_leaf.len) {
+                            temp_keys[temp_ptr] = other_leaf.keys[other_idx];
+                            temp_items[temp_ptr] = other_leaf.items[other_idx];
+                            other_idx += 1;
+                            temp_ptr += 1;
+                        }
+
+                        for (0..new_len - 1) |i| {
+                            if (comp(temp_keys[i], temp_keys[i + 1]) == .eq) {
+                                return error.DuplicateKey;
                             }
                         }
 
+                        @memcpy(leaf.keys[0..new_len], temp_keys[0..new_len]);
+                        @memcpy(leaf.items[0..new_len], temp_items[0..new_len]);
                         leaf.len = new_len;
                     }
                 },
@@ -541,6 +560,74 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
         pub fn iter(self: *Self) Iterator {
             return Iterator.init(self);
         }
+
+        pub fn log_levels(self: *const Self) !void {
+            var queue = try std.ArrayList(?*Node).initCapacity(self.alloc, 0);
+            defer queue.deinit(self.alloc);
+
+            if (self.root.len() == 0) { // An empty tree has a root leaf with len 0
+                std.debug.print("Tree is empty.\n", .{});
+                return;
+            }
+
+            try queue.append(self.alloc, self.root);
+
+            var level: usize = 0;
+            while (queue.items.len > 0) {
+                const current_level_size = queue.items.len;
+                var next_level_queue = try std.ArrayList(?*Node).initCapacity(self.alloc, 0);
+                defer next_level_queue.deinit(self.alloc);
+
+                std.debug.print("Level {d}: ", .{level});
+
+                var first_node_on_level = true;
+                for (0..current_level_size) |_| {
+                    const current_node_ptr = queue.orderedRemove(0); // Dequeue from front
+
+                    if (!first_node_on_level) {
+                        std.debug.print(" | ", .{}); // Separator only between nodes
+                    }
+                    first_node_on_level = false;
+
+                    if (current_node_ptr) |node| {
+                        if (!node.is_leaf()) {
+                            const internal = node.Internal;
+                            std.debug.print("I[", .{});
+                            for (0..internal.len) |i| {
+                                // For an internal node, keys[i] is the smallest key in childs[i]
+                                std.debug.print("{any}", .{internal.keys[i]});
+                                if (i < internal.len - 1) {
+                                    std.debug.print(",", .{});
+                                }
+                                try next_level_queue.append(self.alloc, internal.childs[i]);
+                            }
+                            std.debug.print("]", .{});
+                        } else { // Leaf node
+                            const leaf = node.Leaf;
+                            std.debug.print("L[", .{});
+                            for (0..leaf.len) |i| {
+                                std.debug.print("{any}:{any}", .{ leaf.keys[i], leaf.items[i] });
+                                if (i < leaf.len - 1) {
+                                    std.debug.print(", ", .{});
+                                }
+                            }
+                            std.debug.print("]", .{});
+                        }
+                    } else {
+                        // This case for null pointers should not occur in a well-formed B+ tree
+                        std.debug.print("NULL", .{});
+                    }
+                }
+                std.debug.print("\n", .{});
+
+                // Move nodes for the next level to the main queue
+                queue.clearRetainingCapacity();
+                for (next_level_queue.items) |node_ptr| {
+                    try queue.append(self.alloc, node_ptr);
+                }
+                level += 1;
+            }
+        }
     };
 }
 
@@ -646,15 +733,37 @@ test "B+ Tree leaf traversal" {
 
     var iter = tree.iter();
     var expected_key: usize = 0;
-    while (iter.next()) |leaf_node| {
-        try testing.expect(leaf_node.is_leaf());
-        const leaf_data = leaf_node.Leaf;
-        std.log.err("{any}", .{leaf_data.keys});
-        for (0..leaf_data.len) |i| {
-            try testing.expectEqual(expected_key, leaf_data.keys[i]);
-            try testing.expectEqual(expected_key + 100, leaf_data.items[i]);
+    while (iter.next()) |node| {
+        try testing.expect(node.is_leaf());
+        const leaf = node.Leaf;
+        for (0..leaf.len) |i| {
+            try testing.expectEqual(expected_key, leaf.keys[i]);
+            try testing.expectEqual(expected_key + 100, leaf.items[i]);
             expected_key += 1;
         }
     }
     try testing.expectEqual(20, expected_key);
+}
+
+test "B+ Tree insert a duplicate key" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    try tree.insert(0, 1);
+    tree.insert(0, 2) catch {};
+
+    try testing.expectEqual(1, tree.get(0));
+
+    for (1..90) |key| {
+        try tree.insert(key, key + 1);
+    }
+
+    for (20..30) |key| {
+        tree.insert(key, 2) catch {};
+        try testing.expectEqual(tree.get(key), key + 1);
+    }
 }
