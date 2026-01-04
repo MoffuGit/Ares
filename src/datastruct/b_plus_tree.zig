@@ -17,7 +17,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
         const Self = @This();
 
         Internal: struct { childs: [CAPACITY]*Self = undefined, keys: [CAPACITY]K = undefined, len: u16 = 0, height: usize = 0 },
-        Leaf: struct { items: [CAPACITY]V = undefined, keys: [CAPACITY]K = undefined, len: u16 = 0 },
+        Leaf: struct { items: [CAPACITY]V = undefined, keys: [CAPACITY]K = undefined, len: u16 = 0, next: ?*Self = null },
 
         pub fn add_item(self: *Self, key: K, value: V) Error!void {
             switch (self.*) {
@@ -355,12 +355,17 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         @memcpy(right_keys[0 .. new_len - mid], temp_keys[mid..new_len]);
                         @memcpy(right_items[0 .. new_len - mid], temp_items[mid..new_len]);
 
+                        const original_next_leaf = leaf.next;
+
                         leaf.items = left_items;
                         leaf.keys = left_keys;
                         leaf.len = mid;
 
                         const right_node = try alloc.create(Self);
-                        right_node.* = .{ .Leaf = .{ .items = right_items, .keys = right_keys, .len = new_len - mid } };
+                        right_node.* = .{ .Leaf = .{ .items = right_items, .keys = right_keys, .len = new_len - mid, .next = original_next_leaf } };
+
+                        leaf.next = right_node;
+
                         return right_node;
                     } else {
                         var target: usize = new_len;
@@ -460,6 +465,11 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                 },
             }
         }
+
+        pub fn delete(self: *Self, key: K) !V {
+            _ = self;
+            _ = key;
+        }
     };
 }
 
@@ -471,6 +481,31 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
 
         root: *Node,
         alloc: Allocator,
+
+        pub const Iterator = struct {
+            curr: ?*Node,
+
+            pub fn init(tree: *const Self) Iterator {
+                var current = tree.root;
+                while (true) {
+                    switch (current.*) {
+                        .Internal => |*internal| {
+                            if (internal.len == 0) return .{ .curr = null };
+                            current = internal.childs[0];
+                        },
+                        .Leaf => return .{ .curr = current },
+                    }
+                }
+            }
+
+            pub fn next(self: *Iterator) ?*Node {
+                const result = self.curr;
+                if (self.curr) |node| {
+                    self.curr = node.Leaf.next;
+                }
+                return result;
+            }
+        };
 
         pub fn init(alloc: Allocator) !Self {
             const root = try alloc.create(Node);
@@ -497,6 +532,14 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
 
         pub fn get_ref(self: *Self, key: K) !*V {
             return self.root.find_mut(key);
+        }
+
+        pub fn remove(self: *Self, key: K) !V {
+            return self.root.delete(key);
+        }
+
+        pub fn iter(self: *Self) Iterator {
+            return Iterator.init(self);
         }
     };
 }
@@ -587,4 +630,31 @@ test "B+ Tree get ref operation" {
         value.* = key * 4;
         try testing.expectEqual(key * 4, tree.get(key));
     }
+}
+
+test "B+ Tree leaf traversal" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    for (0..20) |key| {
+        try tree.insert(key, key + 100);
+    }
+
+    var iter = tree.iter();
+    var expected_key: usize = 0;
+    while (iter.next()) |leaf_node| {
+        try testing.expect(leaf_node.is_leaf());
+        const leaf_data = leaf_node.Leaf;
+        std.log.err("{any}", .{leaf_data.keys});
+        for (0..leaf_data.len) |i| {
+            try testing.expectEqual(expected_key, leaf_data.keys[i]);
+            try testing.expectEqual(expected_key + 100, leaf_data.items[i]);
+            expected_key += 1;
+        }
+    }
+    try testing.expectEqual(20, expected_key);
 }
