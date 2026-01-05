@@ -6,11 +6,6 @@ test {
     _ = BPlusTree;
 }
 
-//WARN:
-//Remember to add the linked list values to the leaf nodes,
-//this will work really nice for ranges,
-//remember to update it every time you remove or create a leaf node
-
 //NOTE:
 //when deleting,
 //first we need to find the value,

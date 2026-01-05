@@ -578,8 +578,8 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             return Iterator.init(self);
         }
 
-        pub fn log_levels(self: *const Self) !void {
-            var queue = try std.ArrayList(?*Node).initCapacity(self.alloc, 0);
+        pub fn print(self: *const Self) !void {
+            var queue = try std.ArrayList(*Node).initCapacity(self.alloc, 0);
             defer queue.deinit(self.alloc);
 
             if (self.root.len() == 0) {
@@ -589,60 +589,42 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
 
             try queue.append(self.alloc, self.root);
 
-            var level: usize = 0;
             while (queue.items.len > 0) {
-                const current_level_size = queue.items.len;
-                var next_level_queue = try std.ArrayList(?*Node).initCapacity(self.alloc, 0);
-                defer next_level_queue.deinit(self.alloc);
+                var next_queue = try std.ArrayList(*Node).initCapacity(self.alloc, 0);
+                defer next_queue.deinit(self.alloc);
 
-                std.debug.print("Level {d}: ", .{level});
-
-                var first_node_on_level = true;
-                for (0..current_level_size) |_| {
-                    const current_node_ptr = queue.orderedRemove(0); // Dequeue from front
-
-                    if (!first_node_on_level) {
-                        std.debug.print(" | ", .{}); // Separator only between nodes
-                    }
-                    first_node_on_level = false;
-
-                    if (current_node_ptr) |node| {
-                        if (!node.is_leaf()) {
-                            const internal = node.Internal;
-                            std.debug.print("I[", .{});
-                            for (0..internal.len) |i| {
-                                // For an internal node, keys[i] is the smallest key in childs[i]
-                                std.debug.print("{any}", .{internal.keys[i]});
-                                if (i < internal.len - 1) {
-                                    std.debug.print(",", .{});
-                                }
-                                try next_level_queue.append(self.alloc, internal.childs[i]);
+                while (queue.items.len > 0) {
+                    const node = queue.orderedRemove(0);
+                    if (!node.is_leaf()) {
+                        const internal = node.Internal;
+                        std.debug.print("{s}", .{"{ "});
+                        for (0..internal.len) |i| {
+                            std.debug.print("{any}", .{internal.keys[i]});
+                            if (i < internal.len - 1) {
+                                std.debug.print(", ", .{});
                             }
-                            std.debug.print("]", .{});
-                        } else { // Leaf node
-                            const leaf = node.Leaf;
-                            std.debug.print("L[", .{});
-                            for (0..leaf.len) |i| {
-                                std.debug.print("{any}:{any}", .{ leaf.keys[i], leaf.items[i] });
-                                if (i < leaf.len - 1) {
-                                    std.debug.print(", ", .{});
-                                }
-                            }
-                            std.debug.print("]", .{});
+                            try next_queue.append(self.alloc, internal.childs[i]);
                         }
+                        std.debug.print("{s}", .{" } "});
                     } else {
-                        // This case for null pointers should not occur in a well-formed B+ tree
-                        std.debug.print("NULL", .{});
+                        const leaf = node.Leaf;
+                        std.debug.print("{s}", .{"{ "});
+                        for (0..leaf.len) |i| {
+                            std.debug.print("{{ {any}, {any} }}", .{ leaf.keys[i], leaf.items[i] });
+                            if (i < leaf.len - 1) {
+                                std.debug.print(", ", .{});
+                            }
+                        }
+                        std.debug.print("{s}", .{" } "});
+                        std.debug.print("\n", .{});
                     }
                 }
                 std.debug.print("\n", .{});
 
-                // Move nodes for the next level to the main queue
                 queue.clearRetainingCapacity();
-                for (next_level_queue.items) |node_ptr| {
-                    try queue.append(self.alloc, node_ptr);
+                for (next_queue.items) |node| {
+                    try queue.append(self.alloc, node);
                 }
-                level += 1;
             }
         }
     };
@@ -779,4 +761,6 @@ test "B+ Tree insert a duplicate key" {
         try testing.expectEqual(tree.insert(key, 2), error.DuplicateKey);
         try testing.expectEqual(tree.get(key), key + 1);
     }
+
+    try tree.print();
 }
