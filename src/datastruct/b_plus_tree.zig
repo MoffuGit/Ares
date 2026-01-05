@@ -502,27 +502,44 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
         alloc: Allocator,
 
         pub const Iterator = struct {
-            curr: ?*Node,
+            leaf: ?*Node,
+            index: usize,
 
             pub fn init(tree: *const Self) Iterator {
-                var current = tree.root;
-                while (true) {
-                    switch (current.*) {
+                var current: ?*Node = tree.root;
+                while (current) |node| {
+                    switch (node.*) {
                         .Internal => |*internal| {
-                            if (internal.len == 0) return .{ .curr = null };
+                            if (internal.len == 0) {
+                                current = null;
+                                break;
+                            }
                             current = internal.childs[0];
                         },
-                        .Leaf => return .{ .curr = current },
+                        .Leaf => {
+                            return .{ .leaf = current, .index = 0 };
+                        },
                     }
                 }
+                return .{ .leaf = null, .index = 0 };
             }
 
-            pub fn next(self: *Iterator) ?*Node {
-                const result = self.curr;
-                if (self.curr) |node| {
-                    self.curr = node.Leaf.next;
+            pub fn next(self: *Iterator) ?struct { key: K, value: V } {
+                while (self.leaf) |node| {
+                    if (node.is_leaf()) {
+                        const leaf = node.Leaf;
+                        if (self.index < leaf.len) {
+                            self.index += 1;
+                            return .{ .key = leaf.keys[self.index - 1], .value = leaf.items[self.index - 1] };
+                        } else {
+                            self.leaf = leaf.next;
+                            self.index = 0;
+                        }
+                    } else {
+                        unreachable;
+                    }
                 }
-                return result;
+                return null;
             }
         };
 
@@ -565,7 +582,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             var queue = try std.ArrayList(?*Node).initCapacity(self.alloc, 0);
             defer queue.deinit(self.alloc);
 
-            if (self.root.len() == 0) { // An empty tree has a root leaf with len 0
+            if (self.root.len() == 0) {
                 std.debug.print("Tree is empty.\n", .{});
                 return;
             }
@@ -733,14 +750,10 @@ test "B+ Tree leaf traversal" {
 
     var iter = tree.iter();
     var expected_key: usize = 0;
-    while (iter.next()) |node| {
-        try testing.expect(node.is_leaf());
-        const leaf = node.Leaf;
-        for (0..leaf.len) |i| {
-            try testing.expectEqual(expected_key, leaf.keys[i]);
-            try testing.expectEqual(expected_key + 100, leaf.items[i]);
-            expected_key += 1;
-        }
+    while (iter.next()) |n| {
+        try testing.expectEqual(expected_key, n.key);
+        try testing.expectEqual(expected_key + 100, n.value);
+        expected_key += 1;
     }
     try testing.expectEqual(20, expected_key);
 }
