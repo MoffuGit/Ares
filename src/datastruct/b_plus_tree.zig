@@ -767,7 +767,7 @@ test "B+ Tree insert a duplicate key" {
     defer tree.deinit();
 
     try tree.insert(0, 1);
-    tree.insert(0, 2) catch {};
+    try testing.expectEqual(tree.insert(0, 2), error.DuplicateKey);
 
     try testing.expectEqual(1, tree.get(0));
 
@@ -776,7 +776,7 @@ test "B+ Tree insert a duplicate key" {
     }
 
     for (20..30) |key| {
-        tree.insert(key, 2) catch {};
+        try testing.expectEqual(tree.insert(key, 2), error.DuplicateKey);
         try testing.expectEqual(tree.get(key), key + 1);
     }
 }
