@@ -11,28 +11,16 @@ pub const Thread = @This();
 pub const Mailbox = BlockingQueue(messagepkg.Message, 64);
 
 //NOTE:
-//pub struct Worktree {
-//     snapshot: Snapshot,
-//     path: String,
-// }
-//
-// pub struct Snapshot {
-//     entries_by_path: SumTree<Entry>,
-//     entries_by_id: SumTree<PathEntry>,
-// }
-//
-//Entry {
-//  path: String,
-//  node_type: {
-//      File,
-//      Dir : {
-//          watcher: xev.Watcher,
-//      }
-//  }
-//}
-//
-//i will follow the impl from: https://github.com/dayvster/zig-bplus-tree/tree/main
-//and of couse the impl from zed, on their sum_tree crate
+//The worktree it's going to store the state of the file tree on a B+ tree
+//it will have a lock for reads and writes, all writes will came from this thread
+//for now they will be trigger only by the watchers, at some point i will add the capacity to create the files my self
+//maybe that update the state of the tree
+//I will need a queueu for Wathcers that are waiting to be cancel
+//and probably this watcher can be stored into the B+tree as part of the path data,
+//then when the path gets deleted, we add the watcher cancel to the queue for his deallocation on the future
+//the read of the worktree probaly are going to be really fast because they probably are goin
+//to clone some part of the linked list of the B+tree, i don't expect having a ssytem
+//that take to much time the lock into his hands, and in teory cloning the linked list should be really fast
 
 alloc: Allocator,
 loop: xev.Loop,

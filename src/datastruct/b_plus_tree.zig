@@ -486,7 +486,19 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
         }
 
         pub fn delete(self: *Self, key: K) !V {
-            _ = self;
+            switch (self.*) {
+                .Leaf => {
+                    //search for the key and remove value
+                },
+                .Internal => {
+                    //search for the key and ask children to remove the value
+                    //check if the children is underflowiung
+                    //if it is
+                    //try first to rebalance taking from the silbing
+                    //if not
+                    //merge with a sibling
+                },
+            }
             _ = key;
         }
     };
@@ -761,6 +773,4 @@ test "B+ Tree insert a duplicate key" {
         try testing.expectEqual(tree.insert(key, 2), error.DuplicateKey);
         try testing.expectEqual(tree.get(key), key + 1);
     }
-
-    try tree.print();
 }
