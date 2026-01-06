@@ -1293,4 +1293,6 @@ test "B+ Tree with string keys" {
 
     // Test deletion of a non-existent key
     try testing.expectEqual(error.NotFound, tree.remove("mango"));
+
+    try tree.print();
 }
