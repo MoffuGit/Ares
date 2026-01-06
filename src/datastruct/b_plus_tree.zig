@@ -1179,8 +1179,6 @@ test "B+ Tree delete - underflow and merge with right sibling (leaf)" {
     try testing.expectEqual(11, tree.root.len());
     try testing.expect(tree.root.is_leaf());
 
-    try tree.print();
-
     try testing.expectEqual(1 + 100, try tree.get(1));
     try testing.expectEqual(11 + 100, try tree.get(11));
     try testing.expectEqual(error.NotFound, tree.get(0));
@@ -1192,4 +1190,57 @@ test "B+ Tree delete - underflow and merge with right sibling (leaf)" {
         }
     }
     try testing.expectEqual(error.NotFound, tree.get(99));
+}
+
+test "B+ Tree delete - underflow and borrow from right sibling (internal)" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    for (0..90) |key| {
+        try tree.insert(key, key + 100);
+    }
+
+    try testing.expectEqual(tree.root.height(), 2);
+    try testing.expect(!tree.root.is_leaf());
+    try testing.expectEqual(tree.root.len(), 2);
+
+    const I0 = tree.root.Internal.childs[0];
+    const I1 = tree.root.Internal.childs[1];
+
+    try testing.expect(!I0.is_leaf());
+    try testing.expect(!I1.is_leaf());
+
+    try testing.expectEqual(BASE + 1, I0.len());
+    try testing.expectEqual(BASE, I1.len());
+
+    for (0..9) |_| {
+        const key_to_remove_from_I0 = I0.keys()[0];
+        const removed_val = try tree.remove(key_to_remove_from_I0);
+        try testing.expectEqual(key_to_remove_from_I0 + 100, removed_val);
+        try testing.expectEqual(error.NotFound, tree.get(key_to_remove_from_I0));
+    }
+
+    try testing.expectEqual(tree.root.height(), 2);
+    try testing.expect(!tree.root.is_leaf());
+    try testing.expectEqual(tree.root.len(), 2);
+
+    try testing.expectEqual(tree.root.childs()[0].keys()[0], 9);
+    try testing.expectEqual(tree.root.keys()[0], 9);
+
+    _ = try tree.remove(9);
+
+    try testing.expectEqual(tree.root.height(), 1);
+    try testing.expect(!tree.root.is_leaf());
+    try testing.expectEqual(tree.root.len(), 11);
+
+    try tree.insert(9, 109);
+    try tree.insert(8, 108);
+
+    try testing.expectEqual(tree.root.height(), 1);
+    try testing.expect(!tree.root.is_leaf());
+    try testing.expectEqual(tree.root.len(), 12);
 }
