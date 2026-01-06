@@ -15,7 +15,6 @@ const Editor = @import("editor/mod.zig");
 
 const EditorThread = @import("editor/Thread.zig");
 const RenderThread = @import("renderer/Thread.zig");
-const WorktreeThread = @import("worktree/Thread.zig");
 
 const log = std.log.scoped(.surface);
 const SharedState = @import("SharedState.zig");
@@ -36,9 +35,6 @@ renderer_thr: std.Thread,
 editor: Editor,
 editor_thread: EditorThread,
 editor_thr: std.Thread,
-
-worktree_thread: WorktreeThread,
-worktree_thr: std.Thread,
 
 font_size: facepkg.DesiredSize,
 metrics: facepkg.Metrics,
@@ -61,9 +57,6 @@ pub fn init(
 
     var editor_thread = try EditorThread.init(alloc, &self.editor);
     errdefer editor_thread.deinit();
-
-    var worktree_thread = try WorktreeThread.init(alloc);
-    errdefer worktree_thread.deinit();
 
     const content_scale = rt_surface.content_scale;
     const x_dpi = content_scale.x * facepkg.default_dpi;
@@ -105,11 +98,10 @@ pub fn init(
     var editor = try Editor.init(alloc, .{ .size = size, .mutex = mutex, .thread = &self.renderer_thread });
     errdefer editor.deinit();
 
-    self.* = .{ .renderer = renderer, .metrics = grid.metrics, .grid = grid, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .editor = editor, .editor_thread = editor_thread, .renderer_thr = undefined, .editor_thr = undefined, .worktree_thread = worktree_thread, .worktree_thr = undefined, .shared_state = .{ .editor = &self.editor, .mutex = mutex } };
+    self.* = .{ .renderer = renderer, .metrics = grid.metrics, .grid = grid, .alloc = alloc, .font_size = font_size, .app = app, .rt_app = rt_app, .rt_surface = rt_surface, .size = size, .renderer_thread = renderer_thread, .editor = editor, .editor_thread = editor_thread, .renderer_thr = undefined, .editor_thr = undefined, .shared_state = .{ .editor = &self.editor, .mutex = mutex } };
 
     self.editor_thr = try std.Thread.spawn(.{}, EditorThread.Thread.threadMain, .{&self.editor_thread});
     self.renderer_thr = try std.Thread.spawn(.{}, RenderThread.Thread.threadMain, .{&self.renderer_thread});
-    self.worktree_thr = try std.Thread.spawn(.{}, WorktreeThread.Thread.threadMain, .{&self.worktree_thread});
 }
 
 pub fn deinit(self: *Surface) void {
@@ -122,11 +114,6 @@ pub fn deinit(self: *Surface) void {
         self.editor_thread.stop.notify() catch |err|
             log.err("error notifying editor thread to stop, may stall err={}", .{err});
         self.editor_thr.join();
-    }
-    {
-        self.worktree_thread.stop.notify() catch |err|
-            log.err("error notifying editor thread to stop, may stall err={}", .{err});
-        self.worktree_thr.join();
     }
     self.renderer.deinit();
     self.editor.deinit();
@@ -219,7 +206,4 @@ pub fn setFilePwd(self: *Surface, pwd: [:0]const u8) !void {
     self.pwd = try self.alloc.dupe(u8, pwd);
     _ = self.editor_thread.mailbox.push(.{ .pwd = try self.alloc.dupe(u8, pwd) }, .instant);
     self.editor_thread.wakeup.notify() catch {};
-
-    _ = self.worktree_thread.mailbox.push(.{ .pwd = try self.alloc.dupe(u8, pwd) }, .instant);
-    self.worktree_thread.wakeup.notify() catch {};
 }
