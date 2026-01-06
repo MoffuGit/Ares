@@ -41,7 +41,7 @@ pub fn init(
     var mailbox = try Mailbox.create(alloc);
     errdefer mailbox.destroy(alloc);
 
-    return .{ .alloc = alloc, .loop = loop, .stop = stop_h, .wakeup = wakeup_h, .mailbox = mailbox, .editor = editor};
+    return .{ .alloc = alloc, .loop = loop, .stop = stop_h, .wakeup = wakeup_h, .mailbox = mailbox, .editor = editor };
 }
 
 pub fn deinit(self: *Thread) void {
@@ -96,12 +96,6 @@ fn drainMailbox(self: *Thread) !void {
         switch (message) {
             .size => |size| {
                 self.editor.resize(size);
-            },
-            .pwd => |pwd| {
-                try self.editor.openFile(pwd);
-                self.alloc.free(pwd);
-
-                try self.editor.renderer_thread.wakeup.notify();
             },
         }
     }
