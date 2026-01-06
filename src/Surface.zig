@@ -43,8 +43,6 @@ grid: Grid,
 
 shared_state: SharedState,
 
-pwd: ?[]u8 = null,
-
 pub fn init(
     self: *Surface,
     alloc: Allocator,
@@ -117,9 +115,6 @@ pub fn deinit(self: *Surface) void {
     }
     self.renderer.deinit();
     self.editor.deinit();
-    if (self.pwd) |p| {
-        self.alloc.free(p);
-    }
     log.info("surface closed addr={x}", .{@intFromPtr(self)});
 }
 
@@ -196,14 +191,4 @@ pub fn setFontSize(self: *Surface, size: facepkg.DesiredSize) void {
     //
     // // Schedule render which also drains our mailbox
     // self.queueRender() catch unreachable;
-}
-
-pub fn setFilePwd(self: *Surface, pwd: [:0]const u8) !void {
-    log.debug("set file pwd: {s}", .{pwd});
-    if (self.pwd) |old_pwd| {
-        self.alloc.free(old_pwd);
-    }
-    self.pwd = try self.alloc.dupe(u8, pwd);
-    _ = self.editor_thread.mailbox.push(.{ .pwd = try self.alloc.dupe(u8, pwd) }, .instant);
-    self.editor_thread.wakeup.notify() catch {};
 }

@@ -117,9 +117,8 @@ pub const Surface = struct {
     }
 
     pub fn updateFilePwd(self: *Surface, pwd: [:0]const u8) void {
-        self.core_surface.setFilePwd(pwd) catch |err| {
-            log.err("error with new pwd: {}", .{err});
-        };
+        _ = self;
+        log.debug("set file pwd: {s}", .{pwd});
     }
 };
 
