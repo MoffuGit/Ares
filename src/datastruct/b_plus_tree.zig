@@ -8,7 +8,7 @@ const CAPACITY: usize = 2 * BASE;
 
 pub const Error = error{
     OutOfMemory,
-    DuplicateKey,
+    DuplicatedKey,
     NotFound,
 } || Allocator.Error;
 
@@ -36,13 +36,99 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                                 leaf.keys[idx] = leaf.keys[idx - 1];
                                 leaf.items[idx] = leaf.items[idx - 1];
                             },
-                            .eq => return error.DuplicateKey,
+                            .eq => return error.DuplicatedKey,
                         }
                     }
 
                     leaf.keys[idx] = key;
                     leaf.items[idx] = value;
                     leaf.len += 1;
+                },
+            }
+        }
+
+        pub fn add_children(self: *Self, key: K, value: *Self) Error!void {
+            switch (self.*) {
+                .Leaf => panic("childrens can be only added to internal nodes", .{}),
+                .Internal => |*internal| {
+                    if (internal.len == CAPACITY) {
+                        return error.OutOfMemory;
+                    }
+
+                    var idx: u16 = internal.len;
+
+                    while (idx > 0) : (idx -= 1) {
+                        switch (comp(key, internal.keys[idx - 1])) {
+                            .gt => break,
+                            .lt => {
+                                internal.keys[idx] = internal.keys[idx - 1];
+                                internal.childs[idx] = internal.childs[idx - 1];
+                            },
+                            .eq => return error.DuplicatedKey,
+                        }
+                    }
+
+                    internal.keys[idx] = key;
+                    internal.childs[idx] = value;
+                    internal.len += 1;
+                },
+            }
+        }
+
+        pub fn remove_item(self: *Self, index: u16) struct { key: K, value: V } {
+            switch (self.*) {
+                .Internal => panic("items can be only removed from leaf nodes", .{}),
+                .Leaf => |*leaf| {
+                    if (index >= leaf.len) {
+                        panic("Index: {}, len: {}", .{ leaf.len, index });
+                    }
+
+                    const key = leaf.keys[index];
+                    const value = leaf.items[index];
+
+                    var i: u16 = index;
+                    while (i < leaf.len - 1) : (i += 1) {
+                        leaf.keys[i] = leaf.keys[i + 1];
+                        leaf.items[i] = leaf.items[i + 1];
+                    }
+
+                    leaf.len -= 1;
+
+                    if (leaf.len < CAPACITY) {
+                        leaf.keys[leaf.len] = undefined;
+                        leaf.items[leaf.len] = undefined;
+                    }
+
+                    return .{ .key = key, .value = value };
+                },
+            }
+        }
+
+        pub fn remove_children(self: *Self, index: u16) struct { key: K, child: *Self } {
+            switch (self.*) {
+                .Leaf => panic("childs can be only removed from internal nodes", .{}),
+                .Internal => |*internal| {
+                    if (index >= internal.len) {
+                        panic("Index: {}, len: {}", .{ internal.len, index });
+                    }
+
+                    const key = internal.keys[index];
+                    const child = internal.childs[index];
+
+                    var i: u16 = index;
+                    while (i < internal.len - 1) : (i += 1) {
+                        internal.keys[i] = internal.keys[i + 1];
+                        internal.childs[i] = internal.childs[i + 1];
+                    }
+
+                    internal.len -= 1;
+
+                    if (internal.len < CAPACITY) {
+                        internal.keys[internal.len] = undefined;
+                        internal.childs[internal.len] = undefined;
+                    }
+
+                    return .{ .key = key, .child = child };
                 },
             }
         }
@@ -174,7 +260,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         while (idx < internal.len) {
                             switch (comp(other.keys()[0], internal.keys[idx])) {
                                 .eq => {
-                                    return error.DuplicateKey;
+                                    return error.DuplicatedKey;
                                 },
                                 .gt => {
                                     idx += 1;
@@ -307,7 +393,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                                     other_idx += 1;
                                 },
                                 .eq => {
-                                    return error.DuplicateKey;
+                                    return error.DuplicatedKey;
                                 },
                             }
                             temp += 1;
@@ -377,7 +463,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                                     other_idx += 1;
                                 },
                                 .eq => {
-                                    return error.DuplicateKey;
+                                    return error.DuplicatedKey;
                                 },
                             }
                             temp_ptr += 1;
@@ -399,7 +485,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
 
                         for (0..new_len - 1) |i| {
                             if (comp(temp_keys[i], temp_keys[i + 1]) == .eq) {
-                                return error.DuplicateKey;
+                                return error.DuplicatedKey;
                             }
                         }
 
@@ -485,21 +571,137 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             }
         }
 
-        pub fn delete(self: *Self, key: K) !V {
+        pub fn delete(self: *Self, key: K, alloc: Allocator) !V {
             switch (self.*) {
-                .Leaf => {
-                    //search for the key and remove value
+                .Leaf => |*leaf| {
+                    var i: u16 = 0;
+                    while (i < leaf.len) {
+                        switch (comp(key, leaf.keys[i])) {
+                            .eq => {
+                                const removed_value = leaf.items[i];
+
+                                var j: u16 = i;
+                                while (j < leaf.len - 1) {
+                                    leaf.keys[j] = leaf.keys[j + 1];
+                                    leaf.items[j] = leaf.items[j + 1];
+                                    j += 1;
+                                }
+                                leaf.len -= 1;
+                                return removed_value;
+                            },
+                            .lt => return error.NotFound,
+                            .gt => i += 1,
+                        }
+                    }
                 },
-                .Internal => {
-                    //search for the key and ask children to remove the value
-                    //check if the children is underflowiung
-                    //if it is
-                    //try first to rebalance taking from the silbing
-                    //if not
-                    //merge with a sibling
+                .Internal => |*internal| {
+                    var idx: u16 = 1;
+                    while (idx < internal.len) {
+                        switch (comp(key, internal.keys[idx])) {
+                            .eq => {
+                                idx += 1;
+                                break;
+                            },
+                            .gt => {
+                                idx += 1;
+                            },
+                            .lt => {
+                                break;
+                            },
+                        }
+                    }
+
+                    idx -= 1;
+
+                    const removed = try internal.childs[idx].delete(key, alloc);
+
+                    if (internal.childs[idx].is_underflowing()) {
+                        self.rebalance_child(idx, alloc);
+                    }
+
+                    return removed;
                 },
             }
-            _ = key;
+
+            unreachable;
+        }
+
+        fn rebalance_child(self: *Self, idx: u16, alloc: Allocator) void {
+            const parent = &self.Internal;
+            const child = parent.childs[idx];
+
+            switch (child.*) {
+                .Internal => {
+                    if (idx > 0) {
+                        const sibling = parent.childs[idx - 1];
+                        if (sibling.len() > BASE) {
+                            const borrow = sibling.remove_children(sibling.len() - 1);
+                            child.add_children(borrow.key, borrow.child) catch {};
+
+                            parent.keys[idx] = borrow.key;
+
+                            return;
+                        }
+                    }
+                    if (idx < parent.len - 1) {
+                        const sibling = parent.childs[idx + 1];
+                        if (sibling.len() > BASE) {
+                            const borrow = sibling.remove_children(0);
+                            child.add_children(borrow.key, borrow.child) catch {};
+
+                            parent.keys[idx] = borrow.key;
+
+                            return;
+                        }
+                    }
+                },
+                .Leaf => {
+                    if (idx > 0) {
+                        const sibling = parent.childs[idx - 1];
+                        if (sibling.len() > BASE) {
+                            const borrow = sibling.remove_item(sibling.len() - 1);
+                            child.add_item(borrow.key, borrow.value) catch {};
+
+                            parent.keys[idx] = borrow.key;
+
+                            return;
+                        }
+                    }
+                    if (idx < parent.len - 1) {
+                        const sibling = parent.childs[idx + 1];
+                        if (sibling.len() > BASE) {
+                            const borrow = sibling.remove_item(0);
+                            child.add_item(borrow.key, borrow.value) catch {};
+
+                            parent.keys[idx] = borrow.key;
+
+                            return;
+                        }
+                    }
+                },
+            }
+
+            if (idx > 0) {
+                const sibling = parent.childs[idx - 1];
+
+                _ = self.remove_children(idx);
+                _ = sibling.append_recursive(child.*, alloc) catch {};
+
+                alloc.destroy(child);
+
+                parent.keys[idx - 1] = sibling.keys()[0];
+            }
+
+            if (idx < parent.len - 1) {
+                const sibling = parent.childs[idx + 1];
+
+                _ = self.remove_children(idx + 1);
+                _ = child.append_recursive(sibling.*, alloc) catch {};
+
+                alloc.destroy(sibling);
+
+                parent.keys[idx] = child.keys()[0];
+            }
         }
     };
 }
@@ -583,7 +785,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
         }
 
         pub fn remove(self: *Self, key: K) !V {
-            return self.root.delete(key);
+            return try self.root.delete(key, self.alloc);
         }
 
         pub fn iter(self: *Self) Iterator {
@@ -761,7 +963,7 @@ test "B+ Tree insert a duplicate key" {
     defer tree.deinit();
 
     try tree.insert(0, 1);
-    try testing.expectEqual(tree.insert(0, 2), error.DuplicateKey);
+    try testing.expectEqual(tree.insert(0, 2), error.DuplicatedKey);
 
     try testing.expectEqual(1, tree.get(0));
 
@@ -770,7 +972,26 @@ test "B+ Tree insert a duplicate key" {
     }
 
     for (20..30) |key| {
-        try testing.expectEqual(tree.insert(key, 2), error.DuplicateKey);
+        try testing.expectEqual(tree.insert(key, 2), error.DuplicatedKey);
         try testing.expectEqual(tree.get(key), key + 1);
     }
+}
+
+test "B+ Tree delete" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    for (0..90) |key| {
+        try tree.insert(key, key + 1);
+    }
+
+    _ = try tree.remove(10);
+
+    try testing.expectEqual(error.NotFound, tree.get(10));
+
+    try tree.print();
 }
