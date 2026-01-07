@@ -24,16 +24,16 @@ scanner_thread: ScannerThread,
 scanner_thr: std.Thread,
 
 pub fn init(self: *Worktree, alloc: Allocator) !Worktree {
-    var monitor_thread = try MonitorThread.init(alloc, &self);
+    var monitor_thread = try MonitorThread.init(alloc, &self.monitor);
     errdefer monitor_thread.deinit();
 
-    var scanner_thread = try ScannerThread.init(alloc, &self);
+    var scanner_thread = try ScannerThread.init(alloc, &self.scanner);
     errdefer scanner_thread.deinit();
 
-    var monitor = try Monitor.init(alloc);
+    var monitor = try Monitor.init(alloc, self);
     errdefer monitor.deinit();
 
-    var scanner = try Scanner.init(alloc);
+    var scanner = try Scanner.init(alloc, self);
     errdefer scanner.deinit();
 
     self.* = .{ .alloc = alloc, .root = undefined, .entries = undefined, .monitor = monitor, .monitor_thread = monitor_thread, .monitor_thr = undefined, .scanner = scanner, .scanner_thread = scanner_thread, .scanner_thr = undefined };
