@@ -782,6 +782,13 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             return self.root.find(key);
         }
 
+        pub fn clear(self: *Self) void {
+            self.root.destroy(self.alloc);
+
+            const root = try self.alloc.create(Node);
+            root.* = .{ .Leaf = .{} };
+        }
+
         pub fn get_ref(self: *Self, key: K) !*V {
             return self.root.find_mut(key);
         }

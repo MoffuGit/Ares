@@ -97,6 +97,13 @@ fn wakeupCallback(
 
 fn drainMailbox(self: *Thread) !void {
     while (self.mailbox.pop()) |message| {
-        _ = message;
+        switch (message) {
+            .scan => |request| {
+                try self.scanner.process_scan_request(request.path, request.abs_path);
+            },
+            else => |msg| {
+                log.info("Skipped message: {}", .{msg});
+            },
+        }
     }
 }
