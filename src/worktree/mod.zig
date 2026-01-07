@@ -14,6 +14,7 @@ alloc: Allocator,
 
 root: []u8 = undefined,
 entries: BPlusTree(usize, usize) = undefined,
+mutex: std.Thread.Mutex = .{},
 
 monitor: Monitor,
 monitor_thread: MonitorThread,
@@ -61,4 +62,9 @@ pub fn deinit(self: *Worktree) void {
     self.scanner.deinit();
 
     log.info("Worktree closed", .{});
+}
+
+pub fn set_root(self: *Worktree, path: []const u8) !void {
+    _ = self;
+    _ = path;
 }
