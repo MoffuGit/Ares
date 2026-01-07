@@ -22,3 +22,5 @@ pub fn deinit(self: *Scanner) void {
 //
 //after the first scan the two things that can happen are, a new root, you need to make the first scan again
 //or an event got trigger on the monitor, what you do next in this case would depend on the type of event
+//the paths are relative to the root, you need to lock the mutex, do changes to the entries tree
+//and then unlock the mutex
