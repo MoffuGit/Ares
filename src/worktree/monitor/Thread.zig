@@ -11,6 +11,10 @@ pub const Thread = @This();
 
 pub const Mailbox = BlockingQueue(messagepkg.Message, 64);
 
+//NOTE:
+//add another queue, this time for kqueue Watchers,
+//they need to get deleted on the tick after calling watcher.cancel()
+
 alloc: Allocator,
 loop: xev.Loop,
 
