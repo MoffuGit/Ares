@@ -100,41 +100,11 @@ extension Ares {
             // When our scale factor changes, so does our fb size so we send that too
             setSurfaceSize(width: UInt32(fbFrame.size.width), height: UInt32(fbFrame.size.height))
         }
-
-        func setFile(pwd: String) {
-            let len = pwd.utf8CString.count
-            if len == 0 { return }
-
-            self.pwd = pwd
-            pwd.withCString { ptr in
-                ares_surface_set_file(surface, ptr)
-            }
-
-        }
     }
 
     struct SurfaceWrapper: View {
         let surfaceView: SurfaceView
         @EnvironmentObject private var ghostty: Ares.App
-
-        private func presentFilePicker() {
-            let panel = NSOpenPanel()
-            panel.canChooseFiles = true  // Allow selecting files
-            panel.canChooseDirectories = true  // Disallow selecting directories
-            panel.allowsMultipleSelection = false  // Only allow single file selection
-            panel.prompt = "Select File"  // Custom prompt for the panel
-
-            // Present the panel modally.
-            // The completion handler will be called when the user makes a selection or cancels.
-            panel.begin(completionHandler: { response in
-                if response == .OK {
-                    if let url = panel.url {
-                        let filePath = url.path  // Get the file path from the URL
-                        self.surfaceView.setFile(pwd: filePath)  // Call setFile on the SurfaceView
-                    }
-                }
-            })
-        }
 
         var body: some View {
             ZStack {
@@ -143,24 +113,6 @@ extension Ares {
                     SurfaceRepresentable(view: self.surfaceView, size: geo.size)
                 }
 
-                // File selector UI overlay positioned top-right
-                VStack {
-                    HStack {
-                        Spacer()  // Pushes the button to the right
-                        Button(action: {
-                            self.presentFilePicker()
-                        }) {
-                            Label("Open File", systemImage: "doc.fill")  // Using SF Symbol for a modern look
-                                .font(.caption)  // Make the text/icon slightly smaller
-                                .padding(8)
-                                .background(Color.primary.opacity(0.1))  // Subtle background for the button
-                                .cornerRadius(5)
-                        }
-                        .buttonStyle(PlainButtonStyle())  // Makes the button appear as a styled label, not a standard macOS button
-                        .padding([.top, .trailing], 10)  // Padding from the top and right edges of the view
-                    }
-                    Spacer()  // Pushes the HStack (and thus the button) to the top
-                }
             }
         }
     }
