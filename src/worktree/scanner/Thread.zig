@@ -99,7 +99,7 @@ fn drainMailbox(self: *Thread) !void {
     while (self.mailbox.pop()) |message| {
         switch (message) {
             .scan => |request| {
-                try self.scanner.process_scan_request(request.path, request.abs_path);
+                try self.scanner.process_scan(request.path, request.abs_path);
             },
             .initialScan => {
                 try self.scanner.initial_scan();

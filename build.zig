@@ -41,6 +41,8 @@ pub fn build(b: *std.Build) void {
         break :test_exe test_exe;
     };
 
+    test_exe.root_module.addImport("xev", xev.module("xev"));
+
     // "test" Step
     {
         const tests_run = b.addRunArtifact(test_exe);

@@ -1,7 +1,7 @@
 const std = @import("std");
 const xev = @import("../../global.zig").xev;
 const Allocator = std.mem.Allocator;
-const Worktree = @import("../mod.zig");
+const Worktree = @import("../mod.zig").Worktree;
 
 pub const Monitor = @This();
 

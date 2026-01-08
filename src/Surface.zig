@@ -115,6 +115,10 @@ pub fn deinit(self: *Surface) void {
     }
     self.renderer.deinit();
     self.editor.deinit();
+
+    self.renderer_thread.deinit();
+    self.editor_thread.deinit();
+
     log.info("surface closed addr={x}", .{@intFromPtr(self)});
 }
 

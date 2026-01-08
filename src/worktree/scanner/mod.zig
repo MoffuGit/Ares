@@ -11,21 +11,26 @@ pub const Scanner = @This();
 alloc: Allocator,
 worktree: *Worktree,
 
-fd: i32,
-abs_path: *[]u8,
-root: *[]u8,
+abs_path: []u8,
+root: []u8,
 snapshot: *Snapshot,
 
-pub fn init(alloc: Allocator, worktree: *Worktree) !Scanner {
-    return .{ .alloc = alloc, .worktree = worktree, .abs_path = &worktree.abs_path, .root = &worktree.root, .fd = worktree.fd, .snapshot = &worktree.snapshot };
+pub fn init(alloc: Allocator, worktree: *Worktree, snapshot: *Snapshot, abs_path: []u8, root: []u8) !Scanner {
+    const _root = try alloc.dupe(u8, root);
+    errdefer alloc.free(_root);
+    const _abs_path = try alloc.dupe(u8, abs_path);
+    errdefer alloc.free(_abs_path);
+
+    return .{ .alloc = alloc, .worktree = worktree, .abs_path = _abs_path, .root = _root, .snapshot = snapshot };
 }
 
 pub fn deinit(self: *Scanner) void {
-    _ = self;
+    self.alloc.free(self.abs_path);
+    self.alloc.free(self.root);
 }
 
 pub fn process_scan(self: *Scanner, path: []const u8, abs_path: []const u8) !void {
-    const dir = try std.fs.openDirAbsolute(abs_path, .{ .iterate = true });
+    var dir = try std.fs.openDirAbsolute(abs_path, .{ .iterate = true });
     defer dir.close();
 
     var iter = dir.iterate();
@@ -35,22 +40,22 @@ pub fn process_scan(self: *Scanner, path: []const u8, abs_path: []const u8) !voi
             .file => .file,
             else => continue,
         };
-        const child_abs_path = std.fmt.allocPrint(self.alloc, "{}/{}", .{ abs_path, entry.name });
-        const child_path = std.fmt.allocPrint(self.alloc, "{}/{}", .{ path, entry.name });
+        const child_abs_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ abs_path, entry.name });
+        const child_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ path, entry.name });
 
         {
             self.snapshot.mutex.lock();
             defer self.snapshot.mutex.unlock();
 
-            self.snapshot.entries.insert(child_path, .{ .kind = kind, .path = child_path });
+            try self.snapshot.entries.insert(child_path, .{ .kind = kind, .path = child_path });
         }
 
         if (kind == .dir) {
-            self.worktree.scanner_thread.mailbox.push(.{ .scan = .{ .abs_path = child_abs_path, .path = child_path } }, .instant);
+            _ = self.worktree.scanner_thread.mailbox.push(.{ .scan = .{ .abs_path = child_abs_path, .path = child_path } }, .instant);
         }
     }
 
-    self.worktree.scanner_thread.wakeup.notify();
+    try self.worktree.scanner_thread.wakeup.notify();
 }
 
 //NOTE:
@@ -62,7 +67,11 @@ pub fn process_events(self: *Scanner) !void {
 }
 
 pub fn initial_scan(self: *Scanner) !void {
-    const stat = try std.fs.File.stat(self.fd);
+    const fd = try std.posix.open(self.abs_path, .{}, 0);
+    defer std.posix.close(fd);
+
+    const fstat = try std.posix.fstat(fd);
+    const stat = std.fs.File.Stat.fromPosix(fstat);
 
     const kind: Kind = switch (stat.kind) {
         .file => .file,
@@ -74,11 +83,13 @@ pub fn initial_scan(self: *Scanner) !void {
         self.snapshot.mutex.lock();
         defer self.snapshot.mutex.unlock();
 
-        self.snapshot.entries.insert(self.root, .{ .kind = kind, .path = self.root });
+        try self.snapshot.entries.insert(self.root, .{ .kind = kind, .path = self.root });
+
+        try self.snapshot.entries.print();
     }
 
     if (kind == .dir) {
-        self.worktree.scanner_thread.mailbox.push(.{ .scan = .{ .abs_path = self.abs_path, .path = self.root } }, .instant);
-        self.worktree.scanner_thread.wakeup.notify();
+        _ = self.worktree.scanner_thread.mailbox.push(.{ .scan = .{ .abs_path = self.abs_path, .path = self.root } }, .instant);
+        try self.worktree.scanner_thread.wakeup.notify();
     }
 }

@@ -139,7 +139,7 @@ fn drainMailbox(self: *Thread) !void {
                 log.debug("monitor received add_watcher message: '{s}' {}", .{ data.path, data.id });
             },
             .remove => |id| {
-                log.debug("monitor received remove_watcher message: '{s}'", .{id});
+                log.debug("monitor received remove_watcher message: '{}'", .{id});
             },
         }
     }
