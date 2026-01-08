@@ -107,8 +107,4 @@ pub const Worktree = struct {
             log.err("error notifying scanner thread to wakeup, err={}", .{err});
         };
     }
-
-    pub fn snapshot(self: *Worktree) *Snapshot {
-        return &self.snapshot;
-    }
 };
