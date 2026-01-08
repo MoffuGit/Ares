@@ -101,8 +101,8 @@ fn drainMailbox(self: *Thread) !void {
             .scan => |request| {
                 try self.scanner.process_scan_request(request.path, request.abs_path);
             },
-            else => |msg| {
-                log.info("Skipped message: {}", .{msg});
+            .initialScan => {
+                try self.scanner.initial_scan();
             },
         }
     }
