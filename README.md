@@ -1,8 +1,6 @@
-Little test for native applications:
-https://mitchellh.com/writing/zig-and-swiftui
-At this point the rendering and font process are a clone of the ghostty implementations.
-There are many part that are cloned from Ghostty:
-i dont know if this is enought but this is a copy of his License:
+Currently, moving from xcode to a tui application
+but because i have many part from ghostty i will maintain the
+license:
 
 MIT License
 
