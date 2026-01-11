@@ -42,6 +42,10 @@
         },
         .macos = .{ .path = "./pkg/macos" },
         .apple_sdk = .{ .path = "./pkg/apple-sdk" },
+        .vaxis = .{
+            .url = "git+https://github.com/MoffuGit/libvaxis.git#278022bffeba88cf64f598e237c1f61e43704c97",
+            .hash = "vaxis-0.5.1-BWNV_GVECQAxPKbr4E2Uj6kDAToeraTr9HUu5JwKF8Z8",
+        },
     },
     .paths = .{""},
 }
