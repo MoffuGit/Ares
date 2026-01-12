@@ -23,8 +23,14 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{ .name = "ares", .root_module = mod });
 
+    const run_step = b.step("run", "Run the app");
+
+    const run_cmd = b.addRunArtifact(exe);
+    run_step.dependOn(&run_cmd.step);
+
+    run_cmd.step.dependOn(b.getInstallStep());
+
     b.installArtifact(exe);
-    b.default_step.dependOn(&exe.step);
 
     const test_exe: *Step.Compile = test_exe: {
         const test_filter = b.option(
