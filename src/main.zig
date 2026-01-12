@@ -1,10 +1,9 @@
 const std = @import("std");
 const datastruct = @import("datastruct/mod.zig");
 
-pub fn main() !void {
-    std.debug.print("Hello, World!\n", .{});
-}
+const state = &@import("global.zig").state;
 
-test {
-    _ = datastruct;
+pub fn main() !void {
+    try state.init();
+    defer state.deinit();
 }

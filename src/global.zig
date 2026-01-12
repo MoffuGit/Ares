@@ -31,8 +31,8 @@ pub const GlobalState = struct {
     }
 
     pub fn deinit(self: *GlobalState) void {
-        if (self.gpa) |*value| {
-            _ = value.deinit();
+        if (self.gpa.deinit() == .leak) {
+            std.log.info("We have leaks 🔥", .{});
         }
         std.log.info("GlobalState deinitialized.", .{});
     }
