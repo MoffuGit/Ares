@@ -32,16 +32,10 @@
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
     .dependencies = .{
-        .zig_objc = .{
-            .url = "git+https://github.com/mitchellh/zig-objc#f356ed02833f0f1b8e84d50bed9e807bf7cdc0ae",
-            .hash = "zig_objc-0.0.0-Ir_Sp5gTAQCvxxR7oVIrPXxXwsfKgVP7_wqoOQrZjFeK",
-        },
         .libxev = .{
             .url = "git+https://github.com/MoffuGit/libxev#mac",
             .hash = "libxev-0.0.0-86vtc2-pFAD09Lq7ShCbgupFNVaErAJgtUeS6ahACf2J",
         },
-        .macos = .{ .path = "./pkg/macos" },
-        .apple_sdk = .{ .path = "./pkg/apple-sdk" },
         .vaxis = .{
             .url = "git+https://github.com/MoffuGit/libvaxis.git#39bb3b3c53d6253dd95b43444164721bdbe84d2e",
             .hash = "vaxis-0.5.1-BWNV_GhRCQAtQQDgn6rYbzRO-GOgrGeCcQsvw-AfCqkw",
