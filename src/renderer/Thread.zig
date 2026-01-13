@@ -195,10 +195,6 @@ fn renderCallback(
 
 fn drainMailbox(self: *Thread) !void {
     while (self.mailbox.pop()) |message| {
-        switch (message) {
-            .resize => |size| {
-                try self.renderer.resize(size);
-            },
-        }
+        _ = message;
     }
 }

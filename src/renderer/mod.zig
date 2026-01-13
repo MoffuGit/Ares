@@ -23,12 +23,13 @@ pub fn deinit(self: *Renderer) void {
 }
 
 pub fn resize(self: *Renderer, size: vaxis.Winsize) !void {
-    if (self.size.cols == size.cols and self.size.rows == size.rows) return;
     self.size = size;
 
-    try self.vx.resize(self.alloc, self.tty.writer(), self.size);
-
-    self.rebuild = true;
+    self.vx.screen.deinit(self.alloc);
+    self.vx.screen = try vaxis.Screen.init(self.alloc, size);
+    self.vx.screen.width_method = self.vx.caps.unicode;
+    self.vx.screen_last.deinit(self.alloc);
+    self.vx.screen_last = try vaxis.AllocatingScreen.init(self.alloc, size.cols, size.rows);
 }
 
 pub fn threadEnter(self: *Renderer) !void {
@@ -60,13 +61,7 @@ pub fn drawFrame(self: *Renderer, sync: bool) !void {
     self.rebuild = false;
 
     if (size_changed) {
-        self.size = size;
-
-        self.vx.screen.deinit(self.alloc);
-        self.vx.screen = try vaxis.Screen.init(self.alloc, size);
-        self.vx.screen.width_method = self.vx.caps.unicode;
-        self.vx.screen_last.deinit(self.alloc);
-        self.vx.screen_last = try vaxis.AllocatingScreen.init(self.alloc, size.cols, size.rows);
+        try self.resize(size);
     }
 
     const window = self.vx.window();
