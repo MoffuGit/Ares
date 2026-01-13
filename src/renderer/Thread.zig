@@ -75,15 +75,15 @@ pub fn threadMain(self: *Thread) void {
 fn threadMain_(self: *Thread) !void {
     defer log.debug("renderer thread exited", .{});
 
+    try self.renderer.threadEnter();
+    defer self.renderer.threadExit();
+
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
     self.draw_now.wait(&self.loop, &self.draw_now_c, Thread, self, drawNowCallback);
 
     try self.wakeup.notify();
     self.startDrawTimer();
-
-    try self.renderer.threadEnter();
-    defer self.renderer.threadExit();
 
     log.debug("starting renderer thread", .{});
     defer log.debug("starting renderer thread shutdown", .{});

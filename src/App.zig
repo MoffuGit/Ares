@@ -15,7 +15,7 @@ const App = @This();
 alloc: Allocator,
 
 tty: vaxis.Tty,
-buffer: [1024]u8 = undefined,
+buffer: [256]u8 = undefined,
 
 renderer: Renderer,
 renderer_thread: RendererThread,
@@ -58,7 +58,9 @@ pub fn run(self: *App) !void {
     var cache: vaxis.GraphemeCache = .{};
 
     const winsize = try vaxis.Tty.getWinsize(self.tty.fd);
+
     _ = self.renderer_thread.mailbox.push(.{ .resize = winsize }, .instant);
+    try self.renderer_thread.wakeup.notify();
 
     while (true) {
         const n = self.tty.read(buf[read_start..]) catch |err| {
@@ -89,8 +91,8 @@ pub fn run(self: *App) !void {
 fn eventCallback(self: *App, cache: *vaxis.GraphemeCache, event: vaxis.Event) !void {
     _ = cache;
     switch (event) {
-        .winsize => |size| {
-            _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
+        .winsize => {
+            try self.renderer_thread.wakeup.notify();
         },
         else => {},
     }

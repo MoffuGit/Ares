@@ -23,8 +23,11 @@ pub fn deinit(self: *Renderer) void {
 }
 
 pub fn resize(self: *Renderer, size: vaxis.Winsize) !void {
-    if (self.size.x_pixel == size.x_pixel and self.size.y_pixel == size.y_pixel) return;
+    if (self.size.cols == size.cols and self.size.rows == size.rows) return;
     self.size = size;
+
+    try self.vx.resize(self.alloc, self.tty.writer(), self.size);
+
     self.rebuild = true;
 }
 
@@ -44,20 +47,32 @@ pub fn threadExit(self: *Renderer) void {
 }
 
 pub fn drawFrame(self: *Renderer, sync: bool) !void {
-    if (self.size.cols == 0 or self.size.rows == 0) return;
+    const size = try vaxis.Tty.getWinsize(self.tty.fd);
 
-    const needs_redraw = self.rebuild or sync;
-    defer self.rebuild = false;
+    if (size.cols == 0 or size.rows == 0) return;
 
-    if (!needs_redraw) return;
+    const size_changed = self.size.cols != size.cols or self.size.rows != size.rows;
 
-    try self.vx.resize(self.alloc, self.tty.writer(), self.size);
+    const needs_redraw = self.rebuild or sync or size_changed;
+
+    if (!needs_redraw) try self.vx.render(self.tty.writer());
+
+    self.rebuild = false;
+
+    if (size_changed) {
+        self.size = size;
+
+        self.vx.screen.deinit(self.alloc);
+        self.vx.screen = try vaxis.Screen.init(self.alloc, size);
+        self.vx.screen.width_method = self.vx.caps.unicode;
+        self.vx.screen_last.deinit(self.alloc);
+        self.vx.screen_last = try vaxis.AllocatingScreen.init(self.alloc, size.cols, size.rows);
+    }
 
     const window = self.vx.window();
-
-    window.clear();
-
     window.fill(.{ .style = .{ .bg = .{ .rgba = .{ 0, 0, 0, 255 } }, .fg = .{ .rgba = .{ 0, 0, 0, 255 } } } });
+    window.hideCursor();
+    window.setCursorShape(.default);
 
     try self.vx.render(self.tty.writer());
 }
