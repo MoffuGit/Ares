@@ -1,18 +1,20 @@
 pub const Thread = @This();
 
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const apprt = @import("../apprt/embedded.zig");
-const rendererpkg = @import("../renderer.zig");
-const log = std.log.scoped(.renderer_thread);
 const xev = @import("../global.zig").xev;
+const vaxis = @import("vaxis");
 const BlockingQueue = @import("../datastruct/blocking_queue.zig").BlockingQueue;
-const messagepkg = @import("./Message.zig");
-const SharedState = @import("../SharedState.zig");
+const Renderer = @import("mod.zig");
 
-pub const Mailbox = BlockingQueue(messagepkg.Message, 64);
+const Allocator = std.mem.Allocator;
 
-const DRAW_INTERVAL = 8; // 120 FPS
+pub const Message = union(enum) { resize: vaxis.Winsize };
+
+pub const Mailbox = BlockingQueue(Message, 64);
+
+const log = std.log.scoped(.renderer_thread);
+
+const DRAW_INTERVAL = 8;
 
 alloc: Allocator,
 
@@ -30,14 +32,11 @@ stop_c: xev.Completion = .{},
 draw_now: xev.Async,
 draw_now_c: xev.Completion = .{},
 
-surface: *apprt.Surface,
-renderer: *rendererpkg.Renderer,
-
 mailbox: *Mailbox,
 
-shared_state: *SharedState,
+renderer: *Renderer,
 
-pub fn init(alloc: Allocator, surface: *apprt.Surface, renderer_impl: *rendererpkg.Renderer, state: *SharedState) !Thread {
+pub fn init(alloc: Allocator, renderer: *Renderer) !Thread {
     var loop = try xev.Loop.init(.{});
     errdefer loop.deinit();
 
@@ -56,7 +55,7 @@ pub fn init(alloc: Allocator, surface: *apprt.Surface, renderer_impl: *rendererp
     var mailbox = try Mailbox.create(alloc);
     errdefer mailbox.destroy(alloc);
 
-    return .{ .alloc = alloc, .shared_state = state, .draw_now = draw_now, .surface = surface, .renderer = renderer_impl, .loop = loop, .draw_h = draw_h, .stop = stop_h, .mailbox = mailbox, .wakeup = wakeup_h };
+    return .{ .alloc = alloc, .renderer = renderer, .draw_now = draw_now, .loop = loop, .draw_h = draw_h, .stop = stop_h, .mailbox = mailbox, .wakeup = wakeup_h };
 }
 
 pub fn deinit(self: *Thread) void {
@@ -76,15 +75,15 @@ pub fn threadMain(self: *Thread) void {
 fn threadMain_(self: *Thread) !void {
     defer log.debug("renderer thread exited", .{});
 
-    try self.renderer.loopEnter(self);
-    defer self.renderer.loopExit();
-
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
     self.draw_now.wait(&self.loop, &self.draw_now_c, Thread, self, drawNowCallback);
 
     try self.wakeup.notify();
     self.startDrawTimer();
+
+    try self.renderer.threadEnter();
+    defer self.renderer.threadExit();
 
     log.debug("starting renderer thread", .{});
     defer log.debug("starting renderer thread shutdown", .{});
@@ -102,9 +101,9 @@ fn drawNowCallback(
         return .rearm;
     };
 
-    // Draw immediately
     const t = self_.?;
-    t.drawFrame(true);
+    t.renderer.drawFrame(false) catch |err|
+        log.warn("error drawing err={}", .{err});
 
     return .rearm;
 }
@@ -133,19 +132,14 @@ fn drawCallback(
         return .disarm;
     };
 
-    t.drawFrame(false);
+    t.renderer.drawFrame(false) catch |err|
+        log.warn("error drawing err={}", .{err});
 
     t.draw_h.run(&t.loop, &t.draw_c, DRAW_INTERVAL, Thread, t, drawCallback);
 
     return .disarm;
 }
 
-fn drawFrame(self: *Thread, now: bool) void {
-    if (!now and self.renderer.hasVsync()) return;
-
-    self.renderer.drawFrame(false) catch |err|
-        log.warn("error drawing err={}", .{err});
-}
 fn stopCallback(
     self_: ?*Thread,
     _: *xev.Loop,
@@ -193,27 +187,18 @@ fn renderCallback(
         return .disarm;
     };
 
-    // Update our frame data
-    t.renderer.updateFrame(
-        t.shared_state,
-    ) catch |err|
-        log.warn("error rendering err={}", .{err});
-
-    // Draw
-    t.drawFrame(false);
+    t.renderer.drawFrame(false) catch |err|
+        log.warn("error drawing err={}", .{err});
 
     return .disarm;
 }
 
 fn drainMailbox(self: *Thread) !void {
-    // There's probably a more elegant way to do this...
-    //
-    // This is effectively an @autoreleasepool{} block, which we need in
-    // order to ensure that autoreleased objects are properly released.
-    const pool = @import("objc").AutoreleasePool.init();
-    defer pool.deinit();
-
     while (self.mailbox.pop()) |message| {
-        log.debug("mailbox message={}", .{message});
+        switch (message) {
+            .resize => |size| {
+                try self.renderer.resize(size);
+            },
+        }
     }
 }

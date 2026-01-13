@@ -11,11 +11,13 @@ const log = std.log.scoped(.main);
 const global = &@import("global.zig").state;
 
 pub fn main() !void {
-    var buffer: [1024]u8 = undefined;
-    var tty = try vaxis.Tty.init(&buffer);
-    defer tty.deinit();
+    try global.init();
+    defer global.deinit();
 
-    var app = try App.init(global.alloc, &tty);
+    var app = try global.alloc.create(App);
+    defer global.alloc.destroy(app);
+
+    try app.init(global.alloc);
     defer app.deinit();
 
     app.run() catch |err| {
