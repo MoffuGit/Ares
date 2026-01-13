@@ -91,7 +91,8 @@ pub fn run(self: *App) !void {
 fn eventCallback(self: *App, cache: *vaxis.GraphemeCache, event: vaxis.Event) !void {
     _ = cache;
     switch (event) {
-        .winsize => {
+        .winsize => |size| {
+            _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
             try self.renderer_thread.wakeup.notify();
         },
         else => {},
