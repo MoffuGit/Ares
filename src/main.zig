@@ -11,12 +11,14 @@ const log = std.log.scoped(.main);
 const global = &@import("global.zig").state;
 
 pub fn main() !void {
-    const alloc = global.alloc;
+    var buffer: [1024]u8 = undefined;
+    var tty = try vaxis.Tty.init(&buffer);
+    defer tty.deinit();
 
-    var app = try App.init(alloc);
+    var app = try App.init(global.alloc, &tty);
     defer app.deinit();
 
     app.run() catch |err| {
-        log.err("App exist with err: {}", .{err});
+        log.err("App exit with an err: {}", .{err});
     };
 }

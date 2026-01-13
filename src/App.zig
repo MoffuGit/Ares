@@ -11,42 +11,26 @@ const App = @This();
 
 alloc: Allocator,
 
-buffer: [1024]u8 = undefined,
+tty: *vaxis.Tty,
 
-tty: vaxis.Tty,
-
-pub fn init(alloc: Allocator) !App {
-    var app: App = .{ .alloc = alloc, .tty = undefined };
-
-    var tty = try vaxis.Tty.init(&app.buffer);
-    errdefer tty.deinit();
-
-    app.tty = tty;
-
-    return app;
+pub fn init(alloc: Allocator, tty: *vaxis.Tty) !App {
+    return .{ .alloc = alloc, .tty = tty };
 }
 
 pub fn deinit(self: *App) void {
-    self.tty.deinit();
+    _ = self;
 }
 
 pub fn run(self: *App) !void {
-    // const vx = &self.vx;
-
-    // try vx.enterAltScreen(tty.writer());
-    // try vx.queryTerminal(tty.writer(), 1 * std.time.ns_per_s);
-    // try vx.setBracketedPaste(tty.writer(), true);
-    // try vx.subscribeToColorSchemeUpdates(tty.writer());
-    // try vx.setMouseMode(tty.writer(), true);
-
-    // const winsize = try vaxis.Tty.getWinsize(self.tty.fd);
-
     var parser: vaxis.Parser = .{};
 
     var buf: [1024]u8 = undefined;
     var read_start: usize = 0;
 
     var cache: vaxis.GraphemeCache = .{};
+
+    const winsize = try vaxis.Tty.getWinsize(self.tty.fd);
+    log.err("winsize {}", .{winsize});
 
     while (true) {
         const n = self.tty.read(buf[read_start..]) catch |err| {
