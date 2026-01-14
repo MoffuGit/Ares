@@ -4,17 +4,18 @@ const std = @import("std");
 const xev = @import("../global.zig").xev;
 const vaxis = @import("vaxis");
 const BlockingQueue = @import("../datastruct/blocking_queue.zig").BlockingQueue;
-const Renderer = @import("mod.zig");
 
 const Allocator = std.mem.Allocator;
+
+const Window = @import("mod.zig");
 
 pub const Message = union(enum) { resize: vaxis.Winsize };
 
 pub const Mailbox = BlockingQueue(Message, 64);
 
-const log = std.log.scoped(.renderer_thread);
+const log = std.log.scoped(.window_thread);
 
-const DRAW_INTERVAL = 8;
+const TICK_INTERVAL = 8;
 
 alloc: Allocator,
 
@@ -26,33 +27,33 @@ wakeup_c: xev.Completion = .{},
 stop: xev.Async,
 stop_c: xev.Completion = .{},
 
-draw_now: xev.Async,
-draw_now_c: xev.Completion = .{},
+tick_h: xev.Timer,
+tick_c: xev.Completion = .{},
 
 mailbox: *Mailbox,
 
-renderer: *Renderer,
+window: *Window,
 
-pub fn init(alloc: Allocator, renderer: *Renderer) !Thread {
+pub fn init(alloc: Allocator, window: *Window) !Thread {
     var loop = try xev.Loop.init(.{});
     errdefer loop.deinit();
 
     var wakeup_h = try xev.Async.init();
     errdefer wakeup_h.deinit();
 
-    var draw_now = try xev.Async.init();
-    errdefer draw_now.deinit();
-
     var stop_h = try xev.Async.init();
     errdefer stop_h.deinit();
+
+    var tick_h = try xev.Timer.init();
+    errdefer tick_h.deinit();
 
     var mailbox = try Mailbox.create(alloc);
     errdefer mailbox.destroy(alloc);
 
     return .{
         .alloc = alloc,
-        .renderer = renderer,
-        .draw_now = draw_now,
+        .window = window,
+        .tick_h = tick_h,
         .loop = loop,
         .stop = stop_h,
         .mailbox = mailbox,
@@ -62,61 +63,26 @@ pub fn init(alloc: Allocator, renderer: *Renderer) !Thread {
 
 pub fn deinit(self: *Thread) void {
     self.stop.deinit();
-    self.draw_now.deinit();
+    self.tick_h.deinit();
     self.wakeup.deinit();
     self.mailbox.destroy(self.alloc);
 }
 
 pub fn threadMain(self: *Thread) void {
     self.threadMain_() catch |err| {
-        log.warn("error in renderer err={}", .{err});
+        log.warn("error in window err={}", .{err});
     };
 }
 
 fn threadMain_(self: *Thread) !void {
-    defer log.debug("renderer thread exited", .{});
-
-    try self.renderer.threadEnter();
-    defer self.renderer.threadExit();
+    defer log.debug("window thread exited", .{});
 
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
-    self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
-    self.draw_now.wait(&self.loop, &self.draw_now_c, Thread, self, drawNowCallback);
+    self.startTickTimer();
 
-    try self.wakeup.notify();
-
-    log.debug("starting renderer thread", .{});
-    defer log.debug("starting renderer thread shutdown", .{});
+    log.debug("starting window thread", .{});
+    defer log.debug("starting window thread shutdown", .{});
     _ = try self.loop.run(.until_done);
-}
-
-fn drawNowCallback(
-    self_: ?*Thread,
-    _: *xev.Loop,
-    _: *xev.Completion,
-    r: xev.Async.WaitError!void,
-) xev.CallbackAction {
-    _ = r catch |err| {
-        log.err("error in draw now err={}", .{err});
-        return .rearm;
-    };
-
-    const t = self_.?;
-    t.renderer.drawFrame(false) catch |err|
-        log.warn("error drawing err={}", .{err});
-
-    return .rearm;
-}
-
-fn stopCallback(
-    self_: ?*Thread,
-    _: *xev.Loop,
-    _: *xev.Completion,
-    r: xev.Async.WaitError!void,
-) xev.CallbackAction {
-    _ = r catch unreachable;
-    self_.?.loop.stop();
-    return .disarm;
 }
 
 fn wakeupCallback(
@@ -137,12 +103,21 @@ fn wakeupCallback(
     t.drainMailbox() catch |err|
         log.err("error draining mailbox err={}", .{err});
 
-    _ = renderCallback(t, undefined, undefined, {});
-
     return .rearm;
 }
 
-fn renderCallback(
+fn startTickTimer(self: *Thread) void {
+    self.tick_h.run(
+        &self.loop,
+        &self.tick_c,
+        TICK_INTERVAL,
+        Thread,
+        self,
+        tickCallback,
+    );
+}
+
+fn tickCallback(
     self_: ?*Thread,
     _: *xev.Loop,
     _: *xev.Completion,
@@ -155,14 +130,17 @@ fn renderCallback(
         return .disarm;
     };
 
-    t.renderer.drawFrame(false) catch |err|
-        log.warn("error drawing err={}", .{err});
+    t.tick_h.run(&t.loop, &t.tick_c, TICK_INTERVAL, Thread, t, tickCallback);
 
     return .disarm;
 }
 
 fn drainMailbox(self: *Thread) !void {
     while (self.mailbox.pop()) |message| {
-        _ = message;
+        switch (message) {
+            .resize => |size| {
+                try self.window.resize(size);
+            },
+        }
     }
 }

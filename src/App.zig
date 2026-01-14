@@ -6,6 +6,9 @@ const posix = std.posix;
 const RendererThread = @import("renderer/Thread.zig");
 const Renderer = @import("renderer/mod.zig");
 
+const WindowThread = @import("window/Thread.zig");
+const Window = @import("window/mod.zig");
+
 const log = std.log.scoped(.app);
 
 const Allocator = std.mem.Allocator;
@@ -21,21 +24,41 @@ renderer: Renderer,
 renderer_thread: RendererThread,
 renderer_thr: std.Thread,
 
+window: Window,
+window_thread: WindowThread,
+window_thr: std.Thread,
+
 pub fn init(self: *App, alloc: Allocator) !void {
-    var renderer = try Renderer.init(alloc, &self.tty);
+    var renderer = try Renderer.init(alloc, &self.tty, &self.window);
     errdefer renderer.deinit();
 
     var renderer_thread = try RendererThread.init(alloc, &self.renderer);
     errdefer renderer_thread.deinit();
 
-    self.* = .{ .alloc = alloc, .tty = undefined, .renderer = renderer, .renderer_thread = renderer_thread, .renderer_thr = undefined };
+    var window = try Window.init(alloc, renderer_thread.wakeup);
+    errdefer window.deinit();
+
+    var window_thread = try WindowThread.init(alloc, &self.window);
+    errdefer window_thread.deinit();
+
+    self.* = .{
+        .alloc = alloc,
+        .tty = undefined,
+        .renderer = renderer,
+        .renderer_thread = renderer_thread,
+        .renderer_thr = undefined,
+        .window = window,
+        .window_thread = window_thread,
+        .window_thr = undefined,
+    };
 
     var tty = try vaxis.Tty.init(&self.buffer);
     self.tty = tty;
 
     errdefer tty.deinit();
 
-    self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.Thread.threadMain, .{&self.renderer_thread});
+    self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
+    self.window_thr = try std.Thread.spawn(.{}, WindowThread.threadMain, .{&self.window_thread});
 }
 
 pub fn deinit(self: *App) void {
@@ -46,7 +69,18 @@ pub fn deinit(self: *App) void {
         self.renderer_thr.join();
     }
 
+    {
+        self.window_thread.stop.notify() catch |err| {
+            log.err("error notifying renderer thread to stop, may stall err={}", .{err});
+        };
+        self.window_thr.join();
+    }
+
     self.renderer_thread.deinit();
+    self.window_thread.deinit();
+
+    self.window.deinit();
+    self.renderer.deinit();
 }
 
 pub fn run(self: *App) !void {
@@ -59,8 +93,8 @@ pub fn run(self: *App) !void {
 
     const winsize = try vaxis.Tty.getWinsize(self.tty.fd);
 
-    _ = self.renderer_thread.mailbox.push(.{ .resize = winsize }, .instant);
-    try self.renderer_thread.wakeup.notify();
+    _ = self.window_thread.mailbox.push(.{ .resize = winsize }, .instant);
+    try self.window_thread.wakeup.notify();
 
     while (true) {
         const n = self.tty.read(buf[read_start..]) catch |err| {
@@ -92,8 +126,8 @@ fn eventCallback(self: *App, cache: *vaxis.GraphemeCache, event: vaxis.Event) !v
     _ = cache;
     switch (event) {
         .winsize => |size| {
-            _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
-            try self.renderer_thread.wakeup.notify();
+            _ = self.window_thread.mailbox.push(.{ .resize = size }, .instant);
+            try self.window_thread.wakeup.notify();
         },
         else => {},
     }
