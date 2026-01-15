@@ -16,6 +16,8 @@ render_wakeup: xev.Async,
 render_mailbox: *RendererMailbox,
 shared_state: *SharedState,
 
+root: *Root,
+
 size: vaxis.Winsize,
 
 pub fn init(
@@ -24,16 +26,26 @@ pub fn init(
     render_mailbox: *RendererMailbox,
     shared_state: *SharedState,
 ) !Window {
-    return .{ .alloc = alloc, .render_wakeup = render_wakeup, .render_mailbox = render_mailbox, .shared_state = shared_state, .size = .{
-        .cols = 0,
-        .rows = 0,
-        .x_pixel = 0,
-        .y_pixel = 0,
-    } };
+    var root = try alloc.create(Root);
+    try root.init();
+
+    return .{
+        .root = root,
+        .alloc = alloc,
+        .render_wakeup = render_wakeup,
+        .render_mailbox = render_mailbox,
+        .shared_state = shared_state,
+        .size = .{
+            .cols = 0,
+            .rows = 0,
+            .x_pixel = 0,
+            .y_pixel = 0,
+        },
+    };
 }
 
 pub fn deinit(self: *Window) void {
-    _ = self;
+    self.alloc.destroy(self.root);
 }
 
 pub fn draw(self: *Window) !void {
@@ -44,6 +56,10 @@ pub fn draw(self: *Window) !void {
 
         const win = shared_state.screen.window();
         win.fill(.{ .style = .{ .bg = .{ .rgba = .{ 255, 0, 0, 255 } } } });
+
+        try self.root.element.update();
+        try self.root.element.draw(shared_state.screen.buf);
+        shared_state.render = true;
     }
 
     try self.render_wakeup.notify();
