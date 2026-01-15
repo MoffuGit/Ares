@@ -3,24 +3,27 @@ pub const Renderer = @This();
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const vaxis = @import("vaxis");
-const Window = @import("../window/mod.zig");
+const SharedState = @import("../SharedState.zig");
 
 alloc: Allocator,
 
 size: vaxis.Winsize,
 vx: vaxis.Vaxis,
+render: bool,
+
 tty: *vaxis.Tty,
 
-window: *Window,
+shared_state: *SharedState,
 
-pub fn init(alloc: Allocator, tty: *vaxis.Tty, window: *Window) !Renderer {
+pub fn init(alloc: Allocator, tty: *vaxis.Tty, shared_state: *SharedState) !Renderer {
     const vx = try vaxis.Vaxis.init(alloc, .{});
 
     return .{
         .vx = vx,
         .tty = tty,
-        .window = window,
         .alloc = alloc,
+        .render = false,
+        .shared_state = shared_state,
         .size = .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 },
     };
 }
@@ -40,6 +43,12 @@ pub fn threadEnter(self: *Renderer) !void {
     try vx.setMouseMode(tty.writer(), true);
 }
 
+pub fn resize(self: *Renderer, size: vaxis.Winsize) !void {
+    try self.vx.resize(self.alloc, self.tty.writer(), size);
+    self.size = size;
+    self.render = true;
+}
+
 pub fn threadExit(self: *Renderer) void {
     _ = self;
 }
@@ -47,37 +56,36 @@ pub fn threadExit(self: *Renderer) void {
 pub fn renderFrame(self: *Renderer, sync: bool) !void {
     var needs_redraw: bool = undefined;
     var size_change: bool = undefined;
+    const shared_state = self.shared_state;
     {
-        self.window.mutex.lock();
-        defer self.window.mutex.unlock();
+        shared_state.mutex.lock();
+        defer shared_state.mutex.unlock();
 
-        if (self.window.size.rows == 0 or self.window.size.cols == 0) return;
-        size_change = self.size.cols != self.window.size.cols or self.size.rows != self.window.size.rows;
+        size_change = self.size.cols != shared_state.screen.width or self.size.rows != shared_state.screen.height;
 
-        needs_redraw = sync or self.window.render or size_change;
+        needs_redraw = sync or self.shared_state.render or size_change or self.render;
     }
 
     if (!needs_redraw) return;
 
-    {
-        self.window.mutex.lock();
-        defer self.window.mutex.unlock();
+    shared_state.mutex.lock();
+    defer shared_state.mutex.unlock();
 
-        self.window.render = false;
+    defer self.render = false;
+    defer shared_state.render = false;
 
-        if (size_change) {
-            self.size = self.window.size;
-            self.vx.screen.deinit(self.alloc);
-            self.vx.screen = try vaxis.Screen.init(self.alloc, self.size);
-            self.vx.screen.width_method = self.vx.caps.unicode;
-            self.vx.screen_last.deinit(self.alloc);
-            self.vx.screen_last = try vaxis.AllocatingScreen.init(self.alloc, self.size.cols, self.size.rows);
-            self.vx.state.cursor.row = 0;
-            self.vx.state.cursor.col = 0;
-        }
+    if (size_change) {
+        const size: vaxis.Winsize = .{
+            .cols = shared_state.screen.width,
+            .rows = shared_state.screen.height,
+            .x_pixel = shared_state.screen.width_pix,
+            .y_pixel = shared_state.screen.height_pix,
+        };
 
-        @memcpy(self.vx.screen.buf, self.window.buffer);
+        try self.resize(size);
+
+        shared_state.screen.width_method = self.vx.caps.unicode;
     }
 
-    try self.vx.render(self.tty.writer());
+    try self.vx.render(&shared_state.screen, self.tty.writer());
 }

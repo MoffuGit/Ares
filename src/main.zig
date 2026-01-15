@@ -15,16 +15,8 @@ pub fn main() !void {
     try global.init();
     defer global.deinit();
 
-    const root = try global.alloc.create(Root);
-    defer global.alloc.destroy(root);
-
-    try root.init();
-
-    var app = try global.alloc.create(App);
-    defer global.alloc.destroy(app);
-
-    try app.init(global.alloc, root);
-    defer app.deinit();
+    var app = try App.create(global.alloc);
+    defer app.destroy();
 
     app.run() catch |err| {
         log.err("App exit with an err: {}", .{err});

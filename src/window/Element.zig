@@ -11,7 +11,7 @@ zIndex: usize = 0,
 destroyed: bool = false,
 opacity: f32 = 1.0,
 childrens: ?Childrens = null,
-buffer: ?[]vaxis.Cell = null,
+buffer: ?vaxis.Buffer = null,
 
 userdata: ?*anyopaque = null,
 //Callbacks for different events

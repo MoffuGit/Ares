@@ -3,6 +3,8 @@ const vaxis = @import("vaxis");
 const builtin = @import("builtin");
 const posix = std.posix;
 
+const SharedState = @import("SharedState.zig");
+
 const RendererThread = @import("renderer/Thread.zig");
 const Renderer = @import("renderer/mod.zig");
 
@@ -19,6 +21,7 @@ const App = @This();
 
 alloc: Allocator,
 
+shared_state: SharedState,
 tty: vaxis.Tty,
 buffer: [1024]u8 = undefined,
 
@@ -30,40 +33,52 @@ window: Window,
 window_thread: WindowThread,
 window_thr: std.Thread,
 
-pub fn init(self: *App, alloc: Allocator, root: *Root) !void {
-    var renderer = try Renderer.init(alloc, &self.tty, &self.window);
+pub fn create(alloc: Allocator) !*App {
+    var self = try alloc.create(App);
+
+    var shared_state = try SharedState.init(alloc, .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 });
+    errdefer shared_state.deinit(alloc);
+
+    var renderer = try Renderer.init(alloc, &self.tty, &self.shared_state);
     errdefer renderer.deinit();
 
     var renderer_thread = try RendererThread.init(alloc, &self.renderer);
     errdefer renderer_thread.deinit();
 
-    var window = try Window.init(alloc, renderer_thread.wakeup, root);
+    var window = try Window.init(
+        alloc,
+        renderer_thread.wakeup,
+        renderer_thread.mailbox,
+        &self.shared_state,
+    );
     errdefer window.deinit();
 
     var window_thread = try WindowThread.init(alloc, &self.window);
     errdefer window_thread.deinit();
 
+    var tty = try vaxis.Tty.init(&self.buffer);
+    self.tty = tty;
+    errdefer tty.deinit();
+
     self.* = .{
         .alloc = alloc,
-        .tty = undefined,
+        .shared_state = shared_state,
         .renderer = renderer,
         .renderer_thread = renderer_thread,
         .renderer_thr = undefined,
+        .tty = tty,
         .window = window,
         .window_thread = window_thread,
         .window_thr = undefined,
     };
 
-    var tty = try vaxis.Tty.init(&self.buffer);
-    self.tty = tty;
-
-    errdefer tty.deinit();
-
     self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
     self.window_thr = try std.Thread.spawn(.{}, WindowThread.threadMain, .{&self.window_thread});
+
+    return self;
 }
 
-pub fn deinit(self: *App) void {
+pub fn destroy(self: *App) void {
     {
         self.renderer_thread.stop.notify() catch |err| {
             log.err("error notifying renderer thread to stop, may stall err={}", .{err});
