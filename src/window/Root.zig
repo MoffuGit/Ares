@@ -4,6 +4,8 @@ const Element = @import("Element.zig");
 const std = @import("std");
 const vaxis = @import("vaxis");
 
+const Buffer = @import("../Buffer.zig");
+
 element: Element = .{},
 
 bg: vaxis.Color = .default,
@@ -16,12 +18,11 @@ pub fn init(self: *Root) !void {
     self.element.drawFn = draw;
 }
 
-pub fn draw(self: ?*anyopaque, buffer: []vaxis.Cell) void {
+pub fn draw(self: ?*anyopaque, buffer: *Buffer) void {
     if (self == null) return;
     const root: *Root = @ptrCast(@alignCast(self));
 
-    const cell: vaxis.Cell = .{ .style = .{ .bg = root.bg } };
-    @memset(buffer, cell);
+    buffer.fill(.{ .style = .{ .bg = root.bg } });
 }
 
 pub fn update(self: ?*anyopaque, time: std.time.Instant) void {
