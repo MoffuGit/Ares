@@ -5,50 +5,74 @@ const vaxis = @import("vaxis");
 const xev = @import("../global.zig").xev;
 const Allocator = std.mem.Allocator;
 
+const Root = @import("Root.zig");
+
 const RendererMailbox = @import("../renderer/Thread.zig").Mailbox;
 
 alloc: Allocator,
 
-screen: vaxis.Screen,
-render: bool = false,
 render_wakeup: xev.Async,
+
+size: vaxis.Winsize,
+buffer: []vaxis.Cell = &.{},
+
+render: bool = false,
+
 mutex: std.Thread.Mutex = .{},
 
-pub fn init(alloc: Allocator, render_wakeup: xev.Async) !Window {
-    var screen = try vaxis.Screen.init(
-        alloc,
-        .{
-            .cols = 0,
-            .rows = 0,
-            .x_pixel = 0,
-            .y_pixel = 0,
-        },
-    );
-    errdefer screen.deinit();
+root: *Root,
 
-    return .{ .alloc = alloc, .screen = screen, .render_wakeup = render_wakeup };
+pub fn init(
+    alloc: Allocator,
+    render_wakeup: xev.Async,
+    root: *Root,
+) !Window {
+    const buffer = try alloc.alloc(vaxis.Cell, 0);
+    errdefer alloc.free(buffer);
+
+    return .{
+        .root = root,
+        .alloc = alloc,
+        .render_wakeup = render_wakeup,
+        .buffer = buffer,
+        .size = .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 },
+    };
 }
 
 pub fn deinit(self: *Window) void {
-    self.screen.deinit(self.alloc);
+    self.alloc.free(self.buffer);
 }
 
-pub fn resize(self: *Window, size: vaxis.Winsize) !void {
+pub fn draw(self: *Window) !void {
     {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        self.screen.deinit(self.alloc);
-        self.screen = try vaxis.Screen.init(self.alloc, size);
+        try self.root.element.update();
+
+        try self.root.element.draw(self.buffer);
+
+        self.render = true;
+    }
+
+    try self.render_wakeup.notify();
+}
+
+pub fn resize(self: *Window, size: vaxis.Winsize) !void {
+    if (self.size.rows == size.rows and self.size.cols == size.cols) return;
+    {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        self.alloc.free(self.buffer);
+        self.buffer = try self.alloc.alloc(vaxis.Cell, @as(usize, @intCast(size.cols)) * size.rows);
 
         const cell: vaxis.Cell = .{
             .style = .{ .bg = .{ .rgba = .{ 0, 0, 0, 255 } }, .fg = .{ .rgba = .{ 0, 0, 0, 255 } } },
         };
-        @memset(self.screen.buf, cell);
-        self.screen.cursor_vis = false;
-        self.screen.cursor_shape = .default;
+        @memset(self.buffer, cell);
 
-        self.render = true;
+        self.size = size;
     }
 
     try self.render_wakeup.notify();

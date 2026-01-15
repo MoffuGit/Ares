@@ -14,8 +14,6 @@ pub const Mailbox = BlockingQueue(Message, 64);
 
 const log = std.log.scoped(.renderer_thread);
 
-const DRAW_INTERVAL = 8;
-
 alloc: Allocator,
 
 loop: xev.Loop,
@@ -26,8 +24,8 @@ wakeup_c: xev.Completion = .{},
 stop: xev.Async,
 stop_c: xev.Completion = .{},
 
-draw_now: xev.Async,
-draw_now_c: xev.Completion = .{},
+render_now: xev.Async,
+render_now_c: xev.Completion = .{},
 
 mailbox: *Mailbox,
 
@@ -40,8 +38,8 @@ pub fn init(alloc: Allocator, renderer: *Renderer) !Thread {
     var wakeup_h = try xev.Async.init();
     errdefer wakeup_h.deinit();
 
-    var draw_now = try xev.Async.init();
-    errdefer draw_now.deinit();
+    var render_now = try xev.Async.init();
+    errdefer render_now.deinit();
 
     var stop_h = try xev.Async.init();
     errdefer stop_h.deinit();
@@ -52,7 +50,7 @@ pub fn init(alloc: Allocator, renderer: *Renderer) !Thread {
     return .{
         .alloc = alloc,
         .renderer = renderer,
-        .draw_now = draw_now,
+        .render_now = render_now,
         .loop = loop,
         .stop = stop_h,
         .mailbox = mailbox,
@@ -62,7 +60,7 @@ pub fn init(alloc: Allocator, renderer: *Renderer) !Thread {
 
 pub fn deinit(self: *Thread) void {
     self.stop.deinit();
-    self.draw_now.deinit();
+    self.render_now.deinit();
     self.wakeup.deinit();
     self.mailbox.destroy(self.alloc);
 }
@@ -81,7 +79,7 @@ fn threadMain_(self: *Thread) !void {
 
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
-    self.draw_now.wait(&self.loop, &self.draw_now_c, Thread, self, drawNowCallback);
+    self.render_now.wait(&self.loop, &self.render_now_c, Thread, self, renderNowCallback);
 
     try self.wakeup.notify();
 
@@ -90,20 +88,20 @@ fn threadMain_(self: *Thread) !void {
     _ = try self.loop.run(.until_done);
 }
 
-fn drawNowCallback(
+fn renderNowCallback(
     self_: ?*Thread,
     _: *xev.Loop,
     _: *xev.Completion,
     r: xev.Async.WaitError!void,
 ) xev.CallbackAction {
     _ = r catch |err| {
-        log.err("error in draw now err={}", .{err});
+        log.err("error in rendering now err={}", .{err});
         return .rearm;
     };
 
     const t = self_.?;
-    t.renderer.drawFrame(false) catch |err|
-        log.warn("error drawing err={}", .{err});
+    t.renderer.renderFrame(false) catch |err|
+        log.warn("error rendering err={}", .{err});
 
     return .rearm;
 }
@@ -155,8 +153,8 @@ fn renderCallback(
         return .disarm;
     };
 
-    t.renderer.drawFrame(false) catch |err|
-        log.warn("error drawing err={}", .{err});
+    t.renderer.renderFrame(false) catch |err|
+        log.warn("error rendering err={}", .{err});
 
     return .disarm;
 }

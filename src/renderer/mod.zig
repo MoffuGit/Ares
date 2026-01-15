@@ -44,15 +44,17 @@ pub fn threadExit(self: *Renderer) void {
     _ = self;
 }
 
-pub fn drawFrame(self: *Renderer, sync: bool) !void {
+pub fn renderFrame(self: *Renderer, sync: bool) !void {
     var needs_redraw: bool = undefined;
+    var size_change: bool = undefined;
     {
         self.window.mutex.lock();
         defer self.window.mutex.unlock();
 
-        if (self.window.screen.width == 0 or self.window.screen.height == 0) return;
+        if (self.window.size.rows == 0 or self.window.size.cols == 0) return;
+        size_change = self.size.cols != self.window.size.cols or self.size.rows != self.window.size.rows;
 
-        needs_redraw = sync or self.window.render;
+        needs_redraw = sync or self.window.render or size_change;
     }
 
     if (!needs_redraw) return;
@@ -63,32 +65,18 @@ pub fn drawFrame(self: *Renderer, sync: bool) !void {
 
         self.window.render = false;
 
-        self.window.screen.width_method = self.vx.caps.unicode;
+        if (size_change) {
+            self.size = self.window.size;
+            self.vx.screen.deinit(self.alloc);
+            self.vx.screen = try vaxis.Screen.init(self.alloc, self.size);
+            self.vx.screen.width_method = self.vx.caps.unicode;
+            self.vx.screen_last.deinit(self.alloc);
+            self.vx.screen_last = try vaxis.AllocatingScreen.init(self.alloc, self.size.cols, self.size.rows);
+            self.vx.state.cursor.row = 0;
+            self.vx.state.cursor.col = 0;
+        }
 
-        const buf = try self.alloc.alloc(vaxis.Cell, self.window.screen.buf.len);
-
-        @memcpy(buf, self.window.screen.buf);
-
-        self.vx.screen = self.window.screen;
-        self.vx.screen.buf = buf;
-    }
-
-    if (self.vx.screen.height != self.vx.screen_last.height or self.vx.screen.width != self.vx.screen_last.width) {
-        self.vx.screen_last.deinit(self.alloc);
-        self.vx.screen_last = try vaxis.AllocatingScreen.init(self.alloc, self.vx.screen.width, self.vx.screen.height);
-
-        // if (self.vx.state.alt_screen)
-        //     try self.tty.writer().writeAll(vaxis.ctlseqs.home)
-        // else {
-        //     for (0..self.vx.state.cursor.row) |_| {
-        //         try self.tty.writer().writeAll(vaxis.ctlseqs.ri);
-        //     }
-        //     try self.tty.writer().writeByte('\r');
-        // }
-        // self.vx.state.cursor.row = 0;
-        // self.vx.state.cursor.col = 0;
-        // try self.tty.writer().writeAll(vaxis.ctlseqs.sgr_reset ++ vaxis.ctlseqs.erase_below_cursor);
-        // try self.tty.writer().flush();
+        @memcpy(self.vx.screen.buf, self.window.buffer);
     }
 
     try self.vx.render(self.tty.writer());

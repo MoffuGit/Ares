@@ -78,6 +78,8 @@ fn threadMain_(self: *Thread) !void {
     defer log.debug("window thread exited", .{});
 
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
+
+    try self.wakeup.notify();
     self.startTickTimer();
 
     log.debug("starting window thread", .{});
@@ -102,6 +104,9 @@ fn wakeupCallback(
     // wake up our thread after publishing.
     t.drainMailbox() catch |err|
         log.err("error draining mailbox err={}", .{err});
+
+    t.window.draw() catch |err|
+        log.err("draw error: {}", .{err});
 
     return .rearm;
 }
@@ -128,6 +133,10 @@ fn tickCallback(
         // This shouldn't happen so we log it.
         log.warn("render callback fired without data set", .{});
         return .disarm;
+    };
+
+    t.window.draw() catch |err| {
+        log.err("window draw error: {}", .{err});
     };
 
     t.tick_h.run(&t.loop, &t.tick_c, TICK_INTERVAL, Thread, t, tickCallback);

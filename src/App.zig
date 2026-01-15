@@ -9,6 +9,8 @@ const Renderer = @import("renderer/mod.zig");
 const WindowThread = @import("window/Thread.zig");
 const Window = @import("window/mod.zig");
 
+const Root = @import("window/Root.zig");
+
 const log = std.log.scoped(.app);
 
 const Allocator = std.mem.Allocator;
@@ -18,7 +20,7 @@ const App = @This();
 alloc: Allocator,
 
 tty: vaxis.Tty,
-buffer: [256]u8 = undefined,
+buffer: [1024]u8 = undefined,
 
 renderer: Renderer,
 renderer_thread: RendererThread,
@@ -28,14 +30,14 @@ window: Window,
 window_thread: WindowThread,
 window_thr: std.Thread,
 
-pub fn init(self: *App, alloc: Allocator) !void {
+pub fn init(self: *App, alloc: Allocator, root: *Root) !void {
     var renderer = try Renderer.init(alloc, &self.tty, &self.window);
     errdefer renderer.deinit();
 
     var renderer_thread = try RendererThread.init(alloc, &self.renderer);
     errdefer renderer_thread.deinit();
 
-    var window = try Window.init(alloc, renderer_thread.wakeup);
+    var window = try Window.init(alloc, renderer_thread.wakeup, root);
     errdefer window.deinit();
 
     var window_thread = try WindowThread.init(alloc, &self.window);
