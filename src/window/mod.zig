@@ -13,9 +13,12 @@ const Root = @import("Root.zig");
 const RendererMailbox = @import("../renderer/Thread.zig").Mailbox;
 const WindowMailbox = @import("Thread.zig").Mailbox;
 
+pub const TimerCallback = *const fn (userdata: ?*anyopaque, time: i64) ?Timer;
+
 pub const Timer = struct {
     next: i64,
-    element: *Element,
+    callback: TimerCallback,
+    userdata: ?*anyopaque = null,
 
     pub fn lessThan(_: void, a: Timer, b: Timer) std.math.Order {
         return std.math.order(a.next, b.next);
@@ -46,8 +49,10 @@ pub fn init(
     window_mailbox: *WindowMailbox,
     window_wakeup: xev.Async,
 ) !Window {
-    var root = try alloc.create(Root);
+    const root = try alloc.create(Root);
     errdefer alloc.destroy(root);
+
+    root.* = Root.init(alloc);
 
     var buffer = try Buffer.init(alloc, 0, 0);
     errdefer buffer.deinit(alloc);
@@ -55,13 +60,12 @@ pub fn init(
     var timers = Timers.init(alloc, {});
     errdefer timers.deinit();
 
-    // Set context on root element BEFORE init
     root.element.context = .{
         .mailbox = window_mailbox,
         .wakeup = window_wakeup,
     };
 
-    try root.init();
+    try root.setup();
 
     return .{
         .root = root,
@@ -110,10 +114,19 @@ pub fn tick(self: *Window) !void {
     while (self.timers.peek()) |peek| {
         if (peek.next > now) break;
         const timer = self.timers.remove();
-        if (try timer.element.tick(now)) |new| {
-            try self.timers.add(new);
+        if (timer.callback(timer.userdata, now)) |new| {
+            const clamped_next = if (new.next <= now) now + 1 else new.next;
+            try self.timers.add(.{
+                .next = clamped_next,
+                .callback = new.callback,
+                .userdata = new.userdata,
+            });
         }
     }
+}
+
+pub fn addTimer(self: *Window, timer: Timer) !void {
+    try self.timers.add(timer);
 }
 
 pub fn resize(self: *Window, size: vaxis.Winsize) !void {

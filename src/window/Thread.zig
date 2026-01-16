@@ -155,7 +155,7 @@ fn drainMailbox(self: *Thread) !void {
                 try self.window.resize(size);
             },
             .timer => |timer| {
-                try self.window.timers.add(timer);
+                try self.window.addTimer(timer);
             },
         }
     }
