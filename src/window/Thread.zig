@@ -8,8 +8,12 @@ const BlockingQueue = @import("../datastruct/blocking_queue.zig").BlockingQueue;
 const Allocator = std.mem.Allocator;
 
 const Window = @import("mod.zig");
+const Timer = @import("mod.zig").Timer;
 
-pub const Message = union(enum) { resize: vaxis.Winsize };
+pub const Message = union(enum) {
+    resize: vaxis.Winsize,
+    timer: Timer,
+};
 
 pub const Mailbox = BlockingQueue(Message, 64);
 
@@ -135,8 +139,8 @@ fn tickCallback(
         return .disarm;
     };
 
-    t.window.draw() catch |err| {
-        log.err("window draw error: {}", .{err});
+    t.window.tick() catch |err| {
+        log.err("window tick error: {}", .{err});
     };
 
     t.tick_h.run(&t.loop, &t.tick_c, TICK_INTERVAL, Thread, t, tickCallback);
@@ -149,6 +153,9 @@ fn drainMailbox(self: *Thread) !void {
         switch (message) {
             .resize => |size| {
                 try self.window.resize(size);
+            },
+            .timer => |timer| {
+                try self.window.timers.add(timer);
             },
         }
     }

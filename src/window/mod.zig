@@ -6,24 +6,33 @@ const xev = @import("../global.zig").xev;
 const Allocator = std.mem.Allocator;
 const SharedState = @import("../SharedState.zig");
 const Buffer = @import("../Buffer.zig");
+const Element = @import("Element.zig");
 
 const Root = @import("Root.zig");
 
 const RendererMailbox = @import("../renderer/Thread.zig").Mailbox;
+const WindowMailbox = @import("Thread.zig").Mailbox;
+
+pub const Timer = struct {
+    next: i64,
+    element: *Element,
+
+    pub fn lessThan(_: void, a: Timer, b: Timer) std.math.Order {
+        return std.math.order(a.next, b.next);
+    }
+};
+
+const Timers = std.PriorityQueue(Timer, void, Timer.lessThan);
 
 alloc: Allocator,
 
-//NOTE:
-//Maybe an improvement over the current draw technique
-//can be adding a tick queue, where you can add an element,
-//and set an interval, then, you can check if the queue is empty you stop the
-//timer watcher, then on the tick callback the component can ask for a render,
-//this can be an event that we send to the window thread
-
 render_wakeup: xev.Async,
 render_mailbox: *RendererMailbox,
+
 shared_state: *SharedState,
 buffer: Buffer,
+
+timers: Timers,
 
 root: *Root,
 
@@ -34,17 +43,29 @@ pub fn init(
     render_wakeup: xev.Async,
     render_mailbox: *RendererMailbox,
     shared_state: *SharedState,
+    window_mailbox: *WindowMailbox,
+    window_wakeup: xev.Async,
 ) !Window {
     var root = try alloc.create(Root);
     errdefer alloc.destroy(root);
 
-    try root.init();
-
     var buffer = try Buffer.init(alloc, 0, 0);
     errdefer buffer.deinit(alloc);
 
+    var timers = Timers.init(alloc, {});
+    errdefer timers.deinit();
+
+    // Set context on root element BEFORE init
+    root.element.context = .{
+        .mailbox = window_mailbox,
+        .wakeup = window_wakeup,
+    };
+
+    try root.init();
+
     return .{
         .root = root,
+        .timers = timers,
         .alloc = alloc,
         .buffer = buffer,
         .render_wakeup = render_wakeup,
@@ -62,9 +83,12 @@ pub fn init(
 pub fn deinit(self: *Window) void {
     self.buffer.deinit(self.alloc);
     self.alloc.destroy(self.root);
+    self.timers.deinit();
 }
 
 pub fn draw(self: *Window) !void {
+    try self.tick();
+
     try self.root.element.update();
     try self.root.element.draw(&self.buffer);
 
@@ -79,6 +103,17 @@ pub fn draw(self: *Window) !void {
     }
 
     try self.render_wakeup.notify();
+}
+
+pub fn tick(self: *Window) !void {
+    const now = std.time.microTimestamp();
+    while (self.timers.peek()) |peek| {
+        if (peek.next > now) break;
+        const timer = self.timers.remove();
+        if (try timer.element.tick(now)) |new| {
+            try self.timers.add(new);
+        }
+    }
 }
 
 pub fn resize(self: *Window, size: vaxis.Winsize) !void {

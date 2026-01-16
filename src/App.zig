@@ -45,16 +45,18 @@ pub fn create(alloc: Allocator) !*App {
     var renderer_thread = try RendererThread.init(alloc, &self.renderer);
     errdefer renderer_thread.deinit();
 
+    var window_thread = try WindowThread.init(alloc, &self.window);
+    errdefer window_thread.deinit();
+
     var window = try Window.init(
         alloc,
         renderer_thread.wakeup,
         renderer_thread.mailbox,
         &self.shared_state,
+        window_thread.mailbox,
+        window_thread.wakeup,
     );
     errdefer window.deinit();
-
-    var window_thread = try WindowThread.init(alloc, &self.window);
-    errdefer window_thread.deinit();
 
     var tty = try vaxis.Tty.init(&self.buffer);
     self.tty = tty;
