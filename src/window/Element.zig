@@ -15,7 +15,7 @@ pub const Context = struct {
 };
 
 alloc: std.mem.Allocator,
-idx: usize = 0,
+id: []const u8 = "",
 visible: bool = true,
 dirty: bool = false,
 zIndex: usize = 0,
@@ -36,9 +36,22 @@ drawFn: ?*const fn (userdata: ?*anyopaque, buffer: *Buffer) void = null,
 //MouseHandler, KeyHanlder...
 
 pub fn draw(self: *Element, buffer: *Buffer) !void {
+    if (!self.visible) return;
+
     if (self.drawFn) |callback| {
         callback(self.userdata, buffer);
     }
+
+    if (self.childrens) |*children| {
+        std.mem.sort(Element, children.items, {}, zIndexLessThanValue);
+        for (children.items) |*child| {
+            try child.draw(buffer);
+        }
+    }
+}
+
+fn zIndexLessThanValue(_: void, a: Element, b: Element) bool {
+    return a.zIndex < b.zIndex;
 }
 
 pub fn update(self: *Element) !void {
@@ -94,27 +107,29 @@ pub fn addChild(self: *Element, child: Element) !*Element {
         self.childrens = Childrens.init(self.alloc);
     }
     var new_child = child;
-    new_child.idx = self.childrens.?.items.len;
     new_child.context = self.context;
     try self.childrens.?.append(new_child);
-    return &self.childrens.?.items[new_child.idx];
+    return &self.childrens.?.items[self.childrens.?.items.len - 1];
 }
 
-pub fn removeChild(self: *Element, idx: usize) !void {
+pub fn removeChild(self: *Element, id: []const u8) void {
     if (self.childrens) |*children| {
-        if (idx >= children.items.len) return;
-        var child = children.orderedRemove(idx);
-        child.deinit();
-        for (children.items[idx..]) |*c| {
-            c.idx -= 1;
+        for (children.items, 0..) |*child, i| {
+            if (std.mem.eql(u8, child.id, id)) {
+                var removed = children.orderedRemove(i);
+                removed.deinit();
+                return;
+            }
         }
     }
 }
 
-pub fn getChildByIdx(self: *Element, idx: usize) ?*Element {
+pub fn getChildById(self: *Element, id: []const u8) ?*Element {
     if (self.childrens) |*children| {
-        if (idx < children.items.len) {
-            return &children.items[idx];
+        for (children.items) |*child| {
+            if (std.mem.eql(u8, child.id, id)) {
+                return child;
+            }
         }
     }
     return null;
