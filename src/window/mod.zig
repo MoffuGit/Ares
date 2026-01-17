@@ -8,8 +8,6 @@ const SharedState = @import("../SharedState.zig");
 const Buffer = @import("../Buffer.zig");
 const Element = @import("Element.zig");
 
-const Root = @import("Root.zig");
-
 const RendererMailbox = @import("../renderer/Thread.zig").Mailbox;
 const WindowMailbox = @import("Thread.zig").Mailbox;
 
@@ -34,6 +32,7 @@ pub const Opts = struct {
     window_mailbox: *WindowMailbox,
     window_wakeup: xev.Async,
     reschedule_tick: xev.Async,
+    root: *Element,
 };
 
 alloc: Allocator,
@@ -46,7 +45,7 @@ buffer: Buffer,
 
 timers: Timers,
 
-root: *Root,
+root: *Element,
 
 window_mailbox: *WindowMailbox,
 window_wakeup: xev.Async,
@@ -57,11 +56,6 @@ needs_draw: bool = true,
 size: vaxis.Winsize,
 
 pub fn init(alloc: Allocator, opts: Opts) !Window {
-    const root = try alloc.create(Root);
-    errdefer alloc.destroy(root);
-
-    root.* = Root.init(alloc);
-
     var buffer = try Buffer.init(alloc, 0, 0);
     errdefer buffer.deinit(alloc);
 
@@ -69,7 +63,7 @@ pub fn init(alloc: Allocator, opts: Opts) !Window {
     errdefer timers.deinit();
 
     return .{
-        .root = root,
+        .root = opts.root,
         .timers = timers,
         .alloc = alloc,
         .buffer = buffer,
@@ -89,17 +83,15 @@ pub fn init(alloc: Allocator, opts: Opts) !Window {
 }
 
 pub fn setup(self: *Window) !void {
-    self.root.element.context = .{
+    self.root.context = .{
         .mailbox = self.window_mailbox,
         .wakeup = self.window_wakeup,
         .needs_draw = &self.needs_draw,
     };
-    try self.root.setup();
 }
 
 pub fn deinit(self: *Window) void {
     self.buffer.deinit(self.alloc);
-    self.alloc.destroy(self.root);
     self.timers.deinit();
 }
 
@@ -107,8 +99,10 @@ pub fn draw(self: *Window) !void {
     if (!self.needs_draw) return;
     self.needs_draw = false;
 
-    try self.root.element.update();
-    try self.root.element.draw(&self.buffer);
+    var root = self.root;
+
+    try root.update();
+    try root.draw(&self.buffer);
 
     const shared_state = self.shared_state;
     const write_screen = shared_state.writeBuffer();

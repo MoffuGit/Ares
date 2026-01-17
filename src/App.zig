@@ -11,7 +11,7 @@ const Renderer = @import("renderer/mod.zig");
 const WindowThread = @import("window/Thread.zig");
 const Window = @import("window/mod.zig");
 
-const Root = @import("window/Root.zig");
+const Element = @import("window/Element.zig");
 
 const log = std.log.scoped(.app);
 
@@ -33,7 +33,11 @@ window: Window,
 window_thread: WindowThread,
 window_thr: std.Thread,
 
-pub fn create(alloc: Allocator) !*App {
+pub const Opts = struct {
+    root: *Element,
+};
+
+pub fn create(alloc: Allocator, opts: Opts) !*App {
     var self = try alloc.create(App);
 
     var shared_state = try SharedState.init(alloc, .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 });
@@ -55,6 +59,7 @@ pub fn create(alloc: Allocator) !*App {
         .window_mailbox = window_thread.mailbox,
         .window_wakeup = window_thread.wakeup,
         .reschedule_tick = window_thread.reschedule_tick,
+        .root = opts.root,
     });
     errdefer window.deinit();
 
