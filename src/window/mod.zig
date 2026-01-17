@@ -107,8 +107,6 @@ pub fn draw(self: *Window) !void {
     if (!self.needs_draw) return;
     self.needs_draw = false;
 
-    try self.tick();
-
     try self.root.element.update();
     try self.root.element.draw(&self.buffer);
 
