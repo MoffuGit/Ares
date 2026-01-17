@@ -48,14 +48,14 @@ pub fn create(alloc: Allocator) !*App {
     var window_thread = try WindowThread.init(alloc, &self.window);
     errdefer window_thread.deinit();
 
-    var window = try Window.init(
-        alloc,
-        renderer_thread.wakeup,
-        renderer_thread.mailbox,
-        &self.shared_state,
-        window_thread.mailbox,
-        window_thread.wakeup,
-    );
+    var window = try Window.init(alloc, .{
+        .render_wakeup = renderer_thread.wakeup,
+        .render_mailbox = renderer_thread.mailbox,
+        .shared_state = &self.shared_state,
+        .window_mailbox = window_thread.mailbox,
+        .window_wakeup = window_thread.wakeup,
+        .reschedule_tick = window_thread.reschedule_tick,
+    });
     errdefer window.deinit();
 
     var tty = try vaxis.Tty.init(&self.buffer);
@@ -73,6 +73,8 @@ pub fn create(alloc: Allocator) !*App {
         .window_thread = window_thread,
         .window_thr = undefined,
     };
+
+    try self.window.setup();
 
     self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
     self.window_thr = try std.Thread.spawn(.{}, WindowThread.threadMain, .{&self.window_thread});

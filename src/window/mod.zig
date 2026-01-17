@@ -27,6 +27,15 @@ pub const Timer = struct {
 
 const Timers = std.PriorityQueue(Timer, void, Timer.lessThan);
 
+pub const Opts = struct {
+    render_wakeup: xev.Async,
+    render_mailbox: *RendererMailbox,
+    shared_state: *SharedState,
+    window_mailbox: *WindowMailbox,
+    window_wakeup: xev.Async,
+    reschedule_tick: xev.Async,
+};
+
 alloc: Allocator,
 
 render_wakeup: xev.Async,
@@ -39,16 +48,15 @@ timers: Timers,
 
 root: *Root,
 
+window_mailbox: *WindowMailbox,
+window_wakeup: xev.Async,
+reschedule_tick: xev.Async,
+
+needs_draw: bool = true,
+
 size: vaxis.Winsize,
 
-pub fn init(
-    alloc: Allocator,
-    render_wakeup: xev.Async,
-    render_mailbox: *RendererMailbox,
-    shared_state: *SharedState,
-    window_mailbox: *WindowMailbox,
-    window_wakeup: xev.Async,
-) !Window {
+pub fn init(alloc: Allocator, opts: Opts) !Window {
     const root = try alloc.create(Root);
     errdefer alloc.destroy(root);
 
@@ -60,21 +68,17 @@ pub fn init(
     var timers = Timers.init(alloc, {});
     errdefer timers.deinit();
 
-    root.element.context = .{
-        .mailbox = window_mailbox,
-        .wakeup = window_wakeup,
-    };
-
-    try root.setup();
-
     return .{
         .root = root,
         .timers = timers,
         .alloc = alloc,
         .buffer = buffer,
-        .render_wakeup = render_wakeup,
-        .render_mailbox = render_mailbox,
-        .shared_state = shared_state,
+        .render_wakeup = opts.render_wakeup,
+        .render_mailbox = opts.render_mailbox,
+        .shared_state = opts.shared_state,
+        .window_mailbox = opts.window_mailbox,
+        .window_wakeup = opts.window_wakeup,
+        .reschedule_tick = opts.reschedule_tick,
         .size = .{
             .cols = 0,
             .rows = 0,
@@ -84,6 +88,15 @@ pub fn init(
     };
 }
 
+pub fn setup(self: *Window) !void {
+    self.root.element.context = .{
+        .mailbox = self.window_mailbox,
+        .wakeup = self.window_wakeup,
+        .needs_draw = &self.needs_draw,
+    };
+    try self.root.setup();
+}
+
 pub fn deinit(self: *Window) void {
     self.buffer.deinit(self.alloc);
     self.alloc.destroy(self.root);
@@ -91,6 +104,9 @@ pub fn deinit(self: *Window) void {
 }
 
 pub fn draw(self: *Window) !void {
+    if (!self.needs_draw) return;
+    self.needs_draw = false;
+
     try self.tick();
 
     try self.root.element.update();
@@ -126,7 +142,14 @@ pub fn tick(self: *Window) !void {
 }
 
 pub fn addTimer(self: *Window, timer: Timer) !void {
+    const was_empty = self.timers.count() == 0;
+    const old_min = self.timers.peek();
+
     try self.timers.add(timer);
+
+    if (was_empty or (old_min != null and timer.next < old_min.?.next)) {
+        try self.reschedule_tick.notify();
+    }
 }
 
 pub fn resize(self: *Window, size: vaxis.Winsize) !void {
@@ -136,6 +159,8 @@ pub fn resize(self: *Window, size: vaxis.Winsize) !void {
 
     self.buffer.deinit(self.alloc);
     self.buffer = try Buffer.init(self.alloc, self.size.cols, self.size.rows);
+
+    self.needs_draw = true;
 
     {
         const shared_state = self.shared_state;

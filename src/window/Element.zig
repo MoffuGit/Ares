@@ -12,12 +12,12 @@ const xev = @import("../global.zig").xev;
 pub const Context = struct {
     mailbox: *Mailbox,
     wakeup: xev.Async,
+    needs_draw: *bool,
 };
 
 alloc: std.mem.Allocator,
 id: []const u8 = "",
 visible: bool = true,
-dirty: bool = false,
 zIndex: usize = 0,
 destroyed: bool = false,
 opacity: f32 = 1.0,
@@ -69,6 +69,8 @@ pub fn addTimer(self: *Element, timer: Timer) !void {
 
 pub fn requestDraw(self: *Element) !void {
     if (self.context) |ctx| {
+        if (ctx.needs_draw.*) return;
+        ctx.needs_draw.* = true;
         try ctx.wakeup.notify();
     }
 }
