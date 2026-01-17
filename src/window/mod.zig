@@ -11,19 +11,35 @@ const Element = @import("Element.zig");
 const RendererMailbox = @import("../renderer/Thread.zig").Mailbox;
 const WindowMailbox = @import("Thread.zig").Mailbox;
 
-pub const TimerCallback = *const fn (userdata: ?*anyopaque, time: i64) ?Timer;
+pub const Timer = @import("Timer.zig");
+pub const Animation = @import("Animation.zig");
 
-pub const Timer = struct {
+pub const TickCallback = *const fn (userdata: ?*anyopaque, time: i64) ?Tick;
+
+pub const Tick = struct {
     next: i64,
-    callback: TimerCallback,
+    callback: TickCallback,
     userdata: ?*anyopaque = null,
 
-    pub fn lessThan(_: void, a: Timer, b: Timer) std.math.Order {
+    pub fn lessThan(_: void, a: Tick, b: Tick) std.math.Order {
         return std.math.order(a.next, b.next);
     }
 };
 
-const Timers = std.PriorityQueue(Timer, void, Timer.lessThan);
+const Ticks = std.PriorityQueue(Tick, void, Tick.lessThan);
+
+pub const State = enum {
+    idle,
+    active,
+    paused,
+    cancelled,
+    completed,
+};
+
+pub const TimerContext = struct {
+    mailbox: *WindowMailbox,
+    wakeup: xev.Async,
+};
 
 pub const Opts = struct {
     render_wakeup: xev.Async,
@@ -43,7 +59,10 @@ render_mailbox: *RendererMailbox,
 shared_state: *SharedState,
 buffer: Buffer,
 
-timers: Timers,
+ticks: Ticks,
+timers: std.AutoHashMap(u64, *Timer),
+animations: std.AutoHashMap(u64, *Animation),
+next_id: u64 = 1,
 
 root: *Element,
 
@@ -59,12 +78,20 @@ pub fn init(alloc: Allocator, opts: Opts) !Window {
     var buffer = try Buffer.init(alloc, 0, 0);
     errdefer buffer.deinit(alloc);
 
-    var timers = Timers.init(alloc, {});
+    var ticks = Ticks.init(alloc, {});
+    errdefer ticks.deinit();
+
+    var timers = std.AutoHashMap(u64, *Timer).init(alloc);
     errdefer timers.deinit();
+
+    var animations = std.AutoHashMap(u64, *Animation).init(alloc);
+    errdefer animations.deinit();
 
     return .{
         .root = opts.root,
+        .ticks = ticks,
         .timers = timers,
+        .animations = animations,
         .alloc = alloc,
         .buffer = buffer,
         .render_wakeup = opts.render_wakeup,
@@ -92,7 +119,9 @@ pub fn setup(self: *Window) !void {
 
 pub fn deinit(self: *Window) void {
     self.buffer.deinit(self.alloc);
+    self.ticks.deinit();
     self.timers.deinit();
+    self.animations.deinit();
 }
 
 pub fn draw(self: *Window) !void {
@@ -117,14 +146,14 @@ pub fn draw(self: *Window) !void {
     try self.render_wakeup.notify();
 }
 
-pub fn tick(self: *Window) !void {
+pub fn processTicks(self: *Window) !void {
     const now = std.time.microTimestamp();
-    while (self.timers.peek()) |peek| {
+    while (self.ticks.peek()) |peek| {
         if (peek.next > now) break;
-        const timer = self.timers.remove();
-        if (timer.callback(timer.userdata, timer.next)) |new| {
+        const tick = self.ticks.remove();
+        if (tick.callback(tick.userdata, tick.next)) |new| {
             const clamped_next = if (new.next <= now) now + 1 else new.next;
-            try self.timers.add(.{
+            try self.ticks.add(.{
                 .next = clamped_next,
                 .callback = new.callback,
                 .userdata = new.userdata,
@@ -133,14 +162,102 @@ pub fn tick(self: *Window) !void {
     }
 }
 
-pub fn addTimer(self: *Window, timer: Timer) !void {
-    const was_empty = self.timers.count() == 0;
-    const old_min = self.timers.peek();
+pub fn addTick(self: *Window, tick: Tick) !void {
+    const was_empty = self.ticks.count() == 0;
+    const old_min = self.ticks.peek();
 
-    try self.timers.add(timer);
+    try self.ticks.add(tick);
 
-    if (was_empty or (old_min != null and timer.next < old_min.?.next)) {
+    if (was_empty or (old_min != null and tick.next < old_min.?.next)) {
         try self.reschedule_tick.notify();
+    }
+}
+
+pub fn registerTimer(self: *Window, timer: *Timer) !void {
+    timer.id = self.next_id;
+    self.next_id += 1;
+    try self.timers.put(timer.id, timer);
+}
+
+pub fn unregisterTimer(self: *Window, id: u64) void {
+    _ = self.timers.remove(id);
+}
+
+pub fn registerAnimation(self: *Window, animation: *Animation) !void {
+    animation.id = self.next_id;
+    self.next_id += 1;
+    try self.animations.put(animation.id, animation);
+}
+
+pub fn unregisterAnimation(self: *Window, id: u64) void {
+    _ = self.animations.remove(id);
+}
+
+pub fn startTimer(self: *Window, timer: *Timer) !void {
+    if (timer.id == 0) {
+        try self.registerTimer(timer);
+    }
+    timer.state = .active;
+    try self.addTick(timer.toTick());
+}
+
+pub fn pauseTimer(self: *Window, id: u64) void {
+    if (self.timers.get(id)) |timer| {
+        if (timer.state == .active) {
+            timer.state = .paused;
+        }
+    }
+}
+
+pub fn resumeTimer(self: *Window, id: u64) !void {
+    if (self.timers.get(id)) |timer| {
+        if (timer.state == .paused) {
+            timer.state = .active;
+            try self.addTick(timer.toTick());
+        }
+    }
+}
+
+pub fn cancelTimer(self: *Window, id: u64) void {
+    if (self.timers.get(id)) |timer| {
+        timer.state = .cancelled;
+        self.unregisterTimer(id);
+    }
+}
+
+pub fn startAnimation(self: *Window, animation: *Animation) !void {
+    if (animation.id == 0) {
+        try self.registerAnimation(animation);
+    }
+    animation.state = .active;
+    animation.start_time = std.time.microTimestamp();
+    animation.elapsed_at_pause = 0;
+    try self.addTick(animation.toTick());
+}
+
+pub fn pauseAnimation(self: *Window, id: u64) void {
+    if (self.animations.get(id)) |animation| {
+        if (animation.state == .active) {
+            animation.state = .paused;
+        }
+    }
+}
+
+pub fn resumeAnimation(self: *Window, id: u64) !void {
+    if (self.animations.get(id)) |animation| {
+        if (animation.state == .paused) {
+            const now = std.time.microTimestamp();
+            animation.start_time = now - animation.elapsed_at_pause;
+            animation.state = .active;
+            try self.addTick(animation.toTick());
+        }
+    }
+}
+
+pub fn cancelAnimation(self: *Window, id: u64) void {
+    if (self.animations.get(id)) |animation| {
+        animation.state = .cancelled;
+        self.unregisterAnimation(id);
     }
 }
 

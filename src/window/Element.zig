@@ -3,7 +3,11 @@ pub const Element = @This();
 const std = @import("std");
 const vaxis = @import("vaxis");
 
-pub const Timer = @import("mod.zig").Timer;
+const Window = @import("mod.zig");
+pub const Tick = Window.Tick;
+pub const Timer = Window.Timer;
+pub const Animation = Window.Animation;
+pub const TimerContext = Window.TimerContext;
 const Buffer = @import("../Buffer.zig");
 pub const Childrens = std.ArrayList(Element);
 const Mailbox = @import("Thread.zig").Mailbox;
@@ -66,9 +70,25 @@ pub fn update(self: *Element) !void {
     }
 }
 
-pub fn addTimer(self: *Element, timer: Timer) !void {
+pub fn addTick(self: *Element, tick: Tick) !void {
     if (self.context) |ctx| {
-        _ = ctx.mailbox.push(.{ .timer = timer }, .instant);
+        _ = ctx.mailbox.push(.{ .tick = tick }, .instant);
+        try ctx.wakeup.notify();
+    }
+}
+
+pub fn startTimer(self: *Element, timer: *Timer) !void {
+    if (self.context) |ctx| {
+        timer.context = .{ .mailbox = ctx.mailbox, .wakeup = ctx.wakeup };
+        _ = ctx.mailbox.push(.{ .timer_start = timer }, .instant);
+        try ctx.wakeup.notify();
+    }
+}
+
+pub fn startAnimation(self: *Element, animation: *Animation) !void {
+    if (self.context) |ctx| {
+        animation.context = .{ .mailbox = ctx.mailbox, .wakeup = ctx.wakeup };
+        _ = ctx.mailbox.push(.{ .animation_start = animation }, .instant);
         try ctx.wakeup.notify();
     }
 }

@@ -8,11 +8,21 @@ const BlockingQueue = @import("../datastruct/blocking_queue.zig").BlockingQueue;
 const Allocator = std.mem.Allocator;
 
 const Window = @import("mod.zig");
-const Timer = @import("mod.zig").Timer;
+const Tick = Window.Tick;
+const Timer = Window.Timer;
+const Animation = Window.Animation;
 
 pub const Message = union(enum) {
     resize: vaxis.Winsize,
-    timer: Timer,
+    tick: Tick,
+    timer_start: *Timer,
+    timer_pause: u64,
+    timer_resume: u64,
+    timer_cancel: u64,
+    animation_start: *Animation,
+    animation_pause: u64,
+    animation_resume: u64,
+    animation_cancel: u64,
 };
 
 pub const Mailbox = BlockingQueue(Message, 64);
@@ -141,13 +151,13 @@ fn rescheduleTickCallback(
 }
 
 pub fn scheduleNextTick(self: *Thread) void {
-    const next_timer = self.window.timers.peek() orelse {
+    const next_tick = self.window.ticks.peek() orelse {
         self.tick_armed = false;
         return;
     };
 
     const now = std.time.microTimestamp();
-    const delay_us: u64 = @intCast(@max(0, next_timer.next - now));
+    const delay_us: u64 = @intCast(@max(0, next_tick.next - now));
     const delay_ms: u64 = (delay_us + 999) / 1000;
     const clamped_delay = @max(1, delay_ms);
 
@@ -175,7 +185,7 @@ fn resetCallback(
     const t: *Thread = self_ orelse return .disarm;
 
     if (r) |_| {
-        t.window.tick() catch |err| {
+        t.window.processTicks() catch |err| {
             log.err("window tick error: {}", .{err});
         };
         t.tick_armed = false;
@@ -199,7 +209,7 @@ fn tickCallback(
 
     t.tick_armed = false;
 
-    t.window.tick() catch |err| {
+    t.window.processTicks() catch |err| {
         log.err("window tick error: {}", .{err});
     };
 
@@ -214,8 +224,36 @@ fn drainMailbox(self: *Thread) !void {
             .resize => |size| {
                 try self.window.resize(size);
             },
-            .timer => |timer| {
-                try self.window.addTimer(timer);
+            .tick => |tick| {
+                try self.window.addTick(tick);
+            },
+            .timer_start => |timer| {
+                try self.window.startTimer(timer);
+                self.scheduleNextTick();
+            },
+            .timer_pause => |id| {
+                self.window.pauseTimer(id);
+            },
+            .timer_resume => |id| {
+                try self.window.resumeTimer(id);
+                self.scheduleNextTick();
+            },
+            .timer_cancel => |id| {
+                self.window.cancelTimer(id);
+            },
+            .animation_start => |animation| {
+                try self.window.startAnimation(animation);
+                self.scheduleNextTick();
+            },
+            .animation_pause => |id| {
+                self.window.pauseAnimation(id);
+            },
+            .animation_resume => |id| {
+                try self.window.resumeAnimation(id);
+                self.scheduleNextTick();
+            },
+            .animation_cancel => |id| {
+                self.window.cancelAnimation(id);
             },
         }
     }

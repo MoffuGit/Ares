@@ -2,6 +2,7 @@ pub const Root = @This();
 
 const Element = @import("Element.zig");
 const Timer = @import("mod.zig").Timer;
+const Animation = @import("mod.zig").Animation;
 const std = @import("std");
 const vaxis = @import("vaxis");
 
@@ -19,6 +20,10 @@ red_dir: Direction = .up,
 green_dir: Direction = .up,
 blue_dir: Direction = .up,
 
+red_timer: Timer = undefined,
+green_timer: Timer = undefined,
+blue_timer: Timer = undefined,
+
 pub fn init(alloc: std.mem.Allocator) Root {
     return .{
         .element = Element.init(alloc),
@@ -30,22 +35,25 @@ pub fn setup(self: *Root) !void {
     self.element.updateFn = update;
     self.element.drawFn = draw;
 
-    const now = std.time.microTimestamp();
-    try self.element.addTimer(.{
-        .next = now + 10_000,
+    self.red_timer = .{
+        .interval_us = 10_000,
         .callback = tickRed,
         .userdata = self,
-    });
-    try self.element.addTimer(.{
-        .next = now + 15_000,
+    };
+    self.green_timer = .{
+        .interval_us = 15_000,
         .callback = tickGreen,
         .userdata = self,
-    });
-    try self.element.addTimer(.{
-        .next = now + 20_000,
+    };
+    self.blue_timer = .{
+        .interval_us = 20_000,
         .callback = tickBlue,
         .userdata = self,
-    });
+    };
+
+    try self.element.startTimer(&self.red_timer);
+    try self.element.startTimer(&self.green_timer);
+    try self.element.startTimer(&self.blue_timer);
 }
 
 pub fn draw(self: ?*anyopaque, buffer: *Buffer) void {
@@ -73,47 +81,26 @@ fn updateChannel(value: *u8, dir: *Direction) void {
     }
 }
 
-pub fn tickRed(userdata: ?*anyopaque, time: i64) ?Timer {
-    if (userdata == null) return null;
-    const root: *Root = @ptrCast(@alignCast(userdata));
+fn tickRed(userdata: ?*anyopaque) void {
+    const root: *Root = @ptrCast(@alignCast(userdata orelse return));
 
     updateChannel(&root.red, &root.red_dir);
     root.bg = .{ .rgba = .{ root.red, root.green, root.blue, 255 } };
     root.element.requestDraw() catch {};
-
-    return Timer{
-        .next = time + 10_000,
-        .callback = tickRed,
-        .userdata = userdata,
-    };
 }
 
-pub fn tickGreen(userdata: ?*anyopaque, time: i64) ?Timer {
-    if (userdata == null) return null;
-    const root: *Root = @ptrCast(@alignCast(userdata));
+fn tickGreen(userdata: ?*anyopaque) void {
+    const root: *Root = @ptrCast(@alignCast(userdata orelse return));
 
     updateChannel(&root.green, &root.green_dir);
     root.bg = .{ .rgba = .{ root.red, root.green, root.blue, 255 } };
     root.element.requestDraw() catch {};
-
-    return Timer{
-        .next = time + 15_000,
-        .callback = tickGreen,
-        .userdata = userdata,
-    };
 }
 
-pub fn tickBlue(userdata: ?*anyopaque, time: i64) ?Timer {
-    if (userdata == null) return null;
-    const root: *Root = @ptrCast(@alignCast(userdata));
+fn tickBlue(userdata: ?*anyopaque) void {
+    const root: *Root = @ptrCast(@alignCast(userdata orelse return));
 
     updateChannel(&root.blue, &root.blue_dir);
     root.bg = .{ .rgba = .{ root.red, root.green, root.blue, 255 } };
     root.element.requestDraw() catch {};
-
-    return Timer{
-        .next = time + 20_000,
-        .callback = tickBlue,
-        .userdata = userdata,
-    };
 }
