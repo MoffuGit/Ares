@@ -128,7 +128,7 @@ pub fn tick(self: *Window) !void {
     while (self.timers.peek()) |peek| {
         if (peek.next > now) break;
         const timer = self.timers.remove();
-        if (timer.callback(timer.userdata, now)) |new| {
+        if (timer.callback(timer.userdata, timer.next)) |new| {
             const clamped_next = if (new.next <= now) now + 1 else new.next;
             try self.timers.add(.{
                 .next = clamped_next,

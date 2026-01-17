@@ -147,8 +147,8 @@ pub fn scheduleNextTick(self: *Thread) void {
     };
 
     const now = std.time.microTimestamp();
-    const delay_us = @max(0, next_timer.next - now);
-    const delay_ms: u64 = @intCast(@divFloor(delay_us, 1000));
+    const delay_us: u64 = @intCast(@max(0, next_timer.next - now));
+    const delay_ms: u64 = (delay_us + 999) / 1000;
     const clamped_delay = @max(1, delay_ms);
 
     if (self.tick_armed) {
