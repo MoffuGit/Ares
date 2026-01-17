@@ -110,15 +110,15 @@ pub fn draw(self: *Window) !void {
     try self.root.element.update();
     try self.root.element.draw(&self.buffer);
 
-    {
-        const shared_state = self.shared_state;
-        shared_state.mutex.lock();
-        defer shared_state.mutex.unlock();
+    const shared_state = self.shared_state;
+    const write_screen = shared_state.writeBuffer();
 
-        @memcpy(shared_state.screen.buf, self.buffer.buf);
-
-        shared_state.render = true;
+    if (write_screen.width != self.buffer.width or write_screen.height != self.buffer.height) {
+        try shared_state.resizeWriteBuffer(self.alloc, self.size);
     }
+
+    @memcpy(write_screen.buf, self.buffer.buf);
+    shared_state.swapWrite();
 
     try self.render_wakeup.notify();
 }
@@ -159,17 +159,4 @@ pub fn resize(self: *Window, size: vaxis.Winsize) !void {
     self.buffer = try Buffer.init(self.alloc, self.size.cols, self.size.rows);
 
     self.needs_draw = true;
-
-    {
-        const shared_state = self.shared_state;
-
-        shared_state.mutex.lock();
-        defer shared_state.mutex.unlock();
-
-        shared_state.screen.deinit(self.alloc);
-        shared_state.screen = try .init(self.alloc, self.size);
-    }
-
-    _ = self.render_mailbox.push(.{ .resize = size }, .instant);
-    try self.render_wakeup.notify();
 }

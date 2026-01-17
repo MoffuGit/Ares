@@ -76,8 +76,8 @@ pub fn create(alloc: Allocator) !*App {
 
     try self.window.setup();
 
-    self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
     self.window_thr = try std.Thread.spawn(.{}, WindowThread.threadMain, .{&self.window_thread});
+    self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
 
     return self;
 }

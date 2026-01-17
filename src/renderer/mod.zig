@@ -54,38 +54,29 @@ pub fn threadExit(self: *Renderer) void {
 }
 
 pub fn renderFrame(self: *Renderer, sync: bool) !void {
-    var needs_redraw: bool = undefined;
-    var size_change: bool = undefined;
     const shared_state = self.shared_state;
-    {
-        shared_state.mutex.lock();
-        defer shared_state.mutex.unlock();
 
-        size_change = self.size.cols != shared_state.screen.width or self.size.rows != shared_state.screen.height;
+    const has_new_frame = shared_state.swapRead();
 
-        needs_redraw = sync or self.shared_state.render or size_change or self.render;
-    }
-
-    if (!needs_redraw) return;
-
-    shared_state.mutex.lock();
-    defer shared_state.mutex.unlock();
-
+    if (!has_new_frame and !sync and !self.render) return;
     defer self.render = false;
-    defer shared_state.render = false;
+
+    const read_screen = shared_state.readBuffer();
+
+    const size_change = self.size.cols != read_screen.width or self.size.rows != read_screen.height;
 
     if (size_change) {
         const size: vaxis.Winsize = .{
-            .cols = shared_state.screen.width,
-            .rows = shared_state.screen.height,
-            .x_pixel = shared_state.screen.width_pix,
-            .y_pixel = shared_state.screen.height_pix,
+            .cols = read_screen.width,
+            .rows = read_screen.height,
+            .x_pixel = read_screen.width_pix,
+            .y_pixel = read_screen.height_pix,
         };
 
         try self.resize(size);
 
-        shared_state.screen.width_method = self.vx.caps.unicode;
+        read_screen.width_method = self.vx.caps.unicode;
     }
 
-    try self.vx.render(&shared_state.screen, self.tty.writer());
+    try self.vx.render(read_screen, self.tty.writer());
 }
