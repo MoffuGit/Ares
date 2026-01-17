@@ -58,6 +58,12 @@ pub fn update(self: *Element) !void {
     if (self.updateFn) |callback| {
         callback(self.userdata, try std.time.Instant.now());
     }
+
+    if (self.childrens) |*childrens| {
+        for (childrens.items) |*child| {
+            try child.update();
+        }
+    }
 }
 
 pub fn addTimer(self: *Element, timer: Timer) !void {
