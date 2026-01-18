@@ -9,7 +9,7 @@ pub const Timer = Window.Timer;
 pub const Animation = Window.Animation;
 pub const TimerContext = Window.TimerContext;
 const Buffer = @import("../Buffer.zig");
-pub const Childrens = std.ArrayList(Element);
+pub const Childrens = std.ArrayListUnmanaged(*Element);
 const Mailbox = @import("Thread.zig").Mailbox;
 const xev = @import("../global.zig").xev;
 
@@ -47,14 +47,14 @@ pub fn draw(self: *Element, buffer: *Buffer) !void {
     }
 
     if (self.childrens) |*children| {
-        std.mem.sort(Element, children.items, {}, zIndexLessThanValue);
-        for (children.items) |*child| {
+        std.mem.sort(*Element, children.items, {}, zIndexLessThanValue);
+        for (children.items) |child| {
             try child.draw(buffer);
         }
     }
 }
 
-fn zIndexLessThanValue(_: void, a: Element, b: Element) bool {
+fn zIndexLessThanValue(_: void, a: *Element, b: *Element) bool {
     return a.zIndex < b.zIndex;
 }
 
@@ -64,7 +64,7 @@ pub fn update(self: *Element) !void {
     }
 
     if (self.childrens) |*childrens| {
-        for (childrens.items) |*child| {
+        for (childrens.items) |child| {
             try child.update();
         }
     }
@@ -112,7 +112,7 @@ pub fn deinit(self: *Element) void {
         for (children.items) |*child| {
             child.deinit();
         }
-        children.deinit();
+        children.deinit(self.alloc);
         self.childrens = null;
     }
     if (self.buffer) |*buf| {
@@ -130,14 +130,13 @@ pub fn createBuffer(self: *Element, width: u16, height: u16) !void {
     self.height = height;
 }
 
-pub fn addChild(self: *Element, child: Element) !*Element {
+pub fn addChild(self: *Element, child: *Element) !void {
     if (self.childrens == null) {
-        self.childrens = Childrens.init(self.alloc);
+        self.childrens = .{};
     }
     var new_child = child;
     new_child.context = self.context;
-    try self.childrens.?.append(new_child);
-    return &self.childrens.?.items[self.childrens.?.items.len - 1];
+    try self.childrens.?.append(self.alloc, new_child);
 }
 
 pub fn removeChild(self: *Element, id: []const u8) void {

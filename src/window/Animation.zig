@@ -4,6 +4,7 @@ const std = @import("std");
 const Tick = @import("mod.zig").Tick;
 const State = @import("mod.zig").State;
 const TimerContext = @import("mod.zig").TimerContext;
+const Easing = @import("Easing.zig").Type;
 
 pub const Callback = *const fn (userdata: ?*anyopaque, progress: f32) void;
 pub const CompleteCallback = *const fn (userdata: ?*anyopaque) void;
@@ -15,6 +16,7 @@ elapsed_at_pause: i64 = 0,
 callback: Callback,
 userdata: ?*anyopaque = null,
 tick_interval_us: i64 = 16_667,
+easing: Easing = .linear,
 repeat: bool = false,
 state: State = .idle,
 context: ?TimerContext = null,
@@ -67,11 +69,12 @@ fn tickCallback(userdata: ?*anyopaque, time: i64) ?Tick {
         },
         .active => {
             const elapsed = time - anim.start_time;
-            const progress: f32 = @min(1.0, @as(f32, @floatFromInt(elapsed)) / @as(f32, @floatFromInt(anim.duration_us)));
+            const t: f32 = @min(1.0, @as(f32, @floatFromInt(elapsed)) / @as(f32, @floatFromInt(anim.duration_us)));
+            const progress = anim.easing.apply(t);
 
             anim.callback(anim.userdata, progress);
 
-            if (progress >= 1.0) {
+            if (t >= 1.0) {
                 if (anim.repeat) {
                     anim.start_time = time;
                     return Tick{

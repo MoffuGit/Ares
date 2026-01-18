@@ -3,6 +3,7 @@ pub const Root = @This();
 const Element = @import("Element.zig");
 const Timer = @import("mod.zig").Timer;
 const Animation = @import("mod.zig").Animation;
+const Box = @import("Box.zig");
 const std = @import("std");
 const vaxis = @import("vaxis");
 
@@ -24,9 +25,12 @@ red_timer: Timer = undefined,
 green_timer: Timer = undefined,
 blue_timer: Timer = undefined,
 
+box: Box = undefined,
+
 pub fn init(alloc: std.mem.Allocator) Root {
     return .{
         .element = Element.init(alloc),
+        .box = Box.init(alloc),
     };
 }
 
@@ -54,6 +58,10 @@ pub fn setup(self: *Root) !void {
     try self.element.startTimer(&self.red_timer);
     try self.element.startTimer(&self.green_timer);
     try self.element.startTimer(&self.blue_timer);
+
+    _ = try self.element.addChild(&self.box.element);
+    self.box.element.context = self.element.context;
+    try self.box.setup();
 }
 
 pub fn draw(self: ?*anyopaque, buffer: *Buffer) void {

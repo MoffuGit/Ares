@@ -13,6 +13,7 @@ const WindowMailbox = @import("Thread.zig").Mailbox;
 
 pub const Timer = @import("Timer.zig");
 pub const Animation = @import("Animation.zig");
+pub const Easing = @import("Easing.zig").Type;
 
 pub const TickCallback = *const fn (userdata: ?*anyopaque, time: i64) ?Tick;
 
