@@ -5,8 +5,10 @@ const Tick = @import("mod.zig").Tick;
 const State = @import("mod.zig").State;
 const TimerContext = @import("mod.zig").TimerContext;
 
-pub const Callback = *const fn (userdata: ?*anyopaque) void;
-pub const CompleteCallback = *const fn (userdata: ?*anyopaque) void;
+const Element = @import("Element.zig");
+
+pub const Callback = *const fn (userdata: ?*anyopaque, ctx: Element.Context) void;
+pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: Element.Context) void;
 
 pub const Repeat = union(enum) {
     forever,
@@ -60,12 +62,18 @@ pub fn toTick(self: *Timer) Tick {
 
 fn tickCallback(userdata: ?*anyopaque, _: i64) ?Tick {
     const timer: *Timer = @ptrCast(@alignCast(userdata orelse return null));
+    const ctx = timer.context orelse return null;
 
     switch (timer.state) {
         .idle, .cancelled, .completed => return null,
         .paused => return null,
         .active => {
-            timer.callback(timer.userdata);
+            const element_ctx: Element.Context = .{
+                .mailbox = ctx.mailbox,
+                .wakeup = ctx.wakeup,
+                .needs_draw = ctx.needs_draw,
+            };
+            timer.callback(timer.userdata, element_ctx);
 
             switch (timer.repeat) {
                 .forever => {
@@ -78,7 +86,7 @@ fn tickCallback(userdata: ?*anyopaque, _: i64) ?Tick {
                 .times => |*count| {
                     if (count.* <= 1) {
                         timer.state = .completed;
-                        if (timer.on_complete) |cb| cb(timer.userdata);
+                        if (timer.on_complete) |cb| cb(timer.userdata, element_ctx);
                         return null;
                     }
                     count.* -= 1;

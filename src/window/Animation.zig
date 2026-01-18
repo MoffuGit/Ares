@@ -6,8 +6,10 @@ const State = @import("mod.zig").State;
 const TimerContext = @import("mod.zig").TimerContext;
 const Easing = @import("Easing.zig").Type;
 
-pub const Callback = *const fn (userdata: ?*anyopaque, progress: f32) void;
-pub const CompleteCallback = *const fn (userdata: ?*anyopaque) void;
+const Element = @import("Element.zig");
+
+pub const Callback = *const fn (userdata: ?*anyopaque, progress: f32, ctx: Element.Context) void;
+pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: Element.Context) void;
 
 id: u64 = 0,
 duration_us: i64,
@@ -60,6 +62,7 @@ pub fn toTick(self: *Animation) Tick {
 
 fn tickCallback(userdata: ?*anyopaque, time: i64) ?Tick {
     const anim: *Animation = @ptrCast(@alignCast(userdata orelse return null));
+    const ctx = anim.context orelse return null;
 
     switch (anim.state) {
         .idle, .cancelled, .completed => return null,
@@ -72,7 +75,12 @@ fn tickCallback(userdata: ?*anyopaque, time: i64) ?Tick {
             const t: f32 = @min(1.0, @as(f32, @floatFromInt(elapsed)) / @as(f32, @floatFromInt(anim.duration_us)));
             const progress = anim.easing.apply(t);
 
-            anim.callback(anim.userdata, progress);
+            const element_ctx: Element.Context = .{
+                .mailbox = ctx.mailbox,
+                .wakeup = ctx.wakeup,
+                .needs_draw = ctx.needs_draw,
+            };
+            anim.callback(anim.userdata, progress, element_ctx);
 
             if (t >= 1.0) {
                 if (anim.repeat) {
@@ -84,7 +92,7 @@ fn tickCallback(userdata: ?*anyopaque, time: i64) ?Tick {
                     };
                 }
                 anim.state = .completed;
-                if (anim.on_complete) |cb| cb(anim.userdata);
+                if (anim.on_complete) |cb| cb(anim.userdata, element_ctx);
                 return null;
             }
 

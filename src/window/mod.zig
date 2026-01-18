@@ -40,6 +40,7 @@ pub const State = enum {
 pub const TimerContext = struct {
     mailbox: *WindowMailbox,
     wakeup: xev.Async,
+    needs_draw: *bool,
 };
 
 pub const Opts = struct {
@@ -110,12 +111,13 @@ pub fn init(alloc: Allocator, opts: Opts) !Window {
     };
 }
 
-pub fn setup(self: *Window) !void {
-    self.root.context = .{
+pub fn setup(self: *Window) void {
+    const ctx: Element.Context = .{
         .mailbox = self.window_mailbox,
         .wakeup = self.window_wakeup,
         .needs_draw = &self.needs_draw,
     };
+    self.root.setup(ctx);
 }
 
 pub fn deinit(self: *Window) void {
@@ -132,7 +134,7 @@ pub fn draw(self: *Window) !void {
     var root = self.root;
 
     try root.update();
-    try root.draw(&self.buffer);
+    root.draw(&self.buffer);
 
     const shared_state = self.shared_state;
     const write_screen = shared_state.writeBuffer();

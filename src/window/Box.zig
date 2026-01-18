@@ -22,15 +22,26 @@ box_height: u16 = 5,
 
 move_animation: Animation = undefined,
 
-pub fn init(alloc: std.mem.Allocator) Box {
-    return .{
-        .element = Element.init(alloc),
+pub fn create(alloc: std.mem.Allocator) !*Box {
+    const self = try alloc.create(Box);
+    self.* = .{
+        .element = try Element.init(alloc, .{
+            .userdata = self,
+            .setupFn = setup,
+            .drawFn = draw,
+            .destroyFn = destroy,
+        }),
     };
+    return self;
 }
 
-pub fn setup(self: *Box) !void {
-    self.element.userdata = self;
-    self.element.drawFn = draw;
+fn destroy(userdata: ?*anyopaque, alloc: std.mem.Allocator) void {
+    const self: *Box = @ptrCast(@alignCast(userdata orelse return));
+    alloc.destroy(self);
+}
+
+fn setup(userdata: ?*anyopaque, ctx: Element.Context) void {
+    const self: *Box = @ptrCast(@alignCast(userdata orelse return));
 
     self.move_animation = .{
         .duration_us = 2_000_000,
@@ -40,7 +51,7 @@ pub fn setup(self: *Box) !void {
         .repeat = true,
     };
 
-    try self.element.startAnimation(&self.move_animation);
+    Element.startAnimation(ctx, &self.move_animation) catch {};
 }
 
 fn draw(userdata: ?*anyopaque, buffer: *Buffer) void {
@@ -62,13 +73,13 @@ fn draw(userdata: ?*anyopaque, buffer: *Buffer) void {
     }
 }
 
-fn onMove(userdata: ?*anyopaque, progress: f32) void {
+fn onMove(userdata: ?*anyopaque, progress: f32, ctx: Element.Context) void {
     const self: *Box = @ptrCast(@alignCast(userdata orelse return));
 
     self.current_x = lerp(self.start_x, self.end_x, progress);
     self.current_y = lerp(self.start_y, self.end_y, progress);
 
-    self.element.requestDraw() catch {};
+    Element.requestDraw(ctx) catch {};
 }
 
 fn lerp(a: f32, b: f32, t: f32) f32 {

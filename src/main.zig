@@ -15,17 +15,13 @@ pub fn main() !void {
     try global.init();
     defer global.deinit();
 
-    const root = try global.alloc.create(Root);
-    defer global.alloc.destroy(root);
-
-    root.* = Root.init(global.alloc);
+    const root = try Root.create(global.alloc);
+    defer root.element.destroy();
 
     var app = try App.create(global.alloc, .{
         .root = &root.element,
     });
     defer app.destroy();
-
-    try root.setup();
 
     app.run() catch |err| {
         log.err("App exit with an err: {}", .{err});

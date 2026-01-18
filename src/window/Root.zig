@@ -3,9 +3,10 @@ pub const Root = @This();
 const Element = @import("Element.zig");
 const Timer = @import("mod.zig").Timer;
 const Animation = @import("mod.zig").Animation;
-const Box = @import("Box.zig");
 const std = @import("std");
 const vaxis = @import("vaxis");
+
+const Allocator = std.mem.Allocator;
 
 const Buffer = @import("../Buffer.zig");
 
@@ -25,54 +26,56 @@ red_timer: Timer = undefined,
 green_timer: Timer = undefined,
 blue_timer: Timer = undefined,
 
-box: Box = undefined,
-
-pub fn init(alloc: std.mem.Allocator) Root {
-    return .{
-        .element = Element.init(alloc),
-        .box = Box.init(alloc),
+pub fn create(alloc: std.mem.Allocator) !*Root {
+    const self = try alloc.create(Root);
+    self.* = .{
+        .element = try Element.init(alloc, .{
+            .userdata = self,
+            .setupFn = setup,
+            .updateFn = update,
+            .drawFn = draw,
+            .destroyFn = destroy,
+        }),
     };
+    return self;
 }
 
-pub fn setup(self: *Root) !void {
-    self.element.userdata = self;
-    self.element.updateFn = update;
-    self.element.drawFn = draw;
+fn destroy(userdata: ?*anyopaque, alloc: std.mem.Allocator) void {
+    const self: *Root = @ptrCast(@alignCast(userdata orelse return));
+    alloc.destroy(self);
+}
+
+fn setup(userdata: ?*anyopaque, ctx: Element.Context) void {
+    const self: *Root = @ptrCast(@alignCast(userdata orelse return));
 
     self.red_timer = .{
-        .interval_us = 10_000,
+        .interval_us = 16_000,
         .callback = tickRed,
         .userdata = self,
     };
     self.green_timer = .{
-        .interval_us = 15_000,
+        .interval_us = 24_000,
         .callback = tickGreen,
         .userdata = self,
     };
     self.blue_timer = .{
-        .interval_us = 20_000,
+        .interval_us = 32_000,
         .callback = tickBlue,
         .userdata = self,
     };
 
-    try self.element.startTimer(&self.red_timer);
-    try self.element.startTimer(&self.green_timer);
-    try self.element.startTimer(&self.blue_timer);
-
-    _ = try self.element.addChild(&self.box.element);
-    self.box.element.context = self.element.context;
-    try self.box.setup();
+    Element.startTimer(ctx, &self.red_timer) catch {};
+    Element.startTimer(ctx, &self.green_timer) catch {};
+    Element.startTimer(ctx, &self.blue_timer) catch {};
 }
 
-pub fn draw(self: ?*anyopaque, buffer: *Buffer) void {
-    if (self == null) return;
-    const root: *Root = @ptrCast(@alignCast(self));
-
-    buffer.fill(.{ .style = .{ .bg = root.bg } });
+fn draw(userdata: ?*anyopaque, buffer: *Buffer) void {
+    const self: *Root = @ptrCast(@alignCast(userdata orelse return));
+    buffer.fill(.{ .style = .{ .bg = self.bg } });
 }
 
-pub fn update(self: ?*anyopaque, time: std.time.Instant) void {
-    if (self == null) return;
+fn update(userdata: ?*anyopaque, time: std.time.Instant) void {
+    _ = userdata;
     _ = time;
 }
 
@@ -89,26 +92,26 @@ fn updateChannel(value: *u8, dir: *Direction) void {
     }
 }
 
-fn tickRed(userdata: ?*anyopaque) void {
-    const root: *Root = @ptrCast(@alignCast(userdata orelse return));
+fn tickRed(userdata: ?*anyopaque, ctx: Element.Context) void {
+    const self: *Root = @ptrCast(@alignCast(userdata orelse return));
 
-    updateChannel(&root.red, &root.red_dir);
-    root.bg = .{ .rgba = .{ root.red, root.green, root.blue, 255 } };
-    root.element.requestDraw() catch {};
+    updateChannel(&self.red, &self.red_dir);
+    self.bg = .{ .rgba = .{ self.red, self.green, self.blue, 255 } };
+    Element.requestDraw(ctx) catch {};
 }
 
-fn tickGreen(userdata: ?*anyopaque) void {
-    const root: *Root = @ptrCast(@alignCast(userdata orelse return));
+fn tickGreen(userdata: ?*anyopaque, ctx: Element.Context) void {
+    const self: *Root = @ptrCast(@alignCast(userdata orelse return));
 
-    updateChannel(&root.green, &root.green_dir);
-    root.bg = .{ .rgba = .{ root.red, root.green, root.blue, 255 } };
-    root.element.requestDraw() catch {};
+    updateChannel(&self.green, &self.green_dir);
+    self.bg = .{ .rgba = .{ self.red, self.green, self.blue, 255 } };
+    Element.requestDraw(ctx) catch {};
 }
 
-fn tickBlue(userdata: ?*anyopaque) void {
-    const root: *Root = @ptrCast(@alignCast(userdata orelse return));
+fn tickBlue(userdata: ?*anyopaque, ctx: Element.Context) void {
+    const self: *Root = @ptrCast(@alignCast(userdata orelse return));
 
-    updateChannel(&root.blue, &root.blue_dir);
-    root.bg = .{ .rgba = .{ root.red, root.green, root.blue, 255 } };
-    root.element.requestDraw() catch {};
+    updateChannel(&self.blue, &self.blue_dir);
+    self.bg = .{ .rgba = .{ self.red, self.green, self.blue, 255 } };
+    Element.requestDraw(ctx) catch {};
 }
