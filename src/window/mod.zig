@@ -18,6 +18,7 @@ pub const BaseAnimation = AnimationMod.BaseAnimation;
 pub const Easing = @import("Easing.zig").Type;
 
 pub const TickCallback = *const fn (userdata: ?*anyopaque, time: i64) ?Tick;
+const Root = @import("Root.zig");
 
 pub const Tick = struct {
     next: i64,
@@ -52,7 +53,6 @@ pub const Opts = struct {
     window_mailbox: *WindowMailbox,
     window_wakeup: xev.Async,
     reschedule_tick: xev.Async,
-    root: *Element,
 };
 
 alloc: Allocator,
@@ -68,7 +68,7 @@ timers: std.AutoHashMap(u64, *Timer),
 animations: std.AutoHashMap(u64, *BaseAnimation),
 next_id: u64 = 1,
 
-root: *Element,
+root: *Root,
 
 window_mailbox: *WindowMailbox,
 window_wakeup: xev.Async,
@@ -91,8 +91,11 @@ pub fn init(alloc: Allocator, opts: Opts) !Window {
     var animations = std.AutoHashMap(u64, *BaseAnimation).init(alloc);
     errdefer animations.deinit();
 
+    const root = try Root.create(alloc, "root");
+    errdefer root.destroy(alloc);
+
     return .{
-        .root = opts.root,
+        .root = root,
         .ticks = ticks,
         .timers = timers,
         .animations = animations,
@@ -114,7 +117,7 @@ pub fn init(alloc: Allocator, opts: Opts) !Window {
 }
 
 pub fn deinit(self: *Window) void {
-    self.root.remove();
+    self.root.destroy(self.alloc);
     self.buffer.deinit(self.alloc);
     self.ticks.deinit();
     self.timers.deinit();
@@ -125,7 +128,7 @@ pub fn draw(self: *Window) !void {
     if (!self.needs_draw) return;
     self.needs_draw = false;
 
-    var root = self.root;
+    var root = self.root.element;
 
     const ctx: Element.Context = .{
         .mailbox = self.window_mailbox,

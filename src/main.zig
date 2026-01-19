@@ -5,8 +5,6 @@ const vaxis = @import("vaxis");
 const Cell = vaxis.Cell;
 
 const App = @import("App.zig");
-const Root = @import("window/Root.zig");
-const Box = @import("window/Box.zig");
 
 const log = std.log.scoped(.main);
 
@@ -16,22 +14,7 @@ pub fn main() !void {
     try global.init();
     defer global.deinit();
 
-    const root = try Root.create(global.alloc, "root");
-    defer root.destroy(global.alloc);
-
-    const box = try Box.create(global.alloc, .{
-        .id = "box",
-        .height = 20,
-        .width = 20,
-    });
-
-    defer box.destroy(global.alloc);
-
-    try root.element.addChild(&box.element);
-
-    var app = try App.create(global.alloc, .{
-        .root = &root.element,
-    });
+    var app = try App.create(global.alloc);
     defer app.destroy();
 
     app.run() catch |err| {
