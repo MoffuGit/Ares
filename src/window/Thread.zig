@@ -10,7 +10,7 @@ const Allocator = std.mem.Allocator;
 const Window = @import("mod.zig");
 const Tick = Window.Tick;
 const Timer = Window.Timer;
-const Animation = Window.Animation;
+const BaseAnimation = Window.BaseAnimation;
 
 pub const Message = union(enum) {
     resize: vaxis.Winsize,
@@ -19,7 +19,7 @@ pub const Message = union(enum) {
     timer_pause: u64,
     timer_resume: u64,
     timer_cancel: u64,
-    animation_start: *Animation,
+    animation_start: *BaseAnimation,
     animation_pause: u64,
     animation_resume: u64,
     animation_cancel: u64,

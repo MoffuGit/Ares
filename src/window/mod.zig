@@ -12,7 +12,9 @@ const RendererMailbox = @import("../renderer/Thread.zig").Mailbox;
 const WindowMailbox = @import("Thread.zig").Mailbox;
 
 pub const Timer = @import("Timer.zig");
-pub const Animation = @import("Animation.zig");
+const AnimationMod = @import("Animation.zig");
+pub const Animation = AnimationMod.Animation;
+pub const BaseAnimation = AnimationMod.BaseAnimation;
 pub const Easing = @import("Easing.zig").Type;
 
 pub const TickCallback = *const fn (userdata: ?*anyopaque, time: i64) ?Tick;
@@ -63,7 +65,7 @@ buffer: Buffer,
 
 ticks: Ticks,
 timers: std.AutoHashMap(u64, *Timer),
-animations: std.AutoHashMap(u64, *Animation),
+animations: std.AutoHashMap(u64, *BaseAnimation),
 next_id: u64 = 1,
 
 root: *Element,
@@ -86,7 +88,7 @@ pub fn init(alloc: Allocator, opts: Opts) !Window {
     var timers = std.AutoHashMap(u64, *Timer).init(alloc);
     errdefer timers.deinit();
 
-    var animations = std.AutoHashMap(u64, *Animation).init(alloc);
+    var animations = std.AutoHashMap(u64, *BaseAnimation).init(alloc);
     errdefer animations.deinit();
 
     return .{
@@ -186,7 +188,7 @@ pub fn unregisterTimer(self: *Window, id: u64) void {
     _ = self.timers.remove(id);
 }
 
-pub fn registerAnimation(self: *Window, animation: *Animation) !void {
+pub fn registerAnimation(self: *Window, animation: *BaseAnimation) !void {
     animation.id = self.next_id;
     self.next_id += 1;
     try self.animations.put(animation.id, animation);
@@ -228,11 +230,11 @@ pub fn cancelTimer(self: *Window, id: u64) void {
     }
 }
 
-pub fn startAnimation(self: *Window, animation: *Animation) !void {
+pub fn startAnimation(self: *Window, animation: *BaseAnimation) !void {
     if (animation.id == 0) {
         try self.registerAnimation(animation);
     }
-    animation.state = .active;
+    animation.anim_state = .active;
     animation.start_time = std.time.microTimestamp();
     animation.elapsed_at_pause = 0;
     try self.addTick(animation.toTick());
@@ -240,18 +242,18 @@ pub fn startAnimation(self: *Window, animation: *Animation) !void {
 
 pub fn pauseAnimation(self: *Window, id: u64) void {
     if (self.animations.get(id)) |animation| {
-        if (animation.state == .active) {
-            animation.state = .paused;
+        if (animation.anim_state == .active) {
+            animation.anim_state = .paused;
         }
     }
 }
 
 pub fn resumeAnimation(self: *Window, id: u64) !void {
     if (self.animations.get(id)) |animation| {
-        if (animation.state == .paused) {
+        if (animation.anim_state == .paused) {
             const now = std.time.microTimestamp();
             animation.start_time = now - animation.elapsed_at_pause;
-            animation.state = .active;
+            animation.anim_state = .active;
             try self.addTick(animation.toTick());
         }
     }
@@ -259,7 +261,7 @@ pub fn resumeAnimation(self: *Window, id: u64) !void {
 
 pub fn cancelAnimation(self: *Window, id: u64) void {
     if (self.animations.get(id)) |animation| {
-        animation.state = .cancelled;
+        animation.anim_state = .cancelled;
         self.unregisterAnimation(id);
     }
 }

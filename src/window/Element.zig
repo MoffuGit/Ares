@@ -7,6 +7,7 @@ const Window = @import("mod.zig");
 pub const Tick = Window.Tick;
 pub const Timer = Window.Timer;
 pub const Animation = Window.Animation;
+pub const BaseAnimation = Window.BaseAnimation;
 pub const TimerContext = Window.TimerContext;
 const Buffer = @import("../Buffer.zig");
 const Mailbox = @import("Thread.zig").Mailbox;
@@ -126,7 +127,7 @@ pub fn startTimer(ctx: Context, timer: *Timer) !void {
     try ctx.wakeup.notify();
 }
 
-pub fn startAnimation(ctx: Context, animation: *Animation) !void {
+pub fn startAnimation(ctx: Context, animation: *BaseAnimation) !void {
     animation.context = .{ .mailbox = ctx.mailbox, .wakeup = ctx.wakeup, .needs_draw = ctx.needs_draw };
     _ = ctx.mailbox.push(.{ .animation_start = animation }, .instant);
     try ctx.wakeup.notify();

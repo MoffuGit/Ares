@@ -3,33 +3,29 @@ pub const Box = @This();
 const std = @import("std");
 const vaxis = @import("vaxis");
 const Element = @import("Element.zig");
-const Animation = @import("mod.zig").Animation;
+const Animation = Element.Animation;
 const Buffer = @import("../Buffer.zig");
+
+const Options = struct {
+    x: u16 = 0,
+    y: u16 = 0,
+    width: u16 = 0,
+    height: u16 = 0,
+};
 
 element: Element,
 
-start_x: f32 = 0,
-end_x: f32 = 40,
-current_x: f32 = 0,
-
-start_y: f32 = 0,
-end_y: f32 = 10,
-current_y: f32 = 0,
-
-color: vaxis.Color = .{ .rgb = .{ 255, 100, 100 } },
-box_width: u16 = 10,
-box_height: u16 = 5,
-
-move_animation: Animation = undefined,
-
-pub fn create(alloc: std.mem.Allocator) !*Box {
+pub fn create(alloc: std.mem.Allocator, opts: Options) !*Box {
     const self = try alloc.create(Box);
     self.* = .{
         .element = try Element.init(alloc, .{
             .userdata = self,
-            .setupFn = setup,
             .drawFn = draw,
             .destroyFn = destroy,
+            .height = opts.height,
+            .width = opts.width,
+            .x = opts.x,
+            .y = opts.y,
         }),
     };
     return self;
@@ -40,48 +36,21 @@ fn destroy(userdata: ?*anyopaque, alloc: std.mem.Allocator) void {
     alloc.destroy(self);
 }
 
-fn setup(userdata: ?*anyopaque, ctx: Element.Context) void {
-    const self: *Box = @ptrCast(@alignCast(userdata orelse return));
-
-    self.move_animation = .{
-        .duration_us = 2_000_000,
-        .callback = onMove,
-        .userdata = self,
-        .easing = .ease_out_elastic,
-        .repeat = true,
-    };
-
-    Element.startAnimation(ctx, &self.move_animation) catch {};
-}
-
 fn draw(userdata: ?*anyopaque, buffer: *Buffer) void {
     const self: *Box = @ptrCast(@alignCast(userdata orelse return));
 
-    const x: u16 = @intFromFloat(@max(0, self.current_x));
-    const y: u16 = @intFromFloat(@max(0, self.current_y));
+    const x: u16 = self.element.x;
+    const y: u16 = self.element.y;
 
     var row: u16 = 0;
-    while (row < self.box_height) : (row += 1) {
+    while (row < self.element.height) : (row += 1) {
         var col: u16 = 0;
-        while (col < self.box_width) : (col += 1) {
+        while (col < self.element.width) : (col += 1) {
             const px = x + col;
             const py = y + row;
             if (px < buffer.width and py < buffer.height) {
-                buffer.writeCell(px, py, .{ .style = .{ .bg = self.color } });
+                buffer.writeCell(px, py, .{ .style = .{ .bg = .{ .rgba = .{ 255, 0, 0, 255 } } } });
             }
         }
     }
-}
-
-fn onMove(userdata: ?*anyopaque, progress: f32, ctx: Element.Context) void {
-    const self: *Box = @ptrCast(@alignCast(userdata orelse return));
-
-    self.current_x = lerp(self.start_x, self.end_x, progress);
-    self.current_y = lerp(self.start_y, self.end_y, progress);
-
-    Element.requestDraw(ctx) catch {};
-}
-
-fn lerp(a: f32, b: f32, t: f32) f32 {
-    return a + (b - a) * t;
 }
