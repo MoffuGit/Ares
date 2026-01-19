@@ -96,7 +96,7 @@ pub fn threadMain(self: *Thread) void {
     };
 }
 
-fn threadMain_(self: *Thread) !void {
+pub fn threadMain_(self: *Thread) !void {
     defer log.debug("window thread exited", .{});
 
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);

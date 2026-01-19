@@ -17,6 +17,8 @@ const log = std.log.scoped(.app);
 
 const Allocator = std.mem.Allocator;
 
+const ReadThread = @import("read/Thread.zig");
+
 const App = @This();
 
 alloc: Allocator,
@@ -31,11 +33,9 @@ renderer_thr: std.Thread,
 
 window: Window,
 window_thread: WindowThread,
-window_thr: std.Thread,
 
-pub const Opts = struct {
-    root: *Element,
-};
+read_thread: ReadThread,
+read_thr: std.Thread,
 
 pub fn create(alloc: Allocator) !*App {
     var self = try alloc.create(App);
@@ -66,6 +66,8 @@ pub fn create(alloc: Allocator) !*App {
     self.tty = tty;
     errdefer tty.deinit();
 
+    const read_thread = ReadThread.init(alloc, &self.tty, window_thread.mailbox, window_thread.wakeup);
+
     self.* = .{
         .alloc = alloc,
         .shared_state = shared_state,
@@ -75,10 +77,11 @@ pub fn create(alloc: Allocator) !*App {
         .tty = tty,
         .window = window,
         .window_thread = window_thread,
-        .window_thr = undefined,
+        .read_thread = read_thread,
+        .read_thr = undefined,
     };
 
-    self.window_thr = try std.Thread.spawn(.{}, WindowThread.threadMain, .{&self.window_thread});
+    self.read_thr = try std.Thread.spawn(.{}, ReadThread.threadMain, .{&self.read_thread});
     self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
 
     return self;
@@ -93,10 +96,8 @@ pub fn destroy(self: *App) void {
     }
 
     {
-        self.window_thread.stop.notify() catch |err| {
-            log.err("error notifying renderer thread to stop, may stall err={}", .{err});
-        };
-        self.window_thr.join();
+        self.read_thread.stop();
+        self.read_thr.join();
     }
 
     self.renderer_thread.deinit();
@@ -107,51 +108,10 @@ pub fn destroy(self: *App) void {
 }
 
 pub fn run(self: *App) !void {
-    var parser: vaxis.Parser = .{};
-
-    var buf: [1024]u8 = undefined;
-    var read_start: usize = 0;
-
-    var cache: vaxis.GraphemeCache = .{};
-
     const winsize = try vaxis.Tty.getWinsize(self.tty.fd);
 
     _ = self.window_thread.mailbox.push(.{ .resize = winsize }, .instant);
     try self.window_thread.wakeup.notify();
 
-    while (true) {
-        const n = self.tty.read(buf[read_start..]) catch |err| {
-            if (err == error.WouldBlock) continue else return err;
-        };
-        var seq_start: usize = 0;
-        while (seq_start < n) {
-            const result = try parser.parse(buf[seq_start..n], self.alloc);
-            if (result.n == 0) {
-                // copy the read to the beginning. We don't use memcpy because
-                // this could be overlapping, and it's also rare
-                const initial_start = seq_start;
-                while (seq_start < n) : (seq_start += 1) {
-                    buf[seq_start - initial_start] = buf[seq_start];
-                }
-                read_start = seq_start - initial_start + 1;
-                continue;
-            }
-            read_start = 0;
-            seq_start += result.n;
-
-            const event = result.event orelse continue;
-            try self.eventCallback(&cache, event);
-        }
-    }
-}
-
-fn eventCallback(self: *App, cache: *vaxis.GraphemeCache, event: vaxis.Event) !void {
-    _ = cache;
-    switch (event) {
-        .winsize => |size| {
-            _ = self.window_thread.mailbox.push(.{ .resize = size }, .instant);
-            try self.window_thread.wakeup.notify();
-        },
-        else => {},
-    }
+    self.window_thread.threadMain();
 }

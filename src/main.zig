@@ -4,17 +4,21 @@ const datastruct = @import("datastruct/mod.zig");
 const vaxis = @import("vaxis");
 const Cell = vaxis.Cell;
 
+const GPA = std.heap.GeneralPurposeAllocator(.{});
+
 const App = @import("App.zig");
 
 const log = std.log.scoped(.main);
 
-const global = &@import("global.zig").state;
-
 pub fn main() !void {
-    try global.init();
-    defer global.deinit();
+    var gpa: GPA = .{};
+    defer if (gpa.deinit() == .leak) {
+        std.log.info("We have leaks 🔥", .{});
+    };
 
-    var app = try App.create(global.alloc);
+    const alloc = gpa.allocator();
+
+    var app = try App.create(alloc);
     defer app.destroy();
 
     app.run() catch |err| {
