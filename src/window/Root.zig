@@ -30,7 +30,6 @@ pub fn create(alloc: std.mem.Allocator) !*Root {
     const self = try alloc.create(Root);
     self.* = .{
         .element = try Element.init(alloc, .{
-            .userdata = self,
             .setupFn = setup,
             .updateFn = update,
             .drawFn = draw,
@@ -40,13 +39,13 @@ pub fn create(alloc: std.mem.Allocator) !*Root {
     return self;
 }
 
-fn destroy(userdata: ?*anyopaque, alloc: std.mem.Allocator) void {
-    const self: *Root = @ptrCast(@alignCast(userdata orelse return));
+fn destroy(element: *Element, alloc: std.mem.Allocator) void {
+    const self: *Root = @fieldParentPtr("element", element);
     alloc.destroy(self);
 }
 
-fn setup(userdata: ?*anyopaque, ctx: Element.Context) void {
-    const self: *Root = @ptrCast(@alignCast(userdata orelse return));
+fn setup(element: *Element, ctx: Element.Context) void {
+    const self: *Root = @fieldParentPtr("element", element);
 
     self.red_timer = .{
         .interval_us = 16_000,
@@ -69,13 +68,13 @@ fn setup(userdata: ?*anyopaque, ctx: Element.Context) void {
     Element.startTimer(ctx, &self.blue_timer) catch {};
 }
 
-fn draw(userdata: ?*anyopaque, buffer: *Buffer) void {
-    const self: *Root = @ptrCast(@alignCast(userdata orelse return));
+fn draw(element: *Element, buffer: *Buffer) void {
+    const self: *Root = @fieldParentPtr("element", element);
     buffer.fill(.{ .style = .{ .bg = self.bg } });
 }
 
-fn update(userdata: ?*anyopaque, time: std.time.Instant) void {
-    _ = userdata;
+fn update(element: *Element, time: std.time.Instant) void {
+    _ = element;
     _ = time;
 }
 

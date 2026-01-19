@@ -36,15 +36,15 @@ width: u16 = 0,
 height: u16 = 0,
 
 userdata: ?*anyopaque = null,
-setupFn: ?*const fn (userdata: ?*anyopaque, ctx: Context) void = null,
-updateFn: ?*const fn (userdata: ?*anyopaque, time: std.time.Instant) void = null,
-drawFn: ?*const fn (userdata: ?*anyopaque, buffer: *Buffer) void = null,
-destroyFn: ?*const fn (userdata: ?*anyopaque, alloc: std.mem.Allocator) void = null,
+setupFn: ?*const fn (element: *Element, ctx: Context) void = null,
+updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
+drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
+destroyFn: ?*const fn (element: *Element, alloc: std.mem.Allocator) void = null,
 //MouseHandler, KeyHanlder...
 
 pub fn setup(self: *Element, ctx: Context) void {
     if (self.setupFn) |callback| {
-        callback(self.userdata, ctx);
+        callback(self, ctx);
     }
 
     if (self.childrens) |*children| {
@@ -61,7 +61,7 @@ pub fn draw(self: *Element, buffer: *Buffer) void {
         localBuffer.clear();
 
         if (self.drawFn) |callback| {
-            callback(self.userdata, localBuffer);
+            callback(self, localBuffer);
         }
 
         if (self.childrens) |*children| {
@@ -74,7 +74,7 @@ pub fn draw(self: *Element, buffer: *Buffer) void {
         self.blitToBuffer(buffer, localBuffer);
     } else {
         if (self.drawFn) |callback| {
-            callback(self.userdata, buffer);
+            callback(self, buffer);
         }
 
         if (self.childrens) |*children| {
@@ -106,7 +106,7 @@ fn zIndexLessThanValue(_: void, a: *Element, b: *Element) bool {
 
 pub fn update(self: *Element) !void {
     if (self.updateFn) |callback| {
-        callback(self.userdata, try std.time.Instant.now());
+        callback(self, try std.time.Instant.now());
     }
 
     if (self.childrens) |*childrens| {
@@ -150,10 +150,10 @@ pub const Opts = struct {
     height: u16 = 0,
     ownBuffer: bool = false,
     userdata: ?*anyopaque = null,
-    setupFn: ?*const fn (userdata: ?*anyopaque, ctx: Context) void = null,
-    updateFn: ?*const fn (userdata: ?*anyopaque, time: std.time.Instant) void = null,
-    drawFn: ?*const fn (userdata: ?*anyopaque, buffer: *Buffer) void = null,
-    destroyFn: ?*const fn (userdata: ?*anyopaque, alloc: std.mem.Allocator) void = null,
+    setupFn: ?*const fn (element: *Element, ctx: Context) void = null,
+    updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
+    drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
+    destroyFn: ?*const fn (element: *Element, alloc: std.mem.Allocator) void = null,
 };
 
 pub fn init(alloc: std.mem.Allocator, opts: Opts) !Element {
@@ -198,7 +198,7 @@ pub fn deinit(self: *Element) void {
 pub fn destroy(self: *Element) void {
     self.deinit();
     if (self.destroyFn) |destroyFn| {
-        destroyFn(self.userdata, self.alloc);
+        destroyFn(self, self.alloc);
     }
 }
 
