@@ -36,23 +36,10 @@ width: u16 = 0,
 height: u16 = 0,
 
 userdata: ?*anyopaque = null,
-setupFn: ?*const fn (element: *Element, ctx: Context) void = null,
-updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
+updateFn: ?*const fn (element: *Element, ctx: Element.Context, time: std.time.Instant) void = null,
 drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
 removeFn: ?*const fn (element: *Element) void = null,
 //MouseHandler, KeyHanlder...
-
-pub fn setup(self: *Element, ctx: Context) void {
-    if (self.setupFn) |callback| {
-        callback(self, ctx);
-    }
-
-    if (self.childrens) |*children| {
-        for (children.items) |child| {
-            child.setup(ctx);
-        }
-    }
-}
 
 pub fn draw(self: *Element, buffer: *Buffer) void {
     if (!self.visible) return;
@@ -104,14 +91,14 @@ fn zIndexLessThanValue(_: void, a: *Element, b: *Element) bool {
     return a.zIndex < b.zIndex;
 }
 
-pub fn update(self: *Element) !void {
+pub fn update(self: *Element, ctx: Context) !void {
     if (self.updateFn) |callback| {
-        callback(self, try std.time.Instant.now());
+        callback(self, ctx, try std.time.Instant.now());
     }
 
     if (self.childrens) |*childrens| {
         for (childrens.items) |child| {
-            try child.update();
+            try child.update(ctx);
         }
     }
 }
@@ -150,8 +137,7 @@ pub const Opts = struct {
     height: u16 = 0,
     ownBuffer: bool = false,
     userdata: ?*anyopaque = null,
-    setupFn: ?*const fn (element: *Element, ctx: Context) void = null,
-    updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
+    updateFn: ?*const fn (element: *Element, ctx: Context, time: std.time.Instant) void = null,
     drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
     removeFn: ?*const fn (element: *Element) void = null,
 };
@@ -174,7 +160,6 @@ pub fn init(alloc: std.mem.Allocator, opts: Opts) !Element {
         .height = opts.height,
         .buffer = buffer,
         .userdata = opts.userdata,
-        .setupFn = opts.setupFn,
         .updateFn = opts.updateFn,
         .drawFn = opts.drawFn,
         .removeFn = opts.removeFn,

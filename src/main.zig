@@ -17,13 +17,15 @@ pub fn main() !void {
     defer global.deinit();
 
     const root = try Root.create(global.alloc, "root");
-    defer root.element.remove();
+    defer root.destroy(global.alloc);
 
     const box = try Box.create(global.alloc, .{
         .id = "box",
         .height = 20,
         .width = 20,
     });
+
+    defer box.destroy(global.alloc);
 
     try root.element.addChild(&box.element);
 

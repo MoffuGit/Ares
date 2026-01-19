@@ -32,25 +32,11 @@ pub fn create(alloc: std.mem.Allocator, id: []const u8) !*Root {
         .element = try Element.init(alloc, .{
             .id = id,
             .userdata = self,
-            .setupFn = setup,
             .updateFn = update,
             .drawFn = draw,
             .removeFn = remove,
         }),
     };
-    return self;
-}
-
-fn remove(element: *Element) void {
-    const self: *Root = @ptrCast(@alignCast(element.userdata orelse return));
-    self.red_timer.cancel();
-    self.green_timer.cancel();
-    self.blue_timer.cancel();
-    element.alloc.destroy(self);
-}
-
-fn setup(element: *Element, ctx: Element.Context) void {
-    const self: *Root = @ptrCast(@alignCast(element.userdata orelse return));
 
     self.red_timer = .{
         .interval_us = 16_000,
@@ -67,10 +53,21 @@ fn setup(element: *Element, ctx: Element.Context) void {
         .callback = tickBlue,
         .userdata = self,
     };
+    return self;
+}
 
-    Element.startTimer(ctx, &self.red_timer) catch {};
-    Element.startTimer(ctx, &self.green_timer) catch {};
-    Element.startTimer(ctx, &self.blue_timer) catch {};
+pub fn destroy(self: *Root, alloc: Allocator) void {
+    self.element.remove();
+
+    alloc.destroy(self);
+}
+
+fn remove(element: *Element) void {
+    const self: *Root = @ptrCast(@alignCast(element.userdata orelse return));
+
+    self.red_timer.cancel();
+    self.green_timer.cancel();
+    self.blue_timer.cancel();
 }
 
 fn draw(element: *Element, buffer: *Buffer) void {
@@ -78,9 +75,16 @@ fn draw(element: *Element, buffer: *Buffer) void {
     buffer.fill(.{ .style = .{ .bg = self.bg } });
 }
 
-fn update(element: *Element, time: std.time.Instant) void {
-    _ = element;
+fn update(element: *Element, ctx: Element.Context, time: std.time.Instant) void {
     _ = time;
+
+    const self: *Root = @ptrCast(@alignCast(element.userdata orelse return));
+
+    if (self.red_timer.state == .idle) {
+        Element.startTimer(ctx, &self.red_timer) catch {};
+        Element.startTimer(ctx, &self.green_timer) catch {};
+        Element.startTimer(ctx, &self.blue_timer) catch {};
+    }
 }
 
 fn updateChannel(value: *u8, dir: *Direction) void {

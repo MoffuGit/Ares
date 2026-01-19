@@ -6,6 +6,8 @@ const Element = @import("Element.zig");
 const Animation = Element.Animation;
 const Buffer = @import("../Buffer.zig");
 
+const Allocator = std.mem.Allocator;
+
 const Options = struct {
     id: []const u8,
     x: u16 = 0,
@@ -16,14 +18,13 @@ const Options = struct {
 
 element: Element,
 
-pub fn create(alloc: std.mem.Allocator, opts: Options) !*Box {
+pub fn create(alloc: Allocator, opts: Options) !*Box {
     const self = try alloc.create(Box);
     self.* = .{
         .element = try Element.init(alloc, .{
             .id = opts.id,
             .userdata = self,
             .drawFn = draw,
-            .removeFn = remove,
             .height = opts.height,
             .width = opts.width,
             .x = opts.x,
@@ -33,9 +34,10 @@ pub fn create(alloc: std.mem.Allocator, opts: Options) !*Box {
     return self;
 }
 
-fn remove(element: *Element) void {
-    const self: *Box = @ptrCast(@alignCast(element.userdata orelse return));
-    element.alloc.destroy(self);
+pub fn destroy(self: *Box, alloc: Allocator) void {
+    self.element.remove();
+
+    alloc.destroy(self);
 }
 
 fn draw(element: *Element, buffer: *Buffer) void {

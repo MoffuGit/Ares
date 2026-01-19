@@ -113,15 +113,6 @@ pub fn init(alloc: Allocator, opts: Opts) !Window {
     };
 }
 
-pub fn setup(self: *Window) void {
-    const ctx: Element.Context = .{
-        .mailbox = self.window_mailbox,
-        .wakeup = self.window_wakeup,
-        .needs_draw = &self.needs_draw,
-    };
-    self.root.setup(ctx);
-}
-
 pub fn deinit(self: *Window) void {
     self.root.remove();
     self.buffer.deinit(self.alloc);
@@ -136,7 +127,13 @@ pub fn draw(self: *Window) !void {
 
     var root = self.root;
 
-    try root.update();
+    const ctx: Element.Context = .{
+        .mailbox = self.window_mailbox,
+        .wakeup = self.window_wakeup,
+        .needs_draw = &self.needs_draw,
+    };
+
+    try root.update(ctx);
     root.draw(&self.buffer);
 
     const shared_state = self.shared_state;
