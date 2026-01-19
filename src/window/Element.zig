@@ -44,32 +44,21 @@ removeFn: ?*const fn (element: *Element) void = null,
 pub fn draw(self: *Element, buffer: *Buffer) void {
     if (!self.visible) return;
 
-    if (self.buffer) |*localBuffer| {
-        localBuffer.clear();
+    const writeBuffer = if (self.buffer) |*buf| buf else buffer;
 
-        if (self.drawFn) |callback| {
-            callback(self, localBuffer);
-        }
+    if (self.drawFn) |callback| {
+        callback(self, writeBuffer);
+    }
 
-        if (self.childrens) |*children| {
-            std.mem.sort(*Element, children.items, {}, zIndexLessThanValue);
-            for (children.items) |child| {
-                child.draw(localBuffer);
-            }
+    if (self.childrens) |*children| {
+        std.mem.sort(*Element, children.items, {}, zIndexLessThanValue);
+        for (children.items) |child| {
+            child.draw(writeBuffer);
         }
+    }
 
-        self.blitToBuffer(buffer, localBuffer);
-    } else {
-        if (self.drawFn) |callback| {
-            callback(self, buffer);
-        }
-
-        if (self.childrens) |*children| {
-            std.mem.sort(*Element, children.items, {}, zIndexLessThanValue);
-            for (children.items) |child| {
-                child.draw(buffer);
-            }
-        }
+    if (self.buffer) |*buf| {
+        self.blitToBuffer(buf, buffer);
     }
 }
 
