@@ -26,26 +26,31 @@ red_timer: Timer = undefined,
 green_timer: Timer = undefined,
 blue_timer: Timer = undefined,
 
-pub fn create(alloc: std.mem.Allocator) !*Root {
+pub fn create(alloc: std.mem.Allocator, id: []const u8) !*Root {
     const self = try alloc.create(Root);
     self.* = .{
         .element = try Element.init(alloc, .{
+            .id = id,
+            .userdata = self,
             .setupFn = setup,
             .updateFn = update,
             .drawFn = draw,
-            .destroyFn = destroy,
+            .removeFn = remove,
         }),
     };
     return self;
 }
 
-fn destroy(element: *Element, alloc: std.mem.Allocator) void {
-    const self: *Root = @fieldParentPtr("element", element);
-    alloc.destroy(self);
+fn remove(element: *Element) void {
+    const self: *Root = @ptrCast(@alignCast(element.userdata orelse return));
+    self.red_timer.cancel();
+    self.green_timer.cancel();
+    self.blue_timer.cancel();
+    element.alloc.destroy(self);
 }
 
 fn setup(element: *Element, ctx: Element.Context) void {
-    const self: *Root = @fieldParentPtr("element", element);
+    const self: *Root = @ptrCast(@alignCast(element.userdata orelse return));
 
     self.red_timer = .{
         .interval_us = 16_000,
@@ -69,7 +74,7 @@ fn setup(element: *Element, ctx: Element.Context) void {
 }
 
 fn draw(element: *Element, buffer: *Buffer) void {
-    const self: *Root = @fieldParentPtr("element", element);
+    const self: *Root = @ptrCast(@alignCast(element.userdata orelse return));
     buffer.fill(.{ .style = .{ .bg = self.bg } });
 }
 

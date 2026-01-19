@@ -22,10 +22,10 @@ pub const Context = struct {
 };
 
 alloc: std.mem.Allocator,
-id: []const u8 = "",
+id: []const u8,
 visible: bool = true,
 zIndex: usize = 0,
-destroyed: bool = false,
+removed: bool = false,
 opacity: f32 = 1.0,
 childrens: ?Childrens = null,
 parent: ?*Element = null,
@@ -39,7 +39,7 @@ userdata: ?*anyopaque = null,
 setupFn: ?*const fn (element: *Element, ctx: Context) void = null,
 updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
 drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
-destroyFn: ?*const fn (element: *Element, alloc: std.mem.Allocator) void = null,
+removeFn: ?*const fn (element: *Element) void = null,
 //MouseHandler, KeyHanlder...
 
 pub fn setup(self: *Element, ctx: Context) void {
@@ -140,7 +140,7 @@ pub fn requestDraw(ctx: Context) !void {
 }
 
 pub const Opts = struct {
-    id: []const u8 = "",
+    id: []const u8,
     visible: bool = true,
     zIndex: usize = 0,
     opacity: f32 = 1.0,
@@ -153,7 +153,7 @@ pub const Opts = struct {
     setupFn: ?*const fn (element: *Element, ctx: Context) void = null,
     updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
     drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
-    destroyFn: ?*const fn (element: *Element, alloc: std.mem.Allocator) void = null,
+    removeFn: ?*const fn (element: *Element) void = null,
 };
 
 pub fn init(alloc: std.mem.Allocator, opts: Opts) !Element {
@@ -177,28 +177,42 @@ pub fn init(alloc: std.mem.Allocator, opts: Opts) !Element {
         .setupFn = opts.setupFn,
         .updateFn = opts.updateFn,
         .drawFn = opts.drawFn,
-        .destroyFn = opts.destroyFn,
+        .removeFn = opts.removeFn,
     };
 }
 
-pub fn deinit(self: *Element) void {
+pub fn remove(self: *Element) void {
+    if (self.removed) return;
+    self.removed = true;
+
+    if (self.parent) |parent| {
+        if (parent.childrens) |*siblings| {
+            for (siblings.items, 0..) |child, i| {
+                if (std.mem.eql(u8, child.id, self.id)) {
+                    _ = siblings.orderedRemove(i);
+                    break;
+                }
+            }
+        }
+        self.parent = null;
+    }
+
     if (self.childrens) |*children| {
         for (children.items) |child| {
-            child.destroy();
+            child.parent = null;
+            child.remove();
         }
         children.deinit(self.alloc);
         self.childrens = null;
     }
+
     if (self.buffer) |*buf| {
         buf.deinit(self.alloc);
         self.buffer = null;
     }
-}
 
-pub fn destroy(self: *Element) void {
-    self.deinit();
-    if (self.destroyFn) |destroyFn| {
-        destroyFn(self, self.alloc);
+    if (self.removeFn) |removeFn| {
+        removeFn(self);
     }
 }
 
@@ -221,10 +235,9 @@ pub fn addChild(self: *Element, child: *Element) !void {
 
 pub fn removeChild(self: *Element, id: []const u8) void {
     if (self.childrens) |*children| {
-        for (children.items, 0..) |child, i| {
+        for (children.items) |child| {
             if (std.mem.eql(u8, child.id, id)) {
-                const removed = children.orderedRemove(i);
-                removed.destroy();
+                child.remove();
                 return;
             }
         }

@@ -123,6 +123,7 @@ pub fn setup(self: *Window) void {
 }
 
 pub fn deinit(self: *Window) void {
+    self.root.remove();
     self.buffer.deinit(self.alloc);
     self.ticks.deinit();
     self.timers.deinit();
