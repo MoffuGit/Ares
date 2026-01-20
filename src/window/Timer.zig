@@ -1,11 +1,25 @@
 pub const Timer = @This();
 
 const std = @import("std");
-const Tick = @import("mod.zig").Tick;
-const State = @import("mod.zig").State;
-const TimerContext = @import("mod.zig").TimerContext;
+const Loop = @import("../Loop.zig");
+const Tick = Loop.Tick;
+const xev = @import("../global.zig").xev;
 
 const Element = @import("Element.zig");
+
+pub const State = enum {
+    idle,
+    active,
+    paused,
+    cancelled,
+    completed,
+};
+
+pub const Context = struct {
+    mailbox: *Loop.Mailbox,
+    wakeup: xev.Async,
+    needs_draw: *bool,
+};
 
 pub const Callback = *const fn (userdata: ?*anyopaque, ctx: Element.Context) void;
 pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: Element.Context) void;
@@ -21,7 +35,7 @@ callback: Callback,
 userdata: ?*anyopaque = null,
 repeat: Repeat = .forever,
 state: State = .idle,
-context: ?TimerContext = null,
+context: ?Context = null,
 on_complete: ?CompleteCallback = null,
 
 pub fn start(self: *Timer) void {

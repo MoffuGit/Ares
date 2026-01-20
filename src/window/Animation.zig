@@ -1,7 +1,9 @@
 const std = @import("std");
-const Tick = @import("mod.zig").Tick;
-const AnimState = @import("mod.zig").State;
-const TimerContext = @import("mod.zig").TimerContext;
+const Loop = @import("../Loop.zig");
+const Tick = Loop.Tick;
+const Timer = @import("Timer.zig");
+const AnimState = Timer.State;
+const TimerContext = Timer.Context;
 const Easing = @import("Easing.zig").Type;
 const Element = @import("Element.zig");
 

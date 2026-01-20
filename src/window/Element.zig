@@ -3,14 +3,15 @@ pub const Element = @This();
 const std = @import("std");
 const vaxis = @import("vaxis");
 
-const Window = @import("mod.zig");
-pub const Tick = Window.Tick;
-pub const Timer = Window.Timer;
-pub const Animation = Window.Animation;
-pub const BaseAnimation = Window.BaseAnimation;
-pub const TimerContext = Window.TimerContext;
+const Loop = @import("../Loop.zig");
+pub const Tick = Loop.Tick;
+pub const Timer = @import("Timer.zig");
+const AnimationMod = @import("Animation.zig");
+pub const Animation = AnimationMod.Animation;
+pub const BaseAnimation = AnimationMod.BaseAnimation;
+pub const TimerContext = Timer.Context;
 const Buffer = @import("../Buffer.zig");
-const Mailbox = @import("Thread.zig").Mailbox;
+const Mailbox = Loop.Mailbox;
 const xev = @import("../global.zig").xev;
 
 pub const Childrens = std.ArrayListUnmanaged(*Element);

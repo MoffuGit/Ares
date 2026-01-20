@@ -1,8 +1,7 @@
 pub const Root = @This();
 
 const Element = @import("Element.zig");
-const Timer = @import("mod.zig").Timer;
-const Animation = @import("mod.zig").Animation;
+const Timer = @import("Timer.zig");
 const std = @import("std");
 const vaxis = @import("vaxis");
 

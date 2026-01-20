@@ -1,16 +1,28 @@
-pub const Thread = @This();
+pub const Loop = @This();
 
 const std = @import("std");
-const xev = @import("../global.zig").xev;
+const xev = @import("global.zig").xev;
 const vaxis = @import("vaxis");
-const BlockingQueue = @import("../datastruct/blocking_queue.zig").BlockingQueue;
+const BlockingQueue = @import("datastruct/blocking_queue.zig").BlockingQueue;
 
 const Allocator = std.mem.Allocator;
 
-const Window = @import("mod.zig");
-const Tick = Window.Tick;
-const Timer = Window.Timer;
-const BaseAnimation = Window.BaseAnimation;
+const App = @import("App.zig");
+const Timer = @import("window/Timer.zig");
+const AnimationMod = @import("window/Animation.zig");
+const BaseAnimation = AnimationMod.BaseAnimation;
+
+pub const TickCallback = *const fn (userdata: ?*anyopaque, time: i64) ?Tick;
+
+pub const Tick = struct {
+    next: i64,
+    callback: TickCallback,
+    userdata: ?*anyopaque = null,
+
+    pub fn lessThan(_: void, a: Tick, b: Tick) std.math.Order {
+        return std.math.order(a.next, b.next);
+    }
+};
 
 pub const Message = union(enum) {
     resize: vaxis.Winsize,
@@ -27,7 +39,7 @@ pub const Message = union(enum) {
 
 pub const Mailbox = BlockingQueue(Message, 64);
 
-const log = std.log.scoped(.window_thread);
+const log = std.log.scoped(.loop);
 
 alloc: Allocator,
 
@@ -49,9 +61,9 @@ tick_armed: bool = false,
 
 mailbox: *Mailbox,
 
-window: *Window,
+app: *App,
 
-pub fn init(alloc: Allocator, window: *Window) !Thread {
+pub fn init(alloc: Allocator, app: *App) !Loop {
     var loop = try xev.Loop.init(.{});
     errdefer loop.deinit();
 
@@ -72,7 +84,7 @@ pub fn init(alloc: Allocator, window: *Window) !Thread {
 
     return .{
         .alloc = alloc,
-        .window = window,
+        .app = app,
         .tick_h = tick_h,
         .loop = loop,
         .stop = stop_h,
@@ -82,7 +94,7 @@ pub fn init(alloc: Allocator, window: *Window) !Thread {
     };
 }
 
-pub fn deinit(self: *Thread) void {
+pub fn deinit(self: *Loop) void {
     self.stop.deinit();
     self.tick_h.deinit();
     self.wakeup.deinit();
@@ -90,27 +102,27 @@ pub fn deinit(self: *Thread) void {
     self.mailbox.destroy(self.alloc);
 }
 
-pub fn threadMain(self: *Thread) void {
-    self.threadMain_() catch |err| {
-        log.warn("error in window err={}", .{err});
+pub fn run(self: *Loop) void {
+    self.run_() catch |err| {
+        log.warn("error in loop err={}", .{err});
     };
 }
 
-pub fn threadMain_(self: *Thread) !void {
-    defer log.debug("window thread exited", .{});
+pub fn run_(self: *Loop) !void {
+    defer log.debug("loop exited", .{});
 
-    self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
-    self.reschedule_tick.wait(&self.loop, &self.reschedule_tick_c, Thread, self, rescheduleTickCallback);
+    self.wakeup.wait(&self.loop, &self.wakeup_c, Loop, self, wakeupCallback);
+    self.reschedule_tick.wait(&self.loop, &self.reschedule_tick_c, Loop, self, rescheduleTickCallback);
 
     try self.wakeup.notify();
 
-    log.debug("starting window thread", .{});
-    defer log.debug("starting window thread shutdown", .{});
+    log.debug("starting loop", .{});
+    defer log.debug("starting loop shutdown", .{});
     _ = try self.loop.run(.until_done);
 }
 
 fn wakeupCallback(
-    self_: ?*Thread,
+    self_: ?*Loop,
     _: *xev.Loop,
     _: *xev.Completion,
     r: xev.Async.WaitError!void,
@@ -120,21 +132,19 @@ fn wakeupCallback(
         return .rearm;
     };
 
-    const t = self_.?;
+    const l = self_.?;
 
-    // When we wake up, we check the mailbox. Mailbox producers should
-    // wake up our thread after publishing.
-    t.drainMailbox() catch |err|
+    l.drainMailbox() catch |err|
         log.err("error draining mailbox err={}", .{err});
 
-    t.window.draw() catch |err|
+    l.app.draw() catch |err|
         log.err("draw error: {}", .{err});
 
     return .rearm;
 }
 
 fn rescheduleTickCallback(
-    self_: ?*Thread,
+    self_: ?*Loop,
     _: *xev.Loop,
     _: *xev.Completion,
     r: xev.Async.WaitError!void,
@@ -144,14 +154,14 @@ fn rescheduleTickCallback(
         return .rearm;
     };
 
-    const t = self_.?;
-    t.scheduleNextTick();
+    const l = self_.?;
+    l.scheduleNextTick();
 
     return .rearm;
 }
 
-pub fn scheduleNextTick(self: *Thread) void {
-    const next_tick = self.window.ticks.peek() orelse {
+pub fn scheduleNextTick(self: *Loop) void {
+    const next_tick = self.app.ticks.peek() orelse {
         self.tick_armed = false;
         return;
     };
@@ -162,14 +172,14 @@ pub fn scheduleNextTick(self: *Thread) void {
     const clamped_delay = @max(1, delay_ms);
 
     if (self.tick_armed) {
-        self.tick_h.reset(&self.loop, &self.tick_c, &self.tick_cancel_c, clamped_delay, Thread, self, resetCallback);
+        self.tick_h.reset(&self.loop, &self.tick_c, &self.tick_cancel_c, clamped_delay, Loop, self, resetCallback);
     } else {
         self.tick_armed = true;
         self.tick_h.run(
             &self.loop,
             &self.tick_c,
             clamped_delay,
-            Thread,
+            Loop,
             self,
             tickCallback,
         );
@@ -177,83 +187,83 @@ pub fn scheduleNextTick(self: *Thread) void {
 }
 
 fn resetCallback(
-    self_: ?*Thread,
+    self_: ?*Loop,
     _: *xev.Loop,
     _: *xev.Completion,
     r: xev.Timer.RunError!void,
 ) xev.CallbackAction {
-    const t: *Thread = self_ orelse return .disarm;
+    const l: *Loop = self_ orelse return .disarm;
 
     if (r) |_| {
-        t.window.processTicks() catch |err| {
-            log.err("window tick error: {}", .{err});
+        l.app.processTicks() catch |err| {
+            log.err("tick error: {}", .{err});
         };
-        t.tick_armed = false;
-        t.scheduleNextTick();
+        l.tick_armed = false;
+        l.scheduleNextTick();
     } else |_| {}
 
     return .disarm;
 }
 
 fn tickCallback(
-    self_: ?*Thread,
+    self_: ?*Loop,
     _: *xev.Loop,
     _: *xev.Completion,
     r: xev.Timer.RunError!void,
 ) xev.CallbackAction {
     _ = r catch {};
-    const t: *Thread = self_ orelse {
-        log.warn("render callback fired without data set", .{});
+    const l: *Loop = self_ orelse {
+        log.warn("tick callback fired without data set", .{});
         return .disarm;
     };
 
-    t.tick_armed = false;
+    l.tick_armed = false;
 
-    t.window.processTicks() catch |err| {
-        log.err("window tick error: {}", .{err});
+    l.app.processTicks() catch |err| {
+        log.err("tick error: {}", .{err});
     };
 
-    t.scheduleNextTick();
+    l.scheduleNextTick();
 
     return .disarm;
 }
 
-fn drainMailbox(self: *Thread) !void {
+fn drainMailbox(self: *Loop) !void {
     while (self.mailbox.pop()) |message| {
         switch (message) {
             .resize => |size| {
-                try self.window.resize(size);
+                try self.app.resize(size);
             },
             .tick => |tick| {
-                try self.window.addTick(tick);
+                try self.app.addTick(tick);
             },
             .timer_start => |timer| {
-                try self.window.startTimer(timer);
+                try self.app.startTimer(timer);
                 self.scheduleNextTick();
             },
             .timer_pause => |id| {
-                self.window.pauseTimer(id);
+                self.app.pauseTimer(id);
             },
             .timer_resume => |id| {
-                try self.window.resumeTimer(id);
+                try self.app.resumeTimer(id);
                 self.scheduleNextTick();
             },
             .timer_cancel => |id| {
-                self.window.cancelTimer(id);
+                self.app.cancelTimer(id);
             },
             .animation_start => |animation| {
-                try self.window.startAnimation(animation);
+                try self.app.startAnimation(animation);
                 self.scheduleNextTick();
             },
             .animation_pause => |id| {
-                self.window.pauseAnimation(id);
+                self.app.pauseAnimation(id);
             },
             .animation_resume => |id| {
-                try self.window.resumeAnimation(id);
+                try self.app.resumeAnimation(id);
                 self.scheduleNextTick();
             },
             .animation_cancel => |id| {
-                self.window.cancelAnimation(id);
+                self.app.cancelAnimation(id);
             },
         }
     }

@@ -4,19 +4,19 @@ const std = @import("std");
 const vaxis = @import("vaxis");
 const xev = @import("../global.zig").xev;
 
-const WindowThread = @import("../window/Thread.zig");
+const Loop = @import("../Loop.zig");
 
 const Allocator = std.mem.Allocator;
 
-const log = std.log.scoped(.read_thread);
+const log = std.log.scoped(.events_thread);
 
 alloc: Allocator,
 tty: *vaxis.Tty,
-mailbox: *WindowThread.Mailbox,
+mailbox: *Loop.Mailbox,
 wakeup: xev.Async,
 running: std.atomic.Value(bool),
 
-pub fn init(alloc: Allocator, tty: *vaxis.Tty, mailbox: *WindowThread.Mailbox, wakeup: xev.Async) Thread {
+pub fn init(alloc: Allocator, tty: *vaxis.Tty, mailbox: *Loop.Mailbox, wakeup: xev.Async) Thread {
     return .{
         .alloc = alloc,
         .tty = tty,
