@@ -3,7 +3,7 @@ pub const Renderer = @This();
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const vaxis = @import("vaxis");
-const SharedState = @import("../SharedState.zig");
+const Screen = @import("../Screen.zig");
 
 alloc: Allocator,
 
@@ -13,9 +13,9 @@ render: bool,
 
 tty: *vaxis.Tty,
 
-shared_state: *SharedState,
+screen: *Screen,
 
-pub fn init(alloc: Allocator, tty: *vaxis.Tty, shared_state: *SharedState) !Renderer {
+pub fn init(alloc: Allocator, tty: *vaxis.Tty, screen: *Screen) !Renderer {
     const vx = try vaxis.Vaxis.init(alloc, .{});
 
     return .{
@@ -23,7 +23,7 @@ pub fn init(alloc: Allocator, tty: *vaxis.Tty, shared_state: *SharedState) !Rend
         .tty = tty,
         .alloc = alloc,
         .render = false,
-        .shared_state = shared_state,
+        .screen = screen,
         .size = .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 },
     };
 }
@@ -54,29 +54,30 @@ pub fn threadExit(self: *Renderer) void {
 }
 
 pub fn renderFrame(self: *Renderer, sync: bool) !void {
-    const shared_state = self.shared_state;
+    const screen = self.screen;
 
-    const has_new_frame = shared_state.swapRead();
+    const has_new_frame = screen.swapRead();
 
     if (!has_new_frame and !sync and !self.render) return;
     defer self.render = false;
 
-    const read_screen = shared_state.readBuffer();
+    const read_buffer = screen.readBuffer();
 
-    const size_change = self.size.cols != read_screen.width or self.size.rows != read_screen.height;
+    const size_change = self.size.cols != read_buffer.width or self.size.rows != read_buffer.height;
 
     if (size_change) {
         const size: vaxis.Winsize = .{
-            .cols = read_screen.width,
-            .rows = read_screen.height,
-            .x_pixel = read_screen.width_pix,
-            .y_pixel = read_screen.height_pix,
+            .cols = read_buffer.width,
+            .rows = read_buffer.height,
+            .x_pixel = screen.width_pix,
+            .y_pixel = screen.height_pix,
         };
 
         try self.resize(size);
 
-        read_screen.width_method = self.vx.caps.unicode;
+        screen.width_method = self.vx.caps.unicode;
     }
 
-    try self.vx.render(read_screen, self.tty.writer());
+    var vaxis_screen = screen.toVaxisScreen();
+    try self.vx.render(&vaxis_screen, self.tty.writer());
 }

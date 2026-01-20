@@ -4,7 +4,7 @@ const std = @import("std");
 const vaxis = @import("vaxis");
 const xev = @import("../global.zig").xev;
 const Allocator = std.mem.Allocator;
-const SharedState = @import("../SharedState.zig");
+const Screen = @import("../Screen.zig");
 const Buffer = @import("../Buffer.zig");
 const Element = @import("Element.zig");
 
@@ -49,7 +49,7 @@ pub const TimerContext = struct {
 pub const Opts = struct {
     render_wakeup: xev.Async,
     render_mailbox: *RendererMailbox,
-    shared_state: *SharedState,
+    screen: *Screen,
     window_mailbox: *WindowMailbox,
     window_wakeup: xev.Async,
     reschedule_tick: xev.Async,
@@ -60,7 +60,7 @@ alloc: Allocator,
 render_wakeup: xev.Async,
 render_mailbox: *RendererMailbox,
 
-shared_state: *SharedState,
+screen: *Screen,
 buffer: Buffer,
 
 ticks: Ticks,
@@ -103,7 +103,7 @@ pub fn init(alloc: Allocator, opts: Opts) !Window {
         .buffer = buffer,
         .render_wakeup = opts.render_wakeup,
         .render_mailbox = opts.render_mailbox,
-        .shared_state = opts.shared_state,
+        .screen = opts.screen,
         .window_mailbox = opts.window_mailbox,
         .window_wakeup = opts.window_wakeup,
         .reschedule_tick = opts.reschedule_tick,
@@ -139,15 +139,15 @@ pub fn draw(self: *Window) !void {
     try root.update(ctx);
     root.draw(&self.buffer);
 
-    const shared_state = self.shared_state;
-    const write_screen = shared_state.writeBuffer();
+    const screen = self.screen;
+    const write_buffer = screen.writeBuffer();
 
-    if (write_screen.width != self.buffer.width or write_screen.height != self.buffer.height) {
-        try shared_state.resizeWriteBuffer(self.alloc, self.size);
+    if (write_buffer.width != self.buffer.width or write_buffer.height != self.buffer.height) {
+        try screen.resizeWriteBuffer(self.alloc, self.size);
     }
 
-    @memcpy(write_screen.buf, self.buffer.buf);
-    shared_state.swapWrite();
+    @memcpy(write_buffer.buf, self.buffer.buf);
+    screen.swapWrite();
 
     try self.render_wakeup.notify();
 }

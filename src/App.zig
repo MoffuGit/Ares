@@ -3,7 +3,7 @@ const vaxis = @import("vaxis");
 const builtin = @import("builtin");
 const posix = std.posix;
 
-const SharedState = @import("SharedState.zig");
+const Screen = @import("Screen.zig");
 
 const RendererThread = @import("renderer/Thread.zig");
 const Renderer = @import("renderer/mod.zig");
@@ -23,7 +23,7 @@ const App = @This();
 
 alloc: Allocator,
 
-shared_state: SharedState,
+screen: Screen,
 tty: vaxis.Tty,
 buffer: [1024]u8 = undefined,
 
@@ -40,10 +40,10 @@ read_thr: std.Thread,
 pub fn create(alloc: Allocator) !*App {
     var self = try alloc.create(App);
 
-    var shared_state = try SharedState.init(alloc, .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 });
-    errdefer shared_state.deinit(alloc);
+    var screen = try Screen.init(alloc, .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 });
+    errdefer screen.deinit(alloc);
 
-    var renderer = try Renderer.init(alloc, &self.tty, &self.shared_state);
+    var renderer = try Renderer.init(alloc, &self.tty, &self.screen);
     errdefer renderer.deinit();
 
     var renderer_thread = try RendererThread.init(alloc, &self.renderer);
@@ -55,7 +55,7 @@ pub fn create(alloc: Allocator) !*App {
     var window = try Window.init(alloc, .{
         .render_wakeup = renderer_thread.wakeup,
         .render_mailbox = renderer_thread.mailbox,
-        .shared_state = &self.shared_state,
+        .screen = &self.screen,
         .window_mailbox = window_thread.mailbox,
         .window_wakeup = window_thread.wakeup,
         .reschedule_tick = window_thread.reschedule_tick,
@@ -70,7 +70,7 @@ pub fn create(alloc: Allocator) !*App {
 
     self.* = .{
         .alloc = alloc,
-        .shared_state = shared_state,
+        .screen = screen,
         .renderer = renderer,
         .renderer_thread = renderer_thread,
         .renderer_thr = undefined,
