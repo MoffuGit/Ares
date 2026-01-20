@@ -11,6 +11,7 @@ const App = @import("App.zig");
 const Timer = @import("element/Timer.zig");
 const AnimationMod = @import("element/Animation.zig");
 const BaseAnimation = AnimationMod.BaseAnimation;
+const TimeManager = @import("TimeManager.zig");
 
 pub const TickCallback = *const fn (userdata: ?*anyopaque, time: i64) ?Tick;
 
@@ -161,7 +162,7 @@ fn rescheduleTickCallback(
 }
 
 pub fn scheduleNextTick(self: *Loop) void {
-    const next_tick = self.app.ticks.peek() orelse {
+    const next_tick = self.app.time.peekNext() orelse {
         self.tick_armed = false;
         return;
     };
@@ -195,7 +196,8 @@ fn resetCallback(
     const l: *Loop = self_ orelse return .disarm;
 
     if (r) |_| {
-        l.app.processTicks() catch |err| {
+        const now = std.time.microTimestamp();
+        l.app.time.processDue(now) catch |err| {
             log.err("tick error: {}", .{err});
         };
         l.tick_armed = false;
@@ -219,7 +221,8 @@ fn tickCallback(
 
     l.tick_armed = false;
 
-    l.app.processTicks() catch |err| {
+    const now = std.time.microTimestamp();
+    l.app.time.processDue(now) catch |err| {
         log.err("tick error: {}", .{err});
     };
 
@@ -229,42 +232,54 @@ fn tickCallback(
 }
 
 fn drainMailbox(self: *Loop) !void {
+    var needs_reschedule = false;
+
     while (self.mailbox.pop()) |message| {
         switch (message) {
             .resize => |size| {
                 try self.app.resize(size);
             },
             .tick => |tick| {
-                try self.app.addTick(tick);
+                if (try self.app.time.addTick(tick)) {
+                    needs_reschedule = true;
+                }
             },
             .timer_start => |timer| {
-                try self.app.startTimer(timer);
-                self.scheduleNextTick();
+                if (try self.app.time.startTimer(timer)) {
+                    needs_reschedule = true;
+                }
             },
             .timer_pause => |id| {
-                self.app.pauseTimer(id);
+                self.app.time.pauseTimer(id);
             },
             .timer_resume => |id| {
-                try self.app.resumeTimer(id);
-                self.scheduleNextTick();
+                if (try self.app.time.resumeTimer(id)) {
+                    needs_reschedule = true;
+                }
             },
             .timer_cancel => |id| {
-                self.app.cancelTimer(id);
+                self.app.time.cancelTimer(id);
             },
             .animation_start => |animation| {
-                try self.app.startAnimation(animation);
-                self.scheduleNextTick();
+                if (try self.app.time.startAnimation(animation)) {
+                    needs_reschedule = true;
+                }
             },
             .animation_pause => |id| {
-                self.app.pauseAnimation(id);
+                self.app.time.pauseAnimation(id);
             },
             .animation_resume => |id| {
-                try self.app.resumeAnimation(id);
-                self.scheduleNextTick();
+                if (try self.app.time.resumeAnimation(id)) {
+                    needs_reschedule = true;
+                }
             },
             .animation_cancel => |id| {
-                self.app.cancelAnimation(id);
+                self.app.time.cancelAnimation(id);
             },
         }
+    }
+
+    if (needs_reschedule) {
+        self.scheduleNextTick();
     }
 }
