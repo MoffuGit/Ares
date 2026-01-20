@@ -9,8 +9,18 @@ const Cell = vaxis.Cell;
 const GPA = std.heap.GeneralPurposeAllocator(.{});
 
 const App = @import("App.zig");
+const AppContext = @import("AppContext.zig");
 
 const log = std.log.scoped(.main);
+
+pub fn keyPressFn(ctx: AppContext, key: vaxis.Key) ?vaxis.Key {
+    if (key.matches('c', .{ .ctrl = true })) {
+        ctx.stopApp() catch {};
+        return null;
+    }
+
+    return key;
+}
 
 pub fn main() !void {
     var gpa: GPA = .{};
@@ -20,7 +30,9 @@ pub fn main() !void {
 
     const alloc = gpa.allocator();
 
-    var app = try App.create(alloc);
+    var app = try App.create(alloc, .{
+        .keyPressFn = keyPressFn,
+    });
     defer app.destroy();
 
     const root = app.root();

@@ -44,6 +44,7 @@ pub const Message = union(enum) {
     tick: Tick,
     timer: TimerMessage,
     animation: AnimationMessage,
+    key_press: vaxis.Key,
 };
 
 pub const Mailbox = BlockingQueue(Message, 64);
@@ -122,6 +123,7 @@ pub fn run_(self: *Loop) !void {
 
     self.wakeup.wait(&self.loop, &self.wakeup_c, Loop, self, wakeupCallback);
     self.reschedule_tick.wait(&self.loop, &self.reschedule_tick_c, Loop, self, rescheduleTickCallback);
+    self.stop.wait(&self.loop, &self.stop_c, Loop, self, stopCallback);
 
     try self.wakeup.notify();
 
@@ -262,10 +264,24 @@ fn drainMailbox(self: *Loop) !void {
                     needs_reschedule = true;
                 }
             },
+            .key_press => |key| {
+                try self.app.handleKeyPress(key);
+            },
         }
     }
 
     if (needs_reschedule) {
         self.scheduleNextTick();
     }
+}
+
+fn stopCallback(
+    self_: ?*Loop,
+    _: *xev.Loop,
+    _: *xev.Completion,
+    r: xev.Async.WaitError!void,
+) xev.CallbackAction {
+    _ = r catch unreachable;
+    self_.?.loop.stop();
+    return .disarm;
 }

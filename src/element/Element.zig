@@ -34,6 +34,7 @@ userdata: ?*anyopaque = null,
 updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
 drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
 removeFn: ?*const fn (element: *Element) void = null,
+keyPressFn: ?*const fn (element: *Element, key: vaxis.Key) ?vaxis.Key = null,
 //MouseHandler, KeyHanlder...
 
 pub fn draw(self: *Element, buffer: *Buffer) void {

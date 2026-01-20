@@ -1,7 +1,5 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
-const builtin = @import("builtin");
-const posix = std.posix;
 
 const Screen = @import("Screen.zig");
 
@@ -22,17 +20,16 @@ const log = std.log.scoped(.app);
 
 const Allocator = std.mem.Allocator;
 
-pub const State = enum {
-    idle,
-    active,
-    paused,
-    cancelled,
-    completed,
-};
-
 const App = @This();
 
 var tty_buffer: [1024]u8 = undefined;
+
+const KeyPressFn = *const fn (ctx: AppContext, key: vaxis.Key) ?vaxis.Key;
+
+const Options = struct {
+    userdata: ?*anyopaque = null,
+    keyPressFn: ?KeyPressFn = null,
+};
 
 alloc: Allocator,
 tty: vaxis.Tty,
@@ -50,8 +47,10 @@ loop: Loop,
 time: TimeManager,
 
 scene: Scene,
+keyPressFn: ?KeyPressFn,
+userdata: ?*anyopaque,
 
-pub fn create(alloc: Allocator) !*App {
+pub fn create(alloc: Allocator, opts: Options) !*App {
     var self = try alloc.create(App);
 
     var screen = try Screen.init(alloc, .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 });
@@ -75,10 +74,11 @@ pub fn create(alloc: Allocator) !*App {
     var time = TimeManager.init(alloc);
     errdefer time.deinit();
 
-    var scene = try Scene.init(alloc);
+    var scene = try Scene.init(alloc, &self.screen);
     errdefer scene.deinit();
 
     self.* = .{
+        .keyPressFn = opts.keyPressFn,
         .alloc = alloc,
         .screen = screen,
         .renderer = renderer,
@@ -90,12 +90,15 @@ pub fn create(alloc: Allocator) !*App {
         .events_thr = undefined,
         .time = time,
         .scene = scene,
+        .userdata = opts.userdata,
     };
 
     const app_context: AppContext = .{
         .mailbox = self.loop.mailbox,
         .wakeup = self.loop.wakeup,
         .needs_draw = &self.scene.needs_draw,
+        .stop = self.loop.stop,
+        .userdata = self.userdata,
     };
     self.scene.setContext(app_context);
 
@@ -107,19 +110,20 @@ pub fn create(alloc: Allocator) !*App {
 
 pub fn destroy(self: *App) void {
     {
+        self.events_thread.stop();
+        self.events_thr.join();
+    }
+
+    {
         self.renderer_thread.stop.notify() catch |err| {
             log.err("error notifying renderer thread to stop, may stall err={}", .{err});
         };
         self.renderer_thr.join();
     }
 
-    {
-        self.events_thread.stop();
-        self.events_thr.join();
-    }
-
     self.renderer_thread.deinit();
     self.loop.deinit();
+    self.tty.deinit();
 
     self.scene.deinit();
     self.time.deinit();
@@ -142,18 +146,7 @@ pub fn draw(self: *App) !void {
     if (!self.scene.needsDraw()) return;
     self.scene.markDrawn();
 
-    const screen = &self.screen;
-    const buffer = screen.writeBuffer();
-
-    const size = self.scene.size;
-    if (buffer.width != size.cols or buffer.height != size.rows) {
-        try screen.resizeWriteBuffer(self.alloc, size);
-    }
-
-    try self.scene.update();
-    self.scene.draw(screen.writeBuffer());
-
-    screen.swapWrite();
+    try self.scene.draw();
 
     try self.renderer_thread.wakeup.notify();
 }
@@ -164,4 +157,17 @@ pub fn resize(self: *App, size: vaxis.Winsize) void {
 
 pub fn root(self: *App) *Root {
     return self.scene.root;
+}
+
+pub fn handleKeyPress(self: *App, key: vaxis.Key) !void {
+    const app_context: AppContext = .{
+        .mailbox = self.loop.mailbox,
+        .wakeup = self.loop.wakeup,
+        .needs_draw = &self.scene.needs_draw,
+        .userdata = self.userdata,
+        .stop = self.loop.stop,
+    };
+    if (self.keyPressFn) |callback| {
+        if (callback(app_context, key) == null) return;
+    }
 }

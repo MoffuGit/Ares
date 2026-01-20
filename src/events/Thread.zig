@@ -75,6 +75,10 @@ fn handleEvent(self: *Thread, event: vaxis.Event) !void {
             _ = self.mailbox.push(.{ .resize = size }, .instant);
             try self.wakeup.notify();
         },
+        .key_press => |key| {
+            _ = self.mailbox.push(.{ .key_press = key }, .instant);
+            try self.wakeup.notify();
+        },
         else => {},
     }
 }
