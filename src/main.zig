@@ -1,6 +1,8 @@
 const std = @import("std");
 const datastruct = @import("datastruct/mod.zig");
 
+const Box = @import("element/Box.zig");
+
 const vaxis = @import("vaxis");
 const Cell = vaxis.Cell;
 
@@ -20,6 +22,13 @@ pub fn main() !void {
 
     var app = try App.create(alloc);
     defer app.destroy();
+
+    const root = app.root();
+
+    const box = try Box.create(alloc, .{ .height = 10, .width = 10, .id = "__box__" });
+    defer box.destroy(alloc);
+
+    try root.element.addChild(&box.element);
 
     app.run() catch |err| {
         log.err("App exit with an err: {}", .{err});

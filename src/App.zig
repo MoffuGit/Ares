@@ -9,6 +9,7 @@ const RendererThread = @import("renderer/Thread.zig");
 const Renderer = @import("renderer/mod.zig");
 
 const Loop = @import("Loop.zig");
+const Root = @import("element/Root.zig");
 
 const EventsThread = @import("events/Thread.zig");
 
@@ -159,4 +160,8 @@ pub fn draw(self: *App) !void {
 
 pub fn resize(self: *App, size: vaxis.Winsize) void {
     self.scene.resize(size);
+}
+
+pub fn root(self: *App) *Root {
+    return self.scene.root;
 }
