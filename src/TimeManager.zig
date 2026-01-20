@@ -11,6 +11,8 @@ const BaseAnimation = AnimationMod.BaseAnimation;
 const Ticks = std.PriorityQueue(Tick, void, Tick.lessThan);
 
 const TimeManager = @This();
+const AnimationMessage = @import("Loop.zig").AnimationMessage;
+const TimerMessage = @import("Loop.zig").TimerMessage;
 
 timers: std.AutoHashMap(u64, *Timer),
 animations: std.AutoHashMap(u64, *BaseAnimation),
@@ -29,6 +31,28 @@ pub fn deinit(self: *TimeManager) void {
     self.ticks.deinit();
     self.animations.deinit();
     self.timers.deinit();
+}
+
+pub fn handleAnimation(self: *TimeManager, animation: AnimationMessage) !bool {
+    switch (animation) {
+        .start => |a| return try self.startAnimation(a),
+        ._resume => |id| return self.resumeAnimation(id),
+        .cancel => |id| self.cancelAnimation(id),
+        .pause => |id| self.pauseAnimation(id),
+    }
+
+    return false;
+}
+
+pub fn handleTimer(self: *TimeManager, timer: TimerMessage) !bool {
+    switch (timer) {
+        .start => |t| return try self.startTimer(t),
+        ._resume => |id| return self.resumeTimer(id),
+        .cancel => |id| self.cancelTimer(id),
+        .pause => |id| self.pauseTimer(id),
+    }
+
+    return false;
 }
 
 pub fn peekNext(self: *TimeManager) ?Tick {

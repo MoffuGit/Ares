@@ -25,17 +25,25 @@ pub const Tick = struct {
     }
 };
 
+pub const TimerMessage = union(enum) {
+    start: *Timer,
+    pause: u64,
+    _resume: u64,
+    cancel: u64,
+};
+
+pub const AnimationMessage = union(enum) {
+    start: *BaseAnimation,
+    pause: u64,
+    _resume: u64,
+    cancel: u64,
+};
+
 pub const Message = union(enum) {
     resize: vaxis.Winsize,
     tick: Tick,
-    timer_start: *Timer,
-    timer_pause: u64,
-    timer_resume: u64,
-    timer_cancel: u64,
-    animation_start: *BaseAnimation,
-    animation_pause: u64,
-    animation_resume: u64,
-    animation_cancel: u64,
+    timer: TimerMessage,
+    animation: AnimationMessage,
 };
 
 pub const Mailbox = BlockingQueue(Message, 64);
@@ -244,37 +252,15 @@ fn drainMailbox(self: *Loop) !void {
                     needs_reschedule = true;
                 }
             },
-            .timer_start => |timer| {
-                if (try self.app.time.startTimer(timer)) {
+            .animation => |animation| {
+                if (try self.app.time.handleAnimation(animation)) {
                     needs_reschedule = true;
                 }
             },
-            .timer_pause => |id| {
-                self.app.time.pauseTimer(id);
-            },
-            .timer_resume => |id| {
-                if (try self.app.time.resumeTimer(id)) {
+            .timer => |timer| {
+                if (try self.app.time.handleTimer(timer)) {
                     needs_reschedule = true;
                 }
-            },
-            .timer_cancel => |id| {
-                self.app.time.cancelTimer(id);
-            },
-            .animation_start => |animation| {
-                if (try self.app.time.startAnimation(animation)) {
-                    needs_reschedule = true;
-                }
-            },
-            .animation_pause => |id| {
-                self.app.time.pauseAnimation(id);
-            },
-            .animation_resume => |id| {
-                if (try self.app.time.resumeAnimation(id)) {
-                    needs_reschedule = true;
-                }
-            },
-            .animation_cancel => |id| {
-                self.app.time.cancelAnimation(id);
             },
         }
     }

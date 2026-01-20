@@ -21,13 +21,13 @@ pub fn addTick(self: AppContext, tick: Tick) void {
 
 pub fn startTimer(self: AppContext, timer: *Timer) void {
     timer.context = self;
-    _ = self.mailbox.push(.{ .timer_start = timer }, .instant);
+    _ = self.mailbox.push(.{ .timer = .{ .start = timer } }, .instant);
     self.wakeup.notify() catch {};
 }
 
 pub fn startAnimation(self: AppContext, animation: *BaseAnimation) void {
     animation.context = self;
-    _ = self.mailbox.push(.{ .animation_start = animation }, .instant);
+    _ = self.mailbox.push(.{ .animation = .{ .start = animation } }, .instant);
     self.wakeup.notify() catch {};
 }
 

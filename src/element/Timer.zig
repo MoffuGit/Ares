@@ -33,28 +33,28 @@ on_complete: ?CompleteCallback = null,
 
 pub fn start(self: *Timer) void {
     if (self.context) |ctx| {
-        _ = ctx.mailbox.push(.{ .timer_start = self }, .instant);
+        _ = ctx.mailbox.push(.{ .timer = .{ .start = self } }, .instant);
         ctx.wakeup.notify() catch {};
     }
 }
 
 pub fn pause(self: *Timer) void {
     if (self.context) |ctx| {
-        _ = ctx.mailbox.push(.{ .timer_pause = self.id }, .instant);
+        _ = ctx.mailbox.push(.{ .timer = .{ .pause = self.id } }, .instant);
         ctx.wakeup.notify() catch {};
     }
 }
 
 pub fn resume_(self: *Timer) void {
     if (self.context) |ctx| {
-        _ = ctx.mailbox.push(.{ .timer_resume = self.id }, .instant);
+        _ = ctx.mailbox.push(.{ .timer = .{ ._resume = self.id } }, .instant);
         ctx.wakeup.notify() catch {};
     }
 }
 
 pub fn cancel(self: *Timer) void {
     if (self.context) |ctx| {
-        _ = ctx.mailbox.push(.{ .timer_cancel = self.id }, .instant);
+        _ = ctx.mailbox.push(.{ .timer = .{ .cancel = self.id } }, .instant);
         ctx.wakeup.notify() catch {};
     }
 }
