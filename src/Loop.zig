@@ -8,8 +8,8 @@ const BlockingQueue = @import("datastruct/blocking_queue.zig").BlockingQueue;
 const Allocator = std.mem.Allocator;
 
 const App = @import("App.zig");
-const Timer = @import("window/Timer.zig");
-const AnimationMod = @import("window/Animation.zig");
+const Timer = @import("element/Timer.zig");
+const AnimationMod = @import("element/Animation.zig");
 const BaseAnimation = AnimationMod.BaseAnimation;
 
 pub const TickCallback = *const fn (userdata: ?*anyopaque, time: i64) ?Tick;

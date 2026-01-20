@@ -4,7 +4,6 @@ const builtin = @import("builtin");
 const posix = std.posix;
 
 const Screen = @import("Screen.zig");
-const Buffer = @import("Buffer.zig");
 
 const RendererThread = @import("renderer/Thread.zig");
 const Renderer = @import("renderer/mod.zig");
@@ -14,10 +13,10 @@ const Tick = Loop.Tick;
 
 const EventsThread = @import("events/Thread.zig");
 
-const Element = @import("window/Element.zig");
-const Root = @import("window/Root.zig");
-const Timer = @import("window/Timer.zig");
-const AnimationMod = @import("window/Animation.zig");
+const Element = @import("element/Element.zig");
+const Root = @import("element/Root.zig");
+const Timer = @import("element/Timer.zig");
+const AnimationMod = @import("element/Animation.zig");
 const BaseAnimation = AnimationMod.BaseAnimation;
 
 const log = std.log.scoped(.app);
@@ -36,22 +35,20 @@ pub const State = enum {
 
 const App = @This();
 
+var tty_buffer: [1024]u8 = undefined;
+
 alloc: Allocator,
+tty: vaxis.Tty,
+
+events_thread: EventsThread,
+events_thr: std.Thread,
 
 screen: Screen,
-tty: vaxis.Tty,
-tty_buffer: [1024]u8 = undefined,
-
 renderer: Renderer,
 renderer_thread: RendererThread,
 renderer_thr: std.Thread,
 
 loop: Loop,
-
-events_thread: EventsThread,
-events_thr: std.Thread,
-
-buffer: Buffer,
 
 ticks: Ticks,
 timers: std.AutoHashMap(u64, *Timer),
@@ -79,14 +76,11 @@ pub fn create(alloc: Allocator) !*App {
     var loop = try Loop.init(alloc, self);
     errdefer loop.deinit();
 
-    var tty = try vaxis.Tty.init(&self.tty_buffer);
+    var tty = try vaxis.Tty.init(&tty_buffer);
     self.tty = tty;
     errdefer tty.deinit();
 
     const events_thread = EventsThread.init(alloc, &self.tty, loop.mailbox, loop.wakeup);
-
-    var buffer = try Buffer.init(alloc, 0, 0);
-    errdefer buffer.deinit(alloc);
 
     var ticks = Ticks.init(alloc, {});
     errdefer ticks.deinit();
@@ -110,7 +104,6 @@ pub fn create(alloc: Allocator) !*App {
         .loop = loop,
         .events_thread = events_thread,
         .events_thr = undefined,
-        .buffer = buffer,
         .ticks = ticks,
         .timers = timers,
         .animations = animations,
@@ -141,7 +134,6 @@ pub fn destroy(self: *App) void {
     self.loop.deinit();
 
     self.root.destroy(self.alloc);
-    self.buffer.deinit(self.alloc);
     self.ticks.deinit();
     self.timers.deinit();
     self.animations.deinit();
@@ -170,17 +162,16 @@ pub fn draw(self: *App) !void {
         .needs_draw = &self.needs_draw,
     };
 
-    try root.update(ctx);
-    root.draw(&self.buffer);
-
     const screen = &self.screen;
-    const write_buffer = screen.writeBuffer();
+    const buffer = screen.writeBuffer();
 
-    if (write_buffer.width != self.buffer.width or write_buffer.height != self.buffer.height) {
+    if (buffer.width != self.size.cols or buffer.height != self.size.rows) {
         try screen.resizeWriteBuffer(self.alloc, self.size);
     }
 
-    @memcpy(write_buffer.buf, self.buffer.buf);
+    try root.update(ctx);
+    root.draw(buffer);
+
     screen.swapWrite();
 
     try self.renderer_thread.wakeup.notify();
@@ -305,9 +296,6 @@ pub fn resize(self: *App, size: vaxis.Winsize) !void {
     if (self.size.rows == size.rows and self.size.cols == size.cols) return;
 
     self.size = size;
-
-    self.buffer.deinit(self.alloc);
-    self.buffer = try Buffer.init(self.alloc, self.size.cols, self.size.rows);
 
     self.needs_draw = true;
 }
