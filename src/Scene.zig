@@ -36,7 +36,7 @@ pub fn deinit(self: *Scene) void {
     self.root.destroy(self.alloc);
 }
 
-pub fn setContext(self: *Scene, ctx: AppContext) void {
+pub fn setContext(self: *Scene, ctx: *AppContext) void {
     self.root.element.setContext(ctx);
 }
 

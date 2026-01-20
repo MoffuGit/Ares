@@ -28,7 +28,7 @@ x: u16 = 0,
 y: u16 = 0,
 width: u16 = 0,
 height: u16 = 0,
-context: ?AppContext = null,
+context: ?*AppContext = null,
 
 userdata: ?*anyopaque = null,
 updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
@@ -88,11 +88,11 @@ pub fn update(self: *Element) !void {
     }
 }
 
-pub fn getContext(self: *Element) ?AppContext {
+pub fn getContext(self: *Element) ?*AppContext {
     return self.context;
 }
 
-pub fn setContext(self: *Element, ctx: AppContext) void {
+pub fn setContext(self: *Element, ctx: *AppContext) void {
     self.context = ctx;
 
     if (self.childrens) |*childrens| {

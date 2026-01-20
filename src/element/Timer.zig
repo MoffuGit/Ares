@@ -14,8 +14,8 @@ pub const State = enum {
     completed,
 };
 
-pub const Callback = *const fn (userdata: ?*anyopaque, ctx: AppContext) void;
-pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: AppContext) void;
+pub const Callback = *const fn (userdata: ?*anyopaque, ctx: *AppContext) void;
+pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: *AppContext) void;
 
 pub const Repeat = union(enum) {
     forever,
@@ -28,7 +28,7 @@ callback: Callback,
 userdata: ?*anyopaque = null,
 repeat: Repeat = .forever,
 state: State = .idle,
-context: ?AppContext = null,
+context: ?*AppContext = null,
 on_complete: ?CompleteCallback = null,
 
 pub fn start(self: *Timer) void {

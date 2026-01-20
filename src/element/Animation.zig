@@ -16,7 +16,7 @@ pub const BaseAnimation = struct {
     easing: Easing = .linear,
     repeat: bool = false,
     anim_state: AnimState = .idle,
-    context: ?AppContext = null,
+    context: ?*AppContext = null,
 
     tickFn: *const fn (self: *BaseAnimation, time: i64) ?Tick,
 
@@ -39,8 +39,8 @@ pub fn Animation(comptime State: type) type {
         const Self = @This();
 
         pub const UpdateFn = *const fn (start: State, end: State, progress: f32) State;
-        pub const Callback = *const fn (userdata: ?*anyopaque, state: State, ctx: AppContext) void;
-        pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: AppContext) void;
+        pub const Callback = *const fn (userdata: ?*anyopaque, state: State, ctx: *AppContext) void;
+        pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: *AppContext) void;
 
         base: BaseAnimation,
 

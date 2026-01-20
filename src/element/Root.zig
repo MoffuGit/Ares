@@ -101,7 +101,7 @@ fn updateChannel(value: *u8, dir: *Direction) void {
     }
 }
 
-fn tickRed(userdata: ?*anyopaque, ctx: AppContext) void {
+fn tickRed(userdata: ?*anyopaque, ctx: *AppContext) void {
     const self: *Root = @ptrCast(@alignCast(userdata orelse return));
 
     updateChannel(&self.red, &self.red_dir);
@@ -109,7 +109,7 @@ fn tickRed(userdata: ?*anyopaque, ctx: AppContext) void {
     ctx.requestDraw();
 }
 
-fn tickGreen(userdata: ?*anyopaque, ctx: AppContext) void {
+fn tickGreen(userdata: ?*anyopaque, ctx: *AppContext) void {
     const self: *Root = @ptrCast(@alignCast(userdata orelse return));
 
     updateChannel(&self.green, &self.green_dir);
@@ -117,7 +117,7 @@ fn tickGreen(userdata: ?*anyopaque, ctx: AppContext) void {
     ctx.requestDraw();
 }
 
-fn tickBlue(userdata: ?*anyopaque, ctx: AppContext) void {
+fn tickBlue(userdata: ?*anyopaque, ctx: *AppContext) void {
     const self: *Root = @ptrCast(@alignCast(userdata orelse return));
 
     updateChannel(&self.blue, &self.blue_dir);

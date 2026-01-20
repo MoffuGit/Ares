@@ -24,7 +24,7 @@ const App = @This();
 
 var tty_buffer: [1024]u8 = undefined;
 
-const KeyPressFn = *const fn (ctx: AppContext, key: vaxis.Key) ?vaxis.Key;
+const KeyPressFn = *const fn (ctx: *AppContext, key: vaxis.Key) ?vaxis.Key;
 
 const Options = struct {
     userdata: ?*anyopaque = null,
@@ -49,6 +49,7 @@ time: TimeManager,
 scene: Scene,
 keyPressFn: ?KeyPressFn,
 userdata: ?*anyopaque,
+app_context: AppContext,
 
 pub fn create(alloc: Allocator, opts: Options) !*App {
     var self = try alloc.create(App);
@@ -91,16 +92,17 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
         .time = time,
         .scene = scene,
         .userdata = opts.userdata,
+        .app_context = undefined,
     };
 
-    const app_context: AppContext = .{
+    self.app_context = .{
         .mailbox = self.loop.mailbox,
         .wakeup = self.loop.wakeup,
         .needs_draw = &self.scene.needs_draw,
         .stop = self.loop.stop,
         .userdata = self.userdata,
     };
-    self.scene.setContext(app_context);
+    self.scene.setContext(&self.app_context);
 
     self.events_thr = try std.Thread.spawn(.{}, EventsThread.threadMain, .{&self.events_thread});
     self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
@@ -165,14 +167,7 @@ pub fn root(self: *App) *Root {
 }
 
 pub fn handleKeyPress(self: *App, key: vaxis.Key) !void {
-    const app_context: AppContext = .{
-        .mailbox = self.loop.mailbox,
-        .wakeup = self.loop.wakeup,
-        .needs_draw = &self.scene.needs_draw,
-        .userdata = self.userdata,
-        .stop = self.loop.stop,
-    };
     if (self.keyPressFn) |callback| {
-        if (callback(app_context, key) == null) return;
+        if (callback(&self.app_context, key) == null) return;
     }
 }

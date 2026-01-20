@@ -13,7 +13,7 @@ const AppContext = @import("AppContext.zig");
 
 const log = std.log.scoped(.main);
 
-pub fn keyPressFn(ctx: AppContext, key: vaxis.Key) ?vaxis.Key {
+pub fn keyPressFn(ctx: *AppContext, key: vaxis.Key) ?vaxis.Key {
     if (key.matches('c', .{ .ctrl = true })) {
         ctx.stopApp() catch {};
         return null;
