@@ -44,11 +44,8 @@ fn threadMain_(self: *Thread) !void {
     var buf: [1024]u8 = undefined;
     var read_start: usize = 0;
 
-    while (self.running.load(.acquire)) {
-        const n = self.tty.read(buf[read_start..]) catch |err| {
-            if (err == error.WouldBlock) continue else return err;
-        };
-
+    read_loop: while (self.running.load(.acquire)) {
+        const n = try self.tty.read(buf[read_start..]);
         var seq_start: usize = 0;
         while (seq_start < n) {
             const result = try parser.parse(buf[seq_start..n], self.alloc);
@@ -58,7 +55,7 @@ fn threadMain_(self: *Thread) !void {
                     buf[seq_start - initial_start] = buf[seq_start];
                 }
                 read_start = seq_start - initial_start + 1;
-                continue;
+                continue :read_loop;
             }
             read_start = 0;
             seq_start += result.n;

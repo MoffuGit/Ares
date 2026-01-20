@@ -17,6 +17,7 @@ test/cases/**/*.actual.png
 flatpak/builddir/
 flatpak/repo/
 oldrenderer/
+yoga/
 
 glad.zip
 /Box_test.ppm
