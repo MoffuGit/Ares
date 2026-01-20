@@ -144,7 +144,8 @@ pub fn destroy(self: *App) void {
 pub fn run(self: *App) !void {
     const winsize = try vaxis.Tty.getWinsize(self.tty.fd);
 
-    _ = self.loop.mailbox.push(.{ .resize = winsize }, .instant);
+    try self.resize(winsize);
+
     try self.loop.wakeup.notify();
 
     self.loop.run();
