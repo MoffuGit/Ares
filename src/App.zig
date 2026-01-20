@@ -12,10 +12,10 @@ const Loop = @import("Loop.zig");
 
 const EventsThread = @import("events/Thread.zig");
 
-const Element = @import("element/Element.zig");
-const Root = @import("element/Root.zig");
+const Scene = @import("Scene.zig");
 
 const TimeManager = @import("TimeManager.zig");
+const AppContext = @import("AppContext.zig");
 
 const log = std.log.scoped(.app);
 
@@ -48,11 +48,7 @@ loop: Loop,
 
 time: TimeManager,
 
-root: *Root,
-
-needs_draw: bool = true,
-
-size: vaxis.Winsize,
+scene: Scene,
 
 pub fn create(alloc: Allocator) !*App {
     var self = try alloc.create(App);
@@ -78,8 +74,8 @@ pub fn create(alloc: Allocator) !*App {
     var time = TimeManager.init(alloc);
     errdefer time.deinit();
 
-    const root = try Root.create(alloc, "root");
-    errdefer root.destroy(alloc);
+    var scene = try Scene.init(alloc);
+    errdefer scene.deinit();
 
     self.* = .{
         .alloc = alloc,
@@ -92,9 +88,15 @@ pub fn create(alloc: Allocator) !*App {
         .events_thread = events_thread,
         .events_thr = undefined,
         .time = time,
-        .root = root,
-        .size = .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 },
+        .scene = scene,
     };
+
+    const app_context: AppContext = .{
+        .mailbox = self.loop.mailbox,
+        .wakeup = self.loop.wakeup,
+        .needs_draw = &self.scene.needs_draw,
+    };
+    self.scene.setContext(app_context);
 
     self.events_thr = try std.Thread.spawn(.{}, EventsThread.threadMain, .{&self.events_thread});
     self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
@@ -118,7 +120,7 @@ pub fn destroy(self: *App) void {
     self.renderer_thread.deinit();
     self.loop.deinit();
 
-    self.root.destroy(self.alloc);
+    self.scene.deinit();
     self.time.deinit();
 
     self.renderer.deinit();
@@ -128,7 +130,7 @@ pub fn destroy(self: *App) void {
 pub fn run(self: *App) !void {
     const winsize = try vaxis.Tty.getWinsize(self.tty.fd);
 
-    try self.resize(winsize);
+    self.scene.resize(winsize);
 
     try self.loop.wakeup.notify();
 
@@ -136,36 +138,25 @@ pub fn run(self: *App) !void {
 }
 
 pub fn draw(self: *App) !void {
-    if (!self.needs_draw) return;
-    self.needs_draw = false;
-
-    var root = self.root.element;
-
-    const ctx: Element.Context = .{
-        .mailbox = self.loop.mailbox,
-        .wakeup = self.loop.wakeup,
-        .needs_draw = &self.needs_draw,
-    };
+    if (!self.scene.needsDraw()) return;
+    self.scene.markDrawn();
 
     const screen = &self.screen;
     const buffer = screen.writeBuffer();
 
-    if (buffer.width != self.size.cols or buffer.height != self.size.rows) {
-        try screen.resizeWriteBuffer(self.alloc, self.size);
+    const size = self.scene.size;
+    if (buffer.width != size.cols or buffer.height != size.rows) {
+        try screen.resizeWriteBuffer(self.alloc, size);
     }
 
-    try root.update(ctx);
-    root.draw(buffer);
+    try self.scene.update();
+    self.scene.draw(screen.writeBuffer());
 
     screen.swapWrite();
 
     try self.renderer_thread.wakeup.notify();
 }
 
-pub fn resize(self: *App, size: vaxis.Winsize) !void {
-    if (self.size.rows == size.rows and self.size.cols == size.cols) return;
-
-    self.size = size;
-
-    self.needs_draw = true;
+pub fn resize(self: *App, size: vaxis.Winsize) void {
+    self.scene.resize(size);
 }

@@ -3,9 +3,9 @@ const Loop = @import("../Loop.zig");
 const Tick = Loop.Tick;
 const Timer = @import("Timer.zig");
 const AnimState = Timer.State;
-const TimerContext = Timer.Context;
 const Easing = @import("Easing.zig").Type;
-const Element = @import("Element.zig");
+
+const AppContext = @import("../AppContext.zig");
 
 pub const BaseAnimation = struct {
     id: u64 = 0,
@@ -16,7 +16,7 @@ pub const BaseAnimation = struct {
     easing: Easing = .linear,
     repeat: bool = false,
     anim_state: AnimState = .idle,
-    context: ?TimerContext = null,
+    context: ?AppContext = null,
 
     tickFn: *const fn (self: *BaseAnimation, time: i64) ?Tick,
 
@@ -39,8 +39,8 @@ pub fn Animation(comptime State: type) type {
         const Self = @This();
 
         pub const UpdateFn = *const fn (start: State, end: State, progress: f32) State;
-        pub const Callback = *const fn (userdata: ?*anyopaque, state: State, ctx: Element.Context) void;
-        pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: Element.Context) void;
+        pub const Callback = *const fn (userdata: ?*anyopaque, state: State, ctx: AppContext) void;
+        pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: AppContext) void;
 
         base: BaseAnimation,
 
@@ -131,13 +131,7 @@ pub fn Animation(comptime State: type) type {
                     const progress = self.base.easing.apply(t);
 
                     self.current = self.updateFn(self.start, self.end, progress);
-
-                    const element_ctx: Element.Context = .{
-                        .mailbox = ctx.mailbox,
-                        .wakeup = ctx.wakeup,
-                        .needs_draw = ctx.needs_draw,
-                    };
-                    self.callback(self.userdata, self.current, element_ctx);
+                    self.callback(self.userdata, self.current, ctx);
 
                     if (t >= 1.0) {
                         if (self.base.repeat) {
@@ -145,7 +139,7 @@ pub fn Animation(comptime State: type) type {
                             return self.base.toTick();
                         }
                         self.base.anim_state = .completed;
-                        if (self.on_complete) |cb| cb(self.userdata, element_ctx);
+                        if (self.on_complete) |cb| cb(self.userdata, ctx);
                         return null;
                     }
 

@@ -3,9 +3,8 @@ pub const Timer = @This();
 const std = @import("std");
 const Loop = @import("../Loop.zig");
 const Tick = Loop.Tick;
-const xev = @import("../global.zig").xev;
 
-const Element = @import("Element.zig");
+const AppContext = @import("../AppContext.zig");
 
 pub const State = enum {
     idle,
@@ -15,14 +14,8 @@ pub const State = enum {
     completed,
 };
 
-pub const Context = struct {
-    mailbox: *Loop.Mailbox,
-    wakeup: xev.Async,
-    needs_draw: *bool,
-};
-
-pub const Callback = *const fn (userdata: ?*anyopaque, ctx: Element.Context) void;
-pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: Element.Context) void;
+pub const Callback = *const fn (userdata: ?*anyopaque, ctx: AppContext) void;
+pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: AppContext) void;
 
 pub const Repeat = union(enum) {
     forever,
@@ -35,7 +28,7 @@ callback: Callback,
 userdata: ?*anyopaque = null,
 repeat: Repeat = .forever,
 state: State = .idle,
-context: ?Context = null,
+context: ?AppContext = null,
 on_complete: ?CompleteCallback = null,
 
 pub fn start(self: *Timer) void {
@@ -82,12 +75,7 @@ fn tickCallback(userdata: ?*anyopaque, _: i64) ?Tick {
         .idle, .cancelled, .completed => return null,
         .paused => return null,
         .active => {
-            const element_ctx: Element.Context = .{
-                .mailbox = ctx.mailbox,
-                .wakeup = ctx.wakeup,
-                .needs_draw = ctx.needs_draw,
-            };
-            timer.callback(timer.userdata, element_ctx);
+            timer.callback(timer.userdata, ctx);
 
             switch (timer.repeat) {
                 .forever => {
@@ -100,7 +88,7 @@ fn tickCallback(userdata: ?*anyopaque, _: i64) ?Tick {
                 .times => |*count| {
                     if (count.* <= 1) {
                         timer.state = .completed;
-                        if (timer.on_complete) |cb| cb(timer.userdata, element_ctx);
+                        if (timer.on_complete) |cb| cb(timer.userdata, ctx);
                         return null;
                     }
                     count.* -= 1;

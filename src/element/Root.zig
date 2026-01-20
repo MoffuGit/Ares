@@ -2,6 +2,7 @@ pub const Root = @This();
 
 const Element = @import("Element.zig");
 const Timer = @import("Timer.zig");
+const AppContext = Element.AppContext;
 const std = @import("std");
 const vaxis = @import("vaxis");
 
@@ -74,15 +75,16 @@ fn draw(element: *Element, buffer: *Buffer) void {
     buffer.fill(.{ .style = .{ .bg = self.bg } });
 }
 
-fn update(element: *Element, ctx: Element.Context, time: std.time.Instant) void {
+fn update(element: *Element, time: std.time.Instant) void {
     _ = time;
 
     const self: *Root = @ptrCast(@alignCast(element.userdata orelse return));
+    const ctx = element.getContext() orelse return;
 
     if (self.red_timer.state == .idle) {
-        Element.startTimer(ctx, &self.red_timer) catch {};
-        Element.startTimer(ctx, &self.green_timer) catch {};
-        Element.startTimer(ctx, &self.blue_timer) catch {};
+        ctx.startTimer(&self.red_timer);
+        ctx.startTimer(&self.green_timer);
+        ctx.startTimer(&self.blue_timer);
     }
 }
 
@@ -99,26 +101,26 @@ fn updateChannel(value: *u8, dir: *Direction) void {
     }
 }
 
-fn tickRed(userdata: ?*anyopaque, ctx: Element.Context) void {
+fn tickRed(userdata: ?*anyopaque, ctx: AppContext) void {
     const self: *Root = @ptrCast(@alignCast(userdata orelse return));
 
     updateChannel(&self.red, &self.red_dir);
     self.bg = .{ .rgba = .{ self.red, self.green, self.blue, 255 } };
-    Element.requestDraw(ctx) catch {};
+    ctx.requestDraw();
 }
 
-fn tickGreen(userdata: ?*anyopaque, ctx: Element.Context) void {
+fn tickGreen(userdata: ?*anyopaque, ctx: AppContext) void {
     const self: *Root = @ptrCast(@alignCast(userdata orelse return));
 
     updateChannel(&self.green, &self.green_dir);
     self.bg = .{ .rgba = .{ self.red, self.green, self.blue, 255 } };
-    Element.requestDraw(ctx) catch {};
+    ctx.requestDraw();
 }
 
-fn tickBlue(userdata: ?*anyopaque, ctx: Element.Context) void {
+fn tickBlue(userdata: ?*anyopaque, ctx: AppContext) void {
     const self: *Root = @ptrCast(@alignCast(userdata orelse return));
 
     updateChannel(&self.blue, &self.blue_dir);
     self.bg = .{ .rgba = .{ self.red, self.green, self.blue, 255 } };
-    Element.requestDraw(ctx) catch {};
+    ctx.requestDraw();
 }

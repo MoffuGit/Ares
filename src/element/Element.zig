@@ -9,18 +9,11 @@ pub const Timer = @import("Timer.zig");
 const AnimationMod = @import("Animation.zig");
 pub const Animation = AnimationMod.Animation;
 pub const BaseAnimation = AnimationMod.BaseAnimation;
-pub const TimerContext = Timer.Context;
 const Buffer = @import("../Buffer.zig");
-const Mailbox = Loop.Mailbox;
-const xev = @import("../global.zig").xev;
+
+pub const AppContext = @import("../AppContext.zig");
 
 pub const Childrens = std.ArrayListUnmanaged(*Element);
-
-pub const Context = struct {
-    mailbox: *Mailbox,
-    wakeup: xev.Async,
-    needs_draw: *bool,
-};
 
 alloc: std.mem.Allocator,
 id: []const u8,
@@ -35,9 +28,10 @@ x: u16 = 0,
 y: u16 = 0,
 width: u16 = 0,
 height: u16 = 0,
+context: ?AppContext = null,
 
 userdata: ?*anyopaque = null,
-updateFn: ?*const fn (element: *Element, ctx: Element.Context, time: std.time.Instant) void = null,
+updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
 drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
 removeFn: ?*const fn (element: *Element) void = null,
 //MouseHandler, KeyHanlder...
@@ -81,39 +75,30 @@ fn zIndexLessThanValue(_: void, a: *Element, b: *Element) bool {
     return a.zIndex < b.zIndex;
 }
 
-pub fn update(self: *Element, ctx: Context) !void {
+pub fn update(self: *Element) !void {
     if (self.updateFn) |callback| {
-        callback(self, ctx, try std.time.Instant.now());
+        callback(self, try std.time.Instant.now());
     }
 
     if (self.childrens) |*childrens| {
         for (childrens.items) |child| {
-            try child.update(ctx);
+            try child.update();
         }
     }
 }
 
-pub fn addTick(ctx: Context, tick: Tick) !void {
-    _ = ctx.mailbox.push(.{ .tick = tick }, .instant);
-    try ctx.wakeup.notify();
+pub fn getContext(self: *Element) ?AppContext {
+    return self.context;
 }
 
-pub fn startTimer(ctx: Context, timer: *Timer) !void {
-    timer.context = .{ .mailbox = ctx.mailbox, .wakeup = ctx.wakeup, .needs_draw = ctx.needs_draw };
-    _ = ctx.mailbox.push(.{ .timer_start = timer }, .instant);
-    try ctx.wakeup.notify();
-}
+pub fn setContext(self: *Element, ctx: AppContext) void {
+    self.context = ctx;
 
-pub fn startAnimation(ctx: Context, animation: *BaseAnimation) !void {
-    animation.context = .{ .mailbox = ctx.mailbox, .wakeup = ctx.wakeup, .needs_draw = ctx.needs_draw };
-    _ = ctx.mailbox.push(.{ .animation_start = animation }, .instant);
-    try ctx.wakeup.notify();
-}
-
-pub fn requestDraw(ctx: Context) !void {
-    if (ctx.needs_draw.*) return;
-    ctx.needs_draw.* = true;
-    try ctx.wakeup.notify();
+    if (self.childrens) |*childrens| {
+        for (childrens.items) |child| {
+            child.setContext(ctx);
+        }
+    }
 }
 
 pub const Opts = struct {
@@ -127,7 +112,7 @@ pub const Opts = struct {
     height: u16 = 0,
     ownBuffer: bool = false,
     userdata: ?*anyopaque = null,
-    updateFn: ?*const fn (element: *Element, ctx: Context, time: std.time.Instant) void = null,
+    updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
     drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
     removeFn: ?*const fn (element: *Element) void = null,
 };
@@ -205,6 +190,11 @@ pub fn addChild(self: *Element, child: *Element) !void {
         self.childrens = .{};
     }
     child.parent = self;
+
+    if (self.context) |ctx| {
+        child.setContext(ctx);
+    }
+
     try self.childrens.?.append(self.alloc, child);
 }
 

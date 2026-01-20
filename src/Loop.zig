@@ -237,7 +237,7 @@ fn drainMailbox(self: *Loop) !void {
     while (self.mailbox.pop()) |message| {
         switch (message) {
             .resize => |size| {
-                try self.app.resize(size);
+                self.app.resize(size);
             },
             .tick => |tick| {
                 if (try self.app.time.addTick(tick)) {
