@@ -8,6 +8,7 @@ const AppContext = @import("AppContext.zig");
 const Screen = @import("Screen.zig");
 const events = @import("events/mod.zig");
 const EventContext = events.EventContext;
+const Event = events.Event;
 
 const Allocator = std.mem.Allocator;
 
@@ -15,6 +16,7 @@ const Window = @This();
 
 const Options = struct {
     keyPressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void = null,
+    keyReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void = null,
     focusFn: ?*const fn (element: ?*Element) void = null,
     blurFn: ?*const fn (element: ?*Element) void = null,
     app_context: *AppContext,
@@ -30,6 +32,7 @@ size: vaxis.Winsize,
 screen: *Screen,
 
 keyPressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void,
+keyReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void,
 focusFn: ?*const fn (element: ?*Element) void,
 blurFn: ?*const fn (element: ?*Element) void,
 
@@ -45,6 +48,7 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
     return .{
         .app_context = opts.app_context,
         .keyPressFn = opts.keyPressFn,
+        .keyReleaseFn = opts.keyReleaseFn,
         .focusFn = opts.focusFn,
         .blurFn = opts.blurFn,
         .screen = screen,
@@ -97,45 +101,54 @@ pub fn draw(self: *Window) !void {
     screen.swapWrite();
 }
 
-pub fn handleKeyPress(self: *Window, key: vaxis.Key) !void {
-    var event_ctx = EventContext{
+pub fn handleEvent(self: *Window, event: Event) !void {
+    var ctx = EventContext{
         .phase = .capturing,
         .target = self.focused,
     };
 
-    if (self.keyPressFn) |callback| {
-        callback(self.app_context, &event_ctx, key);
+    switch (event) {
+        .key_press => |key| self.handleKeyPress(&ctx, key),
+        .key_release => |key| self.handleKeyRelease(&ctx, key),
     }
 
-    if (event_ctx.stopped) return;
+    if (ctx.stopped) return;
 
     const target = self.focused orelse return;
 
-    event_ctx.phase = .capturing;
+    ctx.phase = .capturing;
     for (self.focus_path.items) |element| {
         if (element == target) continue;
-        if (element.keyPressFn) |handler| {
-            handler(element, &event_ctx, key);
-        }
-        if (event_ctx.stopped) return;
+        element.handleEvent(&ctx, event);
+        if (ctx.stopped) return;
     }
 
-    event_ctx.phase = .at_target;
-    if (target.keyPressFn) |handler| {
-        handler(target, &event_ctx, key);
-    }
-    if (event_ctx.stopped) return;
+    ctx.phase = .at_target;
 
-    event_ctx.phase = .bubbling;
+    target.handleEvent(&ctx, event);
+
+    if (ctx.stopped) return;
+
+    ctx.phase = .bubbling;
     var i: usize = self.focus_path.items.len;
     while (i > 0) {
         i -= 1;
         const element = self.focus_path.items[i];
         if (element == target) continue;
-        if (element.keyPressFn) |handler| {
-            handler(element, &event_ctx, key);
-        }
-        if (event_ctx.stopped) return;
+        element.handleEvent(&ctx, event);
+        if (ctx.stopped) return;
+    }
+}
+
+pub fn handleKeyPress(self: *Window, ctx: *EventContext, key: vaxis.Key) void {
+    if (self.keyPressFn) |callback| {
+        callback(self.app_context, ctx, key);
+    }
+}
+
+pub fn handleKeyRelease(self: *Window, ctx: *EventContext, key: vaxis.Key) void {
+    if (self.keyReleaseFn) |callback| {
+        callback(self.app_context, ctx, key);
     }
 }
 

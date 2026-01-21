@@ -62,6 +62,8 @@ fn threadMain_(self: *Thread) !void {
 
             const event = result.event orelse continue;
             try self.handleEvent(event);
+
+            try self.wakeup.notify();
         }
     }
 }
@@ -70,12 +72,15 @@ fn handleEvent(self: *Thread, event: vaxis.Event) !void {
     switch (event) {
         .winsize => |size| {
             _ = self.mailbox.push(.{ .resize = size }, .instant);
-            try self.wakeup.notify();
         },
         .key_press => |key| {
-            _ = self.mailbox.push(.{ .key_press = key }, .instant);
-            try self.wakeup.notify();
+            _ = self.mailbox.push(.{ .event = .{ .key_press = key } }, .instant);
         },
+        .key_release => |key| {
+            _ = self.mailbox.push(.{ .event = .{ .key_release = key } }, .instant);
+        },
+        .focus_in => {},
+        .focus_out => {},
         else => {},
     }
 }

@@ -12,6 +12,7 @@ const Timer = @import("element/Timer.zig");
 const AnimationMod = @import("element/Animation.zig");
 const BaseAnimation = AnimationMod.BaseAnimation;
 const TimeManager = @import("TimeManager.zig");
+const Event = @import("events/Event.zig").Event;
 
 pub const TickCallback = *const fn (userdata: ?*anyopaque, time: i64) ?Tick;
 
@@ -44,7 +45,7 @@ pub const Message = union(enum) {
     tick: Tick,
     timer: TimerMessage,
     animation: AnimationMessage,
-    key_press: vaxis.Key,
+    event: Event,
 };
 
 pub const Mailbox = BlockingQueue(Message, 64);
@@ -264,8 +265,8 @@ fn drainMailbox(self: *Loop) !void {
                     needs_reschedule = true;
                 }
             },
-            .key_press => |key| {
-                try self.app.window.handleKeyPress(key);
+            .event => |evt| {
+                try self.app.window.handleEvent(evt);
             },
         }
     }

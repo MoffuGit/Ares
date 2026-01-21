@@ -14,6 +14,7 @@ const Buffer = @import("../Buffer.zig");
 pub const AppContext = @import("../AppContext.zig");
 const events = @import("../events/mod.zig");
 pub const EventContext = events.EventContext;
+const Event = events.Event;
 
 pub const Childrens = std.ArrayListUnmanaged(*Element);
 
@@ -37,6 +38,7 @@ updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
 drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
 removeFn: ?*const fn (element: *Element) void = null,
 keyPressFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key) void = null,
+keyReleaseFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key) void = null,
 focusFn: ?*const fn (element: *Element) void = null,
 blurFn: ?*const fn (element: *Element) void = null,
 
@@ -243,4 +245,23 @@ pub fn getChildrenSortedByZIndex(self: *Element, result: *std.ArrayList(*Element
 
 fn zIndexLessThan(_: void, a: *Element, b: *Element) bool {
     return a.zIndex < b.zIndex;
+}
+
+pub fn handleEvent(self: *Element, ctx: *EventContext, event: Event) void {
+    switch (event) {
+        .key_press => |key| self.handleKeyPress(ctx, key),
+        .key_release => |key| self.handleKeyRelease(ctx, key),
+    }
+}
+
+pub fn handleKeyPress(self: *Element, ctx: *EventContext, key: vaxis.Key) void {
+    if (self.keyPressFn) |callback| {
+        callback(self, ctx, key);
+    }
+}
+
+pub fn handleKeyRelease(self: *Element, ctx: *EventContext, key: vaxis.Key) void {
+    if (self.keyReleaseFn) |callback| {
+        callback(self, ctx, key);
+    }
 }
