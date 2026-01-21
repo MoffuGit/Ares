@@ -11,7 +11,7 @@ const Root = @import("element/Root.zig");
 
 const EventsThread = @import("events/Thread.zig");
 
-const Scene = @import("Scene.zig");
+const Window = @import("Window.zig");
 
 const TimeManager = @import("TimeManager.zig");
 const AppContext = @import("AppContext.zig");
@@ -46,7 +46,7 @@ loop: Loop,
 
 time: TimeManager,
 
-scene: Scene,
+window: Window,
 keyPressFn: ?KeyPressFn,
 userdata: ?*anyopaque,
 app_context: AppContext,
@@ -75,8 +75,8 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
     var time = TimeManager.init(alloc);
     errdefer time.deinit();
 
-    var scene = try Scene.init(alloc, &self.screen);
-    errdefer scene.deinit();
+    var window = try Window.init(alloc, &self.screen);
+    errdefer window.deinit();
 
     self.* = .{
         .keyPressFn = opts.keyPressFn,
@@ -90,7 +90,7 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
         .events_thread = events_thread,
         .events_thr = undefined,
         .time = time,
-        .scene = scene,
+        .window = window,
         .userdata = opts.userdata,
         .app_context = undefined,
     };
@@ -98,11 +98,11 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
     self.app_context = .{
         .mailbox = self.loop.mailbox,
         .wakeup = self.loop.wakeup,
-        .needs_draw = &self.scene.needs_draw,
+        .needs_draw = &self.window.needs_draw,
         .stop = self.loop.stop,
         .userdata = self.userdata,
     };
-    self.scene.setContext(&self.app_context);
+    self.window.setContext(&self.app_context);
 
     self.events_thr = try std.Thread.spawn(.{}, EventsThread.threadMain, .{&self.events_thread});
     self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
@@ -128,7 +128,7 @@ pub fn destroy(self: *App) void {
 
     self.renderer_thread.deinit();
 
-    self.scene.deinit();
+    self.window.deinit();
     self.time.deinit();
 
     self.loop.deinit();
@@ -142,7 +142,7 @@ pub fn destroy(self: *App) void {
 pub fn run(self: *App) !void {
     const winsize = try vaxis.Tty.getWinsize(self.tty.fd);
 
-    self.scene.resize(winsize);
+    self.window.resize(winsize);
 
     try self.loop.wakeup.notify();
 
@@ -150,20 +150,20 @@ pub fn run(self: *App) !void {
 }
 
 pub fn draw(self: *App) !void {
-    if (!self.scene.needsDraw()) return;
-    self.scene.markDrawn();
+    if (!self.window.needsDraw()) return;
+    self.window.markDrawn();
 
-    try self.scene.draw();
+    try self.window.draw();
 
     try self.renderer_thread.wakeup.notify();
 }
 
 pub fn resize(self: *App, size: vaxis.Winsize) void {
-    self.scene.resize(size);
+    self.window.resize(size);
 }
 
 pub fn root(self: *App) *Root {
-    return self.scene.root;
+    return self.window.root;
 }
 
 pub fn handleKeyPress(self: *App, key: vaxis.Key) !void {

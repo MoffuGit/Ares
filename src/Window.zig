@@ -9,7 +9,7 @@ const Screen = @import("Screen.zig");
 
 const Allocator = std.mem.Allocator;
 
-const Scene = @This();
+const Window = @This();
 
 alloc: Allocator,
 
@@ -20,7 +20,7 @@ needs_draw: std.atomic.Value(bool) = std.atomic.Value(bool).init(true),
 size: vaxis.Winsize,
 screen: *Screen,
 
-pub fn init(alloc: Allocator, screen: *Screen) !Scene {
+pub fn init(alloc: Allocator, screen: *Screen) !Window {
     const root = try Root.create(alloc, "root");
     errdefer root.destroy(alloc);
 
@@ -32,34 +32,34 @@ pub fn init(alloc: Allocator, screen: *Screen) !Scene {
     };
 }
 
-pub fn deinit(self: *Scene) void {
+pub fn deinit(self: *Window) void {
     self.root.destroy(self.alloc);
 }
 
-pub fn setContext(self: *Scene, ctx: *AppContext) void {
+pub fn setContext(self: *Window, ctx: *AppContext) void {
     self.root.element.setContext(ctx);
 }
 
-pub fn resize(self: *Scene, size: vaxis.Winsize) void {
+pub fn resize(self: *Window, size: vaxis.Winsize) void {
     if (self.size.rows == size.rows and self.size.cols == size.cols) return;
 
     self.size = size;
     self.needs_draw.store(true, .release);
 }
 
-pub fn needsDraw(self: *Scene) bool {
+pub fn needsDraw(self: *Window) bool {
     return self.needs_draw.load(.acquire);
 }
 
-pub fn markDrawn(self: *Scene) void {
+pub fn markDrawn(self: *Window) void {
     self.needs_draw.store(false, .release);
 }
 
-pub fn requestDraw(self: *Scene) void {
+pub fn requestDraw(self: *Window) void {
     self.needs_draw.store(true, .release);
 }
 
-pub fn draw(self: *Scene) !void {
+pub fn draw(self: *Window) !void {
     const screen = self.screen;
     const buffer = screen.writeBuffer();
 
