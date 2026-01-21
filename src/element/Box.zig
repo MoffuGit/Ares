@@ -21,7 +21,7 @@ element: Element,
 pub fn create(alloc: Allocator, opts: Options) !*Box {
     const self = try alloc.create(Box);
     self.* = .{
-        .element = try Element.init(alloc, .{
+        .element = Element.init(alloc, .{
             .id = opts.id,
             .userdata = self,
             .drawFn = draw,

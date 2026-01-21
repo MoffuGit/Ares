@@ -26,7 +26,6 @@ removed: bool = false,
 opacity: f32 = 1.0,
 childrens: ?Childrens = null,
 parent: ?*Element = null,
-buffer: ?Buffer = null,
 x: u16 = 0,
 y: u16 = 0,
 width: u16 = 0,
@@ -45,34 +44,14 @@ blurFn: ?*const fn (element: *Element) void = null,
 pub fn draw(self: *Element, buffer: *Buffer) void {
     if (!self.visible) return;
 
-    const writeBuffer = if (self.buffer) |*buf| buf else buffer;
-
     if (self.drawFn) |callback| {
-        callback(self, writeBuffer);
+        callback(self, buffer);
     }
 
     if (self.childrens) |*children| {
         std.mem.sort(*Element, children.items, {}, zIndexLessThanValue);
         for (children.items) |child| {
-            child.draw(writeBuffer);
-        }
-    }
-
-    if (self.buffer) |*buf| {
-        self.blitToBuffer(buf, buffer);
-    }
-}
-
-fn blitToBuffer(self: *Element, dest: *Buffer, src: *Buffer) void {
-    var row: u16 = 0;
-    while (row < src.height) : (row += 1) {
-        var col: u16 = 0;
-        while (col < src.width) : (col += 1) {
-            if (src.readCell(col, row)) |cell| {
-                const destX = self.x + col;
-                const destY = self.y + row;
-                dest.writeCell(destX, destY, cell);
-            }
+            child.draw(buffer);
         }
     }
 }
@@ -116,7 +95,6 @@ pub const Opts = struct {
     y: u16 = 0,
     width: u16 = 0,
     height: u16 = 0,
-    ownBuffer: bool = false,
     userdata: ?*anyopaque = null,
     updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
     drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
@@ -126,12 +104,7 @@ pub const Opts = struct {
     blurFn: ?*const fn (element: *Element) void = null,
 };
 
-pub fn init(alloc: std.mem.Allocator, opts: Opts) !Element {
-    const buffer: ?Buffer = if (opts.ownBuffer and opts.width > 0 and opts.height > 0)
-        try Buffer.init(alloc, opts.width, opts.height)
-    else
-        null;
-
+pub fn init(alloc: std.mem.Allocator, opts: Opts) Element {
     return .{
         .alloc = alloc,
         .id = opts.id,
@@ -142,7 +115,6 @@ pub fn init(alloc: std.mem.Allocator, opts: Opts) !Element {
         .y = opts.y,
         .width = opts.width,
         .height = opts.height,
-        .buffer = buffer,
         .userdata = opts.userdata,
         .updateFn = opts.updateFn,
         .drawFn = opts.drawFn,
@@ -178,23 +150,9 @@ pub fn remove(self: *Element) void {
         self.childrens = null;
     }
 
-    if (self.buffer) |*buf| {
-        buf.deinit(self.alloc);
-        self.buffer = null;
-    }
-
     if (self.removeFn) |removeFn| {
         removeFn(self);
     }
-}
-
-pub fn createBuffer(self: *Element, width: u16, height: u16) !void {
-    if (self.buffer) |*buf| {
-        buf.deinit(self.alloc);
-    }
-    self.buffer = try Buffer.init(self.alloc, width, height);
-    self.width = width;
-    self.height = height;
 }
 
 pub fn addChild(self: *Element, child: *Element) !void {

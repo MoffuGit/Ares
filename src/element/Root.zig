@@ -17,7 +17,7 @@ element: Element,
 pub fn create(alloc: std.mem.Allocator) !*Root {
     const self = try alloc.create(Root);
     self.* = .{
-        .element = try Element.init(alloc, .{
+        .element = Element.init(alloc, .{
             .id = "__root__",
             .userdata = self,
             .drawFn = draw,
