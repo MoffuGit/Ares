@@ -30,7 +30,7 @@ keyPressFn: ?*const fn (ctx: *AppContext, key: vaxis.Key) void,
 app_context: *AppContext,
 
 pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
-    const root = try Root.create(alloc, "root");
+    const root = try Root.create(alloc);
     errdefer root.destroy(alloc);
 
     return .{

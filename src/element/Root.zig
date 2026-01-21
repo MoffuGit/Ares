@@ -26,11 +26,11 @@ red_timer: Timer = undefined,
 green_timer: Timer = undefined,
 blue_timer: Timer = undefined,
 
-pub fn create(alloc: std.mem.Allocator, id: []const u8) !*Root {
+pub fn create(alloc: std.mem.Allocator) !*Root {
     const self = try alloc.create(Root);
     self.* = .{
         .element = try Element.init(alloc, .{
-            .id = id,
+            .id = "__root__",
             .userdata = self,
             .updateFn = update,
             .drawFn = draw,

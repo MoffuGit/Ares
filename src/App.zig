@@ -170,7 +170,3 @@ pub fn draw(self: *App) !void {
 pub fn resize(self: *App, size: vaxis.Winsize) void {
     self.window.resize(size);
 }
-
-pub fn root(self: *App) *Root {
-    return self.window.root;
-}
