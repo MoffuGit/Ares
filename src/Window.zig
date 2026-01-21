@@ -11,20 +11,31 @@ const Allocator = std.mem.Allocator;
 
 const Window = @This();
 
+const Options = struct {
+    keyPressFn: ?*const fn (ctx: *AppContext, key: vaxis.Key) void = null,
+    app_context: *AppContext,
+};
+
 alloc: Allocator,
 
-root: *Root,
-
 needs_draw: std.atomic.Value(bool) = std.atomic.Value(bool).init(true),
+
+root: *Root,
 
 size: vaxis.Winsize,
 screen: *Screen,
 
-pub fn init(alloc: Allocator, screen: *Screen) !Window {
+keyPressFn: ?*const fn (ctx: *AppContext, key: vaxis.Key) void,
+
+app_context: *AppContext,
+
+pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
     const root = try Root.create(alloc, "root");
     errdefer root.destroy(alloc);
 
     return .{
+        .app_context = opts.app_context,
+        .keyPressFn = opts.keyPressFn,
         .screen = screen,
         .alloc = alloc,
         .root = root,
@@ -72,4 +83,10 @@ pub fn draw(self: *Window) !void {
     self.root.element.draw(buffer);
 
     screen.swapWrite();
+}
+
+pub fn handleKeyPress(self: *Window, key: vaxis.Key) !void {
+    if (self.keyPressFn) |callback| {
+        callback(self.app_context, key);
+    }
 }

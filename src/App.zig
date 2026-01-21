@@ -24,11 +24,9 @@ const App = @This();
 
 var tty_buffer: [1024]u8 = undefined;
 
-const KeyPressFn = *const fn (ctx: *AppContext, key: vaxis.Key) ?vaxis.Key;
-
 const Options = struct {
     userdata: ?*anyopaque = null,
-    keyPressFn: ?KeyPressFn = null,
+    keyPressFn: ?*const fn (ctx: *AppContext, key: vaxis.Key) void = null,
 };
 
 alloc: Allocator,
@@ -47,14 +45,18 @@ loop: Loop,
 time: TimeManager,
 
 window: Window,
-keyPressFn: ?KeyPressFn,
-userdata: ?*anyopaque,
 app_context: AppContext,
+userdata: ?*anyopaque,
 
 pub fn create(alloc: Allocator, opts: Options) !*App {
     var self = try alloc.create(App);
 
-    var screen = try Screen.init(alloc, .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 });
+    var screen = try Screen.init(alloc, .{
+        .cols = 0,
+        .rows = 0,
+        .x_pixel = 0,
+        .y_pixel = 0,
+    });
     errdefer screen.deinit(alloc);
 
     var renderer = try Renderer.init(alloc, &self.tty, &self.screen);
@@ -70,16 +72,23 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
     self.tty = tty;
     errdefer tty.deinit();
 
-    const events_thread = EventsThread.init(alloc, &self.tty, loop.mailbox, loop.wakeup);
+    const events_thread = EventsThread.init(
+        alloc,
+        &self.tty,
+        loop.mailbox,
+        loop.wakeup,
+    );
 
     var time = TimeManager.init(alloc);
     errdefer time.deinit();
 
-    var window = try Window.init(alloc, &self.screen);
+    var window = try Window.init(alloc, &self.screen, .{
+        .keyPressFn = opts.keyPressFn,
+        .app_context = &self.app_context,
+    });
     errdefer window.deinit();
 
     self.* = .{
-        .keyPressFn = opts.keyPressFn,
         .alloc = alloc,
         .screen = screen,
         .renderer = renderer,
@@ -164,10 +173,4 @@ pub fn resize(self: *App, size: vaxis.Winsize) void {
 
 pub fn root(self: *App) *Root {
     return self.window.root;
-}
-
-pub fn handleKeyPress(self: *App, key: vaxis.Key) !void {
-    if (self.keyPressFn) |callback| {
-        if (callback(&self.app_context, key) == null) return;
-    }
 }

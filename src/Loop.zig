@@ -265,7 +265,7 @@ fn drainMailbox(self: *Loop) !void {
                 }
             },
             .key_press => |key| {
-                try self.app.handleKeyPress(key);
+                try self.app.window.handleKeyPress(key);
             },
         }
     }
