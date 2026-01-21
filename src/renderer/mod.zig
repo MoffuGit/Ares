@@ -9,7 +9,6 @@ alloc: Allocator,
 
 size: vaxis.Winsize,
 vx: vaxis.Vaxis,
-render: bool,
 
 tty: *vaxis.Tty,
 
@@ -22,7 +21,6 @@ pub fn init(alloc: Allocator, tty: *vaxis.Tty, screen: *Screen) !Renderer {
         .vx = vx,
         .tty = tty,
         .alloc = alloc,
-        .render = false,
         .screen = screen,
         .size = .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 },
     };
@@ -46,29 +44,25 @@ pub fn threadEnter(self: *Renderer) !void {
 pub fn resize(self: *Renderer, size: vaxis.Winsize) !void {
     try self.vx.resize(self.alloc, self.tty.writer(), size);
     self.size = size;
-    self.render = true;
 }
 
 pub fn threadExit(self: *Renderer) void {
     _ = self;
 }
 
-pub fn renderFrame(self: *Renderer, sync: bool) !void {
+pub fn renderFrame(self: *Renderer) !void {
     const screen = self.screen;
 
-    const has_new_frame = screen.swapRead();
+    const buffer = screen.currentBuffer() orelse return;
 
-    if (!has_new_frame and !sync and !self.render) return;
-    defer self.render = false;
+    defer screen.releaseBuffer();
 
-    const read_buffer = screen.readBuffer();
-
-    const size_change = self.size.cols != read_buffer.width or self.size.rows != read_buffer.height;
+    const size_change = self.size.cols != buffer.width or self.size.rows != buffer.height;
 
     if (size_change) {
         const size: vaxis.Winsize = .{
-            .cols = read_buffer.width,
-            .rows = read_buffer.height,
+            .cols = buffer.width,
+            .rows = buffer.height,
             .x_pixel = screen.width_pix,
             .y_pixel = screen.height_pix,
         };
@@ -78,6 +72,6 @@ pub fn renderFrame(self: *Renderer, sync: bool) !void {
         screen.width_method = self.vx.caps.unicode;
     }
 
-    var vaxis_screen = screen.toVaxisScreen();
+    var vaxis_screen = screen.toVaxisScreen(buffer);
     try self.vx.render(&vaxis_screen, self.tty.writer());
 }

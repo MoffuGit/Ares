@@ -88,17 +88,16 @@ pub fn requestDraw(self: *Window) void {
 
 pub fn draw(self: *Window) !void {
     const screen = self.screen;
-    const buffer = screen.writeBuffer();
+    const buffer = try screen.nextBuffer();
+    errdefer screen.releaseBuffer();
 
     const size = self.size;
     if (buffer.width != size.cols or buffer.height != size.rows) {
-        try screen.resizeWriteBuffer(self.alloc, size);
+        try screen.resizeBuffer(self.alloc, buffer, size);
     }
 
     try self.root.element.update();
     self.root.element.draw(buffer);
-
-    screen.swapWrite();
 }
 
 pub fn handleEvent(self: *Window, event: Event) !void {

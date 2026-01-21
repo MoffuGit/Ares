@@ -6,14 +6,52 @@ const Cell = vaxis.Cell;
 
 pub const Screen = @This();
 
-const AtomicU8 = std.atomic.Value(u8);
-
 const Method = vaxis.gwidth.Method;
 
-buffers: [3]Buffer,
-write_idx: u8 = 0,
-ready_idx: AtomicU8 = .init(3),
-read_idx: u8 = 2,
+const SwapChain = struct {
+    const buf_count = 3;
+
+    buffers: [buf_count]Buffer,
+    buffer_index: std.math.IntFittingRange(0, buf_count) = 0,
+    buffer_sema: std.Thread.Semaphore = .{ .permits = buf_count },
+
+    defunct: bool = false,
+
+    pub fn init(alloc: Allocator, cols: u16, rows: u16) !SwapChain {
+        var result: SwapChain = .{ .buffers = undefined };
+
+        for (&result.buffers) |*buffer| {
+            buffer.* = try Buffer.init(alloc, cols, rows);
+        }
+
+        return result;
+    }
+
+    pub fn deinit(self: *SwapChain, alloc: Allocator) void {
+        if (self.defunct) return;
+        self.defunct = true;
+
+        for (0..buf_count) |_| self.buffer_sema.wait();
+        for (&self.buffers) |*buffer| buffer.deinit(alloc);
+    }
+
+    pub fn nextBuffer(self: *SwapChain) error{Defunct}!*Buffer {
+        if (self.defunct) return error.Defunct;
+
+        self.buffer_sema.wait();
+        errdefer self.buffer_sema.post();
+        self.buffer_index = (self.buffer_index + 1) % buf_count;
+        return &self.buffers[self.buffer_index];
+    }
+
+    pub fn releaseBuffer(self: *SwapChain) void {
+        self.buffer_sema.post();
+    }
+};
+
+swap_chain: SwapChain,
+
+current_buffer: ?*Buffer = null,
 
 cursor_row: u16 = 0,
 cursor_col: u16 = 0,
@@ -29,74 +67,38 @@ cursor_shape: Cell.CursorShape = .default,
 
 pub fn init(alloc: Allocator, size: vaxis.Winsize) !Screen {
     return .{
-        .buffers = .{
-            try Buffer.init(alloc, size.cols, size.rows),
-            try Buffer.init(alloc, size.cols, size.rows),
-            try Buffer.init(alloc, size.cols, size.rows),
-        },
+        .swap_chain = try SwapChain.init(alloc, size.cols, size.rows),
         .width_pix = size.x_pixel,
         .height_pix = size.y_pixel,
     };
 }
 
 pub fn deinit(self: *Screen, alloc: Allocator) void {
-    for (&self.buffers) |*buffer| {
-        buffer.deinit(alloc);
-    }
+    self.swap_chain.deinit(alloc);
 }
 
-pub fn swapWrite(self: *Screen) void {
-    const old_ready = self.ready_idx.swap(self.write_idx, .acq_rel);
-    if (old_ready < 3 and old_ready != self.read_idx) {
-        self.write_idx = old_ready;
-    } else {
-        self.write_idx = self.findFreeBuffer();
-    }
+pub fn nextBuffer(self: *Screen) !*Buffer {
+    const buffer = try self.swap_chain.nextBuffer();
+    self.current_buffer = buffer;
+    return buffer;
 }
 
-pub fn swapRead(self: *Screen) bool {
-    const ready = self.ready_idx.load(.acquire);
-    if (ready >= 3) return false;
-
-    const old_read = self.read_idx;
-    const swapped = self.ready_idx.cmpxchgStrong(ready, old_read, .acq_rel, .acquire);
-
-    if (swapped == null) {
-        self.read_idx = ready;
-        return true;
-    }
-    return false;
+pub fn releaseBuffer(self: *Screen) void {
+    self.swap_chain.releaseBuffer();
 }
 
-pub fn writeBuffer(self: *Screen) *Buffer {
-    return &self.buffers[self.write_idx];
+pub fn currentBuffer(self: *Screen) ?*Buffer {
+    return self.current_buffer;
 }
 
-pub fn readBuffer(self: *Screen) *Buffer {
-    return &self.buffers[self.read_idx];
-}
-
-fn findFreeBuffer(self: *Screen) u8 {
-    const ready = self.ready_idx.load(.acquire);
-    for (0..3) |i| {
-        const idx: u8 = @intCast(i);
-        if (idx != self.read_idx and (ready >= 3 or idx != ready)) {
-            return idx;
-        }
-    }
-    return (self.write_idx + 1) % 3;
-}
-
-pub fn resizeWriteBuffer(self: *Screen, alloc: Allocator, size: vaxis.Winsize) !void {
-    const buffer = &self.buffers[self.write_idx];
+pub fn resizeBuffer(self: *Screen, alloc: Allocator, buffer: *Buffer, size: vaxis.Winsize) !void {
     buffer.deinit(alloc);
     buffer.* = try Buffer.init(alloc, size.cols, size.rows);
     self.width_pix = size.x_pixel;
     self.height_pix = size.y_pixel;
 }
 
-pub fn toVaxisScreen(self: *Screen) vaxis.Screen {
-    const buffer = self.readBuffer();
+pub fn toVaxisScreen(self: *Screen, buffer: *Buffer) vaxis.Screen {
     return .{
         .width = buffer.width,
         .height = buffer.height,

@@ -10,8 +10,6 @@ const Allocator = std.mem.Allocator;
 
 const Buffer = @import("../Buffer.zig");
 
-const Direction = enum { up, down };
-
 element: Element,
 
 pub fn create(alloc: std.mem.Allocator) !*Root {

@@ -24,9 +24,6 @@ wakeup_c: xev.Completion = .{},
 stop: xev.Async,
 stop_c: xev.Completion = .{},
 
-render_now: xev.Async,
-render_now_c: xev.Completion = .{},
-
 mailbox: *Mailbox,
 
 renderer: *Renderer,
@@ -38,9 +35,6 @@ pub fn init(alloc: Allocator, renderer: *Renderer) !Thread {
     var wakeup_h = try xev.Async.init();
     errdefer wakeup_h.deinit();
 
-    var render_now = try xev.Async.init();
-    errdefer render_now.deinit();
-
     var stop_h = try xev.Async.init();
     errdefer stop_h.deinit();
 
@@ -50,7 +44,6 @@ pub fn init(alloc: Allocator, renderer: *Renderer) !Thread {
     return .{
         .alloc = alloc,
         .renderer = renderer,
-        .render_now = render_now,
         .loop = loop,
         .stop = stop_h,
         .mailbox = mailbox,
@@ -60,7 +53,6 @@ pub fn init(alloc: Allocator, renderer: *Renderer) !Thread {
 
 pub fn deinit(self: *Thread) void {
     self.stop.deinit();
-    self.render_now.deinit();
     self.wakeup.deinit();
     self.mailbox.destroy(self.alloc);
 }
@@ -79,31 +71,12 @@ fn threadMain_(self: *Thread) !void {
 
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
-    self.render_now.wait(&self.loop, &self.render_now_c, Thread, self, renderNowCallback);
 
     try self.wakeup.notify();
 
     log.debug("starting renderer thread", .{});
     defer log.debug("starting renderer thread shutdown", .{});
     _ = try self.loop.run(.until_done);
-}
-
-fn renderNowCallback(
-    self_: ?*Thread,
-    _: *xev.Loop,
-    _: *xev.Completion,
-    r: xev.Async.WaitError!void,
-) xev.CallbackAction {
-    _ = r catch |err| {
-        log.err("error in rendering now err={}", .{err});
-        return .rearm;
-    };
-
-    const t = self_.?;
-    t.renderer.renderFrame(false) catch |err|
-        log.warn("error rendering err={}", .{err});
-
-    return .rearm;
 }
 
 fn stopCallback(
@@ -153,7 +126,7 @@ fn renderCallback(
         return .disarm;
     };
 
-    t.renderer.renderFrame(false) catch |err|
+    t.renderer.renderFrame() catch |err|
         log.warn("error rendering err={}", .{err});
 
     return .disarm;
