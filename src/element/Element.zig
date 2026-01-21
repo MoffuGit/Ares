@@ -251,6 +251,8 @@ pub fn handleEvent(self: *Element, ctx: *EventContext, event: Event) void {
     switch (event) {
         .key_press => |key| self.handleKeyPress(ctx, key),
         .key_release => |key| self.handleKeyRelease(ctx, key),
+        .blur => self.handleBlur(),
+        .focus => self.handleFocus(),
     }
 }
 
@@ -263,5 +265,17 @@ pub fn handleKeyPress(self: *Element, ctx: *EventContext, key: vaxis.Key) void {
 pub fn handleKeyRelease(self: *Element, ctx: *EventContext, key: vaxis.Key) void {
     if (self.keyReleaseFn) |callback| {
         callback(self, ctx, key);
+    }
+}
+
+pub fn handleFocus(self: *Element) void {
+    if (self.focusFn) |callback| {
+        callback(self);
+    }
+}
+
+pub fn handleBlur(self: *Element) void {
+    if (self.blurFn) |callback| {
+        callback(self);
     }
 }

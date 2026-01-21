@@ -79,8 +79,12 @@ fn handleEvent(self: *Thread, event: vaxis.Event) !void {
         .key_release => |key| {
             _ = self.mailbox.push(.{ .event = .{ .key_release = key } }, .instant);
         },
-        .focus_in => {},
-        .focus_out => {},
+        .focus_in => {
+            _ = self.mailbox.push(.{ .event = .focus }, .instant);
+        },
+        .focus_out => {
+            _ = self.mailbox.push(.{ .event = .blur }, .instant);
+        },
         else => {},
     }
 }

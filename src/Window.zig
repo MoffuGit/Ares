@@ -17,8 +17,8 @@ const Window = @This();
 const Options = struct {
     keyPressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void = null,
     keyReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void = null,
-    focusFn: ?*const fn (element: ?*Element) void = null,
-    blurFn: ?*const fn (element: ?*Element) void = null,
+    focusFn: ?*const fn (app_ctx: *AppContext) void = null,
+    blurFn: ?*const fn (app_ctx: *AppContext) void = null,
     app_context: *AppContext,
 };
 
@@ -33,8 +33,8 @@ screen: *Screen,
 
 keyPressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void,
 keyReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void,
-focusFn: ?*const fn (element: ?*Element) void,
-blurFn: ?*const fn (element: ?*Element) void,
+focusFn: ?*const fn (app_ctx: *AppContext) void,
+blurFn: ?*const fn (app_ctx: *AppContext) void,
 
 app_context: *AppContext,
 
@@ -110,6 +110,8 @@ pub fn handleEvent(self: *Window, event: Event) !void {
     switch (event) {
         .key_press => |key| self.handleKeyPress(&ctx, key),
         .key_release => |key| self.handleKeyRelease(&ctx, key),
+        .blur => self.handleBlur(),
+        .focus => self.handleFocus(),
     }
 
     if (ctx.stopped) return;
@@ -149,6 +151,18 @@ pub fn handleKeyPress(self: *Window, ctx: *EventContext, key: vaxis.Key) void {
 pub fn handleKeyRelease(self: *Window, ctx: *EventContext, key: vaxis.Key) void {
     if (self.keyReleaseFn) |callback| {
         callback(self.app_context, ctx, key);
+    }
+}
+
+pub fn handleFocus(self: *Window) void {
+    if (self.focusFn) |callback| {
+        callback(self.app_context);
+    }
+}
+
+pub fn handleBlur(self: *Window) void {
+    if (self.blurFn) |callback| {
+        callback(self.app_context);
     }
 }
 
