@@ -7,6 +7,8 @@ const Tick = Loop.Tick;
 const Timer = @import("element/Timer.zig");
 const AnimationMod = @import("element/Animation.zig");
 const BaseAnimation = AnimationMod.BaseAnimation;
+const Element = @import("element/Element.zig");
+const Window = @import("Window.zig");
 
 const AppContext = @This();
 
@@ -15,6 +17,7 @@ mailbox: *Mailbox,
 wakeup: xev.Async,
 stop: xev.Async,
 needs_draw: *std.atomic.Value(bool),
+window: *Window,
 
 pub fn addTick(self: *AppContext, tick: Tick) void {
     _ = self.mailbox.push(.{ .tick = tick }, .instant);
@@ -41,4 +44,8 @@ pub fn requestDraw(self: *AppContext) void {
 
 pub fn stopApp(self: *AppContext) !void {
     try self.stop.notify();
+}
+
+pub fn setFocus(self: *AppContext, element: ?*Element) void {
+    self.window.setFocus(element);
 }

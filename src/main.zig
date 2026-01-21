@@ -10,12 +10,15 @@ const GPA = std.heap.GeneralPurposeAllocator(.{});
 
 const App = @import("App.zig");
 const AppContext = @import("AppContext.zig");
+const events = @import("events/mod.zig");
+const EventContext = events.EventContext;
 
 const log = std.log.scoped(.main);
 
-pub fn keyPressFn(ctx: *AppContext, key: vaxis.Key) void {
+pub fn keyPressFn(app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void {
     if (key.matches('c', .{ .ctrl = true })) {
-        ctx.stopApp() catch {};
+        app_ctx.stopApp() catch {};
+        ctx.stopPropagation();
     }
 }
 

@@ -15,6 +15,8 @@ const Window = @import("Window.zig");
 
 const TimeManager = @import("TimeManager.zig");
 const AppContext = @import("AppContext.zig");
+const events = @import("events/mod.zig");
+const EventContext = events.EventContext;
 
 const log = std.log.scoped(.app);
 
@@ -26,7 +28,7 @@ var tty_buffer: [1024]u8 = undefined;
 
 const Options = struct {
     userdata: ?*anyopaque = null,
-    keyPressFn: ?*const fn (ctx: *AppContext, key: vaxis.Key) void = null,
+    keyPressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void = null,
 };
 
 alloc: Allocator,
@@ -110,6 +112,7 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
         .needs_draw = &self.window.needs_draw,
         .stop = self.loop.stop,
         .userdata = self.userdata,
+        .window = &self.window,
     };
     self.window.setContext(&self.app_context);
 

@@ -12,6 +12,8 @@ pub const BaseAnimation = AnimationMod.BaseAnimation;
 const Buffer = @import("../Buffer.zig");
 
 pub const AppContext = @import("../AppContext.zig");
+const events = @import("../events/mod.zig");
+pub const EventContext = events.EventContext;
 
 pub const Childrens = std.ArrayListUnmanaged(*Element);
 
@@ -34,8 +36,9 @@ userdata: ?*anyopaque = null,
 updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
 drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
 removeFn: ?*const fn (element: *Element) void = null,
-keyPressFn: ?*const fn (element: *Element, key: vaxis.Key) ?vaxis.Key = null,
-//MouseHandler, KeyHanlder...
+keyPressFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key) void = null,
+focusFn: ?*const fn (element: *Element) void = null,
+blurFn: ?*const fn (element: *Element) void = null,
 
 pub fn draw(self: *Element, buffer: *Buffer) void {
     if (!self.visible) return;
@@ -116,6 +119,9 @@ pub const Opts = struct {
     updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
     drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
     removeFn: ?*const fn (element: *Element) void = null,
+    keyPressFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key) void = null,
+    focusFn: ?*const fn (element: *Element) void = null,
+    blurFn: ?*const fn (element: *Element) void = null,
 };
 
 pub fn init(alloc: std.mem.Allocator, opts: Opts) !Element {
@@ -139,6 +145,9 @@ pub fn init(alloc: std.mem.Allocator, opts: Opts) !Element {
         .updateFn = opts.updateFn,
         .drawFn = opts.drawFn,
         .removeFn = opts.removeFn,
+        .keyPressFn = opts.keyPressFn,
+        .focusFn = opts.focusFn,
+        .blurFn = opts.blurFn,
     };
 }
 
