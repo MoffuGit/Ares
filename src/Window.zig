@@ -43,12 +43,11 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
     var root_opts = opts.root_opts;
     root_opts.id = "__root__";
 
-    var elements = Elements.init(alloc);
-
-    try elements.put(root.num, root);
-
     root.* = Element.init(alloc, root_opts);
-    root.setContext(opts.app_context);
+    root.context = opts.app_context;
+
+    var elements = Elements.init(alloc);
+    try elements.put(root.num, root);
 
     return .{
         .screen = screen,
@@ -65,10 +64,6 @@ pub fn deinit(self: *Window) void {
     self.focus_path.deinit(self.alloc);
     self.hit_grid.deinit(self.alloc);
     self.elements.deinit();
-}
-
-pub fn setContext(self: *Window, ctx: *AppContext) void {
-    self.root.setContext(ctx);
 }
 
 pub fn addElement(self: *Window, elem: *Element) !void {

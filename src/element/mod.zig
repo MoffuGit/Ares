@@ -170,12 +170,13 @@ pub fn update(self: *Element) !void {
     }
 }
 
-pub fn setContext(self: *Element, ctx: *AppContext) void {
+pub fn setContext(self: *Element, ctx: *AppContext) !void {
     self.context = ctx;
+    try ctx.window.addElement(self);
 
     if (self.childrens) |*childrens| {
         for (childrens.items) |child| {
-            child.setContext(ctx);
+            try child.setContext(ctx);
         }
     }
 }
@@ -221,8 +222,7 @@ pub fn addChild(self: *Element, child: *Element) !void {
     child.parent = self;
 
     if (self.context) |ctx| {
-        child.setContext(ctx);
-        try ctx.window.addElement(child);
+        try child.setContext(ctx);
     }
 
     const insert_idx = blk: {
@@ -256,21 +256,6 @@ pub fn getChildById(self: *Element, id: []const u8) ?*Element {
         }
     }
     return null;
-}
-
-pub fn getChildrenSortedByZIndex(self: *Element, result: *std.ArrayList(*Element)) !void {
-    if (self.childrens) |*children| {
-        result.clearRetainingCapacity();
-        try result.ensureTotalCapacity(children.items.len);
-        for (children.items) |child| {
-            try result.append(child);
-        }
-        std.mem.sort(*Element, result.items, {}, zIndexLessThan);
-    }
-}
-
-fn zIndexLessThan(_: void, a: *Element, b: *Element) bool {
-    return a.zIndex < b.zIndex;
 }
 
 pub fn handleEvent(self: *Element, ctx: *EventContext, event: Event) void {
