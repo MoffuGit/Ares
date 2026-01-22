@@ -58,15 +58,20 @@ pub const Element = @This();
 alloc: std.mem.Allocator,
 id: []const u8,
 num: u64,
+
 visible: bool = true,
-zIndex: usize = 0,
 removed: bool = false,
+
+zIndex: usize = 0,
+
 childrens: ?Childrens = null,
 parent: ?*Element = null,
+
 x: u16 = 0,
 y: u16 = 0,
 width: u16 = 0,
 height: u16 = 0,
+
 context: ?*AppContext = null,
 
 userdata: ?*anyopaque = null,

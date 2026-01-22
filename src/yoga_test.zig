@@ -1,55 +1,121 @@
 const std = @import("std");
 const yoga = @import("yoga");
+const Style = @import("element/Style.zig");
 
 pub fn main() !void {
-    std.debug.print("=== Yoga Layout Test ===\n\n", .{});
+    std.debug.print("=== Yoga Incremental Layout Test ===\n\n", .{});
 
-    // Create a root node (container)
     const root = yoga.YGNodeNew();
     defer yoga.YGNodeFreeRecursive(root);
 
-    // Set root node styles (flexbox container)
-    yoga.YGNodeStyleSetFlexDirection(root, yoga.YGFlexDirectionColumn);
-    yoga.YGNodeStyleSetWidth(root, 100);
-    yoga.YGNodeStyleSetHeight(root, 100);
-    yoga.YGNodeStyleSetPadding(root, yoga.YGEdgeAll, 10);
+    const root_style = Style{
+        .flex_direction = .column,
+        .width = Style.StyleValue.px(100),
+        .height = Style.StyleValue.px(100),
+        .padding = Style.Edges.uniform(Style.StyleValue.px(10)),
+    };
+    root_style.apply(root);
 
-    // Create first child
     const child1 = yoga.YGNodeNew();
-    yoga.YGNodeStyleSetFlexGrow(child1, 1);
-    yoga.YGNodeStyleSetMargin(child1, yoga.YGEdgeBottom, 5);
+    const child1_style = Style{ .flex_grow = 1 };
+    child1_style.apply(child1);
     yoga.YGNodeInsertChild(root, child1, 0);
 
-    // Create second child
     const child2 = yoga.YGNodeNew();
-    yoga.YGNodeStyleSetFlexGrow(child2, 2);
+    const child2_style = Style{ .flex_grow = 1 };
+    child2_style.apply(child2);
     yoga.YGNodeInsertChild(root, child2, 1);
 
-    // Calculate layout
+    // --- Initial Layout ---
+    std.debug.print("--- Initial Layout ---\n", .{});
+    std.debug.print("Before calculate:\n", .{});
+    printDirtyState(root, child1, child2);
+
     yoga.YGNodeCalculateLayout(root, yoga.YGUndefined, yoga.YGUndefined, yoga.YGDirectionLTR);
 
-    // Print layout results
-    std.debug.print("Root Layout:\n", .{});
-    printNodeLayout("  root", root);
+    std.debug.print("\nAfter calculate:\n", .{});
+    printDirtyState(root, child1, child2);
+    printAllLayouts(root, child1, child2);
 
-    std.debug.print("\nChild Layouts:\n", .{});
-    printNodeLayout("  child1", child1);
-    printNodeLayout("  child2", child2);
+    clearNewLayoutFlags(root);
+    clearNewLayoutFlags(child1);
+    clearNewLayoutFlags(child2);
+
+    // --- Recalculate without changes (should use cache) ---
+    std.debug.print("\n--- Recalculate (no changes) ---\n", .{});
+    std.debug.print("Before calculate:\n", .{});
+    printDirtyState(root, child1, child2);
+
+    yoga.YGNodeCalculateLayout(root, yoga.YGUndefined, yoga.YGUndefined, yoga.YGDirectionLTR);
+
+    std.debug.print("\nAfter calculate:\n", .{});
+    printDirtyState(root, child1, child2);
+    std.debug.print("(hasNewLayout should be false - layout was cached)\n", .{});
+
+    // --- Change child1's height ---
+    std.debug.print("\n--- Change child1 to fixed height=20 ---\n", .{});
+    const child1_updated = Style{
+        .height = Style.StyleValue.px(20),
+        .flex_grow = 0,
+    };
+    child1_updated.apply(child1);
+
+    std.debug.print("Before calculate:\n", .{});
+    printDirtyState(root, child1, child2);
+
+    yoga.YGNodeCalculateLayout(root, yoga.YGUndefined, yoga.YGUndefined, yoga.YGDirectionLTR);
+
+    std.debug.print("\nAfter calculate:\n", .{});
+    printDirtyState(root, child1, child2);
+    printAllLayouts(root, child1, child2);
+
+    clearNewLayoutFlags(root);
+    clearNewLayoutFlags(child1);
+    clearNewLayoutFlags(child2);
+
+    // --- Change only child2 ---
+    std.debug.print("\n--- Change only child2 margin ---\n", .{});
+    const child2_updated = Style{
+        .flex_grow = 1,
+        .margin = Style.Edges{ .top = Style.StyleValue.px(5) },
+    };
+    child2_updated.apply(child2);
+
+    std.debug.print("Before calculate:\n", .{});
+    printDirtyState(root, child1, child2);
+
+    yoga.YGNodeCalculateLayout(root, yoga.YGUndefined, yoga.YGUndefined, yoga.YGDirectionLTR);
+
+    std.debug.print("\nAfter calculate:\n", .{});
+    printDirtyState(root, child1, child2);
+    printAllLayouts(root, child1, child2);
 
     std.debug.print("\n=== Test Complete ===\n", .{});
 }
 
-fn printNodeLayout(name: []const u8, node: yoga.YGNodeRef) void {
-    const left = yoga.YGNodeLayoutGetLeft(node);
-    const top = yoga.YGNodeLayoutGetTop(node);
-    const width = yoga.YGNodeLayoutGetWidth(node);
-    const height = yoga.YGNodeLayoutGetHeight(node);
+fn printDirtyState(root: yoga.YGNodeRef, child1: yoga.YGNodeRef, child2: yoga.YGNodeRef) void {
+    std.debug.print("  root:   dirty={}, hasNewLayout={}\n", .{ yoga.YGNodeIsDirty(root), yoga.YGNodeGetHasNewLayout(root) });
+    std.debug.print("  child1: dirty={}, hasNewLayout={}\n", .{ yoga.YGNodeIsDirty(child1), yoga.YGNodeGetHasNewLayout(child1) });
+    std.debug.print("  child2: dirty={}, hasNewLayout={}\n", .{ yoga.YGNodeIsDirty(child2), yoga.YGNodeGetHasNewLayout(child2) });
+}
 
-    std.debug.print("{s}: left={d:.1}, top={d:.1}, width={d:.1}, height={d:.1}\n", .{
+fn printAllLayouts(root: yoga.YGNodeRef, child1: yoga.YGNodeRef, child2: yoga.YGNodeRef) void {
+    std.debug.print("\nLayout results:\n", .{});
+    printNodeLayout("  root", root);
+    printNodeLayout("  child1", child1);
+    printNodeLayout("  child2", child2);
+}
+
+fn printNodeLayout(name: []const u8, node: yoga.YGNodeRef) void {
+    std.debug.print("{s}: left={d:.0}, top={d:.0}, w={d:.0}, h={d:.0}\n", .{
         name,
-        left,
-        top,
-        width,
-        height,
+        yoga.YGNodeLayoutGetLeft(node),
+        yoga.YGNodeLayoutGetTop(node),
+        yoga.YGNodeLayoutGetWidth(node),
+        yoga.YGNodeLayoutGetHeight(node),
     });
+}
+
+fn clearNewLayoutFlags(node: yoga.YGNodeRef) void {
+    yoga.YGNodeSetHasNewLayout(node, false);
 }

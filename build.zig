@@ -40,6 +40,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     yoga_test_mod.addImport("yoga", yoga_mod);
+    yoga_test_mod.addImport("Style", b.createModule(.{
+        .root_source_file = b.path("src/element/Style.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "yoga", .module = yoga_mod }},
+    }));
 
     const yoga_test_exe = b.addExecutable(.{ .name = "yoga-test", .root_module = yoga_test_mod });
     yoga_test_exe.linkLibrary(yoga_lib);
