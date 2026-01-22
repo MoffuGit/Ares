@@ -20,10 +20,11 @@ const Options = struct {
     keyReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void = null,
     focusFn: ?*const fn (app_ctx: *AppContext) void = null,
     blurFn: ?*const fn (app_ctx: *AppContext) void = null,
-    mousePressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    mouseReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    mouseMotionFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    mouseDragFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseDownFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseUpFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    clickFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseMoveFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    wheelFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
     app_context: *AppContext,
 };
 
@@ -40,16 +41,19 @@ keyPressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key
 keyReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void,
 focusFn: ?*const fn (app_ctx: *AppContext) void,
 blurFn: ?*const fn (app_ctx: *AppContext) void,
-mousePressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
-mouseReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
-mouseMotionFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
-mouseDragFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
+mouseDownFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
+mouseUpFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
+clickFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
+mouseMoveFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
+wheelFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
 
 app_context: *AppContext,
 
 focused: ?*Element = null,
 focus_path: std.ArrayListUnmanaged(*Element) = .{},
 hit_grid: HitGrid = .{},
+hovered: ?*Element = null,
+pressed_on: ?*Element = null,
 
 pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
     const root = try Root.create(alloc);
@@ -63,10 +67,11 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
         .keyReleaseFn = opts.keyReleaseFn,
         .focusFn = opts.focusFn,
         .blurFn = opts.blurFn,
-        .mousePressFn = opts.mousePressFn,
-        .mouseReleaseFn = opts.mouseReleaseFn,
-        .mouseMotionFn = opts.mouseMotionFn,
-        .mouseDragFn = opts.mouseDragFn,
+        .mouseDownFn = opts.mouseDownFn,
+        .mouseUpFn = opts.mouseUpFn,
+        .clickFn = opts.clickFn,
+        .mouseMoveFn = opts.mouseMoveFn,
+        .wheelFn = opts.wheelFn,
         .screen = screen,
         .alloc = alloc,
         .root = root,
@@ -178,28 +183,198 @@ fn handleMouseEvent(self: *Window, mouse: vaxis.Mouse) void {
     const col: u16 = if (mouse.col < 0) 0 else @intCast(mouse.col);
     const row: u16 = if (mouse.row < 0) 0 else @intCast(mouse.row);
 
-    const target = self.getElementAt(col, row);
+    const current_target = self.getElementAt(col, row);
+    const prev_hovered = self.hovered;
 
-    var ctx = EventContext{
-        .phase = .capturing,
-        .target = target,
+    self.processHoverChange(prev_hovered, current_target, mouse);
+
+    switch (mouse.type) {
+        .press => self.processMouseDown(current_target, mouse),
+        .release => self.processMouseUp(current_target, mouse),
+        .motion, .drag => self.processMouseMove(current_target, mouse),
+    }
+
+    self.processWheel(current_target, mouse);
+
+    self.hovered = current_target;
+}
+
+fn processHoverChange(self: *Window, prev: ?*Element, current: ?*Element, mouse: vaxis.Mouse) void {
+    if (prev == current) return;
+
+    var out_ctx = EventContext{ .phase = .at_target, .target = prev };
+    var over_ctx = EventContext{ .phase = .at_target, .target = current };
+
+    if (prev) |prev_elem| {
+        const is_leaving = current == null or !prev_elem.isAncestorOf(current.?);
+        if (is_leaving) {
+            prev_elem.handleMouseLeave(mouse);
+        }
+
+        out_ctx.phase = .at_target;
+        prev_elem.handleMouseOut(&out_ctx, mouse);
+        if (!out_ctx.stopped) {
+            out_ctx.phase = .bubbling;
+            self.bubbleMouseOut(prev_elem.parent, &out_ctx, mouse);
+        }
+    }
+
+    if (current) |curr_elem| {
+        const is_entering = prev == null or !curr_elem.isAncestorOf(prev.?);
+        if (is_entering) {
+            curr_elem.handleMouseEnter(mouse);
+        }
+
+        over_ctx.phase = .at_target;
+        curr_elem.handleMouseOver(&over_ctx, mouse);
+        if (!over_ctx.stopped) {
+            over_ctx.phase = .bubbling;
+            self.bubbleMouseOver(curr_elem.parent, &over_ctx, mouse);
+        }
+    }
+}
+
+fn processMouseDown(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
+    self.pressed_on = target;
+
+    var ctx = EventContext{ .phase = .at_target, .target = target };
+
+    if (self.mouseDownFn) |callback| callback(self.app_context, &ctx, mouse);
+    if (ctx.stopped) return;
+
+    if (target) |elem| {
+        elem.handleMouseDown(&ctx, mouse);
+        if (!ctx.stopped) {
+            ctx.phase = .bubbling;
+            self.bubbleMouseDown(elem.parent, &ctx, mouse);
+        }
+    }
+}
+
+fn processMouseUp(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
+    var ctx = EventContext{ .phase = .at_target, .target = target };
+
+    if (self.mouseUpFn) |callback| callback(self.app_context, &ctx, mouse);
+    if (ctx.stopped) {
+        self.pressed_on = null;
+        return;
+    }
+
+    if (target) |elem| {
+        elem.handleMouseUp(&ctx, mouse);
+        if (!ctx.stopped) {
+            ctx.phase = .bubbling;
+            self.bubbleMouseUp(elem.parent, &ctx, mouse);
+        }
+    }
+
+    if (self.pressed_on == target and target != null) {
+        self.processClick(target.?, mouse);
+    }
+    self.pressed_on = null;
+}
+
+fn processClick(self: *Window, target: *Element, mouse: vaxis.Mouse) void {
+    var ctx = EventContext{ .phase = .at_target, .target = target };
+
+    if (self.clickFn) |callback| callback(self.app_context, &ctx, mouse);
+    if (ctx.stopped) return;
+
+    target.handleClick(&ctx, mouse);
+    if (!ctx.stopped) {
+        ctx.phase = .bubbling;
+        self.bubbleClick(target.parent, &ctx, mouse);
+    }
+}
+
+fn processMouseMove(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
+    var ctx = EventContext{ .phase = .at_target, .target = target };
+
+    if (self.mouseMoveFn) |callback| callback(self.app_context, &ctx, mouse);
+    if (ctx.stopped) return;
+
+    if (target) |elem| {
+        elem.handleMouseMove(&ctx, mouse);
+        if (!ctx.stopped) {
+            ctx.phase = .bubbling;
+            self.bubbleMouseMove(elem.parent, &ctx, mouse);
+        }
+    }
+}
+
+fn processWheel(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
+    const is_wheel = switch (mouse.button) {
+        .wheel_up, .wheel_down, .wheel_left, .wheel_right => true,
+        else => false,
     };
+    if (!is_wheel) return;
 
-    self.handleMouse(&ctx, mouse);
+    var ctx = EventContext{ .phase = .at_target, .target = target };
 
+    if (self.wheelFn) |callback| callback(self.app_context, &ctx, mouse);
     if (ctx.stopped) return;
 
-    const elem = target orelse return;
+    if (target) |elem| {
+        elem.handleWheel(&ctx, mouse);
+        if (!ctx.stopped) {
+            ctx.phase = .bubbling;
+            self.bubbleWheel(elem.parent, &ctx, mouse);
+        }
+    }
+}
 
-    ctx.phase = .at_target;
-    elem.handleMouse(&ctx, mouse);
+fn bubbleMouseDown(_: *Window, start: ?*Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    var current = start;
+    while (current) |elem| : (current = elem.parent) {
+        elem.handleMouseDown(ctx, mouse);
+        if (ctx.stopped) return;
+    }
+}
 
-    if (ctx.stopped) return;
+fn bubbleMouseUp(_: *Window, start: ?*Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    var current = start;
+    while (current) |elem| : (current = elem.parent) {
+        elem.handleMouseUp(ctx, mouse);
+        if (ctx.stopped) return;
+    }
+}
 
-    ctx.phase = .bubbling;
-    var current: ?*Element = elem.parent;
-    while (current) |parent| : (current = parent.parent) {
-        parent.handleMouse(&ctx, mouse);
+fn bubbleClick(_: *Window, start: ?*Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    var current = start;
+    while (current) |elem| : (current = elem.parent) {
+        elem.handleClick(ctx, mouse);
+        if (ctx.stopped) return;
+    }
+}
+
+fn bubbleMouseMove(_: *Window, start: ?*Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    var current = start;
+    while (current) |elem| : (current = elem.parent) {
+        elem.handleMouseMove(ctx, mouse);
+        if (ctx.stopped) return;
+    }
+}
+
+fn bubbleMouseOver(_: *Window, start: ?*Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    var current = start;
+    while (current) |elem| : (current = elem.parent) {
+        elem.handleMouseOver(ctx, mouse);
+        if (ctx.stopped) return;
+    }
+}
+
+fn bubbleMouseOut(_: *Window, start: ?*Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    var current = start;
+    while (current) |elem| : (current = elem.parent) {
+        elem.handleMouseOut(ctx, mouse);
+        if (ctx.stopped) return;
+    }
+}
+
+fn bubbleWheel(_: *Window, start: ?*Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    var current = start;
+    while (current) |elem| : (current = elem.parent) {
+        elem.handleWheel(ctx, mouse);
         if (ctx.stopped) return;
     }
 }
@@ -225,15 +400,6 @@ pub fn handleFocus(self: *Window) void {
 pub fn handleBlur(self: *Window) void {
     if (self.blurFn) |callback| {
         callback(self.app_context);
-    }
-}
-
-pub fn handleMouse(self: *Window, ctx: *EventContext, mouse: vaxis.Mouse) void {
-    switch (mouse.type) {
-        .press => if (self.mousePressFn) |callback| callback(self.app_context, ctx, mouse),
-        .release => if (self.mouseReleaseFn) |callback| callback(self.app_context, ctx, mouse),
-        .motion => if (self.mouseMotionFn) |callback| callback(self.app_context, ctx, mouse),
-        .drag => if (self.mouseDragFn) |callback| callback(self.app_context, ctx, mouse),
     }
 }
 

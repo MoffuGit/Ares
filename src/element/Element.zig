@@ -79,10 +79,15 @@ keyReleaseFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key)
 focusFn: ?*const fn (element: *Element) void = null,
 blurFn: ?*const fn (element: *Element) void = null,
 hitGridFn: ?*const fn (element: *Element, hit_grid: *HitGrid) void = null,
-mousePressFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-mouseReleaseFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-mouseMotionFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-mouseDragFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+mouseDownFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+mouseUpFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+clickFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+mouseMoveFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+mouseEnterFn: ?*const fn (element: *Element, mouse: vaxis.Mouse) void = null,
+mouseLeaveFn: ?*const fn (element: *Element, mouse: vaxis.Mouse) void = null,
+mouseOverFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+mouseOutFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+wheelFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
 
 pub fn draw(self: *Element, buffer: *Buffer) void {
     if (!self.visible) return;
@@ -161,10 +166,15 @@ pub const Opts = struct {
     focusFn: ?*const fn (element: *Element) void = null,
     blurFn: ?*const fn (element: *Element) void = null,
     hitGridFn: ?*const fn (element: *Element, hit_grid: *HitGrid) void = null,
-    mousePressFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    mouseReleaseFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    mouseMotionFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    mouseDragFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseDownFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseUpFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    clickFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseMoveFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseEnterFn: ?*const fn (element: *Element, mouse: vaxis.Mouse) void = null,
+    mouseLeaveFn: ?*const fn (element: *Element, mouse: vaxis.Mouse) void = null,
+    mouseOverFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseOutFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    wheelFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
 };
 
 pub fn init(alloc: std.mem.Allocator, opts: Opts) Element {
@@ -191,10 +201,15 @@ pub fn init(alloc: std.mem.Allocator, opts: Opts) Element {
         .focusFn = opts.focusFn,
         .blurFn = opts.blurFn,
         .hitGridFn = opts.hitGridFn,
-        .mousePressFn = opts.mousePressFn,
-        .mouseReleaseFn = opts.mouseReleaseFn,
-        .mouseMotionFn = opts.mouseMotionFn,
-        .mouseDragFn = opts.mouseDragFn,
+        .mouseDownFn = opts.mouseDownFn,
+        .mouseUpFn = opts.mouseUpFn,
+        .clickFn = opts.clickFn,
+        .mouseMoveFn = opts.mouseMoveFn,
+        .mouseEnterFn = opts.mouseEnterFn,
+        .mouseLeaveFn = opts.mouseLeaveFn,
+        .mouseOverFn = opts.mouseOverFn,
+        .mouseOutFn = opts.mouseOutFn,
+        .wheelFn = opts.wheelFn,
     };
 }
 
@@ -288,7 +303,7 @@ pub fn handleEvent(self: *Element, ctx: *EventContext, event: Event) void {
         .key_release => |key| self.handleKeyRelease(ctx, key),
         .blur => self.handleBlur(),
         .focus => self.handleFocus(),
-        .mouse => |mouse| self.handleMouse(ctx, mouse),
+        .mouse => {},
     }
 }
 
@@ -316,11 +331,46 @@ pub fn handleBlur(self: *Element) void {
     }
 }
 
-pub fn handleMouse(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
-    switch (mouse.type) {
-        .press => if (self.mousePressFn) |callback| callback(self, ctx, mouse),
-        .release => if (self.mouseReleaseFn) |callback| callback(self, ctx, mouse),
-        .motion => if (self.mouseMotionFn) |callback| callback(self, ctx, mouse),
-        .drag => if (self.mouseDragFn) |callback| callback(self, ctx, mouse),
+pub fn handleMouseDown(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    if (self.mouseDownFn) |callback| callback(self, ctx, mouse);
+}
+
+pub fn handleMouseUp(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    if (self.mouseUpFn) |callback| callback(self, ctx, mouse);
+}
+
+pub fn handleClick(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    if (self.clickFn) |callback| callback(self, ctx, mouse);
+}
+
+pub fn handleMouseMove(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    if (self.mouseMoveFn) |callback| callback(self, ctx, mouse);
+}
+
+pub fn handleMouseEnter(self: *Element, mouse: vaxis.Mouse) void {
+    if (self.mouseEnterFn) |callback| callback(self, mouse);
+}
+
+pub fn handleMouseLeave(self: *Element, mouse: vaxis.Mouse) void {
+    if (self.mouseLeaveFn) |callback| callback(self, mouse);
+}
+
+pub fn handleMouseOver(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    if (self.mouseOverFn) |callback| callback(self, ctx, mouse);
+}
+
+pub fn handleMouseOut(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    if (self.mouseOutFn) |callback| callback(self, ctx, mouse);
+}
+
+pub fn handleWheel(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    if (self.wheelFn) |callback| callback(self, ctx, mouse);
+}
+
+pub fn isAncestorOf(self: *Element, other: *Element) bool {
+    var current: ?*Element = other.parent;
+    while (current) |elem| : (current = elem.parent) {
+        if (elem == self) return true;
     }
+    return false;
 }
