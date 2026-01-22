@@ -54,14 +54,10 @@ focus_path: std.ArrayListUnmanaged(*Element) = .{},
 hit_grid: HitGrid = .{},
 hovered: ?*Element = null,
 pressed_on: ?*Element = null,
+element_map: Element.ElementMap,
 
 pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
-    Element.initElementMap(alloc);
-
-    const root = try Root.create(alloc);
-    errdefer root.destroy(alloc);
-
-    return .{
+    var window: Window = .{
         .app_context = opts.app_context,
         .keyPressFn = opts.keyPressFn,
         .keyReleaseFn = opts.keyReleaseFn,
@@ -74,20 +70,40 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
         .wheelFn = opts.wheelFn,
         .screen = screen,
         .alloc = alloc,
-        .root = root,
+        .root = undefined,
         .size = .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 },
+        .element_map = Element.ElementMap.init(alloc),
     };
+
+    const root = try Root.create(alloc);
+    errdefer root.destroy(alloc);
+
+    window.root = root;
+
+    return window;
 }
 
 pub fn deinit(self: *Window) void {
+    self.root.destroy(self.alloc);
     self.focus_path.deinit(self.alloc);
     self.hit_grid.deinit(self.alloc);
-    Element.deinitElementMap();
-    self.root.destroy(self.alloc);
+    self.element_map.deinit();
 }
 
 pub fn setContext(self: *Window, ctx: *AppContext) void {
     self.root.element.setContext(ctx);
+}
+
+pub fn registerElement(self: *Window, elem: *Element) void {
+    self.element_map.put(elem.num, elem) catch {};
+}
+
+pub fn unregisterElement(self: *Window, elem: *Element) void {
+    _ = self.element_map.remove(elem.num);
+}
+
+pub fn getElementByNum(self: *Window, num: u64) ?*Element {
+    return self.element_map.get(num);
 }
 
 pub fn resize(self: *Window, size: vaxis.Winsize) void {
@@ -129,7 +145,7 @@ pub fn draw(self: *Window) !void {
 
 pub fn getElementAt(self: *Window, col: u16, row: u16) ?*Element {
     const num = self.hit_grid.get(col, row) orelse return null;
-    return Element.getElementByNum(num);
+    return self.getElementByNum(num);
 }
 
 pub fn handleEvent(self: *Window, event: Event) !void {

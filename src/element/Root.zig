@@ -37,8 +37,6 @@ pub fn create(alloc: std.mem.Allocator) !*Root {
         }),
     };
 
-    Element.registerElement(&self.element);
-
     const child = try alloc.create(Element);
     child.* = Element.init(alloc, .{
         .id = "test_box",

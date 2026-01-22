@@ -3,6 +3,8 @@ pub const Element = @This();
 const std = @import("std");
 const vaxis = @import("vaxis");
 
+pub var element_counter: std.atomic.Value(u64) = .init(0);
+
 const Loop = @import("../Loop.zig");
 pub const Tick = Loop.Tick;
 pub const Timer = @import("Timer.zig");
@@ -21,39 +23,6 @@ pub const Childrens = std.ArrayListUnmanaged(*Element);
 pub const ElementMap = std.AutoHashMap(u64, *Element);
 
 var global_counter: std.atomic.Value(u64) = .init(0);
-var element_map: ?ElementMap = null;
-
-pub fn initElementMap(alloc: std.mem.Allocator) void {
-    if (element_map == null) {
-        element_map = ElementMap.init(alloc);
-    }
-}
-
-pub fn deinitElementMap() void {
-    if (element_map) |*map| {
-        map.deinit();
-        element_map = null;
-    }
-}
-
-pub fn getElementByNum(num: u64) ?*Element {
-    if (element_map) |map| {
-        return map.get(num);
-    }
-    return null;
-}
-
-pub fn registerElement(elem: *Element) void {
-    if (element_map) |*map| {
-        map.put(elem.num, elem) catch {};
-    }
-}
-
-fn unregisterElement(elem: *Element) void {
-    if (element_map) |*map| {
-        _ = map.remove(elem.num);
-    }
-}
 
 alloc: std.mem.Allocator,
 id: []const u8,
@@ -141,6 +110,7 @@ pub fn getContext(self: *Element) ?*AppContext {
 
 pub fn setContext(self: *Element, ctx: *AppContext) void {
     self.context = ctx;
+    ctx.window.registerElement(self);
 
     if (self.childrens) |*childrens| {
         for (childrens.items) |child| {
@@ -178,7 +148,7 @@ pub const Opts = struct {
 };
 
 pub fn init(alloc: std.mem.Allocator, opts: Opts) Element {
-    const num = global_counter.fetchAdd(1, .monotonic);
+    const num = element_counter.fetchAdd(1, .monotonic);
     var id_buf: [32]u8 = undefined;
     const generated_id = std.fmt.bufPrint(&id_buf, "element-{d}", .{num}) catch "element-?";
 
@@ -217,7 +187,9 @@ pub fn remove(self: *Element) void {
     if (self.removed) return;
     self.removed = true;
 
-    unregisterElement(self);
+    if (self.context) |ctx| {
+        ctx.window.unregisterElement(self);
+    }
 
     if (self.parent) |parent| {
         if (parent.childrens) |*siblings| {
@@ -250,8 +222,6 @@ pub fn addChild(self: *Element, child: *Element) !void {
         self.childrens = .{};
     }
     child.parent = self;
-
-    registerElement(child);
 
     if (self.context) |ctx| {
         child.setContext(ctx);
