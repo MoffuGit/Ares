@@ -79,6 +79,10 @@ keyReleaseFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key)
 focusFn: ?*const fn (element: *Element) void = null,
 blurFn: ?*const fn (element: *Element) void = null,
 hitGridFn: ?*const fn (element: *Element, hit_grid: *HitGrid) void = null,
+mousePressFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+mouseReleaseFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+mouseMotionFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+mouseDragFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
 
 pub fn draw(self: *Element, buffer: *Buffer) void {
     if (!self.visible) return;
@@ -157,6 +161,10 @@ pub const Opts = struct {
     focusFn: ?*const fn (element: *Element) void = null,
     blurFn: ?*const fn (element: *Element) void = null,
     hitGridFn: ?*const fn (element: *Element, hit_grid: *HitGrid) void = null,
+    mousePressFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseReleaseFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseMotionFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseDragFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
 };
 
 pub fn init(alloc: std.mem.Allocator, opts: Opts) Element {
@@ -183,6 +191,10 @@ pub fn init(alloc: std.mem.Allocator, opts: Opts) Element {
         .focusFn = opts.focusFn,
         .blurFn = opts.blurFn,
         .hitGridFn = opts.hitGridFn,
+        .mousePressFn = opts.mousePressFn,
+        .mouseReleaseFn = opts.mouseReleaseFn,
+        .mouseMotionFn = opts.mouseMotionFn,
+        .mouseDragFn = opts.mouseDragFn,
     };
 }
 
@@ -276,6 +288,7 @@ pub fn handleEvent(self: *Element, ctx: *EventContext, event: Event) void {
         .key_release => |key| self.handleKeyRelease(ctx, key),
         .blur => self.handleBlur(),
         .focus => self.handleFocus(),
+        .mouse => |mouse| self.handleMouse(ctx, mouse),
     }
 }
 
@@ -300,5 +313,14 @@ pub fn handleFocus(self: *Element) void {
 pub fn handleBlur(self: *Element) void {
     if (self.blurFn) |callback| {
         callback(self);
+    }
+}
+
+pub fn handleMouse(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    switch (mouse.type) {
+        .press => if (self.mousePressFn) |callback| callback(self, ctx, mouse),
+        .release => if (self.mouseReleaseFn) |callback| callback(self, ctx, mouse),
+        .motion => if (self.mouseMotionFn) |callback| callback(self, ctx, mouse),
+        .drag => if (self.mouseDragFn) |callback| callback(self, ctx, mouse),
     }
 }

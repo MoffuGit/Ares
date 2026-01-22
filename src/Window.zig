@@ -20,6 +20,10 @@ const Options = struct {
     keyReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void = null,
     focusFn: ?*const fn (app_ctx: *AppContext) void = null,
     blurFn: ?*const fn (app_ctx: *AppContext) void = null,
+    mousePressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseMotionFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    mouseDragFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
     app_context: *AppContext,
 };
 
@@ -36,6 +40,10 @@ keyPressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key
 keyReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void,
 focusFn: ?*const fn (app_ctx: *AppContext) void,
 blurFn: ?*const fn (app_ctx: *AppContext) void,
+mousePressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
+mouseReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
+mouseMotionFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
+mouseDragFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
 
 app_context: *AppContext,
 
@@ -55,6 +63,10 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
         .keyReleaseFn = opts.keyReleaseFn,
         .focusFn = opts.focusFn,
         .blurFn = opts.blurFn,
+        .mousePressFn = opts.mousePressFn,
+        .mouseReleaseFn = opts.mouseReleaseFn,
+        .mouseMotionFn = opts.mouseMotionFn,
+        .mouseDragFn = opts.mouseDragFn,
         .screen = screen,
         .alloc = alloc,
         .root = root,
@@ -116,6 +128,11 @@ pub fn getElementAt(self: *Window, col: u16, row: u16) ?*Element {
 }
 
 pub fn handleEvent(self: *Window, event: Event) !void {
+    switch (event) {
+        .mouse => |mouse| return self.handleMouseEvent(mouse),
+        else => {},
+    }
+
     var ctx = EventContext{
         .phase = .capturing,
         .target = self.focused,
@@ -126,6 +143,7 @@ pub fn handleEvent(self: *Window, event: Event) !void {
         .key_release => |key| self.handleKeyRelease(&ctx, key),
         .blur => self.handleBlur(),
         .focus => self.handleFocus(),
+        .mouse => unreachable,
     }
 
     if (ctx.stopped) return;
@@ -156,6 +174,36 @@ pub fn handleEvent(self: *Window, event: Event) !void {
     }
 }
 
+fn handleMouseEvent(self: *Window, mouse: vaxis.Mouse) void {
+    const col: u16 = if (mouse.col < 0) 0 else @intCast(mouse.col);
+    const row: u16 = if (mouse.row < 0) 0 else @intCast(mouse.row);
+
+    const target = self.getElementAt(col, row);
+
+    var ctx = EventContext{
+        .phase = .capturing,
+        .target = target,
+    };
+
+    self.handleMouse(&ctx, mouse);
+
+    if (ctx.stopped) return;
+
+    const elem = target orelse return;
+
+    ctx.phase = .at_target;
+    elem.handleMouse(&ctx, mouse);
+
+    if (ctx.stopped) return;
+
+    ctx.phase = .bubbling;
+    var current: ?*Element = elem.parent;
+    while (current) |parent| : (current = parent.parent) {
+        parent.handleMouse(&ctx, mouse);
+        if (ctx.stopped) return;
+    }
+}
+
 pub fn handleKeyPress(self: *Window, ctx: *EventContext, key: vaxis.Key) void {
     if (self.keyPressFn) |callback| {
         callback(self.app_context, ctx, key);
@@ -177,6 +225,15 @@ pub fn handleFocus(self: *Window) void {
 pub fn handleBlur(self: *Window) void {
     if (self.blurFn) |callback| {
         callback(self.app_context);
+    }
+}
+
+pub fn handleMouse(self: *Window, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    switch (mouse.type) {
+        .press => if (self.mousePressFn) |callback| callback(self.app_context, ctx, mouse),
+        .release => if (self.mouseReleaseFn) |callback| callback(self.app_context, ctx, mouse),
+        .motion => if (self.mouseMotionFn) |callback| callback(self.app_context, ctx, mouse),
+        .drag => if (self.mouseDragFn) |callback| callback(self.app_context, ctx, mouse),
     }
 }
 
