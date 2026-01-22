@@ -1,7 +1,6 @@
 pub const Box = @import("Box.zig");
 pub const Animation = @import("Animation.zig");
 pub const Timer = @import("Timer.zig");
-pub const Style = @import("Style.zig");
 
 pub var element_counter: std.atomic.Value(u64) = .init(0);
 
@@ -32,8 +31,6 @@ pub const Options = struct {
     id: ?[]const u8 = null,
     visible: bool = true,
     zIndex: usize = 0,
-    opacity: f32 = 1.0,
-    style: Style = .{},
     x: u16 = 0,
     y: u16 = 0,
     width: u16 = 0,
@@ -64,8 +61,6 @@ num: u64,
 visible: bool = true,
 zIndex: usize = 0,
 removed: bool = false,
-opacity: f32 = 1.0,
-style: Style = .{},
 childrens: ?Childrens = null,
 parent: ?*Element = null,
 x: u16 = 0,
@@ -103,8 +98,6 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
         .num = num,
         .visible = opts.visible,
         .zIndex = opts.zIndex,
-        .opacity = opts.opacity,
-        .style = opts.style,
         .x = opts.x,
         .y = opts.y,
         .width = opts.width,

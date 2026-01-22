@@ -99,6 +99,12 @@ pub fn requestDraw(self: *Window) void {
 
 pub fn draw(self: *Window) !void {
     const screen = self.screen;
+
+    const hit_grid = &self.hit_grid;
+
+    hit_grid.fillRect(0, 0, hit_grid.width, hit_grid.height, self.root.num);
+    self.root.hit(&self.hit_grid);
+
     const buffer = try screen.nextBuffer();
     errdefer screen.releaseBuffer();
 
@@ -111,11 +117,6 @@ pub fn draw(self: *Window) !void {
     buffer.clear();
 
     self.root.draw(buffer);
-
-    const hit_grid = &self.hit_grid;
-
-    hit_grid.fillRect(0, 0, hit_grid.width, hit_grid.height, self.root.num);
-    self.root.hit(&self.hit_grid);
 }
 
 pub fn tryHit(self: *Window, col: u16, row: u16) ?*Element {
