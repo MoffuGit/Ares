@@ -7,16 +7,14 @@ const RendererThread = @import("renderer/Thread.zig");
 const Renderer = @import("renderer/mod.zig");
 
 const Loop = @import("Loop.zig");
-const Root = @import("element/Root.zig");
 
 const EventsThread = @import("events/Thread.zig");
 
 const Window = @import("Window.zig");
+const Element = @import("element/Element.zig");
 
 const TimeManager = @import("TimeManager.zig");
 const AppContext = @import("AppContext.zig");
-const events = @import("events/mod.zig");
-const EventContext = events.EventContext;
 
 const log = std.log.scoped(.app);
 
@@ -28,7 +26,7 @@ var tty_buffer: [1024]u8 = undefined;
 
 const Options = struct {
     userdata: ?*anyopaque = null,
-    keyPressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void = null,
+    root_opts: Element.Opts = .{},
 };
 
 alloc: Allocator,
@@ -85,8 +83,8 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
     errdefer time.deinit();
 
     var window = try Window.init(alloc, &self.screen, .{
-        .keyPressFn = opts.keyPressFn,
         .app_context = &self.app_context,
+        .root_opts = opts.root_opts,
     });
     errdefer window.deinit();
 

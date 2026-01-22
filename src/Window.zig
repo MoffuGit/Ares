@@ -2,7 +2,6 @@ const std = @import("std");
 const vaxis = @import("vaxis");
 
 const Element = @import("element/Element.zig");
-const Root = @import("element/Root.zig");
 const Buffer = @import("Buffer.zig");
 const AppContext = @import("AppContext.zig");
 const Screen = @import("Screen.zig");
@@ -11,42 +10,24 @@ const events = @import("events/mod.zig");
 const EventContext = events.EventContext;
 const Event = events.Event;
 
+pub const ElementMap = std.AutoHashMap(u64, *Element);
 const Allocator = std.mem.Allocator;
 
 const Window = @This();
 
 const Options = struct {
-    keyPressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void = null,
-    keyReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void = null,
-    focusFn: ?*const fn (app_ctx: *AppContext) void = null,
-    blurFn: ?*const fn (app_ctx: *AppContext) void = null,
-    mouseDownFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    mouseUpFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    clickFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    mouseMoveFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    wheelFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
     app_context: *AppContext,
+    root_opts: Element.Opts = .{},
 };
 
 alloc: Allocator,
 
 needs_draw: std.atomic.Value(bool) = std.atomic.Value(bool).init(true),
 
-root: *Root,
+root: *Element,
 
 size: vaxis.Winsize,
 screen: *Screen,
-
-keyPressFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void,
-keyReleaseFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, key: vaxis.Key) void,
-focusFn: ?*const fn (app_ctx: *AppContext) void,
-blurFn: ?*const fn (app_ctx: *AppContext) void,
-mouseDownFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
-mouseUpFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
-clickFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
-mouseMoveFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
-wheelFn: ?*const fn (app_ctx: *AppContext, ctx: *EventContext, mouse: vaxis.Mouse) void,
-
 app_context: *AppContext,
 
 focused: ?*Element = null,
@@ -54,44 +35,39 @@ focus_path: std.ArrayListUnmanaged(*Element) = .{},
 hit_grid: HitGrid = .{},
 hovered: ?*Element = null,
 pressed_on: ?*Element = null,
-element_map: Element.ElementMap,
+element_map: ElementMap,
 
 pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
-    var window: Window = .{
+    const root = try alloc.create(Element);
+    errdefer alloc.destroy(root);
+
+    var root_opts = opts.root_opts;
+    root_opts.id = "__root__";
+    if (root_opts.drawFn == null) root_opts.drawFn = drawRoot;
+    if (root_opts.hitGridFn == null) root_opts.hitGridFn = hitGridRoot;
+
+    root.* = Element.init(alloc, root_opts);
+
+    return .{
         .app_context = opts.app_context,
-        .keyPressFn = opts.keyPressFn,
-        .keyReleaseFn = opts.keyReleaseFn,
-        .focusFn = opts.focusFn,
-        .blurFn = opts.blurFn,
-        .mouseDownFn = opts.mouseDownFn,
-        .mouseUpFn = opts.mouseUpFn,
-        .clickFn = opts.clickFn,
-        .mouseMoveFn = opts.mouseMoveFn,
-        .wheelFn = opts.wheelFn,
         .screen = screen,
         .alloc = alloc,
-        .root = undefined,
+        .root = root,
         .size = .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 },
-        .element_map = Element.ElementMap.init(alloc),
+        .element_map = ElementMap.init(alloc),
     };
-
-    const root = try Root.create(alloc);
-    errdefer root.destroy(alloc);
-
-    window.root = root;
-
-    return window;
 }
 
 pub fn deinit(self: *Window) void {
-    self.root.destroy(self.alloc);
+    self.root.remove();
+    self.alloc.destroy(self.root);
     self.focus_path.deinit(self.alloc);
     self.hit_grid.deinit(self.alloc);
     self.element_map.deinit();
 }
 
 pub fn setContext(self: *Window, ctx: *AppContext) void {
-    self.root.element.setContext(ctx);
+    self.root.setContext(ctx);
 }
 
 pub fn registerElement(self: *Window, elem: *Element) void {
@@ -136,11 +112,20 @@ pub fn draw(self: *Window) !void {
         try self.hit_grid.resize(self.alloc, size.cols, size.rows);
     }
 
-    try self.root.element.update();
-    self.root.element.draw(buffer);
+    try self.root.update();
+    self.root.draw(buffer);
 
     self.hit_grid.clear();
-    self.root.element.hit(&self.hit_grid);
+    self.root.hit(&self.hit_grid);
+}
+
+fn drawRoot(_: *Element, buffer: *Buffer) void {
+    const cell: vaxis.Cell = .{ .style = .{ .bg = .{ .rgb = .{ 255, 0, 0 } } } };
+    buffer.fill(cell);
+}
+
+fn hitGridRoot(element: *Element, hit_grid: *HitGrid) void {
+    hit_grid.fillRect(0, 0, hit_grid.width, hit_grid.height, element.num);
 }
 
 pub fn getElementAt(self: *Window, col: u16, row: u16) ?*Element {
@@ -255,9 +240,6 @@ fn processMouseDown(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
 
     var ctx = EventContext{ .phase = .at_target, .target = target };
 
-    if (self.mouseDownFn) |callback| callback(self.app_context, &ctx, mouse);
-    if (ctx.stopped) return;
-
     if (target) |elem| {
         elem.handleMouseDown(&ctx, mouse);
         if (!ctx.stopped) {
@@ -270,12 +252,6 @@ fn processMouseDown(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
 fn processMouseUp(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
     var ctx = EventContext{ .phase = .at_target, .target = target };
 
-    if (self.mouseUpFn) |callback| callback(self.app_context, &ctx, mouse);
-    if (ctx.stopped) {
-        self.pressed_on = null;
-        return;
-    }
-
     if (target) |elem| {
         elem.handleMouseUp(&ctx, mouse);
         if (!ctx.stopped) {
@@ -284,7 +260,7 @@ fn processMouseUp(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
         }
     }
 
-    if (self.pressed_on == target and target != null) {
+    if (!ctx.stopped and self.pressed_on == target and target != null) {
         self.processClick(target.?, mouse);
     }
     self.pressed_on = null;
@@ -292,9 +268,6 @@ fn processMouseUp(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
 
 fn processClick(self: *Window, target: *Element, mouse: vaxis.Mouse) void {
     var ctx = EventContext{ .phase = .at_target, .target = target };
-
-    if (self.clickFn) |callback| callback(self.app_context, &ctx, mouse);
-    if (ctx.stopped) return;
 
     target.handleClick(&ctx, mouse);
     if (!ctx.stopped) {
@@ -305,9 +278,6 @@ fn processClick(self: *Window, target: *Element, mouse: vaxis.Mouse) void {
 
 fn processMouseMove(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
     var ctx = EventContext{ .phase = .at_target, .target = target };
-
-    if (self.mouseMoveFn) |callback| callback(self.app_context, &ctx, mouse);
-    if (ctx.stopped) return;
 
     if (target) |elem| {
         elem.handleMouseMove(&ctx, mouse);
@@ -326,9 +296,6 @@ fn processWheel(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
     if (!is_wheel) return;
 
     var ctx = EventContext{ .phase = .at_target, .target = target };
-
-    if (self.wheelFn) |callback| callback(self.app_context, &ctx, mouse);
-    if (ctx.stopped) return;
 
     if (target) |elem| {
         elem.handleWheel(&ctx, mouse);
@@ -396,27 +363,19 @@ fn bubbleWheel(_: *Window, start: ?*Element, ctx: *EventContext, mouse: vaxis.Mo
 }
 
 pub fn handleKeyPress(self: *Window, ctx: *EventContext, key: vaxis.Key) void {
-    if (self.keyPressFn) |callback| {
-        callback(self.app_context, ctx, key);
-    }
+    self.root.handleKeyPress(ctx, key);
 }
 
 pub fn handleKeyRelease(self: *Window, ctx: *EventContext, key: vaxis.Key) void {
-    if (self.keyReleaseFn) |callback| {
-        callback(self.app_context, ctx, key);
-    }
+    self.root.handleKeyRelease(ctx, key);
 }
 
 pub fn handleFocus(self: *Window) void {
-    if (self.focusFn) |callback| {
-        callback(self.app_context);
-    }
+    self.root.handleFocus();
 }
 
 pub fn handleBlur(self: *Window) void {
-    if (self.blurFn) |callback| {
-        callback(self.app_context);
-    }
+    self.root.handleBlur();
 }
 
 pub fn setFocus(self: *Window, element: ?*Element) void {
@@ -425,24 +384,14 @@ pub fn setFocus(self: *Window, element: ?*Element) void {
     const previous = self.focused;
 
     if (previous) |prev| {
-        if (prev.blurFn) |blurFn| {
-            blurFn(prev);
-        }
-    }
-    if (self.blurFn) |blurFn| {
-        blurFn(self.app_context);
+        prev.handleBlur();
     }
 
     self.focused = element;
     self.rebuildFocusPath();
 
     if (element) |elem| {
-        if (elem.focusFn) |focusFn| {
-            focusFn(elem);
-        }
-    }
-    if (self.focusFn) |focusFn| {
-        focusFn(self.app_context);
+        elem.handleFocus();
     }
 }
 

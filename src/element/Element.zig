@@ -60,7 +60,6 @@ pub const EventContext = events.EventContext;
 const Event = events.Event;
 
 pub const Childrens = std.ArrayListUnmanaged(*Element);
-pub const ElementMap = std.AutoHashMap(u64, *Element);
 
 var global_counter: std.atomic.Value(u64) = .init(0);
 
