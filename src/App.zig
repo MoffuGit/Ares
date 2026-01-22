@@ -11,7 +11,7 @@ const Loop = @import("Loop.zig");
 const EventsThread = @import("events/Thread.zig");
 
 const Window = @import("Window.zig");
-const Element = @import("element/Element.zig");
+const Element = @import("element/mod.zig").Element;
 
 const TimeManager = @import("TimeManager.zig");
 const AppContext = @import("AppContext.zig");
@@ -26,7 +26,7 @@ var tty_buffer: [1024]u8 = undefined;
 
 const Options = struct {
     userdata: ?*anyopaque = null,
-    root_opts: Element.Opts = .{},
+    root_opts: Element.Options = .{},
 };
 
 alloc: Allocator,
@@ -112,7 +112,6 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
         .userdata = self.userdata,
         .window = &self.window,
     };
-    self.window.setContext(&self.app_context);
 
     self.events_thr = try std.Thread.spawn(.{}, EventsThread.threadMain, .{&self.events_thread});
     self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});

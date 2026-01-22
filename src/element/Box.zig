@@ -2,7 +2,7 @@ pub const Box = @This();
 
 const std = @import("std");
 const vaxis = @import("vaxis");
-const Element = @import("Element.zig");
+const Element = @import("mod.zig").Element;
 const Animation = Element.Animation;
 const Buffer = @import("../Buffer.zig");
 

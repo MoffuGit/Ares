@@ -7,7 +7,7 @@ const Tick = Loop.Tick;
 const Timer = @import("element/Timer.zig");
 const AnimationMod = @import("element/Animation.zig");
 const BaseAnimation = AnimationMod.BaseAnimation;
-const Element = @import("element/Element.zig");
+const Element = @import("element/mod.zig").Element;
 const Window = @import("Window.zig");
 
 const AppContext = @This();

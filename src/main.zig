@@ -3,7 +3,7 @@ const datastruct = @import("datastruct/mod.zig");
 const yoga = @import("yoga");
 
 const Box = @import("element/Box.zig");
-const Element = @import("element/Element.zig");
+const Element = @import("element/mod.zig").Element;
 
 const vaxis = @import("vaxis");
 const Cell = vaxis.Cell;
