@@ -56,10 +56,10 @@ hovered: ?*Element = null,
 pressed_on: ?*Element = null,
 
 pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
+    Element.initElementMap(alloc);
+
     const root = try Root.create(alloc);
     errdefer root.destroy(alloc);
-
-    Element.initElementMap(alloc);
 
     return .{
         .app_context = opts.app_context,
@@ -414,7 +414,7 @@ pub fn setFocus(self: *Window, element: ?*Element) void {
         }
     }
     if (self.blurFn) |blurFn| {
-        blurFn(previous);
+        blurFn(self.app_context);
     }
 
     self.focused = element;
@@ -426,7 +426,7 @@ pub fn setFocus(self: *Window, element: ?*Element) void {
         }
     }
     if (self.focusFn) |focusFn| {
-        focusFn(element);
+        focusFn(self.app_context);
     }
 }
 

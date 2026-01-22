@@ -43,7 +43,7 @@ pub fn getElementByNum(num: u64) ?*Element {
     return null;
 }
 
-fn registerElement(elem: *Element) void {
+pub fn registerElement(elem: *Element) void {
     if (element_map) |*map| {
         map.put(elem.num, elem) catch {};
     }
