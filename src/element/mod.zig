@@ -18,7 +18,15 @@ const events = @import("../events/mod.zig");
 pub const EventContext = events.EventContext;
 const Event = events.Event;
 
-pub const Childrens = std.ArrayListUnmanaged(*Element);
+pub const Childrens = struct {
+    by_order: std.ArrayList(*Element) = .{},
+    by_z_index: std.ArrayList(*Element) = .{},
+
+    pub fn deinit(self: *Childrens, alloc: std.mem.Allocator) void {
+        self.by_order.deinit(alloc);
+        self.by_z_index.deinit(alloc);
+    }
+};
 
 pub const Options = struct {
     id: ?[]const u8 = null,
@@ -31,7 +39,6 @@ pub const Options = struct {
     width: u16 = 0,
     height: u16 = 0,
     userdata: ?*anyopaque = null,
-    updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
     drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
     removeFn: ?*const fn (element: *Element) void = null,
     keyPressFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key) void = null,
@@ -68,7 +75,6 @@ height: u16 = 0,
 context: ?*AppContext = null,
 
 userdata: ?*anyopaque = null,
-updateFn: ?*const fn (element: *Element, time: std.time.Instant) void = null,
 drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
 removeFn: ?*const fn (element: *Element) void = null,
 keyPressFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key) void = null,
@@ -104,7 +110,6 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
         .width = opts.width,
         .height = opts.height,
         .userdata = opts.userdata,
-        .updateFn = opts.updateFn,
         .drawFn = opts.drawFn,
         .removeFn = opts.removeFn,
         .keyPressFn = opts.keyPressFn,
@@ -124,8 +129,8 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
 }
 
 pub fn deinit(self: *Element) void {
-    if (self.childrens) |*children| {
-        children.deinit(self.alloc);
+    if (self.childrens) |*childrens| {
+        childrens.deinit(self.alloc);
         self.childrens = null;
     }
 }
@@ -137,8 +142,8 @@ pub fn draw(self: *Element, buffer: *Buffer) void {
         callback(self, buffer);
     }
 
-    if (self.childrens) |*children| {
-        for (children.items) |child| {
+    if (self.childrens) |*childrens| {
+        for (childrens.by_z_index.items) |child| {
             child.draw(buffer);
         }
     }
@@ -151,21 +156,9 @@ pub fn hit(self: *Element, hit_grid: *HitGrid) void {
         callback(self, hit_grid);
     }
 
-    if (self.childrens) |*children| {
-        for (children.items) |child| {
-            child.hit(hit_grid);
-        }
-    }
-}
-
-pub fn update(self: *Element) !void {
-    if (self.updateFn) |callback| {
-        callback(self, try std.time.Instant.now());
-    }
-
     if (self.childrens) |*childrens| {
-        for (childrens.items) |child| {
-            try child.update();
+        for (childrens.by_z_index.items) |child| {
+            child.hit(hit_grid);
         }
     }
 }
@@ -175,7 +168,7 @@ pub fn setContext(self: *Element, ctx: *AppContext) !void {
     try ctx.window.addElement(self);
 
     if (self.childrens) |*childrens| {
-        for (childrens.items) |child| {
+        for (childrens.by_order.items) |child| {
             try child.setContext(ctx);
         }
     }
@@ -187,9 +180,15 @@ pub fn remove(self: *Element) void {
 
     if (self.parent) |parent| {
         if (parent.childrens) |*siblings| {
-            for (siblings.items, 0..) |child, i| {
+            for (siblings.by_order.items, 0..) |child, i| {
                 if (std.mem.eql(u8, child.id, self.id)) {
-                    _ = siblings.orderedRemove(i);
+                    _ = siblings.by_order.orderedRemove(i);
+                    break;
+                }
+            }
+            for (siblings.by_z_index.items, 0..) |child, i| {
+                if (std.mem.eql(u8, child.id, self.id)) {
+                    _ = siblings.by_z_index.orderedRemove(i);
                     break;
                 }
             }
@@ -197,8 +196,8 @@ pub fn remove(self: *Element) void {
         self.parent = null;
     }
 
-    if (self.childrens) |*children| {
-        for (children.items) |child| {
+    if (self.childrens) |*childrens| {
+        for (childrens.by_order.items) |child| {
             child.parent = null;
             child.remove();
         }
@@ -225,20 +224,22 @@ pub fn addChild(self: *Element, child: *Element) !void {
         try child.setContext(ctx);
     }
 
+    try self.childrens.?.by_order.append(self.alloc, child);
+
     const insert_idx = blk: {
         var idx: usize = 0;
-        for (self.childrens.?.items) |c| {
+        for (self.childrens.?.by_z_index.items) |c| {
             if (c.zIndex > child.zIndex) break :blk idx;
             idx += 1;
         }
         break :blk idx;
     };
-    try self.childrens.?.insert(self.alloc, insert_idx, child);
+    try self.childrens.?.by_z_index.insert(self.alloc, insert_idx, child);
 }
 
 pub fn removeChild(self: *Element, id: []const u8) void {
-    if (self.childrens) |*children| {
-        for (children.items) |child| {
+    if (self.childrens) |*childrens| {
+        for (childrens.by_order.items) |child| {
             if (std.mem.eql(u8, child.id, id)) {
                 child.remove();
                 return;
@@ -248,8 +249,8 @@ pub fn removeChild(self: *Element, id: []const u8) void {
 }
 
 pub fn getChildById(self: *Element, id: []const u8) ?*Element {
-    if (self.childrens) |*children| {
-        for (children.items) |child| {
+    if (self.childrens) |*childrens| {
+        for (childrens.by_order.items) |child| {
             if (std.mem.eql(u8, child.id, id)) {
                 return child;
             }

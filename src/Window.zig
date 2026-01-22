@@ -30,7 +30,7 @@ size: vaxis.Winsize,
 screen: *Screen,
 
 focused: ?*Element = null,
-focus_path: std.ArrayListUnmanaged(*Element) = .{},
+focus_path: std.ArrayList(*Element) = .{},
 hit_grid: HitGrid = .{},
 hovered: ?*Element = null,
 pressed_on: ?*Element = null,
@@ -110,7 +110,6 @@ pub fn draw(self: *Window) !void {
 
     buffer.clear();
 
-    try self.root.update();
     self.root.draw(buffer);
 
     const hit_grid = &self.hit_grid;
