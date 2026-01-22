@@ -3,6 +3,46 @@ pub const Element = @This();
 const std = @import("std");
 const vaxis = @import("vaxis");
 
+pub const Style = struct {
+    pub const Underline = enum {
+        off,
+        single,
+        double,
+        curly,
+        dotted,
+        dashed,
+    };
+
+    fg: vaxis.Color = .default,
+    bg: vaxis.Color = .default,
+    ul: vaxis.Color = .default,
+    ul_style: Underline = .off,
+
+    bold: bool = false,
+    dim: bool = false,
+    italic: bool = false,
+    blink: bool = false,
+    reverse: bool = false,
+    invisible: bool = false,
+    strikethrough: bool = false,
+
+    pub fn cellStyle(self: Style) vaxis.Style {
+        return .{
+            .fg = self.fg,
+            .bg = self.bg,
+            .ul = self.ul,
+            .ul_style = @enumFromInt(@intFromEnum(self.ul_style)),
+            .bold = self.bold,
+            .dim = self.dim,
+            .italic = self.italic,
+            .blink = self.blink,
+            .reverse = self.reverse,
+            .invisible = self.invisible,
+            .strikethrough = self.strikethrough,
+        };
+    }
+};
+
 pub var element_counter: std.atomic.Value(u64) = .init(0);
 
 const Loop = @import("../Loop.zig");
@@ -31,6 +71,7 @@ visible: bool = true,
 zIndex: usize = 0,
 removed: bool = false,
 opacity: f32 = 1.0,
+style: Style = .{},
 childrens: ?Childrens = null,
 parent: ?*Element = null,
 x: u16 = 0,
@@ -124,6 +165,7 @@ pub const Opts = struct {
     visible: bool = true,
     zIndex: usize = 0,
     opacity: f32 = 1.0,
+    style: Style = .{},
     x: u16 = 0,
     y: u16 = 0,
     width: u16 = 0,
@@ -159,6 +201,7 @@ pub fn init(alloc: std.mem.Allocator, opts: Opts) Element {
         .visible = opts.visible,
         .zIndex = opts.zIndex,
         .opacity = opts.opacity,
+        .style = opts.style,
         .x = opts.x,
         .y = opts.y,
         .width = opts.width,
