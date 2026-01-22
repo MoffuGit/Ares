@@ -10,6 +10,7 @@ const AnimationMod = @import("Animation.zig");
 pub const Animation = AnimationMod.Animation;
 pub const BaseAnimation = AnimationMod.BaseAnimation;
 const Buffer = @import("../Buffer.zig");
+const HitGrid = @import("../HitGrid.zig");
 
 pub const AppContext = @import("../AppContext.zig");
 const events = @import("../events/mod.zig");
@@ -17,8 +18,42 @@ pub const EventContext = events.EventContext;
 const Event = events.Event;
 
 pub const Childrens = std.ArrayListUnmanaged(*Element);
+pub const ElementMap = std.AutoHashMap(u64, *Element);
 
 var global_counter: std.atomic.Value(u64) = .init(0);
+var element_map: ?ElementMap = null;
+
+pub fn initElementMap(alloc: std.mem.Allocator) void {
+    if (element_map == null) {
+        element_map = ElementMap.init(alloc);
+    }
+}
+
+pub fn deinitElementMap() void {
+    if (element_map) |*map| {
+        map.deinit();
+        element_map = null;
+    }
+}
+
+pub fn getElementByNum(num: u64) ?*Element {
+    if (element_map) |map| {
+        return map.get(num);
+    }
+    return null;
+}
+
+fn registerElement(elem: *Element) void {
+    if (element_map) |*map| {
+        map.put(elem.num, elem) catch {};
+    }
+}
+
+fn unregisterElement(elem: *Element) void {
+    if (element_map) |*map| {
+        _ = map.remove(elem.num);
+    }
+}
 
 alloc: std.mem.Allocator,
 id: []const u8,
@@ -43,6 +78,7 @@ keyPressFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key) v
 keyReleaseFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key) void = null,
 focusFn: ?*const fn (element: *Element) void = null,
 blurFn: ?*const fn (element: *Element) void = null,
+hitGridFn: ?*const fn (element: *Element, hit_grid: *HitGrid) void = null,
 
 pub fn draw(self: *Element, buffer: *Buffer) void {
     if (!self.visible) return;
@@ -61,6 +97,21 @@ pub fn draw(self: *Element, buffer: *Buffer) void {
 
 fn zIndexLessThanValue(_: void, a: *Element, b: *Element) bool {
     return a.zIndex < b.zIndex;
+}
+
+pub fn hit(self: *Element, hit_grid: *HitGrid) void {
+    if (!self.visible) return;
+
+    if (self.hitGridFn) |callback| {
+        callback(self, hit_grid);
+    }
+
+    if (self.childrens) |*children| {
+        std.mem.sort(*Element, children.items, {}, zIndexLessThanValue);
+        for (children.items) |child| {
+            child.hit(hit_grid);
+        }
+    }
 }
 
 pub fn update(self: *Element) !void {
@@ -105,6 +156,7 @@ pub const Opts = struct {
     keyPressFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key) void = null,
     focusFn: ?*const fn (element: *Element) void = null,
     blurFn: ?*const fn (element: *Element) void = null,
+    hitGridFn: ?*const fn (element: *Element, hit_grid: *HitGrid) void = null,
 };
 
 pub fn init(alloc: std.mem.Allocator, opts: Opts) Element {
@@ -130,12 +182,15 @@ pub fn init(alloc: std.mem.Allocator, opts: Opts) Element {
         .keyPressFn = opts.keyPressFn,
         .focusFn = opts.focusFn,
         .blurFn = opts.blurFn,
+        .hitGridFn = opts.hitGridFn,
     };
 }
 
 pub fn remove(self: *Element) void {
     if (self.removed) return;
     self.removed = true;
+
+    unregisterElement(self);
 
     if (self.parent) |parent| {
         if (parent.childrens) |*siblings| {
@@ -168,6 +223,8 @@ pub fn addChild(self: *Element, child: *Element) !void {
         self.childrens = .{};
     }
     child.parent = self;
+
+    registerElement(child);
 
     if (self.context) |ctx| {
         child.setContext(ctx);

@@ -85,6 +85,9 @@ fn handleEvent(self: *Thread, event: vaxis.Event) !void {
         .focus_out => {
             _ = self.mailbox.push(.{ .event = .blur }, .instant);
         },
+        .mouse => |mouse| {
+            _ = self.mailbox.push(.{ .event = .{ .mouse = mouse } }, .instant);
+        },
         else => {},
     }
 }

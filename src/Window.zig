@@ -6,6 +6,7 @@ const Root = @import("element/Root.zig");
 const Buffer = @import("Buffer.zig");
 const AppContext = @import("AppContext.zig");
 const Screen = @import("Screen.zig");
+const HitGrid = @import("HitGrid.zig");
 const events = @import("events/mod.zig");
 const EventContext = events.EventContext;
 const Event = events.Event;
@@ -40,10 +41,13 @@ app_context: *AppContext,
 
 focused: ?*Element = null,
 focus_path: std.ArrayListUnmanaged(*Element) = .{},
+hit_grid: HitGrid = .{},
 
 pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
     const root = try Root.create(alloc);
     errdefer root.destroy(alloc);
+
+    Element.initElementMap(alloc);
 
     return .{
         .app_context = opts.app_context,
@@ -60,6 +64,8 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
 
 pub fn deinit(self: *Window) void {
     self.focus_path.deinit(self.alloc);
+    self.hit_grid.deinit(self.alloc);
+    Element.deinitElementMap();
     self.root.destroy(self.alloc);
 }
 
@@ -94,10 +100,19 @@ pub fn draw(self: *Window) !void {
     const size = self.size;
     if (buffer.width != size.cols or buffer.height != size.rows) {
         try screen.resizeBuffer(self.alloc, buffer, size);
+        try self.hit_grid.resize(self.alloc, size.cols, size.rows);
     }
 
     try self.root.element.update();
     self.root.element.draw(buffer);
+
+    self.hit_grid.clear();
+    self.root.element.hit(&self.hit_grid);
+}
+
+pub fn getElementAt(self: *Window, col: u16, row: u16) ?*Element {
+    const num = self.hit_grid.get(col, row) orelse return null;
+    return Element.getElementByNum(num);
 }
 
 pub fn handleEvent(self: *Window, event: Event) !void {

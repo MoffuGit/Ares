@@ -5,4 +5,5 @@ pub const Event = union(enum) {
     key_release: vaxis.Key,
     focus,
     blur,
+    mouse: vaxis.Mouse,
 };
