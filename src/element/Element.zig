@@ -18,8 +18,11 @@ const Event = events.Event;
 
 pub const Childrens = std.ArrayListUnmanaged(*Element);
 
+var global_counter: std.atomic.Value(u64) = .init(0);
+
 alloc: std.mem.Allocator,
 id: []const u8,
+num: u64,
 visible: bool = true,
 zIndex: usize = 0,
 removed: bool = false,
@@ -87,7 +90,7 @@ pub fn setContext(self: *Element, ctx: *AppContext) void {
 }
 
 pub const Opts = struct {
-    id: []const u8,
+    id: ?[]const u8 = null,
     visible: bool = true,
     zIndex: usize = 0,
     opacity: f32 = 1.0,
@@ -105,9 +108,14 @@ pub const Opts = struct {
 };
 
 pub fn init(alloc: std.mem.Allocator, opts: Opts) Element {
+    const num = global_counter.fetchAdd(1, .monotonic);
+    var id_buf: [32]u8 = undefined;
+    const generated_id = std.fmt.bufPrint(&id_buf, "element-{d}", .{num}) catch "element-?";
+
     return .{
         .alloc = alloc,
-        .id = opts.id,
+        .id = opts.id orelse generated_id,
+        .num = num,
         .visible = opts.visible,
         .zIndex = opts.zIndex,
         .opacity = opts.opacity,
