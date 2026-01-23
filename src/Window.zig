@@ -99,9 +99,14 @@ pub fn requestDraw(self: *Window) void {
 }
 
 pub fn draw(self: *Window) !void {
-    const screen = self.screen;
-
     self.calculateLayout();
+
+    const screen = self.screen;
+    const size = self.size;
+
+    if (self.hit_grid.width != size.cols or self.hit_grid.height != size.rows) {
+        try self.hit_grid.resize(self.alloc, size.cols, size.rows);
+    }
 
     const hit_grid = &self.hit_grid;
 
@@ -111,10 +116,8 @@ pub fn draw(self: *Window) !void {
     const buffer = try screen.nextBuffer();
     errdefer screen.releaseBuffer();
 
-    const size = self.size;
     if (buffer.width != size.cols or buffer.height != size.rows) {
         try screen.resizeBuffer(self.alloc, buffer, size);
-        try self.hit_grid.resize(self.alloc, size.cols, size.rows);
     }
 
     buffer.clear();
