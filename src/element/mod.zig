@@ -1,6 +1,20 @@
 pub const Box = @import("Box.zig");
 pub const Animation = @import("Animation.zig");
 pub const Timer = @import("Timer.zig");
+pub const Style = @import("Style.zig");
+
+//NOTE:
+//i need to add a yoga node to every element
+//then, add i to the yoga tree and handle the removal
+//then, an option for updating the style, this change should
+//get apply to the node as well, and then, on the window
+//i need to traverse the yoga tree checking if the node
+//is dirty or not, this will happen at the start of every
+//draw function, the style is for the yoga node,
+//i will need to store some values inside the element, and if the
+//node is dirty, check the changes, update my element values,
+//and then mark the node as clean, all the other process can keep
+//in the way they are
 
 pub var element_counter: std.atomic.Value(u64) = .init(0);
 
