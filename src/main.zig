@@ -76,9 +76,29 @@ pub fn main() !void {
     });
     defer green_box.destroy(alloc);
 
+    const black_box = try Box.create(alloc, .{
+        .id = "black-box",
+        .style = .{
+            .position_type = .absolute,
+            .width = .{ .point = 20 },
+            .height = .{ .point = 10 },
+            .position = .{
+                .top = .{ .percent = 50 },
+                .left = .{ .percent = 50 },
+            },
+            .margin = .{
+                .top = .{ .point = -5 },
+                .left = .{ .point = -10 },
+            },
+        },
+        .background = .{ .rgb = .{ 0, 0, 0 } },
+    });
+    defer black_box.destroy(alloc);
+
     try app.window.root.addChild(&blue_box.element);
     try app.window.root.addChild(&red_box.element);
     try app.window.root.addChild(&green_box.element);
+    try app.window.root.addChild(&black_box.element);
 
     app.run() catch |err| {
         log.err("App exit with an err: {}", .{err});
