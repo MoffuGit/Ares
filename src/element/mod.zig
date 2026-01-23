@@ -196,12 +196,6 @@ pub fn syncLayout(self: *Element) void {
             callback(self, new_width, new_height);
         }
     }
-
-    if (self.childrens) |*childrens| {
-        for (childrens.by_order.items) |child| {
-            child.syncLayout();
-        }
-    }
 }
 
 fn toU16(value: f32) u16 {
