@@ -213,7 +213,8 @@ fn handleMouseEvent(self: *Window, mouse: vaxis.Mouse) void {
     switch (mouse.type) {
         .press => self.processMouseDown(current_target, mouse),
         .release => self.processMouseUp(current_target, mouse),
-        .motion, .drag => self.processMouseMove(current_target, mouse),
+        .motion => self.processMouseMove(current_target, mouse),
+        .drag => {},
     }
 
     self.processWheel(current_target, mouse);
