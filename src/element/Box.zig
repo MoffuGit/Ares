@@ -32,7 +32,7 @@ pub fn create(alloc: Allocator, opts: Options) !*Box {
 }
 
 pub fn destroy(self: *Box, alloc: Allocator) void {
-    self.element.remove();
+    self.element.deinit();
     alloc.destroy(self);
 }
 

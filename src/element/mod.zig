@@ -18,6 +18,7 @@ pub const AppContext = @import("../AppContext.zig");
 const events = @import("../events/mod.zig");
 pub const EventContext = events.EventContext;
 const Event = events.Event;
+const Allocator = std.mem.Allocator;
 
 pub const Childrens = struct {
     by_order: std.ArrayList(*Element) = .{},
@@ -26,6 +27,40 @@ pub const Childrens = struct {
     pub fn deinit(self: *Childrens, alloc: std.mem.Allocator) void {
         self.by_order.deinit(alloc);
         self.by_z_index.deinit(alloc);
+    }
+
+    pub fn add(self: *Childrens, child: *Element, alloc: Allocator) !void {
+        try self.by_order.append(alloc, child);
+
+        const insert_idx = blk: {
+            var idx: usize = 0;
+            for (self.by_z_index.items) |c| {
+                if (c.zIndex > child.zIndex) break :blk idx;
+                idx += 1;
+            }
+            break :blk idx;
+        };
+        try self.by_z_index.insert(alloc, insert_idx, child);
+    }
+
+    pub fn remove(self: *Childrens, num: u64) ?*Element {
+        var removed_child: ?*Element = null;
+
+        for (self.by_order.items, 0..) |child, idx| {
+            if (num == child.num) {
+                removed_child = self.by_order.orderedRemove(idx);
+                break;
+            }
+        }
+
+        for (self.by_z_index.items, 0..) |child, idx| {
+            if (num == child.num) {
+                _ = self.by_z_index.orderedRemove(idx);
+                break;
+            }
+        }
+
+        return removed_child;
     }
 };
 
@@ -76,7 +111,7 @@ pub const Options = struct {
 
 pub const Element = @This();
 
-alloc: std.mem.Allocator,
+alloc: Allocator,
 id: []const u8,
 num: u64,
 
@@ -254,43 +289,26 @@ pub fn setContext(self: *Element, ctx: *AppContext) !void {
 
 pub fn remove(self: *Element) void {
     if (self.removed) return;
-    self.removed = true;
 
     if (self.parent) |parent| {
-        parent.node.removeChild(self.node);
-
-        if (parent.childrens) |*siblings| {
-            for (siblings.by_order.items, 0..) |child, i| {
-                if (std.mem.eql(u8, child.id, self.id)) {
-                    _ = siblings.by_order.orderedRemove(i);
-                    break;
-                }
-            }
-            for (siblings.by_z_index.items, 0..) |child, i| {
-                if (std.mem.eql(u8, child.id, self.id)) {
-                    _ = siblings.by_z_index.orderedRemove(i);
-                    break;
-                }
-            }
+        parent.removeChild(self.num);
+    } else {
+        if (self.context) |ctx| {
+            ctx.window.removeElement(self.num);
         }
-        self.parent = null;
+
+        self.context = null;
+        self.removed = true;
+
+        if (self.removeFn) |removeFn| {
+            removeFn(self);
+        }
     }
 
     if (self.childrens) |*childrens| {
         for (childrens.by_order.items) |child| {
-            child.parent = null;
             child.remove();
         }
-    }
-
-    if (self.context) |ctx| {
-        ctx.window.removeElement(self.num);
-    }
-
-    self.deinit();
-
-    if (self.removeFn) |removeFn| {
-        removeFn(self);
     }
 }
 
@@ -298,34 +316,34 @@ pub fn addChild(self: *Element, child: *Element) !void {
     if (self.childrens == null) {
         self.childrens = .{};
     }
+
     child.parent = self;
 
     if (self.context) |ctx| {
         try child.setContext(ctx);
     }
 
-    try self.childrens.?.by_order.append(self.alloc, child);
-
-    const insert_idx = blk: {
-        var idx: usize = 0;
-        for (self.childrens.?.by_z_index.items) |c| {
-            if (c.zIndex > child.zIndex) break :blk idx;
-            idx += 1;
-        }
-        break :blk idx;
-    };
-    try self.childrens.?.by_z_index.insert(self.alloc, insert_idx, child);
+    try self.childrens.?.add(child, self.alloc);
 
     self.node.insertChild(child.node);
 }
 
-pub fn removeChild(self: *Element, id: []const u8) void {
+pub fn removeChild(self: *Element, num: u64) void {
     if (self.childrens) |*childrens| {
-        for (childrens.by_order.items) |child| {
-            if (std.mem.eql(u8, child.id, id)) {
-                child.remove();
-                return;
-            }
+        const child = childrens.remove(num) orelse return;
+
+        self.node.removeChild(child.node);
+
+        if (child.context) |ctx| {
+            ctx.window.removeElement(num);
+        }
+
+        child.parent = null;
+        child.context = null;
+        child.removed = true;
+
+        if (child.removeFn) |removeFn| {
+            removeFn(child);
         }
     }
 }
@@ -423,4 +441,186 @@ pub fn isAncestorOf(self: *Element, other: *Element) bool {
         if (elem == self) return true;
     }
     return false;
+}
+
+test "add child to element" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var parent = Element.init(alloc, .{});
+    defer parent.deinit();
+
+    var child = Element.init(alloc, .{});
+    defer child.deinit();
+
+    try parent.addChild(&child);
+
+    try testing.expect(child.parent == &parent);
+    try testing.expect(parent.childrens != null);
+    try testing.expectEqual(@as(usize, 1), parent.childrens.?.by_order.items.len);
+    try testing.expectEqual(@as(usize, 1), parent.childrens.?.by_z_index.items.len);
+    try testing.expect(parent.childrens.?.by_order.items[0] == &child);
+}
+
+test "add multiple children with z-index ordering" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var parent = Element.init(alloc, .{});
+    defer parent.deinit();
+
+    var child1 = Element.init(alloc, .{ .zIndex = 2 });
+    defer child1.deinit();
+
+    var child2 = Element.init(alloc, .{ .zIndex = 0 });
+    defer child2.deinit();
+
+    var child3 = Element.init(alloc, .{ .zIndex = 1 });
+    defer child3.deinit();
+
+    try parent.addChild(&child1);
+    try parent.addChild(&child2);
+    try parent.addChild(&child3);
+
+    try testing.expectEqual(@as(usize, 3), parent.childrens.?.by_order.items.len);
+    try testing.expectEqual(@as(usize, 3), parent.childrens.?.by_z_index.items.len);
+
+    try testing.expect(parent.childrens.?.by_order.items[0] == &child1);
+    try testing.expect(parent.childrens.?.by_order.items[1] == &child2);
+    try testing.expect(parent.childrens.?.by_order.items[2] == &child3);
+
+    try testing.expect(parent.childrens.?.by_z_index.items[0] == &child2);
+    try testing.expect(parent.childrens.?.by_z_index.items[1] == &child3);
+    try testing.expect(parent.childrens.?.by_z_index.items[2] == &child1);
+}
+
+test "remove child from element" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var parent = Element.init(alloc, .{});
+    defer parent.deinit();
+
+    var child = Element.init(alloc, .{});
+    defer child.deinit();
+
+    try parent.addChild(&child);
+    try testing.expectEqual(@as(usize, 1), parent.childrens.?.by_order.items.len);
+
+    parent.removeChild(child.num);
+
+    try testing.expectEqual(@as(usize, 0), parent.childrens.?.by_order.items.len);
+    try testing.expectEqual(@as(usize, 0), parent.childrens.?.by_z_index.items.len);
+    try testing.expect(child.parent == null);
+    try testing.expect(child.removed == true);
+}
+
+test "remove middle child preserves order" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var parent = Element.init(alloc, .{});
+    defer parent.deinit();
+
+    var child1 = Element.init(alloc, .{});
+    defer child1.deinit();
+
+    var child2 = Element.init(alloc, .{});
+    defer child2.deinit();
+
+    var child3 = Element.init(alloc, .{});
+    defer child3.deinit();
+
+    try parent.addChild(&child1);
+    try parent.addChild(&child2);
+    try parent.addChild(&child3);
+
+    parent.removeChild(child2.num);
+
+    try testing.expectEqual(@as(usize, 2), parent.childrens.?.by_order.items.len);
+    try testing.expect(parent.childrens.?.by_order.items[0] == &child1);
+    try testing.expect(parent.childrens.?.by_order.items[1] == &child3);
+}
+
+test "element remove via parent" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var parent = Element.init(alloc, .{});
+    defer parent.deinit();
+
+    var child = Element.init(alloc, .{});
+    defer child.deinit();
+
+    try parent.addChild(&child);
+
+    child.remove();
+
+    try testing.expectEqual(@as(usize, 0), parent.childrens.?.by_order.items.len);
+    try testing.expect(child.parent == null);
+    try testing.expect(child.removed == true);
+}
+
+test "isAncestorOf" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var grandparent = Element.init(alloc, .{});
+    defer grandparent.deinit();
+
+    var parent = Element.init(alloc, .{});
+    defer parent.deinit();
+
+    var child = Element.init(alloc, .{});
+    defer child.deinit();
+
+    try grandparent.addChild(&parent);
+    try parent.addChild(&child);
+
+    try testing.expect(grandparent.isAncestorOf(&child) == true);
+    try testing.expect(grandparent.isAncestorOf(&parent) == true);
+    try testing.expect(parent.isAncestorOf(&child) == true);
+    try testing.expect(child.isAncestorOf(&grandparent) == false);
+    try testing.expect(child.isAncestorOf(&parent) == false);
+}
+
+test "getChildById" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var parent = Element.init(alloc, .{});
+    defer parent.deinit();
+
+    var child1 = Element.init(alloc, .{ .id = "first" });
+    defer child1.deinit();
+
+    var child2 = Element.init(alloc, .{ .id = "second" });
+    defer child2.deinit();
+
+    try parent.addChild(&child1);
+    try parent.addChild(&child2);
+
+    const found = parent.getChildById("second");
+    try testing.expect(found != null);
+    try testing.expect(found.? == &child2);
+
+    const not_found = parent.getChildById("nonexistent");
+    try testing.expect(not_found == null);
+}
+
+test "remove nonexistent child does nothing" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var parent = Element.init(alloc, .{});
+    defer parent.deinit();
+
+    var child = Element.init(alloc, .{});
+    defer child.deinit();
+
+    try parent.addChild(&child);
+
+    parent.removeChild(999999);
+
+    try testing.expectEqual(@as(usize, 1), parent.childrens.?.by_order.items.len);
 }

@@ -60,7 +60,7 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
 }
 
 pub fn deinit(self: *Window) void {
-    self.root.remove();
+    self.root.deinit();
     self.alloc.destroy(self.root);
     self.focus_path.deinit(self.alloc);
     self.hit_grid.deinit(self.alloc);
@@ -343,4 +343,223 @@ fn rebuildFocusPath(self: *Window) void {
 
 pub fn getFocus(self: *Window) ?*Element {
     return self.focused;
+}
+
+const testing = std.testing;
+
+fn initTestWindow(alloc: Allocator) !struct { window: Window, screen: *Screen } {
+    const screen = try alloc.create(Screen);
+    screen.* = try Screen.init(alloc, .{ .cols = 80, .rows = 24, .x_pixel = 0, .y_pixel = 0 });
+
+    var window = try Window.init(alloc, screen, .{ .app_context = undefined });
+    window.root.context = null;
+
+    return .{ .window = window, .screen = screen };
+}
+
+fn deinitTestWindow(alloc: Allocator, window: *Window, screen: *Screen) void {
+    window.deinit();
+    screen.deinit(alloc);
+    alloc.destroy(screen);
+}
+
+test "addChild registers element in window map" {
+    const alloc = testing.allocator;
+    var state = try initTestWindow(alloc);
+    defer deinitTestWindow(alloc, &state.window, state.screen);
+
+    var child = Element.init(alloc, .{});
+    defer child.deinit();
+
+    var app_context = AppContext{
+        .userdata = null,
+        .mailbox = undefined,
+        .wakeup = undefined,
+        .stop = undefined,
+        .needs_draw = undefined,
+        .window = &state.window,
+    };
+    state.window.root.context = &app_context;
+
+    try state.window.root.addChild(&child);
+
+    try testing.expect(state.window.elements.count() == 2);
+    try testing.expect(state.window.getElement(child.num) == &child);
+}
+
+test "removeChild removes element from window map" {
+    const alloc = testing.allocator;
+    var state = try initTestWindow(alloc);
+    defer deinitTestWindow(alloc, &state.window, state.screen);
+
+    var child = Element.init(alloc, .{});
+    defer child.deinit();
+
+    var app_context = AppContext{
+        .userdata = null,
+        .mailbox = undefined,
+        .wakeup = undefined,
+        .stop = undefined,
+        .needs_draw = undefined,
+        .window = &state.window,
+    };
+    state.window.root.context = &app_context;
+
+    try state.window.root.addChild(&child);
+    try testing.expect(state.window.elements.count() == 2);
+
+    state.window.root.removeChild(child.num);
+
+    try testing.expect(state.window.elements.count() == 1);
+    try testing.expect(state.window.getElement(child.num) == null);
+}
+
+test "nested children all registered in window map" {
+    const alloc = testing.allocator;
+    var state = try initTestWindow(alloc);
+    defer deinitTestWindow(alloc, &state.window, state.screen);
+
+    var child1 = Element.init(alloc, .{});
+    defer child1.deinit();
+
+    var child2 = Element.init(alloc, .{});
+    defer child2.deinit();
+
+    var app_context = AppContext{
+        .userdata = null,
+        .mailbox = undefined,
+        .wakeup = undefined,
+        .stop = undefined,
+        .needs_draw = undefined,
+        .window = &state.window,
+    };
+    state.window.root.context = &app_context;
+
+    try child1.addChild(&child2);
+    try state.window.root.addChild(&child1);
+
+    try testing.expect(state.window.elements.count() == 3);
+    try testing.expect(state.window.getElement(child1.num) == &child1);
+    try testing.expect(state.window.getElement(child2.num) == &child2);
+}
+
+test "element remove function" {
+    const alloc = testing.allocator;
+    var state = try initTestWindow(alloc);
+    defer deinitTestWindow(alloc, &state.window, state.screen);
+
+    var child = Element.init(alloc, .{});
+    defer child.deinit();
+
+    var app_context = AppContext{
+        .userdata = null,
+        .mailbox = undefined,
+        .wakeup = undefined,
+        .stop = undefined,
+        .needs_draw = undefined,
+        .window = &state.window,
+    };
+    state.window.root.context = &app_context;
+
+    try state.window.root.addChild(&child);
+    try testing.expect(state.window.elements.count() == 2);
+    try testing.expect(state.window.getElement(child.num) == &child);
+
+    child.remove();
+
+    try testing.expect(state.window.elements.count() == 1);
+    try testing.expect(state.window.getElement(child.num) == null);
+    try testing.expect(child.removed == true);
+    try testing.expect(child.parent == null);
+    try testing.expect(child.context == null);
+}
+
+test "element remove() removes nested children" {
+    const alloc = testing.allocator;
+    var state = try initTestWindow(alloc);
+    defer deinitTestWindow(alloc, &state.window, state.screen);
+
+    var child1 = Element.init(alloc, .{});
+    defer child1.deinit();
+
+    var child2 = Element.init(alloc, .{});
+    defer child2.deinit();
+
+    var app_context = AppContext{
+        .userdata = null,
+        .mailbox = undefined,
+        .wakeup = undefined,
+        .stop = undefined,
+        .needs_draw = undefined,
+        .window = &state.window,
+    };
+    state.window.root.context = &app_context;
+
+    try state.window.root.addChild(&child1);
+    try child1.addChild(&child2);
+    try testing.expect(state.window.elements.count() == 3);
+
+    child1.remove();
+
+    try testing.expect(state.window.elements.count() == 1);
+    try testing.expect(state.window.getElement(child1.num) == null);
+    try testing.expect(state.window.getElement(child2.num) == null);
+    try testing.expect(child1.removed == true);
+    try testing.expect(child2.removed == true);
+}
+
+test "element remove() on root with no parent removes from window" {
+    const alloc = testing.allocator;
+    var state = try initTestWindow(alloc);
+    defer deinitTestWindow(alloc, &state.window, state.screen);
+
+    var orphan = Element.init(alloc, .{});
+    defer orphan.deinit();
+
+    var app_context = AppContext{
+        .userdata = null,
+        .mailbox = undefined,
+        .wakeup = undefined,
+        .stop = undefined,
+        .needs_draw = undefined,
+        .window = &state.window,
+    };
+    orphan.context = &app_context;
+
+    try state.window.addElement(&orphan);
+    try testing.expect(state.window.elements.count() == 2);
+
+    orphan.remove();
+
+    try testing.expect(state.window.elements.count() == 1);
+    try testing.expect(state.window.getElement(orphan.num) == null);
+    try testing.expect(orphan.removed == true);
+    try testing.expect(orphan.context == null);
+}
+
+test "element remove() happens once" {
+    const alloc = testing.allocator;
+    var state = try initTestWindow(alloc);
+    defer deinitTestWindow(alloc, &state.window, state.screen);
+
+    var child = Element.init(alloc, .{});
+    defer child.deinit();
+
+    var app_context = AppContext{
+        .userdata = null,
+        .mailbox = undefined,
+        .wakeup = undefined,
+        .stop = undefined,
+        .needs_draw = undefined,
+        .window = &state.window,
+    };
+    state.window.root.context = &app_context;
+
+    try state.window.root.addChild(&child);
+
+    child.remove();
+    try testing.expect(state.window.elements.count() == 1);
+
+    child.remove();
+    try testing.expect(state.window.elements.count() == 1);
 }

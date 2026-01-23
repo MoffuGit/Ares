@@ -41,6 +41,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    test_mod.addImport("yoga", yoga_mod);
     test_mod.addImport("vaxis", vaxis_dep.module("vaxis"));
     test_mod.addImport("xev", xev_dep.module("xev"));
 
@@ -49,6 +50,9 @@ pub fn build(b: *std.Build) void {
         .root_module = test_mod,
         .filters = if (test_filter) |f| &.{f} else &.{},
     });
+
+    test_exe.linkLibrary(yoga_lib);
+    test_exe.linkLibCpp();
 
     if (target.result.os.tag == .linux or target.result.os.tag == .macos) {
         test_exe.linkLibC();
