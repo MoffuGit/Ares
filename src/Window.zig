@@ -155,9 +155,8 @@ pub fn tryHit(self: *Window, col: u16, row: u16) ?*Element {
 }
 
 pub fn handleEvent(self: *Window, event: Event) !void {
-    switch (event) {
-        .mouse => |mouse| return self.handleMouseEvent(mouse),
-        else => {},
+    if (event == .mouse) {
+        return self.handleMouseEvent(event.mouse);
     }
 
     var ctx = EventContext{
@@ -213,8 +212,7 @@ fn handleMouseEvent(self: *Window, mouse: vaxis.Mouse) void {
     switch (mouse.type) {
         .press => self.processMouseDown(current_target, mouse),
         .release => self.processMouseUp(current_target, mouse),
-        .motion => self.processMouseMove(current_target, mouse),
-        .drag => {},
+        .motion, .drag => self.processMouseMove(current_target, mouse),
     }
 
     const is_wheel = switch (mouse.button) {
@@ -289,8 +287,13 @@ fn processMouseUp(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
     self.pressed_on = null;
 }
 
-fn processMouseMove(_: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
+fn processMouseMove(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
     _ = dispatchMouseEvent(target, mouse, Element.handleMouseMove);
+    if (mouse.type == .drag) {
+        if (self.pressed_on) |pressed| {
+            _ = dispatchMouseEvent(pressed, mouse, Element.handleDrag);
+        }
+    }
 }
 
 fn processWheel(_: *Window, target: ?*Element, mouse: vaxis.Mouse) void {

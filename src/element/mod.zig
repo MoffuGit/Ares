@@ -106,6 +106,7 @@ pub const Options = struct {
     mouseOverFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
     mouseOutFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
     wheelFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    dragFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
     resizeFn: ?*const fn (element: *Element, width: u16, height: u16) void = null,
 };
 
@@ -148,6 +149,7 @@ mouseLeaveFn: ?*const fn (element: *Element, mouse: vaxis.Mouse) void = null,
 mouseOverFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
 mouseOutFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
 wheelFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+dragFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
 resizeFn: ?*const fn (element: *Element, width: u16, height: u16) void = null,
 
 pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
@@ -183,6 +185,7 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
         .mouseOverFn = opts.mouseOverFn,
         .mouseOutFn = opts.mouseOutFn,
         .wheelFn = opts.wheelFn,
+        .dragFn = opts.dragFn,
         .resizeFn = opts.resizeFn,
     };
 }
@@ -433,6 +436,10 @@ pub fn handleMouseOut(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) vo
 
 pub fn handleWheel(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
     if (self.wheelFn) |callback| callback(self, ctx, mouse);
+}
+
+pub fn handleDrag(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    if (self.dragFn) |callback| callback(self, ctx, mouse);
 }
 
 pub fn isAncestorOf(self: *Element, other: *Element) bool {
