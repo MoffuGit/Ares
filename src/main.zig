@@ -59,15 +59,26 @@ pub fn main() !void {
     const red_box = try Box.create(alloc, .{
         .id = "red-box",
         .style = .{
-            .flex_grow = 1,
+            .width = .{ .percent = 33.33 },
             .height = .{ .percent = 100 },
         },
         .background = .{ .rgb = .{ 255, 0, 0 } },
     });
     defer red_box.destroy(alloc);
 
+    const green_box = try Box.create(alloc, .{
+        .id = "green-box",
+        .style = .{
+            .width = .{ .percent = 33.33 },
+            .height = .{ .percent = 100 },
+        },
+        .background = .{ .rgb = .{ 0, 255, 0 } },
+    });
+    defer green_box.destroy(alloc);
+
     try app.window.root.addChild(&blue_box.element);
     try app.window.root.addChild(&red_box.element);
+    try app.window.root.addChild(&green_box.element);
 
     app.run() catch |err| {
         log.err("App exit with an err: {}", .{err});

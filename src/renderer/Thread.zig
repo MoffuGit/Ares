@@ -8,7 +8,7 @@ const Renderer = @import("mod.zig");
 
 const Allocator = std.mem.Allocator;
 
-pub const Message = union(enum) { resize: vaxis.Winsize };
+pub const Message = union(enum) { None: void };
 
 pub const Mailbox = BlockingQueue(Message, 64);
 
@@ -135,9 +135,7 @@ fn renderCallback(
 fn drainMailbox(self: *Thread) !void {
     while (self.mailbox.pop()) |message| {
         switch (message) {
-            .resize => |size| {
-                try self.renderer.resize(size);
-            },
+            else => {},
         }
     }
 }

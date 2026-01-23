@@ -83,7 +83,7 @@ pub fn resize(self: *Window, size: vaxis.Winsize) void {
     if (self.size.rows == size.rows and self.size.cols == size.cols) return;
 
     self.size = size;
-    self.needs_draw.store(true, .release);
+    self.requestDraw();
 }
 
 pub fn needsDraw(self: *Window) bool {
