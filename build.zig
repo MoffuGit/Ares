@@ -22,7 +22,8 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("xev", xev_dep.module("xev"));
 
     const exe = b.addExecutable(.{ .name = "ares", .root_module = exe_mod });
-    exe.step.dependOn(&yoga_lib.step);
+    exe.linkLibrary(yoga_lib);
+    exe.linkLibCpp();
 
     b.installArtifact(exe);
     b.installArtifact(yoga_lib);
@@ -32,30 +33,6 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the application");
     run_step.dependOn(&run_cmd.step);
-
-    // Yoga test executable
-    const yoga_test_mod = b.createModule(.{
-        .root_source_file = b.path("src/yoga_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    yoga_test_mod.addImport("yoga", yoga_mod);
-    yoga_test_mod.addImport("Style", b.createModule(.{
-        .root_source_file = b.path("src/element/Style.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{.{ .name = "yoga", .module = yoga_mod }},
-    }));
-
-    const yoga_test_exe = b.addExecutable(.{ .name = "yoga-test", .root_module = yoga_test_mod });
-    yoga_test_exe.linkLibrary(yoga_lib);
-    yoga_test_exe.step.dependOn(&yoga_lib.step);
-
-    const yoga_test_run = b.addRunArtifact(yoga_test_exe);
-    yoga_test_run.step.dependOn(b.getInstallStep());
-
-    const yoga_test_step = b.step("yoga-test", "Run yoga layout test");
-    yoga_test_step.dependOn(&yoga_test_run.step);
 
     const test_filter = b.option([]const u8, "test-filter", "Filter for tests");
 

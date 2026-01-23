@@ -1,5 +1,6 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
+const yoga = @import("element/Node.zig").yoga;
 
 const Element = @import("element/mod.zig").Element;
 const Buffer = @import("Buffer.zig");
@@ -100,6 +101,8 @@ pub fn requestDraw(self: *Window) void {
 pub fn draw(self: *Window) !void {
     const screen = self.screen;
 
+    self.calculateLayout();
+
     const hit_grid = &self.hit_grid;
 
     hit_grid.fillRect(0, 0, hit_grid.width, hit_grid.height, self.root.num);
@@ -117,6 +120,30 @@ pub fn draw(self: *Window) !void {
     buffer.clear();
 
     self.root.draw(buffer);
+}
+
+pub fn calculateLayout(self: *Window) void {
+    const root_node = self.root.node.yg_node;
+    yoga.YGNodeCalculateLayout(root_node, @floatFromInt(self.size.cols), @floatFromInt(self.size.rows), yoga.YGDirectionLTR);
+    applyLayout(self.root);
+}
+
+fn applyLayout(element: *Element) void {
+    const node = element.node.yg_node;
+
+    if (!yoga.YGNodeGetHasNewLayout(node)) {
+        return;
+    }
+
+    yoga.YGNodeSetHasNewLayout(node, false);
+
+    element.syncLayout();
+
+    if (element.childrens) |*childrens| {
+        for (childrens.by_order.items) |child| {
+            applyLayout(child);
+        }
+    }
 }
 
 pub fn tryHit(self: *Window, col: u16, row: u16) ?*Element {

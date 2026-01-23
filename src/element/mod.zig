@@ -2,19 +2,7 @@ pub const Box = @import("Box.zig");
 pub const Animation = @import("Animation.zig");
 pub const Timer = @import("Timer.zig");
 pub const Style = @import("Style.zig");
-
-//NOTE:
-//i need to add a yoga node to every element
-//then, add i to the yoga tree and handle the removal
-//then, an option for updating the style, this change should
-//get apply to the node as well, and then, on the window
-//i need to traverse the yoga tree checking if the node
-//is dirty or not, this will happen at the start of every
-//draw function, the style is for the yoga node,
-//i will need to store some values inside the element, and if the
-//node is dirty, check the changes, update my element values,
-//and then mark the node as clean, all the other process can keep
-//in the way they are
+pub const Node = @import("Node.zig");
 
 pub var element_counter: std.atomic.Value(u64) = .init(0);
 
@@ -41,14 +29,32 @@ pub const Childrens = struct {
     }
 };
 
+pub const Layout = struct {
+    left: u16 = 0,
+    top: u16 = 0,
+    right: u16 = 0,
+    bottom: u16 = 0,
+    width: u16 = 0,
+    height: u16 = 0,
+    direction: Node.yoga.YGDirection = Node.yoga.YGDirectionInherit,
+    had_overflow: bool = false,
+    margin: Edges = .{},
+    border: Edges = .{},
+    padding: Edges = .{},
+
+    pub const Edges = struct {
+        left: u16 = 0,
+        top: u16 = 0,
+        right: u16 = 0,
+        bottom: u16 = 0,
+    };
+};
+
 pub const Options = struct {
     id: ?[]const u8 = null,
     visible: bool = true,
     zIndex: usize = 0,
-    x: u16 = 0,
-    y: u16 = 0,
-    width: u16 = 0,
-    height: u16 = 0,
+    style: Style = .{},
     userdata: ?*anyopaque = null,
     drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
     removeFn: ?*const fn (element: *Element) void = null,
@@ -65,6 +71,7 @@ pub const Options = struct {
     mouseOverFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
     mouseOutFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
     wheelFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    resizeFn: ?*const fn (element: *Element, width: u16, height: u16) void = null,
 };
 
 pub const Element = @This();
@@ -72,6 +79,8 @@ pub const Element = @This();
 alloc: std.mem.Allocator,
 id: []const u8,
 num: u64,
+
+node: Node,
 
 visible: bool = true,
 removed: bool = false,
@@ -81,10 +90,9 @@ zIndex: usize = 0,
 childrens: ?Childrens = null,
 parent: ?*Element = null,
 
-x: u16 = 0,
-y: u16 = 0,
-width: u16 = 0,
-height: u16 = 0,
+layout: Layout = .{},
+
+style: Style = .{},
 
 context: ?*AppContext = null,
 
@@ -105,11 +113,16 @@ mouseLeaveFn: ?*const fn (element: *Element, mouse: vaxis.Mouse) void = null,
 mouseOverFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
 mouseOutFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
 wheelFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+resizeFn: ?*const fn (element: *Element, width: u16, height: u16) void = null,
 
 pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
     const num = element_counter.fetchAdd(1, .monotonic);
     var id_buf: [32]u8 = undefined;
     const generated_id = std.fmt.bufPrint(&id_buf, "element-{d}", .{num}) catch "element-?";
+
+    const node = Node.init(num);
+
+    opts.style.apply(node);
 
     return .{
         .alloc = alloc,
@@ -117,12 +130,10 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
         .num = num,
         .visible = opts.visible,
         .zIndex = opts.zIndex,
-        .x = opts.x,
-        .y = opts.y,
-        .width = opts.width,
-        .height = opts.height,
+        .style = opts.style,
         .userdata = opts.userdata,
         .drawFn = opts.drawFn,
+        .node = node,
         .removeFn = opts.removeFn,
         .keyPressFn = opts.keyPressFn,
         .focusFn = opts.focusFn,
@@ -137,7 +148,66 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
         .mouseOverFn = opts.mouseOverFn,
         .mouseOutFn = opts.mouseOutFn,
         .wheelFn = opts.wheelFn,
+        .resizeFn = opts.resizeFn,
     };
+}
+
+pub fn syncLayout(self: *Element) void {
+    const yoga = Node.yoga;
+    const yg = self.node.yg_node;
+
+    const old_width = self.layout.width;
+    const old_height = self.layout.height;
+
+    const new_width = toU16(yoga.YGNodeLayoutGetWidth(yg));
+    const new_height = toU16(yoga.YGNodeLayoutGetHeight(yg));
+
+    self.layout = .{
+        .left = toU16(yoga.YGNodeLayoutGetLeft(yg)),
+        .top = toU16(yoga.YGNodeLayoutGetTop(yg)),
+        .right = toU16(yoga.YGNodeLayoutGetRight(yg)),
+        .bottom = toU16(yoga.YGNodeLayoutGetBottom(yg)),
+        .width = new_width,
+        .height = new_height,
+        .direction = yoga.YGNodeLayoutGetDirection(yg),
+        .had_overflow = yoga.YGNodeLayoutGetHadOverflow(yg),
+        .margin = .{
+            .left = toU16(yoga.YGNodeLayoutGetMargin(yg, yoga.YGEdgeLeft)),
+            .top = toU16(yoga.YGNodeLayoutGetMargin(yg, yoga.YGEdgeTop)),
+            .right = toU16(yoga.YGNodeLayoutGetMargin(yg, yoga.YGEdgeRight)),
+            .bottom = toU16(yoga.YGNodeLayoutGetMargin(yg, yoga.YGEdgeBottom)),
+        },
+        .border = .{
+            .left = toU16(yoga.YGNodeLayoutGetBorder(yg, yoga.YGEdgeLeft)),
+            .top = toU16(yoga.YGNodeLayoutGetBorder(yg, yoga.YGEdgeTop)),
+            .right = toU16(yoga.YGNodeLayoutGetBorder(yg, yoga.YGEdgeRight)),
+            .bottom = toU16(yoga.YGNodeLayoutGetBorder(yg, yoga.YGEdgeBottom)),
+        },
+        .padding = .{
+            .left = toU16(yoga.YGNodeLayoutGetPadding(yg, yoga.YGEdgeLeft)),
+            .top = toU16(yoga.YGNodeLayoutGetPadding(yg, yoga.YGEdgeTop)),
+            .right = toU16(yoga.YGNodeLayoutGetPadding(yg, yoga.YGEdgeRight)),
+            .bottom = toU16(yoga.YGNodeLayoutGetPadding(yg, yoga.YGEdgeBottom)),
+        },
+    };
+
+    if (old_width != new_width or old_height != new_height) {
+        if (self.resizeFn) |callback| {
+            callback(self, new_width, new_height);
+        }
+    }
+
+    if (self.childrens) |*childrens| {
+        for (childrens.by_order.items) |child| {
+            child.syncLayout();
+        }
+    }
+}
+
+fn toU16(value: f32) u16 {
+    if (value < 0) return 0;
+    if (value > std.math.maxInt(u16)) return std.math.maxInt(u16);
+    return @intFromFloat(value);
 }
 
 pub fn deinit(self: *Element) void {
@@ -145,6 +215,8 @@ pub fn deinit(self: *Element) void {
         childrens.deinit(self.alloc);
         self.childrens = null;
     }
+
+    self.node.deinit();
 }
 
 pub fn draw(self: *Element, buffer: *Buffer) void {
@@ -191,6 +263,8 @@ pub fn remove(self: *Element) void {
     self.removed = true;
 
     if (self.parent) |parent| {
+        parent.node.removeChild(self.node);
+
         if (parent.childrens) |*siblings| {
             for (siblings.by_order.items, 0..) |child, i| {
                 if (std.mem.eql(u8, child.id, self.id)) {
@@ -247,6 +321,8 @@ pub fn addChild(self: *Element, child: *Element) !void {
         break :blk idx;
     };
     try self.childrens.?.by_z_index.insert(self.alloc, insert_idx, child);
+
+    self.node.insertChild(child.node);
 }
 
 pub fn removeChild(self: *Element, id: []const u8) void {
@@ -302,6 +378,12 @@ pub fn handleFocus(self: *Element) void {
 pub fn handleBlur(self: *Element) void {
     if (self.blurFn) |callback| {
         callback(self);
+    }
+}
+
+pub fn handleResize(self: *Element, width: u16, height: u16) void {
+    if (self.resizeFn) |callback| {
+        callback(self, width, height);
     }
 }
 

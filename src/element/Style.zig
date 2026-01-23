@@ -1,5 +1,6 @@
 const std = @import("std");
 const yoga = @import("yoga");
+const Node = @import("Node.zig");
 
 pub const Style = @This();
 
@@ -214,40 +215,41 @@ pub const Gap = struct {
     }
 };
 
-pub fn apply(self: *const Style, node: yoga.YGNodeRef) void {
-    yoga.YGNodeStyleSetDirection(node, @intFromEnum(self.direction));
-    yoga.YGNodeStyleSetFlexDirection(node, @intFromEnum(self.flex_direction));
-    yoga.YGNodeStyleSetJustifyContent(node, @intFromEnum(self.justify_content));
-    yoga.YGNodeStyleSetAlignContent(node, @intFromEnum(self.align_content));
-    yoga.YGNodeStyleSetAlignItems(node, @intFromEnum(self.align_items));
-    yoga.YGNodeStyleSetAlignSelf(node, @intFromEnum(self.align_self));
-    yoga.YGNodeStyleSetPositionType(node, @intFromEnum(self.position_type));
-    yoga.YGNodeStyleSetFlexWrap(node, @intFromEnum(self.flex_wrap));
-    yoga.YGNodeStyleSetOverflow(node, @intFromEnum(self.overflow));
-    yoga.YGNodeStyleSetDisplay(node, @intFromEnum(self.display));
-    yoga.YGNodeStyleSetBoxSizing(node, @intFromEnum(self.box_sizing));
+pub fn apply(self: *const Style, node: Node) void {
+    const yg_node = node.yg_node;
+    yoga.YGNodeStyleSetDirection(yg_node, @intFromEnum(self.direction));
+    yoga.YGNodeStyleSetFlexDirection(yg_node, @intFromEnum(self.flex_direction));
+    yoga.YGNodeStyleSetJustifyContent(yg_node, @intFromEnum(self.justify_content));
+    yoga.YGNodeStyleSetAlignContent(yg_node, @intFromEnum(self.align_content));
+    yoga.YGNodeStyleSetAlignItems(yg_node, @intFromEnum(self.align_items));
+    yoga.YGNodeStyleSetAlignSelf(yg_node, @intFromEnum(self.align_self));
+    yoga.YGNodeStyleSetPositionType(yg_node, @intFromEnum(self.position_type));
+    yoga.YGNodeStyleSetFlexWrap(yg_node, @intFromEnum(self.flex_wrap));
+    yoga.YGNodeStyleSetOverflow(yg_node, @intFromEnum(self.overflow));
+    yoga.YGNodeStyleSetDisplay(yg_node, @intFromEnum(self.display));
+    yoga.YGNodeStyleSetBoxSizing(yg_node, @intFromEnum(self.box_sizing));
 
-    if (self.flex) |f| yoga.YGNodeStyleSetFlex(node, f);
-    yoga.YGNodeStyleSetFlexGrow(node, self.flex_grow);
-    yoga.YGNodeStyleSetFlexShrink(node, self.flex_shrink);
-    applyStyleValue(node, self.flex_basis, setFlexBasis);
+    if (self.flex) |f| yoga.YGNodeStyleSetFlex(yg_node, f);
+    yoga.YGNodeStyleSetFlexGrow(yg_node, self.flex_grow);
+    yoga.YGNodeStyleSetFlexShrink(yg_node, self.flex_shrink);
+    applyStyleValue(yg_node, self.flex_basis, setFlexBasis);
 
-    applyEdges(node, self.position, setPosition);
-    applyEdges(node, self.margin, setMargin);
-    applyEdges(node, self.padding, setPadding);
-    applyBorderEdges(node, self.border);
+    applyEdges(yg_node, self.position, setPosition);
+    applyEdges(yg_node, self.margin, setMargin);
+    applyEdges(yg_node, self.padding, setPadding);
+    applyBorderEdges(yg_node, self.border);
 
-    applyGap(node, self.gap);
+    applyGap(yg_node, self.gap);
 
-    applyStyleValue(node, self.width, setWidth);
-    applyStyleValue(node, self.height, setHeight);
-    applyStyleValue(node, self.min_width, setMinWidth);
-    applyStyleValue(node, self.min_height, setMinHeight);
-    applyStyleValue(node, self.max_width, setMaxWidth);
-    applyStyleValue(node, self.max_height, setMaxHeight);
+    applyStyleValue(yg_node, self.width, setWidth);
+    applyStyleValue(yg_node, self.height, setHeight);
+    applyStyleValue(yg_node, self.min_width, setMinWidth);
+    applyStyleValue(yg_node, self.min_height, setMinHeight);
+    applyStyleValue(yg_node, self.max_width, setMaxWidth);
+    applyStyleValue(yg_node, self.max_height, setMaxHeight);
 
     if (self.aspect_ratio) |ar| {
-        yoga.YGNodeStyleSetAspectRatio(node, ar);
+        yoga.YGNodeStyleSetAspectRatio(yg_node, ar);
     }
 }
 
