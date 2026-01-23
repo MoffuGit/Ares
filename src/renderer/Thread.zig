@@ -108,28 +108,10 @@ fn wakeupCallback(
     t.drainMailbox() catch |err|
         log.err("error draining mailbox err={}", .{err});
 
-    _ = renderCallback(t, undefined, undefined, {});
-
-    return .rearm;
-}
-
-fn renderCallback(
-    self_: ?*Thread,
-    _: *xev.Loop,
-    _: *xev.Completion,
-    r: xev.Timer.RunError!void,
-) xev.CallbackAction {
-    _ = r catch unreachable;
-    const t: *Thread = self_ orelse {
-        // This shouldn't happen so we log it.
-        log.warn("render callback fired without data set", .{});
-        return .disarm;
-    };
-
     t.renderer.renderFrame() catch |err|
         log.warn("error rendering err={}", .{err});
 
-    return .disarm;
+    return .rearm;
 }
 
 fn drainMailbox(self: *Thread) !void {
