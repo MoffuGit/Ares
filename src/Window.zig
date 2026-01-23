@@ -217,7 +217,18 @@ fn handleMouseEvent(self: *Window, mouse: vaxis.Mouse) void {
         .drag => {},
     }
 
-    self.processWheel(current_target, mouse);
+    const is_wheel = switch (mouse.button) {
+        .wheel_up,
+        .wheel_down,
+        .wheel_left,
+        .wheel_right,
+        => true,
+        else => false,
+    };
+
+    if (is_wheel) {
+        self.processWheel(current_target, mouse);
+    }
 
     self.hovered = current_target;
 }
@@ -283,12 +294,6 @@ fn processMouseMove(_: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
 }
 
 fn processWheel(_: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
-    const is_wheel = switch (mouse.button) {
-        .wheel_up, .wheel_down, .wheel_left, .wheel_right => true,
-        else => false,
-    };
-    if (!is_wheel) return;
-
     _ = dispatchMouseEvent(target, mouse, Element.handleWheel);
 }
 
