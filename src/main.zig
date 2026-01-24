@@ -68,14 +68,12 @@ const DraggableBox = struct {
         self.pos_x = col;
         self.pos_y = row;
 
-        const yg_node = element.node.yg_node;
-        yoga.YGNodeStyleSetPosition(yg_node, yoga.YGEdgeLeft, self.pos_x);
-        yoga.YGNodeStyleSetPosition(yg_node, yoga.YGEdgeTop, self.pos_y);
-
         element.style.position.left = .{ .point = self.pos_x };
         element.style.position.top = .{ .point = self.pos_y };
         element.style.margin.left = .{ .point = -10 };
         element.style.margin.top = .{ .point = -5 };
+
+        element.style.apply(element.node);
 
         if (element.context) |ctx| {
             ctx.requestDraw();

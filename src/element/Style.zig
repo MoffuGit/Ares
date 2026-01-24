@@ -1,4 +1,3 @@
-const std = @import("std");
 const yoga = @import("yoga");
 const Node = @import("Node.zig");
 
@@ -216,212 +215,92 @@ pub const Gap = struct {
 };
 
 pub fn apply(self: *const Style, node: Node) void {
-    const yg_node = node.yg_node;
-    yoga.YGNodeStyleSetDirection(yg_node, @intFromEnum(self.direction));
-    yoga.YGNodeStyleSetFlexDirection(yg_node, @intFromEnum(self.flex_direction));
-    yoga.YGNodeStyleSetJustifyContent(yg_node, @intFromEnum(self.justify_content));
-    yoga.YGNodeStyleSetAlignContent(yg_node, @intFromEnum(self.align_content));
-    yoga.YGNodeStyleSetAlignItems(yg_node, @intFromEnum(self.align_items));
-    yoga.YGNodeStyleSetAlignSelf(yg_node, @intFromEnum(self.align_self));
-    yoga.YGNodeStyleSetPositionType(yg_node, @intFromEnum(self.position_type));
-    yoga.YGNodeStyleSetFlexWrap(yg_node, @intFromEnum(self.flex_wrap));
-    yoga.YGNodeStyleSetOverflow(yg_node, @intFromEnum(self.overflow));
-    yoga.YGNodeStyleSetDisplay(yg_node, @intFromEnum(self.display));
-    yoga.YGNodeStyleSetBoxSizing(yg_node, @intFromEnum(self.box_sizing));
+    node.setDirection(self.direction);
+    node.setFlexDirection(self.flex_direction);
+    node.setJustifyContent(self.justify_content);
+    node.setAlignContent(self.align_content);
+    node.setAlignItems(self.align_items);
+    node.setAlignSelf(self.align_self);
+    node.setPositionType(self.position_type);
+    node.setFlexWrap(self.flex_wrap);
+    node.setOverflow(self.overflow);
+    node.setDisplay(self.display);
+    node.setBoxSizing(self.box_sizing);
 
-    if (self.flex) |f| yoga.YGNodeStyleSetFlex(yg_node, f);
-    yoga.YGNodeStyleSetFlexGrow(yg_node, self.flex_grow);
-    yoga.YGNodeStyleSetFlexShrink(yg_node, self.flex_shrink);
-    applyStyleValue(yg_node, self.flex_basis, setFlexBasis);
+    if (self.flex) |f| node.setFlex(f);
+    node.setFlexGrow(self.flex_grow);
+    node.setFlexShrink(self.flex_shrink);
+    node.setFlexBasis(self.flex_basis);
 
-    applyEdges(yg_node, self.position, setPosition);
-    applyEdges(yg_node, self.margin, setMargin);
-    applyEdges(yg_node, self.padding, setPadding);
-    applyBorderEdges(yg_node, self.border);
+    applyEdges(node, self.position, Node.setPosition);
+    applyEdges(node, self.margin, Node.setMargin);
+    applyEdges(node, self.padding, Node.setPadding);
+    applyBorderEdges(node, self.border);
 
-    applyGap(yg_node, self.gap);
+    applyGap(node, self.gap);
 
-    applyStyleValue(yg_node, self.width, setWidth);
-    applyStyleValue(yg_node, self.height, setHeight);
-    applyStyleValue(yg_node, self.min_width, setMinWidth);
-    applyStyleValue(yg_node, self.min_height, setMinHeight);
-    applyStyleValue(yg_node, self.max_width, setMaxWidth);
-    applyStyleValue(yg_node, self.max_height, setMaxHeight);
+    node.setWidth(self.width);
+    node.setHeight(self.height);
+    node.setMinWidth(self.min_width);
+    node.setMinHeight(self.min_height);
+    node.setMaxWidth(self.max_width);
+    node.setMaxHeight(self.max_height);
 
     if (self.aspect_ratio) |ar| {
-        yoga.YGNodeStyleSetAspectRatio(yg_node, ar);
+        node.setAspectRatio(ar);
     }
 }
 
-const SetValueFn = *const fn (yoga.YGNodeRef, f32) callconv(.c) void;
-const SetAutoFn = *const fn (yoga.YGNodeRef) callconv(.c) void;
-const SetMaxContentFn = *const fn (yoga.YGNodeRef) callconv(.c) void;
-const SetFitContentFn = *const fn (yoga.YGNodeRef) callconv(.c) void;
-const SetStretchFn = *const fn (yoga.YGNodeRef) callconv(.c) void;
-
-const DimensionSetters = struct {
-    point: SetValueFn,
-    percent: SetValueFn,
-    auto: ?SetAutoFn = null,
-    max_content: ?SetMaxContentFn = null,
-    fit_content: ?SetFitContentFn = null,
-    stretch_fn: ?SetStretchFn = null,
-};
-
-const setFlexBasis = DimensionSetters{
-    .point = yoga.YGNodeStyleSetFlexBasis,
-    .percent = yoga.YGNodeStyleSetFlexBasisPercent,
-    .auto = yoga.YGNodeStyleSetFlexBasisAuto,
-    .max_content = yoga.YGNodeStyleSetFlexBasisMaxContent,
-    .fit_content = yoga.YGNodeStyleSetFlexBasisFitContent,
-    .stretch_fn = yoga.YGNodeStyleSetFlexBasisStretch,
-};
-
-const setWidth = DimensionSetters{
-    .point = yoga.YGNodeStyleSetWidth,
-    .percent = yoga.YGNodeStyleSetWidthPercent,
-    .auto = yoga.YGNodeStyleSetWidthAuto,
-    .max_content = yoga.YGNodeStyleSetWidthMaxContent,
-    .fit_content = yoga.YGNodeStyleSetWidthFitContent,
-    .stretch_fn = yoga.YGNodeStyleSetWidthStretch,
-};
-
-const setHeight = DimensionSetters{
-    .point = yoga.YGNodeStyleSetHeight,
-    .percent = yoga.YGNodeStyleSetHeightPercent,
-    .auto = yoga.YGNodeStyleSetHeightAuto,
-    .max_content = yoga.YGNodeStyleSetHeightMaxContent,
-    .fit_content = yoga.YGNodeStyleSetHeightFitContent,
-    .stretch_fn = yoga.YGNodeStyleSetHeightStretch,
-};
-
-const setMinWidth = DimensionSetters{
-    .point = yoga.YGNodeStyleSetMinWidth,
-    .percent = yoga.YGNodeStyleSetMinWidthPercent,
-    .max_content = yoga.YGNodeStyleSetMinWidthMaxContent,
-    .fit_content = yoga.YGNodeStyleSetMinWidthFitContent,
-    .stretch_fn = yoga.YGNodeStyleSetMinWidthStretch,
-};
-
-const setMinHeight = DimensionSetters{
-    .point = yoga.YGNodeStyleSetMinHeight,
-    .percent = yoga.YGNodeStyleSetMinHeightPercent,
-    .max_content = yoga.YGNodeStyleSetMinHeightMaxContent,
-    .fit_content = yoga.YGNodeStyleSetMinHeightFitContent,
-    .stretch_fn = yoga.YGNodeStyleSetMinHeightStretch,
-};
-
-const setMaxWidth = DimensionSetters{
-    .point = yoga.YGNodeStyleSetMaxWidth,
-    .percent = yoga.YGNodeStyleSetMaxWidthPercent,
-    .max_content = yoga.YGNodeStyleSetMaxWidthMaxContent,
-    .fit_content = yoga.YGNodeStyleSetMaxWidthFitContent,
-    .stretch_fn = yoga.YGNodeStyleSetMaxWidthStretch,
-};
-
-const setMaxHeight = DimensionSetters{
-    .point = yoga.YGNodeStyleSetMaxHeight,
-    .percent = yoga.YGNodeStyleSetMaxHeightPercent,
-    .max_content = yoga.YGNodeStyleSetMaxHeightMaxContent,
-    .fit_content = yoga.YGNodeStyleSetMaxHeightFitContent,
-    .stretch_fn = yoga.YGNodeStyleSetMaxHeightStretch,
-};
-
-fn applyStyleValue(node: yoga.YGNodeRef, value: StyleValue, setters: DimensionSetters) void {
-    switch (value) {
-        .undefined => {},
-        .auto => if (setters.auto) |f| f(node),
-        .point => |v| setters.point(node, v),
-        .percent => |v| setters.percent(node, v),
-        .max_content => if (setters.max_content) |f| f(node),
-        .fit_content => if (setters.fit_content) |f| f(node),
-        .stretch => if (setters.stretch_fn) |f| f(node),
-    }
-}
-
-const EdgeSetValueFn = *const fn (yoga.YGNodeRef, c_uint, f32) callconv(.c) void;
-const EdgeSetAutoFn = *const fn (yoga.YGNodeRef, c_uint) callconv(.c) void;
-
-const EdgeSetters = struct {
-    point: EdgeSetValueFn,
-    percent: EdgeSetValueFn,
-    auto: ?EdgeSetAutoFn = null,
-};
-
-const setPosition = EdgeSetters{
-    .point = yoga.YGNodeStyleSetPosition,
-    .percent = yoga.YGNodeStyleSetPositionPercent,
-    .auto = yoga.YGNodeStyleSetPositionAuto,
-};
-
-const setMargin = EdgeSetters{
-    .point = yoga.YGNodeStyleSetMargin,
-    .percent = yoga.YGNodeStyleSetMarginPercent,
-    .auto = yoga.YGNodeStyleSetMarginAuto,
-};
-
-const setPadding = EdgeSetters{
-    .point = yoga.YGNodeStyleSetPadding,
-    .percent = yoga.YGNodeStyleSetPaddingPercent,
-};
-
-fn applyEdges(node: yoga.YGNodeRef, edges: Edges, setters: EdgeSetters) void {
-    const edge_values = [_]struct { edge: c_uint, value: StyleValue }{
-        .{ .edge = yoga.YGEdgeLeft, .value = edges.left },
-        .{ .edge = yoga.YGEdgeTop, .value = edges.top },
-        .{ .edge = yoga.YGEdgeRight, .value = edges.right },
-        .{ .edge = yoga.YGEdgeBottom, .value = edges.bottom },
-        .{ .edge = yoga.YGEdgeStart, .value = edges.start },
-        .{ .edge = yoga.YGEdgeEnd, .value = edges.end },
-        .{ .edge = yoga.YGEdgeHorizontal, .value = edges.horizontal },
-        .{ .edge = yoga.YGEdgeVertical, .value = edges.vertical },
-        .{ .edge = yoga.YGEdgeAll, .value = edges.all },
+fn applyEdges(node: Node, edges: Edges, setter: *const fn (Node, Edge, StyleValue) void) void {
+    const edge_values = [_]struct { edge: Edge, value: StyleValue }{
+        .{ .edge = .left, .value = edges.left },
+        .{ .edge = .top, .value = edges.top },
+        .{ .edge = .right, .value = edges.right },
+        .{ .edge = .bottom, .value = edges.bottom },
+        .{ .edge = .start, .value = edges.start },
+        .{ .edge = .end, .value = edges.end },
+        .{ .edge = .horizontal, .value = edges.horizontal },
+        .{ .edge = .vertical, .value = edges.vertical },
+        .{ .edge = .all, .value = edges.all },
     };
 
     for (edge_values) |ev| {
-        switch (ev.value) {
-            .undefined => {},
-            .auto => if (setters.auto) |f| f(node, ev.edge),
-            .point => |v| setters.point(node, ev.edge, v),
-            .percent => |v| setters.percent(node, ev.edge, v),
-            else => {},
+        if (ev.value != .undefined) {
+            setter(node, ev.edge, ev.value);
         }
     }
 }
 
-fn applyBorderEdges(node: yoga.YGNodeRef, edges: BorderEdges) void {
-    const edge_values = [_]struct { edge: c_uint, value: ?f32 }{
-        .{ .edge = yoga.YGEdgeLeft, .value = edges.left },
-        .{ .edge = yoga.YGEdgeTop, .value = edges.top },
-        .{ .edge = yoga.YGEdgeRight, .value = edges.right },
-        .{ .edge = yoga.YGEdgeBottom, .value = edges.bottom },
-        .{ .edge = yoga.YGEdgeStart, .value = edges.start },
-        .{ .edge = yoga.YGEdgeEnd, .value = edges.end },
-        .{ .edge = yoga.YGEdgeHorizontal, .value = edges.horizontal },
-        .{ .edge = yoga.YGEdgeVertical, .value = edges.vertical },
-        .{ .edge = yoga.YGEdgeAll, .value = edges.all },
+fn applyBorderEdges(node: Node, edges: BorderEdges) void {
+    const edge_values = [_]struct { edge: Edge, value: ?f32 }{
+        .{ .edge = .left, .value = edges.left },
+        .{ .edge = .top, .value = edges.top },
+        .{ .edge = .right, .value = edges.right },
+        .{ .edge = .bottom, .value = edges.bottom },
+        .{ .edge = .start, .value = edges.start },
+        .{ .edge = .end, .value = edges.end },
+        .{ .edge = .horizontal, .value = edges.horizontal },
+        .{ .edge = .vertical, .value = edges.vertical },
+        .{ .edge = .all, .value = edges.all },
     };
 
     for (edge_values) |ev| {
         if (ev.value) |v| {
-            yoga.YGNodeStyleSetBorder(node, ev.edge, v);
+            node.setBorder(ev.edge, v);
         }
     }
 }
 
-fn applyGap(node: yoga.YGNodeRef, gap: Gap) void {
-    const gap_values = [_]struct { gutter: c_uint, value: StyleValue }{
-        .{ .gutter = yoga.YGGutterColumn, .value = gap.column },
-        .{ .gutter = yoga.YGGutterRow, .value = gap.row },
-        .{ .gutter = yoga.YGGutterAll, .value = gap.all },
+fn applyGap(node: Node, gap: Gap) void {
+    const gap_values = [_]struct { gutter: Gutter, value: StyleValue }{
+        .{ .gutter = .column, .value = gap.column },
+        .{ .gutter = .row, .value = gap.row },
+        .{ .gutter = .all, .value = gap.all },
     };
 
     for (gap_values) |gv| {
-        switch (gv.value) {
-            .undefined => {},
-            .point => |v| yoga.YGNodeStyleSetGap(node, gv.gutter, v),
-            .percent => |v| yoga.YGNodeStyleSetGapPercent(node, gv.gutter, v),
-            else => {},
+        if (gv.value != .undefined) {
+            node.setGap(gv.gutter, gv.value);
         }
     }
 }
