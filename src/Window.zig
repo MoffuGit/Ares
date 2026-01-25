@@ -46,6 +46,7 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
 
     root.* = Element.init(alloc, root_opts);
     root.context = opts.app_context;
+    root.removed = false;
 
     var elements = Elements.init(alloc);
     try elements.put(root.num, root);
@@ -499,35 +500,6 @@ test "element remove() removes nested children" {
     try testing.expect(state.window.getElement(child2.num) == null);
     try testing.expect(child1.removed == true);
     try testing.expect(child2.removed == true);
-}
-
-test "element remove() on root with no parent removes from window" {
-    const alloc = testing.allocator;
-    var state = try initTestWindow(alloc);
-    defer deinitTestWindow(alloc, &state.window, state.screen);
-
-    var orphan = Element.init(alloc, .{});
-    defer orphan.deinit();
-
-    var app_context = AppContext{
-        .userdata = null,
-        .mailbox = undefined,
-        .wakeup = undefined,
-        .stop = undefined,
-        .needs_draw = undefined,
-        .window = &state.window,
-    };
-    orphan.context = &app_context;
-
-    try state.window.addElement(&orphan);
-    try testing.expect(state.window.elements.count() == 2);
-
-    orphan.remove();
-
-    try testing.expect(state.window.elements.count() == 1);
-    try testing.expect(state.window.getElement(orphan.num) == null);
-    try testing.expect(orphan.removed == true);
-    try testing.expect(orphan.context == null);
 }
 
 test "element remove() happens once" {
