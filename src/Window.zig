@@ -164,17 +164,7 @@ pub fn handleEvent(self: *Window, event: Event) !void {
         .target = self.focused,
     };
 
-    switch (event) {
-        .key_press => |key| self.handleKeyPress(&ctx, key),
-        .key_release => |key| self.handleKeyRelease(&ctx, key),
-        .blur => self.handleBlur(),
-        .focus => self.handleFocus(),
-        .mouse => unreachable,
-    }
-
-    if (ctx.stopped) return;
-
-    const target = self.focused orelse return;
+    const target = self.focused orelse self.root;
 
     ctx.phase = .capturing;
     for (self.focus_path.items) |element| {
