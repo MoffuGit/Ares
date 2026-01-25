@@ -27,9 +27,8 @@ pub fn deinit(self: *Node) void {
     yoga.YGNodeFree(self.yg_node);
 }
 
-pub fn insertChild(self: Node, child: Node) void {
-    const count = yoga.YGNodeGetChildCount(self.yg_node);
-    yoga.YGNodeInsertChild(self.yg_node, child.yg_node, count);
+pub fn insertChild(self: Node, child: Node, index: usize) void {
+    yoga.YGNodeInsertChild(self.yg_node, child.yg_node, index);
 }
 
 pub fn removeChild(self: Node, child: Node) void {

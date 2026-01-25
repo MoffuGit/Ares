@@ -24,6 +24,10 @@ pub const Childrens = struct {
     by_order: std.ArrayList(*Element) = .{},
     by_z_index: std.ArrayList(*Element) = .{},
 
+    pub fn len(self: *Childrens) usize {
+        return self.by_order.items.len;
+    }
+
     pub fn deinit(self: *Childrens, alloc: std.mem.Allocator) void {
         self.by_order.deinit(alloc);
         self.by_z_index.deinit(alloc);
@@ -31,7 +35,15 @@ pub const Childrens = struct {
 
     pub fn add(self: *Childrens, child: *Element, alloc: Allocator) !void {
         try self.by_order.append(alloc, child);
+        try self.insertByZIndex(child, alloc);
+    }
 
+    pub fn insert(self: *Childrens, child: *Element, index: usize, alloc: Allocator) !void {
+        try self.by_order.insert(alloc, index, child);
+        try self.insertByZIndex(child, alloc);
+    }
+
+    fn insertByZIndex(self: *Childrens, child: *Element, alloc: Allocator) !void {
         const insert_idx = blk: {
             var idx: usize = 0;
             for (self.by_z_index.items) |c| {
@@ -328,7 +340,23 @@ pub fn addChild(self: *Element, child: *Element) !void {
 
     try self.childrens.?.add(child, self.alloc);
 
-    self.node.insertChild(child.node);
+    self.node.insertChild(child.node, self.childrens.?.len() - 1);
+}
+
+pub fn insertChild(self: *Element, child: *Element, index: usize) !void {
+    if (self.childrens == null) {
+        self.childrens = .{};
+    }
+
+    child.parent = self;
+
+    if (self.context) |ctx| {
+        try child.setContext(ctx);
+    }
+
+    try self.childrens.?.insert(child, index, self.alloc);
+
+    self.node.insertChild(child.node, index);
 }
 
 pub fn removeChild(self: *Element, num: u64) void {
