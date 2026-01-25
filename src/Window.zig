@@ -309,11 +309,12 @@ pub fn handleKeyRelease(self: *Window, ctx: *EventContext, key: vaxis.Key) void 
 }
 
 pub fn handleFocus(self: *Window) void {
+    self.setFocus(self.root);
     self.root.handleFocus();
 }
 
 pub fn handleBlur(self: *Window) void {
-    self.root.handleBlur();
+    self.setFocus(null);
 }
 
 pub fn setFocus(self: *Window, element: ?*Element) void {

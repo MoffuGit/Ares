@@ -4,6 +4,9 @@ const Allocator = std.mem.Allocator;
 const NodePath = @import("mod.zig").NodePath;
 const Element = @import("../element/mod.zig").Element;
 const Buffer = @import("../Buffer.zig");
+const HitGrid = @import("../HitGrid.zig");
+const EventContext = @import("../events/EventContext.zig");
+const vaxis = @import("vaxis");
 
 pub const Direction = enum {
     horizontal,
@@ -13,8 +16,10 @@ pub const Direction = enum {
 pub const Split = struct {
     direction: Direction,
     children: std.ArrayList(*Node) = .{},
+    equal_nodes: std.ArrayList(*Node) = .{},
     alloc: Allocator,
-    ratio: ?f32 = null,
+    ratio: f32 = 1.0,
+    equal: bool = false,
     element: Element,
 
     pub fn create(alloc: Allocator, direction: Direction) !*Split {
@@ -25,8 +30,12 @@ pub const Split = struct {
             .element = Element.init(alloc, .{
                 .style = .{
                     .flex_direction = switch (direction) {
-                        .horizontal => .row,
-                        .vertical => .col,
+                        .horizontal => .col,
+                        .vertical => .row,
+                    },
+                    .gap = switch (direction) {
+                        .horizontal => .{ .column = .{ .point = 1 } },
+                        .vertical => .{ .row = .{ .point = 1 } },
                     },
                 },
             }),
@@ -40,6 +49,7 @@ pub const Split = struct {
             self.alloc.destroy(child);
         }
         self.children.deinit(self.alloc);
+        self.equal_nodes.deinit(self.alloc);
         self.element.deinit();
         self.alloc.destroy(self);
     }
@@ -47,11 +57,19 @@ pub const Split = struct {
     pub fn addChild(self: *Split, node: *Node) !void {
         try self.children.append(self.alloc, node);
         try self.element.addChild(node.getElement());
+        if (node.isEqual()) {
+            try self.equal_nodes.append(self.alloc, node);
+        }
+        self.updateEqualRatios();
     }
 
     pub fn insertChild(self: *Split, index: usize, node: *Node) !void {
         try self.children.insert(self.alloc, index, node);
         try self.element.addChild(node.getElement());
+        if (node.isEqual()) {
+            try self.equal_nodes.append(self.alloc, node);
+        }
+        self.updateEqualRatios();
     }
 
     pub fn get(self: *Split, index: usize) !*Node {
@@ -62,23 +80,68 @@ pub const Split = struct {
     pub fn removeChild(self: *Split, index: usize) *Node {
         const removed = self.children.orderedRemove(index);
         self.element.removeChild(removed.getElement().num);
+        if (removed.isEqual()) {
+            for (self.equal_nodes.items, 0..) |node, i| {
+                if (node == removed) {
+                    _ = self.equal_nodes.orderedRemove(i);
+                    break;
+                }
+            }
+        }
+        self.updateEqualRatios();
         return removed;
     }
 
     pub fn childCount(self: *const Split) usize {
         return self.children.items.len;
     }
+
+    pub fn updateEqualRatios(self: *Split) void {
+        const count = self.children.items.len;
+        if (count == 0) return;
+        const equal_ratio = 1.0 / @as(f32, @floatFromInt(count));
+        for (self.equal_nodes.items) |node| {
+            node.setRatioInternal(equal_ratio);
+        }
+    }
+
+    pub fn registerEqualNode(self: *Split, node: *Node) !void {
+        for (self.equal_nodes.items) |n| {
+            if (n == node) return;
+        }
+        try self.equal_nodes.append(self.alloc, node);
+        self.updateEqualRatios();
+    }
+
+    pub fn unregisterEqualNode(self: *Split, node: *Node) void {
+        for (self.equal_nodes.items, 0..) |n, i| {
+            if (n == node) {
+                _ = self.equal_nodes.orderedRemove(i);
+                break;
+            }
+        }
+    }
 };
 
 pub const View = struct {
     id: u64,
-    ratio: ?f32 = null,
+    ratio: f32 = 1.0,
+    equal: bool = false,
     alloc: Allocator,
     element: Element,
+    focus: bool = false,
 
     fn draw(element: *Element, buffer: *Buffer) void {
+        const self: *View = @ptrCast(@alignCast(element.userdata));
+
         const x = element.layout.left;
         const y = element.layout.top;
+
+        const cell: vaxis.Cell = if (!self.focus) .{
+            .style = .{ .bg = .{ .rgb = .{ 0, 255, 0 } } },
+        } else .{
+            .style = .{ .bg = .{ .rgb = .{ 255, 0, 255 } } },
+        };
 
         var row: u16 = 0;
         while (row < element.layout.height) : (row += 1) {
@@ -87,10 +150,36 @@ pub const View = struct {
                 const px = x + col;
                 const py = y + row;
                 if (px < buffer.width and py < buffer.height) {
-                    buffer.writeCell(px, py, .{ .style = .{ .bg = .{ .rgb = .{ 0, 255, 0 } } } });
+                    buffer.writeCell(px, py, cell);
                 }
             }
         }
+    }
+
+    fn hit(element: *Element, hit_grid: *HitGrid) void {
+        const x = element.layout.left;
+        const y = element.layout.top;
+
+        hit_grid.fillRect(x, y, element.layout.width, element.layout.height, element.num);
+    }
+
+    fn onClick(element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+        _ = ctx;
+        if (mouse.button == .left) {
+            element.context.?.setFocus(element);
+        }
+    }
+
+    fn onFocus(element: *Element) void {
+        const self: *View = @ptrCast(@alignCast(element.userdata));
+        self.focus = true;
+        element.context.?.requestDraw();
+    }
+
+    fn onBlur(element: *Element) void {
+        const self: *View = @ptrCast(@alignCast(element.userdata));
+        self.focus = false;
+        element.context.?.requestDraw();
     }
 
     pub fn create(alloc: Allocator, id: u64) !*View {
@@ -99,9 +188,14 @@ pub const View = struct {
             .id = id,
             .alloc = alloc,
             .element = Element.init(alloc, .{
+                .userdata = self,
                 .drawFn = draw,
+                .hitGridFn = hit,
+                .focusFn = onFocus,
+                .blurFn = onBlur,
+                .clickFn = onClick,
                 .style = .{
-                    .flex_grow = 0.5,
+                    .flex_grow = 1.0,
                 },
             }),
         };
@@ -173,28 +267,47 @@ pub const Node = union(enum) {
         return false;
     }
 
-    pub fn ratio(self: *Node) ?f32 {
+    pub fn ratio(self: *Node) f32 {
+        switch (self.*) {
+            .split => |split| return split.ratio,
+            .view => |view| return view.ratio,
+        }
+    }
+
+    pub fn setRatio(self: *Node, r: f32) void {
+        self.setRatioInternal(r);
+        switch (self.*) {
+            .split => |split| split.equal = false,
+            .view => |view| view.equal = false,
+        }
+    }
+
+    pub fn setRatioInternal(self: *Node, r: f32) void {
         switch (self.*) {
             .split => |split| {
-                return split.ratio;
+                split.ratio = r;
+                split.element.style.flex_grow = r;
+                split.element.style.apply(split.element.node);
             },
             .view => |view| {
-                return view.ratio;
+                view.ratio = r;
+                view.element.style.flex_grow = r;
+                view.element.style.apply(view.element.node);
             },
         }
     }
 
-    pub fn setRatio(self: *Node, r: ?f32) void {
-        //NOTE:
-        //when setting a ratio, i need to set the
-        //flex_grow percentaje,
+    pub fn isEqual(self: *Node) bool {
         switch (self.*) {
-            .split => |split| {
-                split.ratio = r;
-            },
-            .view => |view| {
-                view.ratio = r;
-            },
+            .split => |split| return split.equal,
+            .view => |view| return view.equal,
+        }
+    }
+
+    pub fn setEqual(self: *Node, eq: bool) void {
+        switch (self.*) {
+            .split => |split| split.equal = eq,
+            .view => |view| view.equal = eq,
         }
     }
 
@@ -215,10 +328,13 @@ pub const Node = union(enum) {
         const old_view = self.view;
         const new_split = try Split.create(alloc, direction);
         new_split.ratio = old_view.ratio;
+        new_split.equal = old_view.equal;
 
-        old_view.ratio = null;
+        old_view.ratio = 1.0;
+        old_view.equal = true;
 
         const new_view = try View.create(alloc, id);
+        new_view.equal = true;
 
         const old_node = try alloc.create(Node);
         old_node.* = Node{ .view = old_view };
@@ -227,14 +343,12 @@ pub const Node = union(enum) {
         new_node.* = Node{ .view = new_view };
 
         if (after) {
-            try new_split.children.append(new_split.alloc, old_node);
-            try new_split.children.append(new_split.alloc, new_node);
+            try new_split.addChild(old_node);
+            try new_split.addChild(new_node);
         } else {
-            try new_split.children.append(new_split.alloc, new_node);
-            try new_split.children.append(new_split.alloc, old_node);
+            try new_split.addChild(new_node);
+            try new_split.addChild(old_node);
         }
-
-        try new_split.element.addChild(&new_view.element);
 
         self.* = Node{ .split = new_split };
     }
