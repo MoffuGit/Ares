@@ -13,19 +13,23 @@ pub const Tree = @This();
 pub const NodePath = std.ArrayList(usize);
 
 alloc: Allocator,
-root: Node,
+root: *Node,
 next_id: u64,
 
-pub fn init(alloc: Allocator) Tree {
+pub fn init(alloc: Allocator) !Tree {
+    const root = try alloc.create(Node);
+    root.* = Node{ .view = View.init(0) };
+
     return .{
         .alloc = alloc,
-        .root = Node{ .view = View.init(0) },
+        .root = root,
         .next_id = 1,
     };
 }
 
 pub fn deinit(self: *Tree) void {
     self.root.deinit();
+    self.alloc.destroy(self.root);
 }
 
 pub fn nextId(self: *Tree) u64 {
@@ -43,9 +47,9 @@ pub fn findPath(self: *Tree, id: u64) ?NodePath {
 }
 
 pub fn getNodeFromPath(self: *Tree, path: []const usize) ?*Node {
-    var current: *Node = &self.root;
+    var current: *Node = self.root;
 
-    if (path.len == 0) return &self.root;
+    if (path.len == 0) return self.root;
 
     for (path) |index| {
         switch (current.*) {
@@ -74,7 +78,7 @@ pub fn count(self: *const Tree) usize {
 pub fn split(self: *Tree, id: u64, direction: Direction, after: bool) !u64 {
     const new_id = self.nextId();
 
-    if (self.root == .view) {
+    if (self.root.* == .view) {
         if (self.root.view.id != id) return error.NotFound;
         try self.root._split(self.alloc, new_id, direction, after);
         return new_id;
@@ -109,7 +113,7 @@ pub fn split(self: *Tree, id: u64, direction: Direction, after: bool) !u64 {
 }
 
 pub fn remove(self: *Tree, id: u64) void {
-    if (self.root == .view) {
+    if (self.root.* == .view) {
         return;
     }
     var path = self.findPath(id) orelse return;
@@ -141,16 +145,16 @@ pub fn remove(self: *Tree, id: u64) void {
 const testing = std.testing;
 
 test "init: creates tree with single view" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     try testing.expectEqual(@as(usize, 1), tree.count());
-    try testing.expect(tree.root == .view);
+    try testing.expect(tree.root.* == .view);
     try testing.expectEqual(@as(u64, 0), tree.root.view.id);
 }
 
 test "find: locates nested view after splits" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     const id1 = try tree.split(0, .horizontal, true);
@@ -169,48 +173,48 @@ test "find: locates nested view after splits" {
 }
 
 test "find: returns null for nonexistent id" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     try testing.expect(tree.find(999) == null);
 }
 
 test "splitView: splits root horizontally after" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     const new_id = try tree.split(0, .horizontal, true);
 
     try testing.expectEqual(@as(u64, 1), new_id);
     try testing.expectEqual(@as(usize, 2), tree.count());
-    try testing.expect(tree.root == .split);
+    try testing.expect(tree.root.* == .split);
     try testing.expectEqual(Direction.horizontal, tree.root.split.direction);
     try testing.expectEqual(@as(u64, 0), tree.root.split.children.items[0].view.id);
     try testing.expectEqual(@as(u64, 1), tree.root.split.children.items[1].view.id);
 }
 
 test "splitView: splits root vertically before" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     const new_id = try tree.split(0, .vertical, false);
 
     try testing.expectEqual(@as(u64, 1), new_id);
-    try testing.expect(tree.root == .split);
+    try testing.expect(tree.root.* == .split);
     try testing.expectEqual(Direction.vertical, tree.root.split.direction);
     try testing.expectEqual(@as(u64, 1), tree.root.split.children.items[0].view.id);
     try testing.expectEqual(@as(u64, 0), tree.root.split.children.items[1].view.id);
 }
 
 test "splitView: nested split creates new split node" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     _ = try tree.split(0, .horizontal, true);
     _ = try tree.split(0, .vertical, true);
 
     try testing.expectEqual(@as(usize, 3), tree.count());
-    try testing.expect(tree.root == .split);
+    try testing.expect(tree.root.* == .split);
 
     const first_child = tree.root.split.children.items[0];
     try testing.expect(first_child.* == .split);
@@ -218,19 +222,19 @@ test "splitView: nested split creates new split node" {
 }
 
 test "splitView: same direction adds sibling" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     _ = try tree.split(0, .horizontal, true);
     _ = try tree.split(0, .horizontal, true);
 
     try testing.expectEqual(@as(usize, 3), tree.count());
-    try testing.expect(tree.root == .split);
+    try testing.expect(tree.root.* == .split);
     try testing.expectEqual(@as(usize, 3), tree.root.split.children.items.len);
 }
 
 test "splitView: returns error for nonexistent id" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     const result = tree.split(999, .horizontal, true);
@@ -238,7 +242,7 @@ test "splitView: returns error for nonexistent id" {
 }
 
 test "findPath: returns correct path to nested node" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     _ = try tree.split(0, .horizontal, true);
@@ -255,23 +259,23 @@ test "findPath: returns correct path to nested node" {
 }
 
 test "findPath: returns null for nonexistent id" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     try testing.expect(tree.findPath(999) == null);
 }
 
 test "getNodeFromPath: empty path returns root" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     const node = tree.getNodeFromPath(&.{});
     try testing.expect(node != null);
-    try testing.expect(node.? == &tree.root);
+    try testing.expect(node.? == tree.root);
 }
 
 test "getNodeFromPath: valid path returns correct node" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     _ = try tree.split(0, .horizontal, true);
@@ -286,7 +290,7 @@ test "getNodeFromPath: valid path returns correct node" {
 }
 
 test "getNodeFromPath: invalid path returns null" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     _ = try tree.split(0, .horizontal, true);
@@ -296,7 +300,7 @@ test "getNodeFromPath: invalid path returns null" {
 }
 
 test "count: tracks views through splits" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     try testing.expectEqual(@as(usize, 1), tree.count());
@@ -312,7 +316,7 @@ test "count: tracks views through splits" {
 }
 
 test "remove: removes view and collapses parent with one child" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     _ = try tree.split(0, .horizontal, true);
@@ -321,12 +325,12 @@ test "remove: removes view and collapses parent with one child" {
     tree.remove(1);
 
     try testing.expectEqual(@as(usize, 1), tree.count());
-    try testing.expect(tree.root == .view);
+    try testing.expect(tree.root.* == .view);
     try testing.expectEqual(@as(u64, 0), tree.root.view.id);
 }
 
 test "remove: keeps split with multiple children" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     _ = try tree.split(0, .horizontal, true);
@@ -336,12 +340,12 @@ test "remove: keeps split with multiple children" {
     tree.remove(1);
 
     try testing.expectEqual(@as(usize, 2), tree.count());
-    try testing.expect(tree.root == .split);
+    try testing.expect(tree.root.* == .split);
     try testing.expectEqual(@as(usize, 2), tree.root.split.children.items.len);
 }
 
 test "remove: does nothing for nonexistent id" {
-    var tree = Tree.init(testing.allocator);
+    var tree = try Tree.init(testing.allocator);
     defer tree.deinit();
 
     _ = try tree.split(0, .horizontal, true);
