@@ -333,6 +333,7 @@ pub fn addChild(self: *Element, child: *Element) !void {
     }
 
     child.parent = self;
+    child.removed = false;
 
     if (self.context) |ctx| {
         try child.setContext(ctx);
@@ -349,6 +350,7 @@ pub fn insertChild(self: *Element, child: *Element, index: usize) !void {
     }
 
     child.parent = self;
+    child.removed = false;
 
     if (self.context) |ctx| {
         try child.setContext(ctx);
