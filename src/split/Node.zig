@@ -160,7 +160,7 @@ pub const Node = union(enum) {
         }
     }
 
-    pub fn removeChild(self: *Node, idx: usize) Node {
+    pub fn removeChild(self: *Node, idx: usize) *Node {
         switch (self.*) {
             .view => std.debug.panic("Remove is only possible for split nodes", .{}),
             .split => |*split| {
@@ -180,7 +180,7 @@ pub const Node = union(enum) {
 
     pub fn collapse(self: *Node) void {
         switch (self.*) {
-            .view => std.debug.panic("Collapse is only possible for split nodes", .{}),
+            .view => {},
             .split => |*split| {
                 const child_ptr = split.removeChild(0);
                 const child = child_ptr.*;

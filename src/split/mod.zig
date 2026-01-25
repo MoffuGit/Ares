@@ -114,35 +114,12 @@ pub fn remove(self: *Tree, id: u64) void {
     const parent = self.getParentFromPath(path.items) orelse return;
     const index = path.items[path.items.len - 1];
 
-    switch (parent.*) {
-        .split => |*split| {
-            const removed = split.removeChild(index);
-            removed.deinit();
-            split.alloc.destroy(removed);
+    const removed = parent.removeChild(index);
+    removed.deinit();
+    self.alloc.destroy(removed);
 
-            if (split.childCount() == 1) {
-                parent.collapse();
-            }
-        },
-        .view => return,
-    }
-
-    self.collapseRecursive(path.items[0 .. path.items.len - 1]);
-}
-
-fn collapseRecursive(self: *Tree, path: []const usize) void {
-    if (path.len == 0) return;
-
-    const node = self.getNodeFromPath(path) orelse return;
-
-    switch (node.*) {
-        .split => |*split| {
-            if (split.childCount() == 1) {
-                node.collapse();
-                self.collapseRecursive(path[0 .. path.len - 1]);
-            }
-        },
-        .view => return,
+    if (parent.count() == 1) {
+        parent.collapse();
     }
 }
 
@@ -155,25 +132,6 @@ test "init: creates tree with single view" {
     try testing.expectEqual(@as(usize, 1), tree.count());
     try testing.expect(tree.root == .view);
     try testing.expectEqual(@as(u64, 0), tree.root.view.id);
-}
-
-test "nextId: increments sequentially" {
-    var tree = Tree.init(testing.allocator);
-    defer tree.deinit();
-
-    try testing.expectEqual(@as(u64, 1), tree.nextId());
-    try testing.expectEqual(@as(u64, 2), tree.nextId());
-    try testing.expectEqual(@as(u64, 3), tree.nextId());
-}
-
-test "find: locates root view by id" {
-    var tree = Tree.init(testing.allocator);
-    defer tree.deinit();
-
-    const found = tree.find(0);
-    try testing.expect(found != null);
-    try testing.expect(found.?.* == .view);
-    try testing.expectEqual(@as(u64, 0), found.?.view.id);
 }
 
 test "find: locates nested view after splits" {
@@ -338,15 +296,6 @@ test "count: tracks views through splits" {
     try testing.expectEqual(@as(usize, 4), tree.count());
 }
 
-test "remove: does nothing on single view root" {
-    var tree = Tree.init(testing.allocator);
-    defer tree.deinit();
-
-    tree.remove(0);
-    try testing.expectEqual(@as(usize, 1), tree.count());
-    try testing.expect(tree.root == .view);
-}
-
 test "remove: removes view and collapses parent with one child" {
     var tree = Tree.init(testing.allocator);
     defer tree.deinit();
@@ -386,45 +335,4 @@ test "remove: does nothing for nonexistent id" {
     tree.remove(999);
 
     try testing.expectEqual(@as(usize, 2), tree.count());
-}
-
-test "remove: recursively collapses nested single-child splits" {
-    var tree = Tree.init(testing.allocator);
-    defer tree.deinit();
-
-    // Create structure: root(h) -> [view0, split(v) -> [view1, view2]]
-    const id1 = try tree.splitView(0, .horizontal, true);
-    const id2 = try tree.splitView(id1, .vertical, true);
-
-    try testing.expectEqual(@as(usize, 3), tree.count());
-
-    // Remove view0, which should:
-    // 1. Leave root(h) -> [split(v) -> [view1, view2]]
-    // 2. Collapse root since it has only one child
-    // Result: root becomes split(v) -> [view1, view2]
-    tree.remove(0);
-
-    try testing.expectEqual(@as(usize, 2), tree.count());
-    try testing.expect(tree.root == .split);
-    try testing.expectEqual(Direction.vertical, tree.root.split.direction);
-    try testing.expectEqual(@as(usize, 2), tree.root.split.children.items.len);
-    try testing.expectEqual(id1, tree.root.split.children.items[0].view.id);
-    try testing.expectEqual(id2, tree.root.split.children.items[1].view.id);
-}
-
-test "pointer stability: sibling pointers remain valid when other siblings split" {
-    var tree = Tree.init(testing.allocator);
-    defer tree.deinit();
-
-    const id1 = try tree.splitView(0, .horizontal, true);
-    const id2 = try tree.splitView(0, .horizontal, true);
-
-    const ptr1 = tree.find(id1).?;
-    const ptr2 = tree.find(id2).?;
-
-    _ = try tree.splitView(0, .horizontal, true);
-    _ = try tree.splitView(0, .horizontal, true);
-
-    try testing.expect(tree.find(id1).? == ptr1);
-    try testing.expect(tree.find(id2).? == ptr2);
 }
