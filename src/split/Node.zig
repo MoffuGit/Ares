@@ -30,7 +30,7 @@ pub const Split = struct {
             .element = Element.init(alloc, .{
                 .style = .{
                     .flex_direction = switch (direction) {
-                        .horizontal => .col,
+                        .horizontal => .column,
                         .vertical => .row,
                     },
                     .gap = switch (direction) {

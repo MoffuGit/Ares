@@ -9,6 +9,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Element = @import("../element/mod.zig").Element;
 const Buffer = @import("../Buffer.zig");
+const EventContext = @import("../events/EventContext.zig");
+const vaxis = @import("vaxis");
 
 pub const Tree = @This();
 
@@ -36,6 +38,16 @@ fn draw(element: *Element, buffer: *Buffer) void {
     }
 }
 
+pub fn keyPressFn(element: *Element, ctx: *EventContext, key: vaxis.Key) void {
+    if (key.matches('l', .{ .ctrl = true })) {
+        const self: *Tree = @ptrCast(@alignCast(element.userdata));
+
+        _ = self.split(0, .horizontal, true) catch {};
+
+        ctx.stopPropagation();
+    }
+}
+
 pub fn create(alloc: Allocator) !*Tree {
     const self = try alloc.create(Tree);
     errdefer alloc.destroy(self);
@@ -54,6 +66,7 @@ pub fn create(alloc: Allocator) !*Tree {
         .element = Element.init(
             alloc,
             .{
+                .keyPressFn = keyPressFn,
                 .userdata = self,
                 .drawFn = draw,
                 .style = .{
@@ -124,6 +137,7 @@ pub fn split(self: *Tree, id: u64, direction: Direction, after: bool) !u64 {
     const new_id = self.nextId();
 
     if (self.root.* == .view) {
+        //NOTE: check this part, is broken
         if (self.root.view.id != id) return error.NotFound;
         try self.root._split(self.alloc, new_id, direction, after);
         try self.element.addChild(self.root.getElement());
