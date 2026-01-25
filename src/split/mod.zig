@@ -7,6 +7,8 @@ pub const Node = nodepkg.Node;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Element = @import("../element/mod.zig").Element;
+const Buffer = @import("../Buffer.zig");
 
 pub const Tree = @This();
 
@@ -15,21 +17,64 @@ pub const NodePath = std.ArrayList(usize);
 alloc: Allocator,
 root: *Node,
 next_id: u64,
+element: Element,
 
-pub fn init(alloc: Allocator) !Tree {
+fn draw(element: *Element, buffer: *Buffer) void {
+    const x = element.layout.left;
+    const y = element.layout.top;
+
+    var row: u16 = 0;
+    while (row < element.layout.height) : (row += 1) {
+        var col: u16 = 0;
+        while (col < element.layout.width) : (col += 1) {
+            const px = x + col;
+            const py = y + row;
+            if (px < buffer.width and py < buffer.height) {
+                buffer.writeCell(px, py, .{ .style = .{ .bg = .{ .rgb = .{ 255, 0, 0 } } } });
+            }
+        }
+    }
+}
+
+pub fn create(alloc: Allocator) !*Tree {
+    const self = try alloc.create(Tree);
+    errdefer alloc.destroy(self);
+
+    const view = try View.create(alloc, 0);
+    errdefer view.destroy();
+
     const root = try alloc.create(Node);
-    root.* = Node{ .view = View.init(0) };
+    errdefer root.destroy();
+    root.* = Node{ .view = view };
 
-    return .{
+    var element = Element.init(
+        alloc,
+        .{
+            .userdata = self,
+            .drawFn = draw,
+            .style = .{
+                .width = .{ .percent = 100 },
+                .height = .{ .percent = 100 },
+            },
+        },
+    );
+    try element.addChild(&view.element);
+
+    self.* = .{
         .alloc = alloc,
         .root = root,
         .next_id = 1,
+        .element = element,
     };
+
+    return self;
 }
 
-pub fn deinit(self: *Tree) void {
-    self.root.deinit();
+pub fn destroy(self: *Tree) void {
+    self.root.destroy();
     self.alloc.destroy(self.root);
+    self.element.deinit();
+    self.alloc.destroy(self);
 }
 
 pub fn nextId(self: *Tree) u64 {
@@ -53,7 +98,7 @@ pub fn getNodeFromPath(self: *Tree, path: []const usize) ?*Node {
 
     for (path) |index| {
         switch (current.*) {
-            .split => |*s| {
+            .split => |s| {
                 if (index >= s.children.items.len) return null;
                 current = s.children.items[index];
             },
@@ -81,6 +126,7 @@ pub fn split(self: *Tree, id: u64, direction: Direction, after: bool) !u64 {
     if (self.root.* == .view) {
         if (self.root.view.id != id) return error.NotFound;
         try self.root._split(self.alloc, new_id, direction, after);
+        try self.element.addChild(self.root.getElement());
         return new_id;
     }
 
@@ -95,12 +141,14 @@ pub fn split(self: *Tree, id: u64, direction: Direction, after: bool) !u64 {
     const node = try parent.get(index);
 
     if (parent.split.direction == direction) {
-        var new_node = Node{ .view = View.init(new_id) };
+        const new_view = try View.create(self.alloc, new_id);
+        const new_node = try self.alloc.create(Node);
+        new_node.* = Node{ .view = new_view };
 
         if (node.ratio()) |ratio| {
             const half = ratio / 2.0;
 
-            new_node.setRatio(half);
+            new_view.ratio = half;
             node.setRatio(half);
         }
 
@@ -124,8 +172,8 @@ pub fn remove(self: *Tree, id: u64) void {
 
     const removed = parent.removeChild(index);
 
-    if (parent.count() == 1) {
-        parent.collapse();
+    if (parent.split.childCount() == 1) {
+        parent.collapse(self.alloc);
     } else if (removed.ratio()) |removed_ratio| {
         const children = &parent.split.children.items;
         const left: ?*Node = if (index > 0) children.*[index - 1] else null;
@@ -138,8 +186,7 @@ pub fn remove(self: *Tree, id: u64) void {
         }
     }
 
-    removed.deinit();
-    self.alloc.destroy(removed);
+    removed.destroy();
 }
 
 const testing = std.testing;

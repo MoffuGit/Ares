@@ -2,6 +2,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const NodePath = @import("mod.zig").NodePath;
+const Element = @import("../element/mod.zig").Element;
+const Buffer = @import("../Buffer.zig");
 
 pub const Direction = enum {
     horizontal,
@@ -13,32 +15,36 @@ pub const Split = struct {
     children: std.ArrayList(*Node) = .{},
     alloc: Allocator,
     ratio: ?f32 = null,
+    element: Element,
 
-    pub fn init(alloc: Allocator, direction: Direction) Split {
-        return .{
+    pub fn create(alloc: Allocator, direction: Direction) !*Split {
+        const self = try alloc.create(Split);
+        self.* = .{
             .direction = direction,
             .alloc = alloc,
+            .element = Element.init(alloc, .{}),
         };
+        return self;
     }
 
-    pub fn deinit(self: *Split) void {
+    pub fn destroy(self: *Split) void {
         for (self.children.items) |child| {
-            child.deinit();
+            child.destroy();
             self.alloc.destroy(child);
         }
         self.children.deinit(self.alloc);
+        self.element.deinit();
+        self.alloc.destroy(self);
     }
 
-    pub fn addChild(self: *Split, node: Node) !void {
-        const node_ptr = try self.alloc.create(Node);
-        node_ptr.* = node;
-        try self.children.append(self.alloc, node_ptr);
+    pub fn addChild(self: *Split, node: *Node) !void {
+        try self.children.append(self.alloc, node);
+        try self.element.addChild(node.getElement());
     }
 
-    pub fn insertChild(self: *Split, index: usize, node: Node) !void {
-        const node_ptr = try self.alloc.create(Node);
-        node_ptr.* = node;
-        try self.children.insert(self.alloc, index, node_ptr);
+    pub fn insertChild(self: *Split, index: usize, node: *Node) !void {
+        try self.children.insert(self.alloc, index, node);
+        try self.element.addChild(node.getElement());
     }
 
     pub fn get(self: *Split, index: usize) !*Node {
@@ -47,7 +53,9 @@ pub const Split = struct {
     }
 
     pub fn removeChild(self: *Split, index: usize) *Node {
-        return self.children.orderedRemove(index);
+        const removed = self.children.orderedRemove(index);
+        self.element.removeChild(removed.getElement().num);
+        return removed;
     }
 
     pub fn childCount(self: *const Split) usize {
@@ -58,20 +66,63 @@ pub const Split = struct {
 pub const View = struct {
     id: u64,
     ratio: ?f32 = null,
+    alloc: Allocator,
+    element: Element,
 
-    pub fn init(id: u64) View {
-        return .{ .id = id };
+    fn draw(element: *Element, buffer: *Buffer) void {
+        const x = element.layout.left;
+        const y = element.layout.top;
+
+        var row: u16 = 0;
+        while (row < element.layout.height) : (row += 1) {
+            var col: u16 = 0;
+            while (col < element.layout.width) : (col += 1) {
+                const px = x + col;
+                const py = y + row;
+                if (px < buffer.width and py < buffer.height) {
+                    buffer.writeCell(px, py, .{ .style = .{ .bg = .{ .rgb = .{ 0, 255, 0 } } } });
+                }
+            }
+        }
+    }
+
+    pub fn create(alloc: Allocator, id: u64) !*View {
+        const self = try alloc.create(View);
+        self.* = .{
+            .id = id,
+            .alloc = alloc,
+            .element = Element.init(alloc, .{
+                .style = .{
+                    .width = .{ .percent = 100 },
+                    .height = .{ .percent = 100 },
+                },
+                .drawFn = draw,
+            }),
+        };
+        return self;
+    }
+
+    pub fn destroy(self: *View) void {
+        self.element.deinit();
+        self.alloc.destroy(self);
     }
 };
 
 pub const Node = union(enum) {
-    split: Split,
-    view: View,
+    split: *Split,
+    view: *View,
 
-    pub fn deinit(self: *Node) void {
+    pub fn destroy(self: *Node) void {
         switch (self.*) {
-            .split => |*s| s.deinit(),
-            .view => {},
+            .split => |s| s.destroy(),
+            .view => |v| v.destroy(),
+        }
+    }
+
+    pub fn getElement(self: *Node) *Element {
+        switch (self.*) {
+            .split => |s| return &s.element,
+            .view => |v| return &v.element,
         }
     }
 
@@ -80,7 +131,7 @@ pub const Node = union(enum) {
             .view => |v| {
                 if (v.id == id) return node;
             },
-            .split => |*s| {
+            .split => |s| {
                 for (s.children.items) |child| {
                     if (child.find(id)) |found| {
                         return found;
@@ -105,7 +156,7 @@ pub const Node = union(enum) {
             .view => |v| {
                 return v.id == id;
             },
-            .split => |*s| {
+            .split => |s| {
                 for (s.children.items, 0..) |child, i| {
                     _path.append(alloc, i) catch return false;
                     if (child.findPath(alloc, id, _path)) return true;
@@ -129,10 +180,10 @@ pub const Node = union(enum) {
 
     pub fn setRatio(self: *Node, r: ?f32) void {
         switch (self.*) {
-            .split => |*split| {
+            .split => |split| {
                 split.ratio = r;
             },
-            .view => |*view| {
+            .view => |view| {
                 view.ratio = r;
             },
         }
@@ -152,29 +203,37 @@ pub const Node = union(enum) {
     }
 
     pub fn _split(self: *Node, alloc: Allocator, id: u64, direction: Direction, after: bool) !void {
-        var new_split = Split.init(alloc, direction);
-        new_split.ratio = self.ratio();
+        const old_view = self.view;
+        const new_split = try Split.create(alloc, direction);
+        new_split.ratio = old_view.ratio;
 
-        var old_view = self.*;
-        old_view.setRatio(null);
+        old_view.ratio = null;
 
-        const new_view = Node{ .view = View.init(id) };
+        const new_view = try View.create(alloc, id);
+
+        const old_node = try alloc.create(Node);
+        old_node.* = Node{ .view = old_view };
+
+        const new_node = try alloc.create(Node);
+        new_node.* = Node{ .view = new_view };
 
         if (after) {
-            try new_split.addChild(old_view);
-            try new_split.addChild(new_view);
+            try new_split.children.append(new_split.alloc, old_node);
+            try new_split.children.append(new_split.alloc, new_node);
         } else {
-            try new_split.addChild(new_view);
-            try new_split.addChild(old_view);
+            try new_split.children.append(new_split.alloc, new_node);
+            try new_split.children.append(new_split.alloc, old_node);
         }
+
+        try new_split.element.addChild(&new_view.element);
 
         self.* = Node{ .split = new_split };
     }
 
-    pub fn insertChild(self: *Node, idx: usize, child: Node) !void {
+    pub fn insertChild(self: *Node, idx: usize, child: *Node) !void {
         switch (self.*) {
             .view => std.debug.panic("Insert is only possible for split nodes", .{}),
-            .split => |*split| {
+            .split => |split| {
                 return split.insertChild(idx, child);
             },
         }
@@ -183,7 +242,7 @@ pub const Node = union(enum) {
     pub fn removeChild(self: *Node, idx: usize) *Node {
         switch (self.*) {
             .view => std.debug.panic("Remove is only possible for split nodes", .{}),
-            .split => |*split| {
+            .split => |split| {
                 return split.removeChild(idx);
             },
         }
@@ -192,23 +251,26 @@ pub const Node = union(enum) {
     pub fn get(self: *Node, index: usize) !*Node {
         switch (self.*) {
             .view => std.debug.panic("Get is only possible for split nodes", .{}),
-            .split => |*split| {
+            .split => |split| {
                 return split.get(index);
             },
         }
     }
 
-    pub fn collapse(self: *Node) void {
+    pub fn collapse(self: *Node, alloc: Allocator) void {
         switch (self.*) {
             .view => {},
-            .split => |*split| {
+            .split => |split| {
                 const parent_ratio = split.ratio;
                 const child_ptr = split.removeChild(0);
-                var child = child_ptr.*;
-                child.setRatio(parent_ratio);
-                split.alloc.destroy(child_ptr);
+                child_ptr.setRatio(parent_ratio);
+
                 split.children.deinit(split.alloc);
-                self.* = child;
+                split.element.deinit();
+                alloc.destroy(split);
+
+                self.* = child_ptr.*;
+                alloc.destroy(child_ptr);
             },
         }
     }

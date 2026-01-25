@@ -50,6 +50,11 @@ pub fn main() !void {
     });
     defer app.destroy();
 
+    const tree = try SplitTree.create(alloc);
+    defer tree.destroy();
+
+    try app.window.root.addChild(&tree.element);
+
     app.run() catch |err| {
         log.err("App exit with an err: {}", .{err});
     };
