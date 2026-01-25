@@ -131,7 +131,7 @@ num: u64,
 node: Node,
 
 visible: bool = true,
-removed: bool = false,
+removed: bool = true,
 
 zIndex: usize = 0,
 
