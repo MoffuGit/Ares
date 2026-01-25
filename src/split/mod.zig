@@ -71,7 +71,7 @@ pub fn count(self: *const Tree) usize {
     return self.root.count();
 }
 
-pub fn splitView(self: *Tree, id: u64, direction: Direction, after: bool) !u64 {
+pub fn split(self: *Tree, id: u64, direction: Direction, after: bool) !u64 {
     const new_id = self.nextId();
 
     if (self.root == .view) {
@@ -86,19 +86,23 @@ pub fn splitView(self: *Tree, id: u64, direction: Direction, after: bool) !u64 {
     const parent = self.getParentFromPath(path.items) orelse return error.PathIsBroken;
     const index = path.items[path.items.len - 1];
 
-    switch (parent.*) {
-        .split => |*split| {
-            if (split.direction == direction) {
-                try split.insertChild(
-                    if (after) index + 1 else index,
-                    Node{ .view = View.init(new_id) },
-                );
-            } else {
-                const node = try split.get(index);
-                try node._split(self.alloc, new_id, direction, after);
-            }
-        },
-        .view => return error.PathIsBroken,
+    if (parent.* != .split) return error.PathIsBroken;
+
+    const node = try parent.get(index);
+
+    if (parent.split.direction == direction) {
+        var new_node = Node{ .view = View.init(new_id) };
+
+        if (node.ratio()) |ratio| {
+            const half = ratio / 2.0;
+
+            new_node.setRatio(half);
+            node.setRatio(half);
+        }
+
+        try parent.insertChild(if (after) index + 1 else index, new_node);
+    } else {
+        try node._split(self.alloc, new_id, direction, after);
     }
 
     return new_id;
@@ -115,12 +119,23 @@ pub fn remove(self: *Tree, id: u64) void {
     const index = path.items[path.items.len - 1];
 
     const removed = parent.removeChild(index);
-    removed.deinit();
-    self.alloc.destroy(removed);
 
     if (parent.count() == 1) {
         parent.collapse();
+    } else if (removed.ratio()) |removed_ratio| {
+        const children = &parent.split.children.items;
+        const left: ?*Node = if (index > 0) children.*[index - 1] else null;
+        const right: ?*Node = if (index < children.len) children.*[index] else null;
+
+        if (left != null and left.?.ratio() != null) {
+            left.?.setRatio(left.?.ratio().? + removed_ratio);
+        } else if (right != null and right.?.ratio() != null) {
+            right.?.setRatio(right.?.ratio().? + removed_ratio);
+        }
     }
+
+    removed.deinit();
+    self.alloc.destroy(removed);
 }
 
 const testing = std.testing;
@@ -138,8 +153,8 @@ test "find: locates nested view after splits" {
     var tree = Tree.init(testing.allocator);
     defer tree.deinit();
 
-    const id1 = try tree.splitView(0, .horizontal, true);
-    const id2 = try tree.splitView(id1, .vertical, true);
+    const id1 = try tree.split(0, .horizontal, true);
+    const id2 = try tree.split(id1, .vertical, true);
 
     const found0 = tree.find(0);
     const found1 = tree.find(id1);
@@ -164,7 +179,7 @@ test "splitView: splits root horizontally after" {
     var tree = Tree.init(testing.allocator);
     defer tree.deinit();
 
-    const new_id = try tree.splitView(0, .horizontal, true);
+    const new_id = try tree.split(0, .horizontal, true);
 
     try testing.expectEqual(@as(u64, 1), new_id);
     try testing.expectEqual(@as(usize, 2), tree.count());
@@ -178,7 +193,7 @@ test "splitView: splits root vertically before" {
     var tree = Tree.init(testing.allocator);
     defer tree.deinit();
 
-    const new_id = try tree.splitView(0, .vertical, false);
+    const new_id = try tree.split(0, .vertical, false);
 
     try testing.expectEqual(@as(u64, 1), new_id);
     try testing.expect(tree.root == .split);
@@ -191,8 +206,8 @@ test "splitView: nested split creates new split node" {
     var tree = Tree.init(testing.allocator);
     defer tree.deinit();
 
-    _ = try tree.splitView(0, .horizontal, true);
-    _ = try tree.splitView(0, .vertical, true);
+    _ = try tree.split(0, .horizontal, true);
+    _ = try tree.split(0, .vertical, true);
 
     try testing.expectEqual(@as(usize, 3), tree.count());
     try testing.expect(tree.root == .split);
@@ -206,8 +221,8 @@ test "splitView: same direction adds sibling" {
     var tree = Tree.init(testing.allocator);
     defer tree.deinit();
 
-    _ = try tree.splitView(0, .horizontal, true);
-    _ = try tree.splitView(0, .horizontal, true);
+    _ = try tree.split(0, .horizontal, true);
+    _ = try tree.split(0, .horizontal, true);
 
     try testing.expectEqual(@as(usize, 3), tree.count());
     try testing.expect(tree.root == .split);
@@ -218,7 +233,7 @@ test "splitView: returns error for nonexistent id" {
     var tree = Tree.init(testing.allocator);
     defer tree.deinit();
 
-    const result = tree.splitView(999, .horizontal, true);
+    const result = tree.split(999, .horizontal, true);
     try testing.expectError(error.NotFound, result);
 }
 
@@ -226,7 +241,7 @@ test "findPath: returns correct path to nested node" {
     var tree = Tree.init(testing.allocator);
     defer tree.deinit();
 
-    _ = try tree.splitView(0, .horizontal, true);
+    _ = try tree.split(0, .horizontal, true);
 
     var path0 = tree.findPath(0) orelse return error.TestUnexpectedResult;
     defer path0.deinit(testing.allocator);
@@ -259,7 +274,7 @@ test "getNodeFromPath: valid path returns correct node" {
     var tree = Tree.init(testing.allocator);
     defer tree.deinit();
 
-    _ = try tree.splitView(0, .horizontal, true);
+    _ = try tree.split(0, .horizontal, true);
 
     const node0 = tree.getNodeFromPath(&.{0});
     const node1 = tree.getNodeFromPath(&.{1});
@@ -274,7 +289,7 @@ test "getNodeFromPath: invalid path returns null" {
     var tree = Tree.init(testing.allocator);
     defer tree.deinit();
 
-    _ = try tree.splitView(0, .horizontal, true);
+    _ = try tree.split(0, .horizontal, true);
 
     try testing.expect(tree.getNodeFromPath(&.{99}) == null);
     try testing.expect(tree.getNodeFromPath(&.{ 0, 0 }) == null);
@@ -286,13 +301,13 @@ test "count: tracks views through splits" {
 
     try testing.expectEqual(@as(usize, 1), tree.count());
 
-    _ = try tree.splitView(0, .horizontal, true);
+    _ = try tree.split(0, .horizontal, true);
     try testing.expectEqual(@as(usize, 2), tree.count());
 
-    _ = try tree.splitView(0, .vertical, true);
+    _ = try tree.split(0, .vertical, true);
     try testing.expectEqual(@as(usize, 3), tree.count());
 
-    _ = try tree.splitView(1, .horizontal, false);
+    _ = try tree.split(1, .horizontal, false);
     try testing.expectEqual(@as(usize, 4), tree.count());
 }
 
@@ -300,7 +315,7 @@ test "remove: removes view and collapses parent with one child" {
     var tree = Tree.init(testing.allocator);
     defer tree.deinit();
 
-    _ = try tree.splitView(0, .horizontal, true);
+    _ = try tree.split(0, .horizontal, true);
     try testing.expectEqual(@as(usize, 2), tree.count());
 
     tree.remove(1);
@@ -314,8 +329,8 @@ test "remove: keeps split with multiple children" {
     var tree = Tree.init(testing.allocator);
     defer tree.deinit();
 
-    _ = try tree.splitView(0, .horizontal, true);
-    _ = try tree.splitView(0, .horizontal, true);
+    _ = try tree.split(0, .horizontal, true);
+    _ = try tree.split(0, .horizontal, true);
     try testing.expectEqual(@as(usize, 3), tree.count());
 
     tree.remove(1);
@@ -329,7 +344,7 @@ test "remove: does nothing for nonexistent id" {
     var tree = Tree.init(testing.allocator);
     defer tree.deinit();
 
-    _ = try tree.splitView(0, .horizontal, true);
+    _ = try tree.split(0, .horizontal, true);
     try testing.expectEqual(@as(usize, 2), tree.count());
 
     tree.remove(999);

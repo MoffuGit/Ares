@@ -12,6 +12,7 @@ pub const Split = struct {
     direction: Direction,
     children: std.ArrayList(*Node) = .{},
     alloc: Allocator,
+    ratio: ?f32 = null,
 
     pub fn init(alloc: Allocator, direction: Direction) Split {
         return .{
@@ -56,6 +57,7 @@ pub const Split = struct {
 
 pub const View = struct {
     id: u64,
+    ratio: ?f32 = null,
 
     pub fn init(id: u64) View {
         return .{ .id = id };
@@ -114,6 +116,28 @@ pub const Node = union(enum) {
         return false;
     }
 
+    pub fn ratio(self: *Node) ?f32 {
+        switch (self.*) {
+            .split => |split| {
+                return split.ratio;
+            },
+            .view => |view| {
+                return view.ratio;
+            },
+        }
+    }
+
+    pub fn setRatio(self: *Node, r: ?f32) void {
+        switch (self.*) {
+            .split => |*split| {
+                split.ratio = r;
+            },
+            .view => |*view| {
+                view.ratio = r;
+            },
+        }
+    }
+
     pub fn count(self: *const Node) usize {
         switch (self.*) {
             .view => return 1,
@@ -128,27 +152,23 @@ pub const Node = union(enum) {
     }
 
     pub fn _split(self: *Node, alloc: Allocator, id: u64, direction: Direction, after: bool) !void {
-        switch (self.*) {
-            .view => {
-                var new_split = Split.init(alloc, direction);
+        var new_split = Split.init(alloc, direction);
+        new_split.ratio = self.ratio();
 
-                const old_view = self.*;
-                const new_view = Node{ .view = View.init(id) };
+        var old_view = self.*;
+        old_view.setRatio(null);
 
-                if (after) {
-                    try new_split.addChild(old_view);
-                    try new_split.addChild(new_view);
-                } else {
-                    try new_split.addChild(new_view);
-                    try new_split.addChild(old_view);
-                }
+        const new_view = Node{ .view = View.init(id) };
 
-                self.* = Node{ .split = new_split };
-            },
-            .split => {
-                std.debug.panic("Split is only possible for view nodes", .{});
-            },
+        if (after) {
+            try new_split.addChild(old_view);
+            try new_split.addChild(new_view);
+        } else {
+            try new_split.addChild(new_view);
+            try new_split.addChild(old_view);
         }
+
+        self.* = Node{ .split = new_split };
     }
 
     pub fn insertChild(self: *Node, idx: usize, child: Node) !void {
@@ -182,8 +202,10 @@ pub const Node = union(enum) {
         switch (self.*) {
             .view => {},
             .split => |*split| {
+                const parent_ratio = split.ratio;
                 const child_ptr = split.removeChild(0);
-                const child = child_ptr.*;
+                var child = child_ptr.*;
+                child.setRatio(parent_ratio);
                 split.alloc.destroy(child_ptr);
                 split.children.deinit(split.alloc);
                 self.* = child;
