@@ -55,6 +55,7 @@ pub fn create(alloc: Allocator) !*Tree {
             .style = .{
                 .width = .{ .percent = 100 },
                 .height = .{ .percent = 100 },
+                .flex_direction = .row,
             },
         },
     );

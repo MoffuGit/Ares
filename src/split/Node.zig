@@ -22,7 +22,14 @@ pub const Split = struct {
         self.* = .{
             .direction = direction,
             .alloc = alloc,
-            .element = Element.init(alloc, .{}),
+            .element = Element.init(alloc, .{
+                .style = .{
+                    .flex_direction = switch (direction) {
+                        .horizontal => .row,
+                        .vertical => .col,
+                    },
+                },
+            }),
         };
         return self;
     }
@@ -92,11 +99,10 @@ pub const View = struct {
             .id = id,
             .alloc = alloc,
             .element = Element.init(alloc, .{
-                .style = .{
-                    .width = .{ .percent = 100 },
-                    .height = .{ .percent = 100 },
-                },
                 .drawFn = draw,
+                .style = .{
+                    .flex_grow = 0.5,
+                },
             }),
         };
         return self;
@@ -179,6 +185,9 @@ pub const Node = union(enum) {
     }
 
     pub fn setRatio(self: *Node, r: ?f32) void {
+        //NOTE:
+        //when setting a ratio, i need to set the
+        //flex_grow percentaje,
         switch (self.*) {
             .split => |split| {
                 split.ratio = r;

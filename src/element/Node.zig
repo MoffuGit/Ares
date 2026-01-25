@@ -36,6 +36,10 @@ pub fn removeChild(self: Node, child: Node) void {
     yoga.YGNodeRemoveChild(self.yg_node, child.yg_node);
 }
 
+pub fn removeAllChildrens(self: Node) void {
+    yoga.YGNodeRemoveAllChildren(self.yg_node);
+}
+
 pub fn setDirection(self: Node, direction: Style.Direction) void {
     yoga.YGNodeStyleSetDirection(self.yg_node, @intFromEnum(direction));
 }
