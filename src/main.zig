@@ -8,7 +8,6 @@ const Node = @import("element/Node.zig");
 const Style = @import("element/mod.zig").Style;
 const Buffer = @import("Buffer.zig");
 const HitGrid = @import("HitGrid.zig");
-const SplitTree = @import("split/mod.zig");
 
 const vaxis = @import("vaxis");
 const Cell = vaxis.Cell;
@@ -49,11 +48,6 @@ pub fn main() !void {
         },
     });
     defer app.destroy();
-
-    const tree = try SplitTree.create(alloc);
-    defer tree.destroy();
-
-    try app.window.root.addChild(&tree.element);
 
     app.run() catch |err| {
         log.err("App exit with an err: {}", .{err});
