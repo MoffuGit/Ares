@@ -272,6 +272,12 @@ fn processMouseDown(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
 fn processMouseUp(self: *Window, target: ?*Element, mouse: vaxis.Mouse) void {
     const ctx = dispatchMouseEvent(target, mouse, Element.handleMouseUp);
 
+    if (self.pressed_on) |pressed| {
+        if (pressed.dragging) {
+            _ = dispatchMouseEvent(pressed, mouse, Element.handleDragEnd);
+        }
+    }
+
     if (!ctx.stopped and self.pressed_on == target and target != null) {
         _ = dispatchMouseEvent(target, mouse, Element.handleClick);
     }
@@ -313,7 +319,6 @@ pub fn setFocus(self: *Window, element: ?*Element) void {
     const previous = self.focused;
 
     if (previous) |prev| {
-        prev.focused = false;
         prev.handleBlur();
     }
 
@@ -321,7 +326,6 @@ pub fn setFocus(self: *Window, element: ?*Element) void {
     self.rebuildFocusPath();
 
     if (element) |elem| {
-        elem.focused = true;
         elem.handleFocus();
     }
 

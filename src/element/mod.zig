@@ -119,6 +119,7 @@ pub const Options = struct {
     mouseOutFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
     wheelFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
     dragFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+    dragEndFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
     resizeFn: ?*const fn (element: *Element, width: u16, height: u16) void = null,
 };
 
@@ -134,6 +135,7 @@ visible: bool = true,
 removed: bool = true,
 focused: bool = false,
 hovered: bool = false,
+dragging: bool = false,
 
 zIndex: usize = 0,
 
@@ -164,6 +166,7 @@ mouseOverFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mou
 mouseOutFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
 wheelFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
 dragFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
+dragEndFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
 resizeFn: ?*const fn (element: *Element, width: u16, height: u16) void = null,
 
 pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
@@ -200,6 +203,7 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
         .mouseOutFn = opts.mouseOutFn,
         .wheelFn = opts.wheelFn,
         .dragFn = opts.dragFn,
+        .dragEndFn = opts.dragEndFn,
         .resizeFn = opts.resizeFn,
     };
 }
@@ -420,12 +424,15 @@ pub fn handleKeyRelease(self: *Element, ctx: *EventContext, key: vaxis.Key) void
 }
 
 pub fn handleFocus(self: *Element) void {
+    self.focused = true;
+
     if (self.focusFn) |callback| {
         callback(self);
     }
 }
 
 pub fn handleBlur(self: *Element) void {
+    self.focused = false;
     if (self.blurFn) |callback| {
         callback(self);
     }
@@ -454,10 +461,12 @@ pub fn handleMouseMove(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) v
 }
 
 pub fn handleMouseEnter(self: *Element, mouse: vaxis.Mouse) void {
+    self.hovered = true;
     if (self.mouseEnterFn) |callback| callback(self, mouse);
 }
 
 pub fn handleMouseLeave(self: *Element, mouse: vaxis.Mouse) void {
+    self.hovered = false;
     if (self.mouseLeaveFn) |callback| callback(self, mouse);
 }
 
@@ -474,7 +483,13 @@ pub fn handleWheel(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void 
 }
 
 pub fn handleDrag(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    self.dragging = true;
     if (self.dragFn) |callback| callback(self, ctx, mouse);
+}
+
+pub fn handleDragEnd(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
+    self.dragging = false;
+    if (self.dragEndFn) |callback| callback(self, ctx, mouse);
 }
 
 pub fn isAncestorOf(self: *Element, other: *Element) bool {

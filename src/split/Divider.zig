@@ -66,7 +66,7 @@ fn hit(element: *Element, hit_grid: *HitGrid) void {
 }
 
 fn draw(element: *Element, buffer: *Buffer) void {
-    const cell = if (element.hovered) vaxis.Cell{
+    const cell = if (element.hovered or element.dragging) vaxis.Cell{
         .style = .{ .bg = .{ .rgb = .{ 0, 0, 255 } } },
     } else vaxis.Cell{
         .style = .{ .bg = .{ .rgb = .{ 255, 0, 0 } } },
@@ -88,12 +88,12 @@ pub fn destroy(self: *Divider, alloc: Allocator) void {
 }
 
 pub fn mouseEnter(element: *Element, _: vaxis.Mouse) void {
-    element.hovered = true;
+    element.context.?.window.screen.mouse_shape = .pointer;
     element.context.?.requestDraw();
 }
 
 pub fn mouseLeave(element: *Element, _: vaxis.Mouse) void {
-    element.hovered = false;
+    element.context.?.window.screen.mouse_shape = .default;
     element.context.?.requestDraw();
 }
 
