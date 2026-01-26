@@ -72,23 +72,86 @@ fn draw(element: *Element, buffer: *Buffer) void {
     else
         .{ .rgb = .{ 80, 80, 80 } };
 
-    const char: []const u8 = switch (self.direction) {
-        .vertical => "│",
-        .horizontal => "─",
-    };
+    const layout = element.layout;
 
-    const cell = vaxis.Cell{
-        .char = .{ .grapheme = char, .width = 1 },
-        .style = .{ .fg = fg_color },
-    };
+    switch (self.direction) {
+        .vertical => {
+            const col = layout.left;
+            const top = if (layout.top > 0) layout.top - 1 else 0;
+            const height = if (layout.top > 0) layout.height + 1 else layout.height;
+            var row: u16 = 0;
+            while (row <= height) : (row += 1) {
+                const y = top + row;
+                const pos: Position = if (row == 0) .start else if (row == height) .end else .middle;
+                const char = getVerticalChar(buffer, col, y, pos);
+                const cell = vaxis.Cell{
+                    .char = .{ .grapheme = char, .width = 1 },
+                    .style = .{ .fg = fg_color },
+                };
+                buffer.writeCell(col, y, cell);
+            }
+        },
+        .horizontal => {
+            const row = layout.top;
+            const left = if (layout.left > 0) layout.left - 1 else 0;
+            const width = if (layout.left > 0) layout.width + 1 else layout.width;
+            var col: u16 = 0;
+            while (col <= width) : (col += 1) {
+                const x = left + col;
+                const pos: Position = if (col == 0) .start else if (col == width) .end else .middle;
+                const char = getHorizontalChar(buffer, x, row, pos);
+                const cell = vaxis.Cell{
+                    .char = .{ .grapheme = char, .width = 1 },
+                    .style = .{ .fg = fg_color },
+                };
+                buffer.writeCell(x, row, cell);
+            }
+        },
+    }
+}
 
-    buffer.fillRect(
-        element.layout.left,
-        element.layout.top,
-        element.layout.width,
-        element.layout.height,
-        cell,
-    );
+const Position = enum { start, middle, end };
+
+fn getVerticalChar(buffer: *Buffer, col: u16, row: u16, pos: Position) []const u8 {
+    if (buffer.readCell(col, row)) |existing| {
+        if (existing.char.grapheme.len > 0) {
+            const g = existing.char.grapheme;
+            if (std.mem.eql(u8, g, "─")) {
+                return switch (pos) {
+                    .start => "┬",
+                    .end => "┴",
+                    .middle => "┼",
+                };
+            }
+            if (std.mem.eql(u8, g, "┤") or std.mem.eql(u8, g, "├") or
+                std.mem.eql(u8, g, "┴") or std.mem.eql(u8, g, "┬"))
+            {
+                return "┼";
+            }
+        }
+    }
+    return "│";
+}
+
+fn getHorizontalChar(buffer: *Buffer, col: u16, row: u16, pos: Position) []const u8 {
+    if (buffer.readCell(col, row)) |existing| {
+        if (existing.char.grapheme.len > 0) {
+            const g = existing.char.grapheme;
+            if (std.mem.eql(u8, g, "│")) {
+                return switch (pos) {
+                    .start => "├",
+                    .end => "┤",
+                    .middle => "┼",
+                };
+            }
+            if (std.mem.eql(u8, g, "┤") or std.mem.eql(u8, g, "├") or
+                std.mem.eql(u8, g, "┴") or std.mem.eql(u8, g, "┬"))
+            {
+                return "┼";
+            }
+        }
+    }
+    return "─";
 }
 
 pub fn destroy(self: *Divider, alloc: Allocator) void {
