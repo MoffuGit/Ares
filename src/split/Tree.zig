@@ -55,6 +55,10 @@ fn keyPressFn(element: *Element, ctx: *EventContext, key: vaxis.Key) void {
 
     if (key.mods.ctrl) {
         const handled = switch (key.codepoint) {
+            //WARN:
+            //Vaxis is not sending ctrl+h but delete
+            //and i don't know why, probably i will need to search about
+            //it
             'h' => blk: {
                 _ = self.split(self.focused_view, .vertical, false) catch break :blk false;
                 break :blk true;
