@@ -66,11 +66,22 @@ fn hit(element: *Element, hit_grid: *HitGrid) void {
 }
 
 fn draw(element: *Element, buffer: *Buffer) void {
-    const cell = if (element.hovered or element.dragging) vaxis.Cell{
-        .style = .{ .bg = .{ .rgb = .{ 0, 0, 255 } } },
-    } else vaxis.Cell{
-        .style = .{ .bg = .{ .rgb = .{ 255, 0, 0 } } },
+    const self: *Divider = @ptrCast(@alignCast(element.userdata));
+    const fg_color: vaxis.Color = if (element.hovered or element.dragging)
+        .{ .rgb = .{ 100, 100, 255 } }
+    else
+        .{ .rgb = .{ 80, 80, 80 } };
+
+    const char: []const u8 = switch (self.direction) {
+        .vertical => "│",
+        .horizontal => "─",
     };
+
+    const cell = vaxis.Cell{
+        .char = .{ .grapheme = char, .width = 1 },
+        .style = .{ .fg = fg_color },
+    };
+
     buffer.fillRect(
         element.layout.left,
         element.layout.top,
