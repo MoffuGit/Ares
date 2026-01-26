@@ -58,6 +58,16 @@ pub fn fill(self: *Buffer, cell: Cell) void {
     @memset(self.buf, cell);
 }
 
+pub fn fillRect(self: *Buffer, x: u16, y: u16, width: u16, height: u16, cell: Cell) void {
+    var row: u16 = 0;
+    while (row < height) : (row += 1) {
+        var col: u16 = 0;
+        while (col < width) : (col += 1) {
+            self.writeCell(x + col, y + row, cell);
+        }
+    }
+}
+
 fn coordsToIndex(self: *Buffer, x: u32, y: u32) u32 {
     return y * self.width + x;
 }

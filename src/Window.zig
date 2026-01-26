@@ -313,6 +313,7 @@ pub fn setFocus(self: *Window, element: ?*Element) void {
     const previous = self.focused;
 
     if (previous) |prev| {
+        prev.focused = false;
         prev.handleBlur();
     }
 
@@ -320,8 +321,11 @@ pub fn setFocus(self: *Window, element: ?*Element) void {
     self.rebuildFocusPath();
 
     if (element) |elem| {
+        elem.focused = true;
         elem.handleFocus();
     }
+
+    self.requestDraw();
 }
 
 fn rebuildFocusPath(self: *Window) void {

@@ -18,6 +18,9 @@ const App = @import("App.zig");
 const events = @import("events/mod.zig");
 const EventContext = events.EventContext;
 
+const split = @import("split/mod.zig");
+const SplitTree = split.Tree;
+
 const log = std.log.scoped(.main);
 
 pub fn keyPressFn(element: *Element, ctx: *EventContext, key: vaxis.Key) void {
@@ -48,6 +51,11 @@ pub fn main() !void {
         },
     });
     defer app.destroy();
+
+    const tree = try SplitTree.create(alloc);
+    defer tree.destroy();
+
+    try app.window.root.addChild(tree.element);
 
     app.run() catch |err| {
         log.err("App exit with an err: {}", .{err});
