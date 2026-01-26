@@ -130,8 +130,6 @@ pub fn createView(alloc: Allocator, id: u64) !*Node {
     element.* = Element.init(alloc, .{
         .style = .{
             .flex_grow = 1,
-            .width = .{ .percent = 100 },
-            .height = .{ .percent = 100 },
         },
         .userdata = node,
         .drawFn = drawView,
@@ -189,8 +187,6 @@ pub fn createSplit(alloc: Allocator, direction: Direction) !*Node {
         .style = .{
             .flex_direction = direction.toFlexDirection(),
             .flex_grow = 1,
-            .width = .{ .percent = 100 },
-            .height = .{ .percent = 100 },
         },
     });
 
@@ -240,6 +236,7 @@ pub fn isSplit(self: *const Node) bool {
 }
 
 pub fn applyRatio(self: *Node) void {
+    self.element.style.flex_grow = self.ratio;
     self.element.node.setFlexGrow(self.ratio);
 }
 
