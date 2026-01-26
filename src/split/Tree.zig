@@ -129,7 +129,18 @@ pub fn split(self: *Tree, id: u64, direction: Direction, after: bool) !u64 {
             const idx = parent.findChildIndex(target) orelse return error.NodeNotFound;
             const insert_idx = if (after) idx + 1 else idx;
             new_view.parent = parent;
-            try parent.data.split.insertChild(insert_idx, new_view, self.alloc, parent.element);
+
+            if (target.sizing == .fixed) {
+                const half_ratio = target.ratio / 2.0;
+                target.ratio = half_ratio;
+                target.applyRatio();
+                new_view.ratio = half_ratio;
+                new_view.sizing = .fixed;
+                new_view.applyRatio();
+                try parent.data.split.insertChildFixed(insert_idx, new_view, self.alloc, parent.element);
+            } else {
+                try parent.data.split.insertChild(insert_idx, new_view, self.alloc, parent.element);
+            }
             return new_id;
         }
     }

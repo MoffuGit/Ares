@@ -77,6 +77,37 @@ pub const SplitData = struct {
         self.updateEqualRatios();
     }
 
+    pub fn insertChildFixed(self: *SplitData, index: usize, node: *Node, alloc: Allocator, parent_element: *Element) !void {
+        const left = if (index > 0) self.children.items[index - 1] else null;
+        const right = if (index < self.children.items.len) self.children.items[index] else null;
+        const node_elem_idx = index * 2;
+
+        if (left != null and right != null) {
+            for (self.dividers.items, 0..) |d, i| {
+                if (d.left == left and d.right == right.?) {
+                    d.right = node;
+                    const new_divider = try Divider.create(alloc, self.direction, node, right.?);
+                    try self.dividers.insert(alloc, i + 1, new_divider);
+                    try parent_element.insertChild(node.element, node_elem_idx);
+                    try parent_element.insertChild(new_divider.element, node_elem_idx + 1);
+                    break;
+                }
+            }
+        } else if (right != null) {
+            const new_divider = try Divider.create(alloc, self.direction, node, right.?);
+            try self.dividers.insert(alloc, 0, new_divider);
+            try parent_element.insertChild(node.element, node_elem_idx);
+            try parent_element.insertChild(new_divider.element, node_elem_idx + 1);
+        } else if (left != null) {
+            const new_divider = try Divider.create(alloc, self.direction, left.?, node);
+            try self.dividers.append(alloc, new_divider);
+            try parent_element.addChild(new_divider.element);
+            try parent_element.addChild(node.element);
+        }
+
+        try self.children.insert(alloc, index, node);
+    }
+
     fn elementIndexFor(self: *SplitData, child_index: usize) usize {
         _ = self;
         return child_index * 2;
