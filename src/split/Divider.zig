@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const vaxis = @import("vaxis");
 
+const EventContext = @import("../events/EventContext.zig");
 const Element = @import("../element/mod.zig").Element;
 const Style = @import("../element/mod.zig").Style;
 const Buffer = @import("../Buffer.zig");
@@ -39,6 +40,9 @@ pub fn create(alloc: Allocator, direction: Direction, left: *Node, right: *Node)
         .hitGridFn = hit,
         .userdata = divider,
         .drawFn = draw,
+        .dragFn = onDrag,
+        .mouseEnterFn = mouseEnter,
+        .mouseLeaveFn = mouseLeave,
     });
 
     divider.* = .{
@@ -62,12 +66,17 @@ fn hit(element: *Element, hit_grid: *HitGrid) void {
 }
 
 fn draw(element: *Element, buffer: *Buffer) void {
+    const cell = if (element.hovered) vaxis.Cell{
+        .style = .{ .bg = .{ .rgb = .{ 0, 0, 255 } } },
+    } else vaxis.Cell{
+        .style = .{ .bg = .{ .rgb = .{ 255, 0, 0 } } },
+    };
     buffer.fillRect(
         element.layout.left,
         element.layout.top,
         element.layout.width,
         element.layout.height,
-        .{ .style = .{ .bg = .{ .rgb = .{ 255, 0, 0 } } } },
+        cell,
     );
 }
 
@@ -78,7 +87,41 @@ pub fn destroy(self: *Divider, alloc: Allocator) void {
     alloc.destroy(self);
 }
 
-pub fn onDrag(self: *Divider, delta: f32) void {
+pub fn mouseEnter(element: *Element, _: vaxis.Mouse) void {
+    element.hovered = true;
+    element.context.?.requestDraw();
+}
+
+pub fn mouseLeave(element: *Element, _: vaxis.Mouse) void {
+    element.hovered = false;
+    element.context.?.requestDraw();
+}
+
+pub fn onDrag(element: *Element, _: *EventContext, mouse: vaxis.Mouse) void {
+    const self: *Divider = @ptrCast(@alignCast(element.userdata));
+
+    const parent = element.parent orelse return;
+    const parent_layout = parent.layout;
+
+    const delta: f32 = switch (self.direction) {
+        .vertical => blk: {
+            const parent_width: f32 = @floatFromInt(parent_layout.width);
+            if (parent_width == 0) break :blk 0;
+            const mouse_x: f32 = @floatFromInt(mouse.col);
+            const left_start: f32 = @floatFromInt(self.left.element.layout.left);
+            const left_end: f32 = left_start + @as(f32, @floatFromInt(self.left.element.layout.width));
+            break :blk (mouse_x - left_end) / parent_width;
+        },
+        .horizontal => blk: {
+            const parent_height: f32 = @floatFromInt(parent_layout.height);
+            if (parent_height == 0) break :blk 0;
+            const mouse_y: f32 = @floatFromInt(mouse.row);
+            const left_start: f32 = @floatFromInt(self.left.element.layout.top);
+            const left_end: f32 = left_start + @as(f32, @floatFromInt(self.left.element.layout.height));
+            break :blk (mouse_y - left_end) / parent_height;
+        },
+    };
+
     const total_ratio = self.left.ratio + self.right.ratio;
     const delta_ratio = delta * total_ratio;
 
@@ -94,6 +137,8 @@ pub fn onDrag(self: *Divider, delta: f32) void {
 
         self.left.applyRatio();
         self.right.applyRatio();
+
+        element.context.?.requestDraw();
     }
 }
 

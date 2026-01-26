@@ -133,6 +133,7 @@ node: Node,
 visible: bool = true,
 removed: bool = true,
 focused: bool = false,
+hovered: bool = false,
 
 zIndex: usize = 0,
 
