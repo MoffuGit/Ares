@@ -55,7 +55,7 @@ fn keyPressFn(element: *Element, ctx: *EventContext, key: vaxis.Key) void {
 
     if (key.mods.ctrl) {
         const handled = switch (key.codepoint) {
-            'g' => blk: {
+            'h' => blk: {
                 _ = self.split(self.focused_view, .vertical, false) catch break :blk false;
                 break :blk true;
             },

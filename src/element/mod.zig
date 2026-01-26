@@ -213,9 +213,12 @@ pub fn syncLayout(self: *Element) void {
     const new_width = toU16(yoga.YGNodeLayoutGetWidth(yg));
     const new_height = toU16(yoga.YGNodeLayoutGetHeight(yg));
 
+    const parent_left: u16 = if (self.parent) |p| p.layout.left else 0;
+    const parent_top: u16 = if (self.parent) |p| p.layout.top else 0;
+
     self.layout = .{
-        .left = toU16(yoga.YGNodeLayoutGetLeft(yg)),
-        .top = toU16(yoga.YGNodeLayoutGetTop(yg)),
+        .left = parent_left + toU16(yoga.YGNodeLayoutGetLeft(yg)),
+        .top = parent_top + toU16(yoga.YGNodeLayoutGetTop(yg)),
         .right = toU16(yoga.YGNodeLayoutGetRight(yg)),
         .bottom = toU16(yoga.YGNodeLayoutGetBottom(yg)),
         .width = new_width,
