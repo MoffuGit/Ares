@@ -258,9 +258,10 @@ pub fn syncLayout(self: *Element) void {
 }
 
 fn toU16(value: f32) u16 {
-    if (value < 0) return 0;
-    if (value > std.math.maxInt(u16)) return std.math.maxInt(u16);
-    return @intFromFloat(value);
+    const round = @floor(value);
+    if (round < 0) return 0;
+    if (round > std.math.maxInt(u16)) return std.math.maxInt(u16);
+    return @intFromFloat(round);
 }
 
 pub fn deinit(self: *Element) void {

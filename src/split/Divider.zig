@@ -11,12 +11,9 @@ const split = @import("mod.zig");
 const Direction = split.Direction;
 const Sizing = split.Sizing;
 const Node = split.Node;
+const MINSIZE = split.MINSIZE;
 
 const Divider = @This();
-
-//RULES:
-//Split and resize should not happen if one of views height or width become less than our minimum
-//delta should be bigger for horizontal splits
 
 direction: Direction,
 left: *Node,
@@ -69,6 +66,11 @@ fn hit(element: *Element, hit_grid: *HitGrid) void {
     );
 }
 
+//NOTE:
+//draw your line like normal,
+//then, you are going to get the start and the end
+//adn see if there is already a divider cell, if is true,
+//then you are only going to change the char, all the ohter values keep equal
 fn draw(element: *Element, buffer: *Buffer) void {
     const self: *Divider = @ptrCast(@alignCast(element.userdata));
     const fg_color: vaxis.Color = if (element.hovered or element.dragging)
@@ -206,18 +208,46 @@ pub fn onDrag(element: *Element, _: *EventContext, mouse: vaxis.Mouse) void {
     const new_left = @max(0.05, self.left.ratio + delta_ratio);
     const new_right = @max(0.05, self.right.ratio - delta_ratio);
 
-    if (new_left >= 0.05 and new_right >= 0.05) {
-        self.left.ratio = new_left;
-        self.right.ratio = new_right;
+    if (new_left < 0.05 or new_right < 0.05) return;
 
-        self.left.sizing = .fixed;
-        self.right.sizing = .fixed;
+    const new_left_size: f32 = switch (self.direction) {
+        .vertical => blk: {
+            const current: f32 = @floatFromInt(self.left.element.layout.width);
+            const delta_px = delta * @as(f32, @floatFromInt(parent_layout.width));
+            break :blk current + delta_px;
+        },
+        .horizontal => blk: {
+            const current: f32 = @floatFromInt(self.left.element.layout.height);
+            const delta_px = delta * @as(f32, @floatFromInt(parent_layout.height));
+            break :blk current + delta_px;
+        },
+    };
+    const new_right_size: f32 = switch (self.direction) {
+        .vertical => blk: {
+            const current: f32 = @floatFromInt(self.right.element.layout.width);
+            const delta_px = delta * @as(f32, @floatFromInt(parent_layout.width));
+            break :blk current - delta_px;
+        },
+        .horizontal => blk: {
+            const current: f32 = @floatFromInt(self.right.element.layout.height);
+            const delta_px = delta * @as(f32, @floatFromInt(parent_layout.height));
+            break :blk current - delta_px;
+        },
+    };
 
-        self.left.applyRatio();
-        self.right.applyRatio();
+    const min_size: f32 = @floatFromInt(MINSIZE);
+    if (new_left_size < min_size or new_right_size < min_size) return;
 
-        element.context.?.requestDraw();
-    }
+    self.left.ratio = new_left;
+    self.right.ratio = new_right;
+
+    self.left.sizing = .fixed;
+    self.right.sizing = .fixed;
+
+    self.left.applyRatio();
+    self.right.applyRatio();
+
+    element.context.?.requestDraw();
 }
 
 test "create divider" {

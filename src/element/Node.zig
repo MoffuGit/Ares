@@ -11,7 +11,7 @@ index: usize,
 fn getConfig() yoga.YGConfigRef {
     if (config == null) {
         config = yoga.YGConfigNew();
-        yoga.YGConfigSetPointScaleFactor(config, 1.0);
+        yoga.YGConfigSetPointScaleFactor(config, 2.0);
     }
     return config;
 }

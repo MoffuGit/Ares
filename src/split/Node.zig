@@ -180,22 +180,15 @@ pub fn createView(alloc: Allocator, id: u64) !*Node {
 }
 
 fn drawView(element: *Element, buffer: *Buffer) void {
-    const cell: vaxis.Cell = if (element.focused) vaxis.Cell{
-        .style = .{
-            .bg = .{ .rgb = .{ 0, 0, 0 } },
-        },
-    } else vaxis.Cell{ .style = .{ .bg = .{ .rgb = .{
-        239,
-        236,
-        235,
-    } } } };
-    buffer.fillRect(
-        element.layout.left,
-        element.layout.top,
-        element.layout.width,
-        element.layout.height,
-        cell,
-    );
+    if (element.focused) {
+        buffer.fillRect(
+            element.layout.left,
+            element.layout.top,
+            element.layout.width,
+            element.layout.height,
+            .{ .style = .{ .bg = .{ .rgb = .{ 60, 0, 0 } } } },
+        );
+    }
 }
 
 fn clickView(element: *Element, _: *EventContext, _: vaxis.Mouse) void {

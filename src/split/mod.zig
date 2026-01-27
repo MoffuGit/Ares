@@ -22,6 +22,8 @@ pub const Sizing = enum {
     fixed,
 };
 
+pub const MINSIZE: u16 = 5;
+
 test {
     std.testing.refAllDecls(@This());
 }

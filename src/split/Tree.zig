@@ -10,6 +10,7 @@ const splitpkg = @import("mod.zig");
 const Node = splitpkg.Node;
 const Direction = splitpkg.Direction;
 const Divider = splitpkg.Divider;
+const MINSIZE = splitpkg.MINSIZE;
 
 const Tree = @This();
 
@@ -55,10 +56,6 @@ fn keyPressFn(element: *Element, ctx: *EventContext, key: vaxis.Key) void {
 
     if (key.mods.ctrl) {
         const handled = switch (key.codepoint) {
-            //WARN:
-            //Vaxis is not sending ctrl+h but delete
-            //and i don't know why, probably i will need to search about
-            //it
             'h' => blk: {
                 _ = self.split(self.focused_view, .vertical, false) catch break :blk false;
                 break :blk true;
@@ -120,6 +117,13 @@ fn findInNode(node: *Node, id: u64) ?*Node {
 
 pub fn split(self: *Tree, id: u64, direction: Direction, after: bool) !u64 {
     const target = self.find(id) orelse return error.NodeNotFound;
+
+    const target_size: u16 = switch (direction) {
+        .vertical => target.element.layout.width,
+        .horizontal => target.element.layout.height,
+    };
+    if (target_size < MINSIZE * 2) return error.NodeTooSmall;
+
     const new_id = self.nextId();
     const new_view = try Node.createView(self.alloc, new_id);
     new_view.tree = self;
