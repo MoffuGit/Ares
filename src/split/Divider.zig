@@ -38,6 +38,7 @@ pub fn create(alloc: Allocator, direction: Direction, left: *Node, right: *Node)
                 .flex_shrink = 0,
             },
         },
+        .zIndex = 10,
         .hitGridFn = hit,
         .userdata = divider,
         .drawFn = draw,
@@ -66,14 +67,9 @@ fn hit(element: *Element, hit_grid: *HitGrid) void {
     );
 }
 
-//NOTE:
-//draw your line like normal,
-//then, you are going to get the start and the end
-//adn see if there is already a divider cell, if is true,
-//then you are only going to change the char, all the ohter values keep equal
 fn draw(element: *Element, buffer: *Buffer) void {
     const self: *Divider = @ptrCast(@alignCast(element.userdata));
-    const fg_color: vaxis.Color = if (element.hovered or element.dragging)
+    const color: vaxis.Color = if (element.hovered or element.dragging)
         .{ .rgb = .{ 100, 100, 255 } }
     else
         .{ .rgb = .{ 80, 80, 80 } };
@@ -92,7 +88,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
                 const char = getVerticalChar(buffer, col, y, pos);
                 const cell = vaxis.Cell{
                     .char = .{ .grapheme = char, .width = 1 },
-                    .style = .{ .fg = fg_color },
+                    .style = .{ .fg = color },
                 };
                 buffer.writeCell(col, y, cell);
             }
@@ -108,7 +104,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
                 const char = getHorizontalChar(buffer, x, row, pos);
                 const cell = vaxis.Cell{
                     .char = .{ .grapheme = char, .width = 1 },
-                    .style = .{ .fg = fg_color },
+                    .style = .{ .fg = color },
                 };
                 buffer.writeCell(x, row, cell);
             }
@@ -126,12 +122,22 @@ fn getVerticalChar(buffer: *Buffer, col: u16, row: u16, pos: Position) []const u
                 return switch (pos) {
                     .start => "┬",
                     .end => "┴",
-                    .middle => "┼",
+                    .middle => {
+                        const left = if (buffer.readCell(col - 1, row)) |l| std.mem.eql(u8, l.char.grapheme, "─") else false;
+                        const right = if (buffer.readCell(col + 1, row)) |r| std.mem.eql(u8, r.char.grapheme, "─") else false;
+                        if (left and right) {
+                            return "┼";
+                        }
+
+                        if (left) {
+                            return "┤";
+                        }
+
+                        return "├";
+                    },
                 };
             }
-            if (std.mem.eql(u8, g, "┤") or std.mem.eql(u8, g, "├") or
-                std.mem.eql(u8, g, "┴") or std.mem.eql(u8, g, "┬"))
-            {
+            if (std.mem.eql(u8, g, "┴") or std.mem.eql(u8, g, "┬")) {
                 return "┼";
             }
         }
@@ -147,12 +153,22 @@ fn getHorizontalChar(buffer: *Buffer, col: u16, row: u16, pos: Position) []const
                 return switch (pos) {
                     .start => "├",
                     .end => "┤",
-                    .middle => "┼",
+                    .middle => {
+                        const left = if (buffer.readCell(col, row + 1)) |l| std.mem.eql(u8, l.char.grapheme, "│") else false;
+                        const right = if (buffer.readCell(col, row - 1)) |r| std.mem.eql(u8, r.char.grapheme, "│") else false;
+                        if (left and right) {
+                            return "┼";
+                        }
+
+                        if (left) {
+                            return "┬";
+                        }
+
+                        return "┴";
+                    },
                 };
             }
-            if (std.mem.eql(u8, g, "┤") or std.mem.eql(u8, g, "├") or
-                std.mem.eql(u8, g, "┴") or std.mem.eql(u8, g, "┬"))
-            {
+            if (std.mem.eql(u8, g, "┤") or std.mem.eql(u8, g, "├")) {
                 return "┼";
             }
         }
