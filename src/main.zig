@@ -8,6 +8,7 @@ const Node = @import("element/Node.zig");
 const Style = @import("element/mod.zig").Style;
 const Buffer = @import("Buffer.zig");
 const HitGrid = @import("HitGrid.zig");
+const Debug = @import("Debug.zig");
 
 const vaxis = @import("vaxis");
 const Cell = vaxis.Cell;
@@ -29,6 +30,9 @@ pub fn keyPressFn(element: *Element, ctx: *EventContext, key: vaxis.Key) void {
             app_ctx.stopApp() catch {};
         }
         ctx.stopPropagation();
+    }
+    if (key.matches('d', .{ .ctrl = true })) {
+        Debug.dumpToFile(element.context.?.window, "debugWindow.txt") catch {};
     }
 }
 

@@ -14,6 +14,10 @@ const Node = split.Node;
 
 const Divider = @This();
 
+//RULES:
+//Split and resize should not happen if one of views height or width become less than our minimum
+//delta should be bigger for horizontal splits
+
 direction: Direction,
 left: *Node,
 right: *Node,

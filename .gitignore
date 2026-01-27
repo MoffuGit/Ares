@@ -18,6 +18,7 @@ flatpak/builddir/
 flatpak/repo/
 oldrenderer/
 yoga/
+debugWindow.txt
 
 glad.zip
 /Box_test.ppm

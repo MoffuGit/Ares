@@ -172,7 +172,7 @@ resizeFn: ?*const fn (element: *Element, width: u16, height: u16) void = null,
 pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
     const num = element_counter.fetchAdd(1, .monotonic);
     var id_buf: [32]u8 = undefined;
-    const generated_id = std.fmt.bufPrint(&id_buf, "element-{d}", .{num}) catch "element-?";
+    const generated_id = std.fmt.bufPrint(&id_buf, "element-{}", .{num}) catch "element-?";
 
     const node = Node.init(num);
 

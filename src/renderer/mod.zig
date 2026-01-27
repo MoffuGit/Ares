@@ -15,7 +15,7 @@ tty: *vaxis.Tty,
 screen: *Screen,
 
 pub fn init(alloc: Allocator, tty: *vaxis.Tty, screen: *Screen) !Renderer {
-    const vx = try vaxis.Vaxis.init(alloc, .{});
+    const vx = try vaxis.init(alloc, .{});
 
     return .{
         .vx = vx,
@@ -33,6 +33,8 @@ pub fn deinit(self: *Renderer) void {
 pub fn threadEnter(self: *Renderer) !void {
     const vx = &self.vx;
     const tty = self.tty;
+
+    vx.caps.kitty_keyboard = true;
 
     try vx.enterAltScreen(tty.writer());
     try vx.queryTerminal(tty.writer(), 1 * std.time.ns_per_s);
