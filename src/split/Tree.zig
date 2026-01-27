@@ -32,9 +32,9 @@ pub fn create(alloc: Allocator) !*Tree {
                 .height = .{ .percent = 100 },
             },
             .userdata = tree,
-            .keyPressFn = keyPressFn,
         },
     );
+    try element.addEventListener(.key_press, keyPressFn);
 
     const initial_id: u64 = 1;
     const root = try Node.createView(alloc, initial_id);
@@ -51,7 +51,10 @@ pub fn create(alloc: Allocator) !*Tree {
     return tree;
 }
 
-fn keyPressFn(element: *Element, ctx: *EventContext, key: vaxis.Key) void {
+fn keyPressFn(element: *Element, data: Element.EventData) void {
+    const key_data = data.key_press;
+    const ctx = key_data.ctx;
+    const key = key_data.key;
     const self: *Tree = @ptrCast(@alignCast(element.userdata));
 
     if (key.mods.ctrl) {

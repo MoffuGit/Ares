@@ -24,14 +24,15 @@ const SplitTree = split.Tree;
 
 const log = std.log.scoped(.main);
 
-pub fn keyPressFn(element: *Element, ctx: *EventContext, key: vaxis.Key) void {
-    if (key.matches('c', .{ .ctrl = true })) {
+pub fn keyPressFn(element: *Element, data: Element.EventData) void {
+    const key_data = data.key_press;
+    if (key_data.key.matches('c', .{ .ctrl = true })) {
         if (element.context) |app_ctx| {
             app_ctx.stopApp() catch {};
         }
-        ctx.stopPropagation();
+        key_data.ctx.stopPropagation();
     }
-    if (key.matches('d', .{ .ctrl = true })) {
+    if (key_data.key.matches('d', .{ .ctrl = true })) {
         Debug.dumpToFile(element.context.?.window, "debugWindow.txt") catch {};
     }
 }
@@ -46,7 +47,6 @@ pub fn main() !void {
 
     var app = try App.create(alloc, .{
         .root_opts = .{
-            .keyPressFn = keyPressFn,
             .style = .{
                 .flex_direction = .row,
                 .width = .{ .percent = 100 },
@@ -55,6 +55,8 @@ pub fn main() !void {
         },
     });
     defer app.destroy();
+
+    try app.window.root.addEventListener(.key_press, keyPressFn);
 
     const tree = try SplitTree.create(alloc);
     defer tree.destroy();

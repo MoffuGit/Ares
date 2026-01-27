@@ -39,13 +39,13 @@ pub fn create(alloc: Allocator, direction: Direction, left: *Node, right: *Node)
             },
         },
         .zIndex = 10,
-        .hitGridFn = hit,
         .userdata = divider,
+        .hitGridFn = hit,
         .drawFn = draw,
-        .dragFn = onDrag,
-        .mouseEnterFn = mouseEnter,
-        .mouseLeaveFn = mouseLeave,
     });
+    try element.addEventListener(.drag, onDrag);
+    try element.addEventListener(.mouse_enter, mouseEnter);
+    try element.addEventListener(.mouse_leave, mouseLeave);
 
     divider.* = .{
         .direction = direction,
@@ -87,7 +87,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
                 const pos: Position = if (row == 0) .start else if (row == height) .end else .middle;
                 const char = getVerticalChar(buffer, col, y, pos);
                 const cell = vaxis.Cell{
-                    .char = .{ .grapheme = char, .width = 1 },
+                    .char = .{ .grapheme = char },
                     .style = .{ .fg = color },
                 };
                 buffer.writeCell(col, y, cell);
@@ -103,7 +103,9 @@ fn draw(element: *Element, buffer: *Buffer) void {
                 const pos: Position = if (col == 0) .start else if (col == width) .end else .middle;
                 const char = getHorizontalChar(buffer, x, row, pos);
                 const cell = vaxis.Cell{
-                    .char = .{ .grapheme = char, .width = 1 },
+                    .char = .{
+                        .grapheme = char,
+                    },
                     .style = .{ .fg = color },
                 };
                 buffer.writeCell(x, row, cell);
@@ -183,17 +185,18 @@ pub fn destroy(self: *Divider, alloc: Allocator) void {
     alloc.destroy(self);
 }
 
-pub fn mouseEnter(element: *Element, _: vaxis.Mouse) void {
+pub fn mouseEnter(element: *Element, _: Element.EventData) void {
     element.context.?.window.screen.mouse_shape = .pointer;
     element.context.?.requestDraw();
 }
 
-pub fn mouseLeave(element: *Element, _: vaxis.Mouse) void {
+pub fn mouseLeave(element: *Element, _: Element.EventData) void {
     element.context.?.window.screen.mouse_shape = .default;
     element.context.?.requestDraw();
 }
 
-pub fn onDrag(element: *Element, _: *EventContext, mouse: vaxis.Mouse) void {
+pub fn onDrag(element: *Element, data: Element.EventData) void {
+    const mouse = data.drag.mouse;
     const self: *Divider = @ptrCast(@alignCast(element.userdata));
 
     const parent = element.parent orelse return;

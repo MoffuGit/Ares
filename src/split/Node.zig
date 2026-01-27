@@ -164,9 +164,9 @@ pub fn createView(alloc: Allocator, id: u64) !*Node {
         },
         .userdata = node,
         .drawFn = drawView,
-        .clickFn = clickView,
         .hitGridFn = hitView,
     });
+    try element.addEventListener(.click, clickView);
 
     node.* = .{
         .parent = null,
@@ -191,7 +191,7 @@ fn drawView(element: *Element, buffer: *Buffer) void {
     }
 }
 
-fn clickView(element: *Element, _: *EventContext, _: vaxis.Mouse) void {
+fn clickView(element: *Element, _: Element.EventData) void {
     const node: *Node = @ptrCast(@alignCast(element.userdata));
 
     if (element.context) |ctx| {

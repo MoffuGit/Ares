@@ -97,6 +97,50 @@ pub const Layout = struct {
     };
 };
 
+pub const EventType = enum {
+    remove,
+    key_press,
+    key_release,
+    focus,
+    blur,
+    mouse_down,
+    mouse_up,
+    click,
+    mouse_move,
+    mouse_enter,
+    mouse_leave,
+    mouse_over,
+    mouse_out,
+    wheel,
+    drag,
+    drag_end,
+    resize,
+};
+
+pub const EventData = union(EventType) {
+    remove: void,
+    key_press: struct { ctx: *EventContext, key: vaxis.Key },
+    key_release: struct { ctx: *EventContext, key: vaxis.Key },
+    focus: void,
+    blur: void,
+    mouse_down: struct { ctx: *EventContext, mouse: vaxis.Mouse },
+    mouse_up: struct { ctx: *EventContext, mouse: vaxis.Mouse },
+    click: struct { ctx: *EventContext, mouse: vaxis.Mouse },
+    mouse_move: struct { ctx: *EventContext, mouse: vaxis.Mouse },
+    mouse_enter: vaxis.Mouse,
+    mouse_leave: vaxis.Mouse,
+    mouse_over: struct { ctx: *EventContext, mouse: vaxis.Mouse },
+    mouse_out: struct { ctx: *EventContext, mouse: vaxis.Mouse },
+    wheel: struct { ctx: *EventContext, mouse: vaxis.Mouse },
+    drag: struct { ctx: *EventContext, mouse: vaxis.Mouse },
+    drag_end: struct { ctx: *EventContext, mouse: vaxis.Mouse },
+    resize: struct { width: u16, height: u16 },
+};
+
+pub const Callback = *const fn (element: *Element, data: EventData) void;
+pub const CallbackList = std.ArrayListUnmanaged(Callback);
+pub const EventListeners = std.EnumArray(EventType, CallbackList);
+
 pub const Options = struct {
     id: ?[]const u8 = null,
     visible: bool = true,
@@ -104,23 +148,7 @@ pub const Options = struct {
     style: Style = .{},
     userdata: ?*anyopaque = null,
     drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
-    removeFn: ?*const fn (element: *Element) void = null,
-    keyPressFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key) void = null,
-    focusFn: ?*const fn (element: *Element) void = null,
-    blurFn: ?*const fn (element: *Element) void = null,
     hitGridFn: ?*const fn (element: *Element, hit_grid: *HitGrid) void = null,
-    mouseDownFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    mouseUpFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    clickFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    mouseMoveFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    mouseEnterFn: ?*const fn (element: *Element, mouse: vaxis.Mouse) void = null,
-    mouseLeaveFn: ?*const fn (element: *Element, mouse: vaxis.Mouse) void = null,
-    mouseOverFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    mouseOutFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    wheelFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    dragFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    dragEndFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-    resizeFn: ?*const fn (element: *Element, width: u16, height: u16) void = null,
 };
 
 pub const Element = @This();
@@ -150,24 +178,8 @@ context: ?*AppContext = null,
 
 userdata: ?*anyopaque = null,
 drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
-removeFn: ?*const fn (element: *Element) void = null,
-keyPressFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key) void = null,
-keyReleaseFn: ?*const fn (element: *Element, ctx: *EventContext, key: vaxis.Key) void = null,
-focusFn: ?*const fn (element: *Element) void = null,
-blurFn: ?*const fn (element: *Element) void = null,
 hitGridFn: ?*const fn (element: *Element, hit_grid: *HitGrid) void = null,
-mouseDownFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-mouseUpFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-clickFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-mouseMoveFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-mouseEnterFn: ?*const fn (element: *Element, mouse: vaxis.Mouse) void = null,
-mouseLeaveFn: ?*const fn (element: *Element, mouse: vaxis.Mouse) void = null,
-mouseOverFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-mouseOutFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-wheelFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-dragFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-dragEndFn: ?*const fn (element: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void = null,
-resizeFn: ?*const fn (element: *Element, width: u16, height: u16) void = null,
+listeners: EventListeners = EventListeners.initFill(.{}),
 
 pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
     const num = element_counter.fetchAdd(1, .monotonic);
@@ -187,25 +199,33 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
         .style = opts.style,
         .userdata = opts.userdata,
         .drawFn = opts.drawFn,
-        .node = node,
-        .removeFn = opts.removeFn,
-        .keyPressFn = opts.keyPressFn,
-        .focusFn = opts.focusFn,
-        .blurFn = opts.blurFn,
         .hitGridFn = opts.hitGridFn,
-        .mouseDownFn = opts.mouseDownFn,
-        .mouseUpFn = opts.mouseUpFn,
-        .clickFn = opts.clickFn,
-        .mouseMoveFn = opts.mouseMoveFn,
-        .mouseEnterFn = opts.mouseEnterFn,
-        .mouseLeaveFn = opts.mouseLeaveFn,
-        .mouseOverFn = opts.mouseOverFn,
-        .mouseOutFn = opts.mouseOutFn,
-        .wheelFn = opts.wheelFn,
-        .dragFn = opts.dragFn,
-        .dragEndFn = opts.dragEndFn,
-        .resizeFn = opts.resizeFn,
+        .node = node,
     };
+}
+
+pub fn addEventListener(self: *Element, event_type: EventType, callback: Callback) !void {
+    try self.listeners.getPtr(event_type).append(self.alloc, callback);
+}
+
+fn dispatchEvent(self: *Element, data: EventData) void {
+    const callbacks = self.listeners.get(@as(EventType, data));
+    for (callbacks.items) |callback| {
+        callback(self, data);
+    }
+}
+
+pub fn emit(self: *Element, data: EventData) void {
+    switch (@as(EventType, data)) {
+        .focus => self.focused = true,
+        .blur => self.focused = false,
+        .mouse_enter => self.hovered = true,
+        .mouse_leave => self.hovered = false,
+        .drag => self.dragging = true,
+        .drag_end => self.dragging = false,
+        else => {},
+    }
+    self.dispatchEvent(data);
 }
 
 pub fn syncLayout(self: *Element) void {
@@ -251,9 +271,7 @@ pub fn syncLayout(self: *Element) void {
     };
 
     if (old_width != new_width or old_height != new_height) {
-        if (self.resizeFn) |callback| {
-            callback(self, new_width, new_height);
-        }
+        self.dispatchEvent(.{ .resize = .{ .width = new_width, .height = new_height } });
     }
 }
 
@@ -268,6 +286,10 @@ pub fn deinit(self: *Element) void {
     if (self.childrens) |*childrens| {
         childrens.deinit(self.alloc);
         self.childrens = null;
+    }
+
+    for (&self.listeners.values) |*list| {
+        list.deinit(self.alloc);
     }
 
     self.node.deinit();
@@ -325,9 +347,7 @@ pub fn remove(self: *Element) void {
         self.context = null;
         self.removed = true;
 
-        if (self.removeFn) |removeFn| {
-            removeFn(self);
-        }
+        self.dispatchEvent(.{ .remove = {} });
     }
 
     if (self.childrens) |*childrens| {
@@ -385,9 +405,7 @@ pub fn removeChild(self: *Element, num: u64) void {
         child.context = null;
         child.removed = true;
 
-        if (child.removeFn) |removeFn| {
-            removeFn(child);
-        }
+        child.dispatchEvent(.{ .remove = {} });
     }
 }
 
@@ -413,84 +431,23 @@ pub fn handleEvent(self: *Element, ctx: *EventContext, event: Event) void {
 }
 
 pub fn handleKeyPress(self: *Element, ctx: *EventContext, key: vaxis.Key) void {
-    if (self.keyPressFn) |callback| {
-        callback(self, ctx, key);
-    }
+    self.emit(.{ .key_press = .{ .ctx = ctx, .key = key } });
 }
 
 pub fn handleKeyRelease(self: *Element, ctx: *EventContext, key: vaxis.Key) void {
-    if (self.keyReleaseFn) |callback| {
-        callback(self, ctx, key);
-    }
+    self.emit(.{ .key_release = .{ .ctx = ctx, .key = key } });
 }
 
 pub fn handleFocus(self: *Element) void {
-    self.focused = true;
-
-    if (self.focusFn) |callback| {
-        callback(self);
-    }
+    self.emit(.{ .focus = {} });
 }
 
 pub fn handleBlur(self: *Element) void {
-    self.focused = false;
-    if (self.blurFn) |callback| {
-        callback(self);
-    }
+    self.emit(.{ .blur = {} });
 }
 
 pub fn handleResize(self: *Element, width: u16, height: u16) void {
-    if (self.resizeFn) |callback| {
-        callback(self, width, height);
-    }
-}
-
-pub fn handleMouseDown(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
-    if (self.mouseDownFn) |callback| callback(self, ctx, mouse);
-}
-
-pub fn handleMouseUp(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
-    if (self.mouseUpFn) |callback| callback(self, ctx, mouse);
-}
-
-pub fn handleClick(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
-    if (self.clickFn) |callback| callback(self, ctx, mouse);
-}
-
-pub fn handleMouseMove(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
-    if (self.mouseMoveFn) |callback| callback(self, ctx, mouse);
-}
-
-pub fn handleMouseEnter(self: *Element, mouse: vaxis.Mouse) void {
-    self.hovered = true;
-    if (self.mouseEnterFn) |callback| callback(self, mouse);
-}
-
-pub fn handleMouseLeave(self: *Element, mouse: vaxis.Mouse) void {
-    self.hovered = false;
-    if (self.mouseLeaveFn) |callback| callback(self, mouse);
-}
-
-pub fn handleMouseOver(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
-    if (self.mouseOverFn) |callback| callback(self, ctx, mouse);
-}
-
-pub fn handleMouseOut(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
-    if (self.mouseOutFn) |callback| callback(self, ctx, mouse);
-}
-
-pub fn handleWheel(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
-    if (self.wheelFn) |callback| callback(self, ctx, mouse);
-}
-
-pub fn handleDrag(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
-    self.dragging = true;
-    if (self.dragFn) |callback| callback(self, ctx, mouse);
-}
-
-pub fn handleDragEnd(self: *Element, ctx: *EventContext, mouse: vaxis.Mouse) void {
-    self.dragging = false;
-    if (self.dragEndFn) |callback| callback(self, ctx, mouse);
+    self.emit(.{ .resize = .{ .width = width, .height = height } });
 }
 
 pub fn isAncestorOf(self: *Element, other: *Element) bool {
