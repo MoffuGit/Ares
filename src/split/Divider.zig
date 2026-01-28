@@ -11,7 +11,6 @@ const split = @import("mod.zig");
 const Direction = split.Direction;
 const Sizing = split.Sizing;
 const Node = split.Node;
-const MINSIZE = split.MINSIZE;
 
 const Divider = @This();
 

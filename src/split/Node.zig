@@ -352,9 +352,14 @@ pub fn findChildIndex(self: *Node, child: *Node) ?usize {
 }
 
 pub fn minSize(self: *const Node, direction: Direction) u16 {
+    const base_min: u16 = switch (direction) {
+        .vertical => split.MIN_WIDTH,
+        .horizontal => split.MIN_HEIGHT,
+    };
+
     switch (self.data) {
         .split => |s| {
-            if (s.children.items.len == 0) return split.MINSIZE;
+            if (s.children.items.len == 0) return base_min;
 
             var total: u16 = 0;
             if (s.direction == direction) {
@@ -367,9 +372,9 @@ pub fn minSize(self: *const Node, direction: Direction) u16 {
                     total = @max(total, child.minSize(direction));
                 }
             }
-            return @max(total, split.MINSIZE);
+            return @max(total, base_min);
         },
-        .view => return split.MINSIZE,
+        .view => return base_min,
     }
 }
 

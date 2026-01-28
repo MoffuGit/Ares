@@ -10,7 +10,8 @@ const splitpkg = @import("mod.zig");
 const Node = splitpkg.Node;
 const Direction = splitpkg.Direction;
 const Divider = splitpkg.Divider;
-const MINSIZE = splitpkg.MINSIZE;
+const MIN_WIDTH = splitpkg.MIN_WIDTH;
+const MIN_HEIGHT = splitpkg.MIN_HEIGHT;
 
 const Tree = @This();
 
@@ -125,7 +126,11 @@ pub fn split(self: *Tree, id: u64, direction: Direction, after: bool) !u64 {
         .vertical => target.element.layout.width,
         .horizontal => target.element.layout.height,
     };
-    if (target_size < MINSIZE * 2) return error.NodeTooSmall;
+    const min_size: u16 = switch (direction) {
+        .vertical => MIN_WIDTH,
+        .horizontal => MIN_HEIGHT,
+    };
+    if (target_size < min_size * 2) return error.NodeTooSmall;
 
     const new_id = self.nextId();
     const new_view = try Node.createView(self.alloc, new_id);
