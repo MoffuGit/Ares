@@ -40,7 +40,6 @@ pub fn process_scan(self: *Scanner, path: []const u8, abs_path: []const u8) !voi
             .file => .file,
             else => continue,
         };
-        const child_abs_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ abs_path, entry.name });
         const child_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ path, entry.name });
 
         {
@@ -50,9 +49,10 @@ pub fn process_scan(self: *Scanner, path: []const u8, abs_path: []const u8) !voi
             try self.snapshot.entries.insert(child_path, .{ .kind = kind, .path = child_path });
         }
 
-        if (kind == .dir) {
-            _ = self.worktree.scanner_thread.mailbox.push(.{ .scan = .{ .abs_path = child_abs_path, .path = child_path } }, .instant);
-        }
+        // if (kind == .dir) {
+        //     const child_abs_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ abs_path, entry.name });
+        //     _ = self.worktree.scanner_thread.mailbox.push(.{ .scan = .{ .abs_path = child_abs_path, .path = child_path } }, .forever);
+        // }
     }
 
     try self.worktree.scanner_thread.wakeup.notify();

@@ -43,6 +43,18 @@ pub const Worktree = struct {
     scanner_thread: ScannerThread,
     scanner_thr: std.Thread,
 
+    pub fn create(abs_path: []const u8, alloc: Allocator) !*Worktree {
+        const worktree = try alloc.create(Worktree);
+        try worktree.init(abs_path, alloc);
+
+        return worktree;
+    }
+
+    pub fn destroy(self: *Worktree) void {
+        self.deinit();
+        self.alloc.destroy(self);
+    }
+
     pub fn init(self: *Worktree, abs_path: []const u8, alloc: Allocator) !void {
         const _abs_path = try alloc.dupe(u8, abs_path);
         errdefer alloc.free(_abs_path);

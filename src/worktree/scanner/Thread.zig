@@ -100,6 +100,7 @@ fn drainMailbox(self: *Thread) !void {
         switch (message) {
             .scan => |request| {
                 try self.scanner.process_scan(request.path, request.abs_path);
+                self.alloc.free(request.abs_path);
             },
             .initialScan => {
                 try self.scanner.initial_scan();

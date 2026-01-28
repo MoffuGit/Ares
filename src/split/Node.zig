@@ -162,6 +162,7 @@ pub fn createView(alloc: Allocator, id: u64) !*Node {
         .style = .{
             .flex_grow = 1,
         },
+        .zIndex = 20,
         .userdata = node,
         .drawFn = drawView,
         .hitGridFn = hitView,
