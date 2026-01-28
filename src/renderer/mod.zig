@@ -49,7 +49,9 @@ pub fn resize(self: *Renderer, size: vaxis.Winsize) !void {
 }
 
 pub fn threadExit(self: *Renderer) void {
-    _ = self;
+    const writer = self.tty.writer();
+    writer.writeAll(vaxis.ctlseqs.in_band_resize_reset) catch {};
+    writer.flush() catch {};
 }
 
 pub fn renderFrame(self: *Renderer) !void {

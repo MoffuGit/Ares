@@ -121,18 +121,18 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
 
 pub fn destroy(self: *App) void {
     {
-        self.renderer_thread.stop.notify() catch |err| {
-            log.err("error notifying renderer thread to stop, may stall err={}", .{err});
-        };
-        self.renderer_thr.join();
-    }
-
-    {
         self.events_thread.stop();
         const writer = self.tty.writer();
         writer.writeAll(vaxis.ctlseqs.device_status_report) catch {};
         writer.flush() catch {};
         self.events_thr.join();
+    }
+
+    {
+        self.renderer_thread.stop.notify() catch |err| {
+            log.err("error notifying renderer thread to stop, may stall err={}", .{err});
+        };
+        self.renderer_thr.join();
     }
 
     self.renderer_thread.deinit();
@@ -141,9 +141,9 @@ pub fn destroy(self: *App) void {
     self.time.deinit();
 
     self.loop.deinit();
-    self.tty.deinit();
 
     self.renderer.deinit();
+    self.tty.deinit();
     self.screen.deinit(self.alloc);
     self.alloc.destroy(self);
 }
