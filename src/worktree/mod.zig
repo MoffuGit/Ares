@@ -8,6 +8,8 @@ const ScannerThread = @import("scanner/Thread.zig");
 
 const Snapshot = @import("Snapshot.zig");
 
+pub const FileTree = @import("FileTree.zig");
+
 const BPlusTree = @import("../datastruct/b_plus_tree.zig").BPlusTree;
 
 fn entryOrder(a: []const u8, b: []const u8) std.math.Order {

@@ -17,5 +17,9 @@ pub fn init(alloc: Allocator) !Snapshot {
 }
 
 pub fn deinit(self: *Snapshot) void {
+    var it = self.entries.iter();
+    while (it.next()) |entry| {
+        self.alloc.free(entry.key);
+    }
     self.entries.deinit();
 }

@@ -13,7 +13,9 @@ const GPA = std.heap.GeneralPurposeAllocator(.{});
 const App = @import("App.zig");
 const events = @import("events/mod.zig");
 const EventContext = events.EventContext;
-const Worktree = @import("worktree/mod.zig").Worktree;
+const worktree_mod = @import("worktree/mod.zig");
+const Worktree = worktree_mod.Worktree;
+const FileTree = worktree_mod.FileTree;
 
 const split = @import("split/mod.zig");
 const SplitTree = split.Tree;
@@ -53,19 +55,19 @@ pub fn main() !void {
 
     try app.window.root.addEventListener(.key_press, keyPressFn);
 
-    // const cwd = std.fs.cwd();
-    // var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    // const cwd_path = try cwd.realpath(".", &path_buf);
+    const cwd = std.fs.cwd();
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const cwd_path = try cwd.realpath(".", &path_buf);
 
-    // var worktree = try Worktree.create(cwd_path, alloc);
-    // defer worktree.destroy();
-    //
-    // try worktree.initial_scan();
+    var worktree = try Worktree.create(cwd_path, alloc);
+    defer worktree.destroy();
 
-    // const tree = try SplitTree.create(alloc);
-    // defer tree.destroy();
-    //
-    // try app.window.root.addChild(tree.element);
+    try worktree.initial_scan();
+
+    const file_tree = try FileTree.create(alloc, worktree);
+    defer file_tree.destroy(alloc);
+
+    try app.window.root.addChild(&file_tree.element);
 
     app.run() catch |err| {
         log.err("App exit with an err: {}", .{err});
