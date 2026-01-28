@@ -1,4 +1,3 @@
-pub const Box = @import("Box.zig");
 pub const Animation = @import("Animation.zig");
 pub const Timer = @import("Timer.zig");
 pub const Style = @import("Style.zig");

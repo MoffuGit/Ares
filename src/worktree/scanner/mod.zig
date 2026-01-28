@@ -52,10 +52,11 @@ pub fn process_scan(self: *Scanner, path: []const u8, abs_path: []const u8) !voi
 
         if (kind == .dir) {
             const child_abs_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ abs_path, entry.name });
-            _ = self.worktree.scanner_thread.mailbox.push(.{ .scan = .{ .abs_path = child_abs_path, .path = child_path } }, .forever);
+            if (self.worktree.scanner_thread.mailbox.push(.{ .scan = .{ .abs_path = child_abs_path, .path = child_path } }, .instant) == 0) {
+                self.alloc.free(child_abs_path);
+            }
         }
     }
-
     try self.worktree.scanner_thread.wakeup.notify();
 }
 

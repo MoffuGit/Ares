@@ -47,6 +47,7 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
     root.* = Element.init(alloc, root_opts);
     root.context = opts.app_context;
     root.removed = false;
+    root.hitGridFn = HitGrid.hitElement;
 
     var elements = Elements.init(alloc);
     try elements.put(root.num, root);
@@ -105,13 +106,12 @@ pub fn draw(self: *Window) !void {
     const screen = self.screen;
     const size = self.size;
 
-    if (self.hit_grid.width != size.cols or self.hit_grid.height != size.rows) {
-        try self.hit_grid.resize(self.alloc, size.cols, size.rows);
-    }
-
     const hit_grid = &self.hit_grid;
 
-    hit_grid.fillRect(0, 0, hit_grid.width, hit_grid.height, self.root.num);
+    if (hit_grid.width != size.cols or hit_grid.height != size.rows) {
+        try hit_grid.resize(self.alloc, size.cols, size.rows);
+    }
+
     self.root.hit(&self.hit_grid);
 
     const buffer = try screen.nextBuffer();

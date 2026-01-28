@@ -9,7 +9,7 @@ const log = std.log.scoped(.worktree_scanner);
 
 pub const Thread = @This();
 
-pub const Mailbox = BlockingQueue(messagepkg.Message, 64);
+pub const Mailbox = BlockingQueue(messagepkg.Message, 1024);
 
 alloc: Allocator,
 loop: xev.Loop,
@@ -41,6 +41,15 @@ pub fn init(alloc: Allocator, scanner: *Scanner) !Thread {
 }
 
 pub fn deinit(self: *Thread) void {
+    while (self.mailbox.pop()) |message| {
+        switch (message) {
+            .scan => |request| {
+                self.alloc.free(request.abs_path);
+            },
+            .initialScan => {},
+        }
+    }
+
     self.wakeup.deinit();
     self.stop.deinit();
     self.loop.deinit();
@@ -71,6 +80,7 @@ fn stopCallback(
     r: xev.Async.WaitError!void,
 ) xev.CallbackAction {
     _ = r catch unreachable;
+    log.debug("scanner stopCallback called, stopping loop", .{});
     self_.?.loop.stop();
     return .disarm;
 }
@@ -99,8 +109,8 @@ fn drainMailbox(self: *Thread) !void {
     while (self.mailbox.pop()) |message| {
         switch (message) {
             .scan => |request| {
+                defer self.alloc.free(request.abs_path);
                 try self.scanner.process_scan(request.path, request.abs_path);
-                self.alloc.free(request.abs_path);
             },
             .initialScan => {
                 try self.scanner.initial_scan();

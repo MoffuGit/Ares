@@ -10,6 +10,7 @@ const Kind = worktree_mod.Kind;
 
 const Allocator = std.mem.Allocator;
 const gwidth = vaxis.gwidth.gwidth;
+const HitGrid = @import("../HitGrid.zig");
 
 pub const FileTree = @This();
 
@@ -24,6 +25,7 @@ pub fn create(alloc: Allocator, wt: *Worktree) !*FileTree {
             .id = "file-tree",
             .userdata = self,
             .drawFn = draw,
+            .hitGridFn = hit,
             .style = .{
                 .width = .{ .percent = 100 },
                 .height = .{ .percent = 100 },
@@ -74,6 +76,16 @@ fn onClick(element: *Element, _: Element.EventData) void {
     if (element.context) |ctx| {
         ctx.setFocus(element);
     }
+}
+
+fn hit(element: *Element, hit_grid: *HitGrid) void {
+    hit_grid.fillRect(
+        element.layout.left,
+        element.layout.top,
+        element.layout.width,
+        element.layout.height,
+        element.num,
+    );
 }
 
 fn draw(element: *Element, buffer: *Buffer) void {

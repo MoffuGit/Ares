@@ -165,7 +165,7 @@ pub fn createView(alloc: Allocator, id: u64) !*Node {
         .zIndex = 20,
         .userdata = node,
         .drawFn = drawView,
-        .hitGridFn = hitView,
+        .hitGridFn = HitGrid.hitElement,
     });
     try element.addEventListener(.click, clickView);
 
@@ -202,16 +202,6 @@ fn clickView(element: *Element, _: Element.EventData) void {
     if (node.tree) |tree| {
         tree.focus(node.data.view.id);
     }
-}
-
-fn hitView(element: *Element, hit_grid: *HitGrid) void {
-    hit_grid.fillRect(
-        element.layout.left,
-        element.layout.top,
-        element.layout.width,
-        element.layout.height,
-        element.num,
-    );
 }
 
 //HACK:

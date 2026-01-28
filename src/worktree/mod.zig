@@ -33,6 +33,7 @@ pub const Worktree = struct {
     alloc: Allocator,
 
     snapshot: Snapshot,
+    version: std.atomic.Value(u64) = .{ .raw = 0 },
 
     abs_path: []u8,
     root: []u8,

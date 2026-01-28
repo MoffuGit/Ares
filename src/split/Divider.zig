@@ -39,7 +39,7 @@ pub fn create(alloc: Allocator, direction: Direction, left: *Node, right: *Node)
         },
         .zIndex = 10,
         .userdata = divider,
-        .hitGridFn = hit,
+        .hitGridFn = HitGrid.hitElement,
         .drawFn = draw,
     });
     try element.addEventListener(.drag, onDrag);
@@ -54,16 +54,6 @@ pub fn create(alloc: Allocator, direction: Direction, left: *Node, right: *Node)
         .dragging = false,
     };
     return divider;
-}
-
-fn hit(element: *Element, hit_grid: *HitGrid) void {
-    hit_grid.fillRect(
-        element.layout.left,
-        element.layout.top,
-        element.layout.width,
-        element.layout.height,
-        element.num,
-    );
 }
 
 fn draw(element: *Element, buffer: *Buffer) void {
