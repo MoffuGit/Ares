@@ -213,16 +213,76 @@ fn hitView(element: *Element, hit_grid: *HitGrid) void {
     );
 }
 
+//HACK:
+//Using yoga values don't give us a nice divided area,
+//with this i expect to have a better result
+fn hitSplit(element: *Element, _: *HitGrid) void {
+    const node: *Node = @ptrCast(@alignCast(element.userdata));
+    const is_horizontal = node.data.split.direction == .horizontal;
+
+    const children = element.childrens orelse return;
+    if (children.by_order.items.len == 0) return;
+
+    var expected_pos: u16 = if (is_horizontal) element.layout.top else element.layout.left;
+
+    for (children.by_order.items) |child| {
+        if (is_horizontal) {
+            child.layout.left = element.layout.left;
+            child.layout.width = element.layout.width;
+            if (child.layout.top != expected_pos) {
+                child.layout.top = expected_pos;
+            }
+            expected_pos += child.layout.height;
+        } else {
+            child.layout.top = element.layout.top;
+            child.layout.height = element.layout.height;
+            if (child.layout.left != expected_pos) {
+                child.layout.left = expected_pos;
+            }
+            expected_pos += child.layout.width;
+        }
+    }
+
+    const last = children.by_order.items[children.by_order.items.len - 1];
+    const end_pos = if (is_horizontal)
+        element.layout.top + element.layout.height
+    else
+        element.layout.left + element.layout.width;
+
+    if (expected_pos < end_pos) {
+        const extra = end_pos - expected_pos;
+        if (is_horizontal) {
+            last.layout.height += extra;
+        } else {
+            last.layout.width += extra;
+        }
+    } else if (expected_pos > end_pos) {
+        const overflow = expected_pos - end_pos;
+        if (is_horizontal) {
+            if (last.layout.height > overflow) {
+                last.layout.height -= overflow;
+            }
+        } else {
+            if (last.layout.width > overflow) {
+                last.layout.width -= overflow;
+            }
+        }
+    }
+}
+
 pub fn createSplit(alloc: Allocator, direction: Direction) !*Node {
+    const node = try alloc.create(Node);
+
     const element = try alloc.create(Element);
     element.* = Element.init(alloc, .{
         .style = .{
             .flex_direction = direction.toFlexDirection(),
             .flex_grow = 1,
         },
+        .userdata = node,
+        .hitGridFn = hitSplit,
     });
 
-    const node = try alloc.create(Node);
     node.* = .{
         .parent = null,
         .tree = null,
@@ -289,6 +349,28 @@ pub fn findChildIndex(self: *Node, child: *Node) ?usize {
         .view => {},
     }
     return null;
+}
+
+pub fn minSize(self: *const Node, direction: Direction) u16 {
+    switch (self.data) {
+        .split => |s| {
+            if (s.children.items.len == 0) return split.MINSIZE;
+
+            var total: u16 = 0;
+            if (s.direction == direction) {
+                for (s.children.items) |child| {
+                    total += child.minSize(direction);
+                }
+                total += @intCast(s.dividers.items.len);
+            } else {
+                for (s.children.items) |child| {
+                    total = @max(total, child.minSize(direction));
+                }
+            }
+            return @max(total, split.MINSIZE);
+        },
+        .view => return split.MINSIZE,
+    }
 }
 
 test "createView allocates node with view data" {

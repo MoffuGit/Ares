@@ -48,7 +48,6 @@ pub fn main() !void {
     var app = try App.create(alloc, .{
         .root_opts = .{
             .style = .{
-                .flex_direction = .row,
                 .width = .{ .percent = 100 },
                 .height = .{ .percent = 100 },
             },

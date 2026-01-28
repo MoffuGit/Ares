@@ -254,8 +254,9 @@ pub fn onDrag(element: *Element, data: Element.EventData) void {
         },
     };
 
-    const min_size: f32 = @floatFromInt(MINSIZE);
-    if (new_left_size < min_size or new_right_size < min_size) return;
+    const left_min: f32 = @floatFromInt(self.left.minSize(self.direction));
+    const right_min: f32 = @floatFromInt(self.right.minSize(self.direction));
+    if (new_left_size < left_min or new_right_size < right_min) return;
 
     self.left.ratio = new_left;
     self.right.ratio = new_right;

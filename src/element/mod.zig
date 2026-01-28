@@ -276,7 +276,7 @@ pub fn syncLayout(self: *Element) void {
 }
 
 fn toU16(value: f32) u16 {
-    const round = @floor(value);
+    const round = @round(value);
     if (round < 0) return 0;
     if (round > std.math.maxInt(u16)) return std.math.maxInt(u16);
     return @intFromFloat(round);
