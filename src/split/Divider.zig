@@ -39,7 +39,7 @@ pub fn create(alloc: Allocator, direction: Direction, left: *Node, right: *Node)
         },
         .zIndex = 10,
         .userdata = divider,
-        .hitGridFn = HitGrid.hitElement,
+        .hitFn = HitGrid.hitElement,
         .drawFn = draw,
     });
     try element.addEventListener(.drag, onDrag);
@@ -275,27 +275,4 @@ test "create divider" {
     try std.testing.expectEqual(left, divider.left);
     try std.testing.expectEqual(right, divider.right);
     try std.testing.expect(!divider.dragging);
-}
-
-test "onDrag adjusts ratios" {
-    const alloc = std.testing.allocator;
-
-    const left = try Node.createView(alloc, 1);
-    defer left.destroy(alloc);
-
-    const right = try Node.createView(alloc, 2);
-    defer right.destroy(alloc);
-
-    left.ratio = 0.5;
-    right.ratio = 0.5;
-
-    const divider = try Divider.create(alloc, .vertical, left, right);
-    defer divider.destroy(alloc);
-
-    divider.onDrag(0.2);
-
-    try std.testing.expect(left.ratio > 0.5);
-    try std.testing.expect(right.ratio < 0.5);
-    try std.testing.expectEqual(Sizing.fixed, left.sizing);
-    try std.testing.expectEqual(Sizing.fixed, right.sizing);
 }

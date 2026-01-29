@@ -50,3 +50,11 @@ I probably should check the existing framework and take ideas from there
 ┿	vH	253F	9535	BOX DRAWINGS VERTICAL LIGHT AND HORIZONTAL HEAVY
 ╂	Vh	2542	9538	BOX DRAWINGS VERTICAL HEAVY AND HORIZONTAL LIGHT
 ╋	VH	254B	9547	BOX DRAWINGS HEAVY VERTICAL AND HORIZONTAL
+
+*   Upper Half Block (U+2580): ▀
+
+*   Lower Half Block (U+2584): ▄
+
+*   Left Half Block (U+258C): ▌
+
+*   Right Half Block (U+2590): ▐

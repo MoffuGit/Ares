@@ -27,12 +27,12 @@ const SwapChain = struct {
         return result;
     }
 
-    pub fn deinit(self: *SwapChain, alloc: Allocator) void {
+    pub fn deinit(self: *SwapChain) void {
         if (self.defunct) return;
         self.defunct = true;
 
         for (0..buf_count) |_| self.buffer_sema.wait();
-        for (&self.buffers) |*buffer| buffer.deinit(alloc);
+        for (&self.buffers) |*buffer| buffer.deinit();
     }
 
     pub fn nextBuffer(self: *SwapChain) error{Defunct}!*Buffer {
@@ -73,8 +73,8 @@ pub fn init(alloc: Allocator, size: vaxis.Winsize) !Screen {
     };
 }
 
-pub fn deinit(self: *Screen, alloc: Allocator) void {
-    self.swap_chain.deinit(alloc);
+pub fn deinit(self: *Screen) void {
+    self.swap_chain.deinit();
 }
 
 pub fn nextBuffer(self: *Screen) !*Buffer {
@@ -92,7 +92,7 @@ pub fn currentBuffer(self: *Screen) ?*Buffer {
 }
 
 pub fn resizeBuffer(self: *Screen, alloc: Allocator, buffer: *Buffer, size: vaxis.Winsize) !void {
-    buffer.deinit(alloc);
+    buffer.deinit();
     buffer.* = try Buffer.init(alloc, size.cols, size.rows);
     self.width_pix = size.x_pixel;
     self.height_pix = size.y_pixel;

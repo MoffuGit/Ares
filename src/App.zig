@@ -57,7 +57,7 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
         .x_pixel = 0,
         .y_pixel = 0,
     });
-    errdefer screen.deinit(alloc);
+    errdefer screen.deinit();
 
     var renderer = try Renderer.init(alloc, &self.tty, &self.screen);
     errdefer renderer.deinit();
@@ -144,7 +144,7 @@ pub fn destroy(self: *App) void {
 
     self.renderer.deinit();
     self.tty.deinit();
-    self.screen.deinit(self.alloc);
+    self.screen.deinit();
     self.alloc.destroy(self);
 }
 

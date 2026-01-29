@@ -32,7 +32,7 @@ screen: *Screen,
 
 focused: ?*Element = null,
 focus_path: std.ArrayList(*Element) = .{},
-hit_grid: HitGrid = .{},
+hit_grid: HitGrid,
 hovered: ?*Element = null,
 pressed_on: ?*Element = null,
 elements: Elements,
@@ -47,10 +47,12 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
     root.* = Element.init(alloc, root_opts);
     root.context = opts.app_context;
     root.removed = false;
-    root.hitGridFn = HitGrid.hitElement;
+    root.hitFn = HitGrid.hitElement;
 
     var elements = Elements.init(alloc);
     try elements.put(root.num, root);
+
+    const hit_grid = try HitGrid.init(alloc, 0, 0);
 
     return .{
         .screen = screen,
@@ -58,6 +60,7 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
         .root = root,
         .size = .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 },
         .elements = elements,
+        .hit_grid = hit_grid,
     };
 }
 
@@ -65,7 +68,7 @@ pub fn deinit(self: *Window) void {
     self.root.deinit();
     self.alloc.destroy(self.root);
     self.focus_path.deinit(self.alloc);
-    self.hit_grid.deinit(self.alloc);
+    self.hit_grid.deinit();
     self.elements.deinit();
 }
 
@@ -109,7 +112,7 @@ pub fn draw(self: *Window) !void {
     const hit_grid = &self.hit_grid;
 
     if (hit_grid.width != size.cols or hit_grid.height != size.rows) {
-        try hit_grid.resize(self.alloc, size.cols, size.rows);
+        try hit_grid.resize(size.cols, size.rows);
     }
 
     self.root.hit(&self.hit_grid);
@@ -375,7 +378,7 @@ fn initTestWindow(alloc: Allocator) !struct { window: Window, screen: *Screen } 
 
 fn deinitTestWindow(alloc: Allocator, window: *Window, screen: *Screen) void {
     window.deinit();
-    screen.deinit(alloc);
+    screen.deinit();
     alloc.destroy(screen);
 }
 

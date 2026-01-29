@@ -25,7 +25,7 @@ pub fn create(alloc: Allocator, wt: *Worktree) !*FileTree {
             .id = "file-tree",
             .userdata = self,
             .drawFn = draw,
-            .hitGridFn = hit,
+            .hitFn = hit,
             .style = .{
                 .width = .{ .percent = 100 },
                 .height = .{ .percent = 100 },
@@ -70,6 +70,8 @@ fn onWheel(element: *Element, data: Element.EventData) void {
     } else if (mouse.button == .wheel_down) {
         self.scroll_offset += 1;
     }
+
+    element.context.?.requestDraw();
 }
 
 fn onClick(element: *Element, _: Element.EventData) void {

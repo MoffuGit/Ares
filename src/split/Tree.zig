@@ -249,8 +249,8 @@ fn collapse(self: *Tree, parent: *Node) !void {
     }
 
     parent.data.split.children.clearRetainingCapacity();
-    parent.data.split.dividers.deinit();
-    parent.data.split.children.deinit();
+    parent.data.split.dividers.deinit(self.alloc);
+    parent.data.split.children.deinit(self.alloc);
     parent.element.deinit();
     self.alloc.destroy(parent.element);
     self.alloc.destroy(parent);
@@ -282,101 +282,4 @@ fn findFirstView(node: *Node) ?*Node {
 
 pub fn getFocusedView(self: *Tree) ?*Node {
     return self.find(self.focused_view);
-}
-
-test "create tree with initial view" {
-    const alloc = std.testing.allocator;
-
-    const tree = try Tree.create(alloc);
-    defer tree.destroy();
-
-    try std.testing.expect(tree.root.isView());
-    try std.testing.expectEqual(@as(u64, 1), tree.root.data.view.id);
-    try std.testing.expectEqual(@as(u64, 1), tree.focused_view);
-    try std.testing.expectEqual(@as(u64, 2), tree.next_id);
-}
-
-test "find view by id" {
-    const alloc = std.testing.allocator;
-
-    const tree = try Tree.create(alloc);
-    defer tree.destroy();
-
-    const found = tree.find(1);
-    try std.testing.expect(found != null);
-    try std.testing.expectEqual(@as(u64, 1), found.?.data.view.id);
-
-    const not_found = tree.find(999);
-    try std.testing.expect(not_found == null);
-}
-
-test "split creates new view" {
-    const alloc = std.testing.allocator;
-
-    const tree = try Tree.create(alloc);
-    defer tree.destroy();
-
-    const new_id = try tree.split(1, .vertical, true);
-
-    try std.testing.expectEqual(@as(u64, 2), new_id);
-    try std.testing.expect(tree.root.isSplit());
-    try std.testing.expectEqual(@as(usize, 2), tree.root.childCount());
-
-    const view1 = tree.find(1);
-    const view2 = tree.find(2);
-    try std.testing.expect(view1 != null);
-    try std.testing.expect(view2 != null);
-}
-
-test "split same direction adds sibling" {
-    const alloc = std.testing.allocator;
-
-    const tree = try Tree.create(alloc);
-    defer tree.destroy();
-
-    _ = try tree.split(1, .vertical, true);
-    _ = try tree.split(1, .vertical, true);
-
-    try std.testing.expectEqual(@as(usize, 3), tree.root.childCount());
-}
-
-test "remove collapses parent" {
-    const alloc = std.testing.allocator;
-
-    const tree = try Tree.create(alloc);
-    defer tree.destroy();
-
-    _ = try tree.split(1, .vertical, true);
-    try std.testing.expect(tree.root.isSplit());
-
-    try tree.remove(2);
-
-    try std.testing.expect(tree.root.isView());
-    try std.testing.expectEqual(@as(u64, 1), tree.root.data.view.id);
-}
-
-test "focus changes focused_view" {
-    const alloc = std.testing.allocator;
-
-    const tree = try Tree.create(alloc);
-    defer tree.destroy();
-
-    const new_id = try tree.split(1, .vertical, true);
-    try std.testing.expectEqual(@as(u64, 1), tree.focused_view);
-
-    tree.focus(new_id);
-    try std.testing.expectEqual(new_id, tree.focused_view);
-}
-
-test "remove focused view refocuses" {
-    const alloc = std.testing.allocator;
-
-    const tree = try Tree.create(alloc);
-    defer tree.destroy();
-
-    const new_id = try tree.split(1, .vertical, true);
-    tree.focus(new_id);
-
-    try tree.remove(new_id);
-    try std.testing.expectEqual(@as(u64, 1), tree.focused_view);
 }

@@ -164,8 +164,8 @@ pub fn createView(alloc: Allocator, id: u64) !*Node {
         },
         .zIndex = 20,
         .userdata = node,
-        .drawFn = drawView,
-        .hitGridFn = HitGrid.hitElement,
+        .beforeDrawFn = drawView,
+        .beforeHitFn = HitGrid.hitElement,
     });
     try element.addEventListener(.click, clickView);
 
@@ -271,7 +271,7 @@ pub fn createSplit(alloc: Allocator, direction: Direction) !*Node {
             .flex_grow = 1,
         },
         .userdata = node,
-        .hitGridFn = hitSplit,
+        .hitFn = hitSplit,
     });
 
     node.* = .{

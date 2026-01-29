@@ -2,6 +2,7 @@ pub const Animation = @import("Animation.zig");
 pub const Timer = @import("Timer.zig");
 pub const Style = @import("Style.zig");
 pub const Node = @import("Node.zig");
+pub const Scrollable = @import("Scrollable.zig");
 
 pub var element_counter: std.atomic.Value(u64) = .init(0);
 
@@ -140,14 +141,21 @@ pub const Callback = *const fn (element: *Element, data: EventData) void;
 pub const CallbackList = std.ArrayListUnmanaged(Callback);
 pub const EventListeners = std.EnumArray(EventType, CallbackList);
 
+pub const DrawFn = *const fn (element: *Element, buffer: *Buffer) void;
+pub const HitFn = *const fn (element: *Element, hit_grid: *HitGrid) void;
+
 pub const Options = struct {
     id: ?[]const u8 = null,
     visible: bool = true,
     zIndex: usize = 0,
     style: Style = .{},
     userdata: ?*anyopaque = null,
-    drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
-    hitGridFn: ?*const fn (element: *Element, hit_grid: *HitGrid) void = null,
+    beforeDrawFn: ?DrawFn = null,
+    drawFn: ?DrawFn = null,
+    afterDrawFn: ?DrawFn = null,
+    beforeHitFn: ?HitFn = null,
+    hitFn: ?HitFn = null,
+    afterHitFn: ?HitFn = null,
 };
 
 pub const Element = @This();
@@ -176,8 +184,14 @@ style: Style = .{},
 context: ?*AppContext = null,
 
 userdata: ?*anyopaque = null,
-drawFn: ?*const fn (element: *Element, buffer: *Buffer) void = null,
-hitGridFn: ?*const fn (element: *Element, hit_grid: *HitGrid) void = null,
+drawFn: ?DrawFn = null,
+hitFn: ?HitFn = null,
+
+beforeDrawFn: ?DrawFn = null,
+afterDrawFn: ?DrawFn = null,
+beforeHitFn: ?HitFn = null,
+afterHitFn: ?HitFn = null,
+
 listeners: EventListeners = EventListeners.initFill(.{}),
 
 pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
@@ -197,8 +211,12 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
         .zIndex = opts.zIndex,
         .style = opts.style,
         .userdata = opts.userdata,
+        .beforeDrawFn = opts.beforeDrawFn,
+        .afterDrawFn = opts.afterDrawFn,
+        .beforeHitFn = opts.beforeHitFn,
+        .afterHitFn = opts.afterHitFn,
         .drawFn = opts.drawFn,
-        .hitGridFn = opts.hitGridFn,
+        .hitFn = opts.hitFn,
         .node = node,
     };
 }
@@ -297,6 +315,10 @@ pub fn deinit(self: *Element) void {
 pub fn draw(self: *Element, buffer: *Buffer) void {
     if (!self.visible) return;
 
+    if (self.beforeDrawFn) |callback| {
+        callback(self, buffer);
+    }
+
     if (self.drawFn) |callback| {
         callback(self, buffer);
     }
@@ -306,12 +328,20 @@ pub fn draw(self: *Element, buffer: *Buffer) void {
             child.draw(buffer);
         }
     }
+
+    if (self.afterDrawFn) |callback| {
+        callback(self, buffer);
+    }
 }
 
 pub fn hit(self: *Element, hit_grid: *HitGrid) void {
     if (!self.visible) return;
 
-    if (self.hitGridFn) |callback| {
+    if (self.beforeHitFn) |callback| {
+        callback(self, hit_grid);
+    }
+
+    if (self.hitFn) |callback| {
         callback(self, hit_grid);
     }
 
@@ -319,6 +349,10 @@ pub fn hit(self: *Element, hit_grid: *HitGrid) void {
         for (childrens.by_z_index.items) |child| {
             child.hit(hit_grid);
         }
+    }
+
+    if (self.afterHitFn) |callback| {
+        callback(self, hit_grid);
     }
 }
 
