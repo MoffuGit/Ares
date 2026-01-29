@@ -81,9 +81,13 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
             .drawFn = drawBar,
             .zIndex = 10,
             .userdata = self,
+            .hitFn = HitGrid.hitElement,
         });
 
         self.bar = bar;
+
+        try bar.addEventListener(.click, onBarClick);
+        try bar.addEventListener(.drag, onBarDrag);
 
         try outer.addChild(bar);
     }
@@ -244,7 +248,61 @@ fn drawBar(element: *Element, buffer: *Buffer) void {
     const curr: u32 = if (self.scroll_y < 0) 0 else @intCast(self.scroll_y);
     const bar_pos: u16 = @intCast((curr * height) / max);
 
-    buffer.fillRect(element.layout.left, element.layout.top, element.layout.width, element.layout.height, .{ .style = .{ .bg = .{ .rgb = .{ 255, 0, 0 } } } });
+    const char = "▐";
 
-    buffer.writeCell(element.layout.left, bar_pos, .{ .style = .{ .bg = .{ .rgb = .{ 0, 255, 0 } } } });
+    buffer.fillRect(element.layout.left, element.layout.top, element.layout.width, element.layout.height, .{ .char = .{ .grapheme = char }, .style = .{ .fg = .{ .rgb = .{ 255, 0, 0 } } } });
+
+    buffer.writeCell(element.layout.left, bar_pos, .{ .char = .{ .grapheme = char }, .style = .{ .fg = .{ .rgb = .{ 0, 255, 0 } } } });
+}
+
+fn getThumbPos(self: *const Scrollable) u16 {
+    const bar = self.bar orelse return 0;
+    const height = bar.layout.height;
+    const max = self.inner.layout.height;
+
+    if (max == 0 or height == 0) return 0;
+
+    const curr: u32 = if (self.scroll_y < 0) 0 else @intCast(self.scroll_y);
+    return @intCast((curr * height) / max);
+}
+
+fn onBarClick(element: *Element, data: Element.EventData) void {
+    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+    const mouse = data.click.mouse;
+
+    const thumb_pos = self.getThumbPos();
+    const bar_top: i16 = @intCast(element.layout.top);
+    const click_y: u16 = @intCast(@max(0, mouse.row - bar_top));
+
+    if (click_y != thumb_pos) {
+        const bar_height = element.layout.height;
+        const max_scroll = self.maxScrollY();
+
+        if (bar_height > 0) {
+            const new_scroll: i32 = @intCast((@as(u32, click_y) * @as(u32, @intCast(max_scroll))) / bar_height);
+            self.scrollTo(0, new_scroll);
+
+            if (element.context) |ctx| {
+                ctx.requestDraw();
+            }
+        }
+    }
+}
+
+fn onBarDrag(element: *Element, data: Element.EventData) void {
+    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+    const mouse = data.drag.mouse;
+    const bar_height = element.layout.height;
+    const max_scroll = self.maxScrollY();
+
+    if (bar_height > 0) {
+        const bar_top: i16 = @intCast(element.layout.top);
+        const drag_y: u16 = @intCast(@max(0, mouse.row - bar_top));
+        const new_scroll: i32 = @intCast((@as(u32, drag_y) * @as(u32, @intCast(max_scroll))) / bar_height);
+        self.scrollTo(0, new_scroll);
+    }
+
+    if (element.context) |ctx| {
+        ctx.requestDraw();
+    }
 }

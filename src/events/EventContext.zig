@@ -10,8 +10,8 @@ pub const Phase = enum {
 
 pub const EventContext = @This();
 
-phase: Phase,
-target: ?*Element,
+phase: Phase = undefined,
+target: *Element = undefined,
 stopped: bool = false,
 
 pub fn stopPropagation(self: *EventContext) void {
