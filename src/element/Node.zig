@@ -229,3 +229,56 @@ pub fn setGap(self: Node, gutter: Style.Gutter, value: Style.StyleValue) void {
         else => {},
     }
 }
+
+fn toU16(value: f32) u16 {
+    const round = @round(value);
+    if (round < 0) return 0;
+    if (round > std.math.maxInt(u16)) return std.math.maxInt(u16);
+    return @intFromFloat(round);
+}
+
+const std = @import("std");
+
+pub fn getLayoutLeft(self: Node) u16 {
+    return toU16(yoga.YGNodeLayoutGetLeft(self.yg_node));
+}
+
+pub fn getLayoutTop(self: Node) u16 {
+    return toU16(yoga.YGNodeLayoutGetTop(self.yg_node));
+}
+
+pub fn getLayoutRight(self: Node) u16 {
+    return toU16(yoga.YGNodeLayoutGetRight(self.yg_node));
+}
+
+pub fn getLayoutBottom(self: Node) u16 {
+    return toU16(yoga.YGNodeLayoutGetBottom(self.yg_node));
+}
+
+pub fn getLayoutWidth(self: Node) u16 {
+    return toU16(yoga.YGNodeLayoutGetWidth(self.yg_node));
+}
+
+pub fn getLayoutHeight(self: Node) u16 {
+    return toU16(yoga.YGNodeLayoutGetHeight(self.yg_node));
+}
+
+pub fn getLayoutDirection(self: Node) yoga.YGDirection {
+    return yoga.YGNodeLayoutGetDirection(self.yg_node);
+}
+
+pub fn getLayoutHadOverflow(self: Node) bool {
+    return yoga.YGNodeLayoutGetHadOverflow(self.yg_node);
+}
+
+pub fn getLayoutMargin(self: Node, edge: Style.Edge) u16 {
+    return toU16(yoga.YGNodeLayoutGetMargin(self.yg_node, @intFromEnum(edge)));
+}
+
+pub fn getLayoutBorder(self: Node, edge: Style.Edge) u16 {
+    return toU16(yoga.YGNodeLayoutGetBorder(self.yg_node, @intFromEnum(edge)));
+}
+
+pub fn getLayoutPadding(self: Node, edge: Style.Edge) u16 {
+    return toU16(yoga.YGNodeLayoutGetPadding(self.yg_node, @intFromEnum(edge)));
+}

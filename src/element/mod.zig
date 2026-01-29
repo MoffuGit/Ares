@@ -144,6 +144,8 @@ pub const EventListeners = std.EnumArray(EventType, CallbackList);
 pub const DrawFn = *const fn (element: *Element, buffer: *Buffer) void;
 pub const HitFn = *const fn (element: *Element, hit_grid: *HitGrid) void;
 
+pub const UpdateFn = *const fn (element: *Element) void;
+
 pub const Options = struct {
     id: ?[]const u8 = null,
     visible: bool = true,
@@ -156,6 +158,7 @@ pub const Options = struct {
     beforeHitFn: ?HitFn = null,
     hitFn: ?HitFn = null,
     afterHitFn: ?HitFn = null,
+    updateFn: ?UpdateFn = null,
 };
 
 pub const Element = @This();
@@ -184,6 +187,9 @@ style: Style = .{},
 context: ?*AppContext = null,
 
 userdata: ?*anyopaque = null,
+
+updateFn: ?UpdateFn = null,
+
 drawFn: ?DrawFn = null,
 hitFn: ?HitFn = null,
 
@@ -217,6 +223,7 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
         .afterHitFn = opts.afterHitFn,
         .drawFn = opts.drawFn,
         .hitFn = opts.hitFn,
+        .updateFn = opts.updateFn,
         .node = node,
     };
 }
@@ -246,57 +253,47 @@ pub fn emit(self: *Element, data: EventData) void {
 }
 
 pub fn syncLayout(self: *Element) void {
-    const yoga = Node.yoga;
-    const yg = self.node.yg_node;
-
     const old_width = self.layout.width;
     const old_height = self.layout.height;
 
-    const new_width = toU16(yoga.YGNodeLayoutGetWidth(yg));
-    const new_height = toU16(yoga.YGNodeLayoutGetHeight(yg));
+    const new_width = self.node.getLayoutWidth();
+    const new_height = self.node.getLayoutHeight();
 
     const parent_left: u16 = if (self.parent) |p| p.layout.left else 0;
     const parent_top: u16 = if (self.parent) |p| p.layout.top else 0;
 
     self.layout = .{
-        .left = parent_left + toU16(yoga.YGNodeLayoutGetLeft(yg)),
-        .top = parent_top + toU16(yoga.YGNodeLayoutGetTop(yg)),
-        .right = toU16(yoga.YGNodeLayoutGetRight(yg)),
-        .bottom = toU16(yoga.YGNodeLayoutGetBottom(yg)),
+        .left = parent_left + self.node.getLayoutLeft(),
+        .top = parent_top + self.node.getLayoutTop(),
+        .right = self.node.getLayoutRight(),
+        .bottom = self.node.getLayoutBottom(),
         .width = new_width,
         .height = new_height,
-        .direction = yoga.YGNodeLayoutGetDirection(yg),
-        .had_overflow = yoga.YGNodeLayoutGetHadOverflow(yg),
+        .direction = self.node.getLayoutDirection(),
+        .had_overflow = self.node.getLayoutHadOverflow(),
         .margin = .{
-            .left = toU16(yoga.YGNodeLayoutGetMargin(yg, yoga.YGEdgeLeft)),
-            .top = toU16(yoga.YGNodeLayoutGetMargin(yg, yoga.YGEdgeTop)),
-            .right = toU16(yoga.YGNodeLayoutGetMargin(yg, yoga.YGEdgeRight)),
-            .bottom = toU16(yoga.YGNodeLayoutGetMargin(yg, yoga.YGEdgeBottom)),
+            .left = self.node.getLayoutMargin(.left),
+            .top = self.node.getLayoutMargin(.top),
+            .right = self.node.getLayoutMargin(.right),
+            .bottom = self.node.getLayoutMargin(.bottom),
         },
         .border = .{
-            .left = toU16(yoga.YGNodeLayoutGetBorder(yg, yoga.YGEdgeLeft)),
-            .top = toU16(yoga.YGNodeLayoutGetBorder(yg, yoga.YGEdgeTop)),
-            .right = toU16(yoga.YGNodeLayoutGetBorder(yg, yoga.YGEdgeRight)),
-            .bottom = toU16(yoga.YGNodeLayoutGetBorder(yg, yoga.YGEdgeBottom)),
+            .left = self.node.getLayoutBorder(.left),
+            .top = self.node.getLayoutBorder(.top),
+            .right = self.node.getLayoutBorder(.right),
+            .bottom = self.node.getLayoutBorder(.bottom),
         },
         .padding = .{
-            .left = toU16(yoga.YGNodeLayoutGetPadding(yg, yoga.YGEdgeLeft)),
-            .top = toU16(yoga.YGNodeLayoutGetPadding(yg, yoga.YGEdgeTop)),
-            .right = toU16(yoga.YGNodeLayoutGetPadding(yg, yoga.YGEdgeRight)),
-            .bottom = toU16(yoga.YGNodeLayoutGetPadding(yg, yoga.YGEdgeBottom)),
+            .left = self.node.getLayoutPadding(.left),
+            .top = self.node.getLayoutPadding(.top),
+            .right = self.node.getLayoutPadding(.right),
+            .bottom = self.node.getLayoutPadding(.bottom),
         },
     };
 
     if (old_width != new_width or old_height != new_height) {
         self.dispatchEvent(.{ .resize = .{ .width = new_width, .height = new_height } });
     }
-}
-
-fn toU16(value: f32) u16 {
-    const round = @round(value);
-    if (round < 0) return 0;
-    if (round > std.math.maxInt(u16)) return std.math.maxInt(u16);
-    return @intFromFloat(round);
 }
 
 pub fn deinit(self: *Element) void {
@@ -310,6 +307,18 @@ pub fn deinit(self: *Element) void {
     }
 
     self.node.deinit();
+}
+
+pub fn update(self: *Element) void {
+    if (self.updateFn) |callback| {
+        callback(self);
+    }
+
+    if (self.childrens) |*childrens| {
+        for (childrens.by_order.items) |child| {
+            child.update();
+        }
+    }
 }
 
 pub fn draw(self: *Element, buffer: *Buffer) void {

@@ -67,7 +67,7 @@ pub fn main() !void {
     const file_tree = try FileTree.create(alloc, worktree);
     defer file_tree.destroy(alloc);
 
-    try app.window.root.addChild(&file_tree.element);
+    try app.window.root.addChild(file_tree.getElement());
 
     app.run() catch |err| {
         log.err("App exit with an err: {}", .{err});

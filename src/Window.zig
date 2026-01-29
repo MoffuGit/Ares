@@ -104,6 +104,8 @@ pub fn requestDraw(self: *Window) void {
 }
 
 pub fn draw(self: *Window) !void {
+    self.root.update();
+
     self.calculateLayout();
 
     const screen = self.screen;

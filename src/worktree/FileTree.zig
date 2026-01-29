@@ -1,7 +1,9 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
-const Element = @import("../element/mod.zig").Element;
-const Style = @import("../element/mod.zig").Style;
+const element_mod = @import("../element/mod.zig");
+const Element = element_mod.Element;
+const Scrollable = element_mod.Scrollable;
+const Style = element_mod.Style;
 const Buffer = @import("../Buffer.zig");
 const worktree_mod = @import("mod.zig");
 const Worktree = worktree_mod.Worktree;
@@ -14,64 +16,49 @@ const HitGrid = @import("../HitGrid.zig");
 
 pub const FileTree = @This();
 
-element: Element,
+scrollable: *Scrollable,
+content: *Element,
 worktree: *Worktree,
-scroll_offset: usize = 0,
 
 pub fn create(alloc: Allocator, wt: *Worktree) !*FileTree {
     const self = try alloc.create(FileTree);
+
+    const scrollable = try Scrollable.init(alloc, .{});
+
+    const content = try alloc.create(Element);
+    content.* = Element.init(alloc, .{
+        .id = "file-tree-content",
+        .userdata = self,
+        .updateFn = onUpdate,
+        .beforeDrawFn = draw,
+        .style = .{
+            .flex_shrink = 0,
+            .width = .{ .percent = 100 },
+        },
+    });
+
+    try scrollable.inner.addChild(content);
+
     self.* = .{
-        .element = Element.init(alloc, .{
-            .id = "file-tree",
-            .userdata = self,
-            .drawFn = draw,
-            .hitFn = hit,
-            .style = .{
-                .width = .{ .percent = 100 },
-                .height = .{ .percent = 100 },
-            },
-        }),
+        .scrollable = scrollable,
+        .content = content,
         .worktree = wt,
     };
 
-    try self.element.addEventListener(.key_press, onKeyPress);
-    try self.element.addEventListener(.wheel, onWheel);
-    try self.element.addEventListener(.click, onClick);
+    try scrollable.outer.addEventListener(.click, onClick);
 
     return self;
 }
 
+pub fn getElement(self: *FileTree) *Element {
+    return self.scrollable.outer;
+}
+
 pub fn destroy(self: *FileTree, alloc: Allocator) void {
-    self.element.deinit();
+    self.content.deinit();
+    alloc.destroy(self.content);
+    self.scrollable.deinit(alloc);
     alloc.destroy(self);
-}
-
-fn onKeyPress(element: *Element, data: Element.EventData) void {
-    const self: *FileTree = @ptrCast(@alignCast(element.userdata));
-    const key = data.key_press.key;
-
-    if (key.matches('j', .{}) or key.matches(vaxis.Key.down, .{})) {
-        self.scroll_offset += 1;
-    } else if (key.matches('k', .{}) or key.matches(vaxis.Key.up, .{})) {
-        if (self.scroll_offset > 0) {
-            self.scroll_offset -= 1;
-        }
-    }
-}
-
-fn onWheel(element: *Element, data: Element.EventData) void {
-    const self: *FileTree = @ptrCast(@alignCast(element.userdata));
-    const mouse = data.wheel.mouse;
-
-    if (mouse.button == .wheel_up) {
-        if (self.scroll_offset > 0) {
-            self.scroll_offset -= 1;
-        }
-    } else if (mouse.button == .wheel_down) {
-        self.scroll_offset += 1;
-    }
-
-    element.context.?.requestDraw();
 }
 
 fn onClick(element: *Element, _: Element.EventData) void {
@@ -80,14 +67,42 @@ fn onClick(element: *Element, _: Element.EventData) void {
     }
 }
 
-fn hit(element: *Element, hit_grid: *HitGrid) void {
-    hit_grid.fillRect(
-        element.layout.left,
-        element.layout.top,
-        element.layout.width,
-        element.layout.height,
-        element.num,
-    );
+fn onMouseEnter(element: *Element, _: Element.EventData) void {
+    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+    const file_tree: *FileTree = @ptrCast(@alignCast(self.userdata));
+    file_tree.hovered = true;
+    if (element.context) |ctx| {
+        ctx.requestDraw();
+    }
+}
+
+fn onMouseLeave(element: *Element, _: Element.EventData) void {
+    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+    const file_tree: *FileTree = @ptrCast(@alignCast(self.userdata));
+    file_tree.hovered = false;
+    if (element.context) |ctx| {
+        ctx.requestDraw();
+    }
+}
+
+fn onUpdate(element: *Element) void {
+    const self: *FileTree = @ptrCast(@alignCast(element.userdata));
+
+    var height: f32 = 0.0;
+
+    {
+        self.worktree.snapshot.mutex.lock();
+        defer self.worktree.snapshot.mutex.unlock();
+
+        var it = self.worktree.snapshot.entries.iter();
+
+        while (it.next()) |_| {
+            height += 1.0;
+        }
+    }
+
+    element.style.height = .{ .point = height };
+    element.node.setHeight(.{ .point = height });
 }
 
 fn draw(element: *Element, buffer: *Buffer) void {
@@ -95,22 +110,25 @@ fn draw(element: *Element, buffer: *Buffer) void {
 
     const x = element.layout.left;
     const y = element.layout.top;
-    const height = element.layout.height;
+    const viewport_height = self.scrollable.outer.layout.height;
+
+    const skip: usize = @intCast(self.scrollable.scroll_y);
+    const max_visible: usize = @intCast(viewport_height);
 
     self.worktree.snapshot.mutex.lock();
     defer self.worktree.snapshot.mutex.unlock();
 
     var it = self.worktree.snapshot.entries.iter();
+    var index: usize = 0;
     var row: usize = 0;
-    var skip: usize = self.scroll_offset;
 
     while (it.next()) |entry| {
-        if (skip > 0) {
-            skip -= 1;
+        if (index < skip) {
+            index += 1;
             continue;
         }
 
-        if (row >= height) break;
+        if (row >= max_visible) break;
 
         const icon: []const u8 = switch (entry.value.kind) {
             .dir => ">",
@@ -123,6 +141,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
         col = writeText(buffer, x, row_y, icon, buffer.width);
         _ = writeText(buffer, x + col, row_y, entry.value.path, buffer.width);
 
+        index += 1;
         row += 1;
     }
 }

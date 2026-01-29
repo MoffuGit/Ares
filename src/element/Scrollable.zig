@@ -12,36 +12,50 @@ pub const ScrollMode = enum {
     both,
 };
 
-outer: Element,
-inner: Element,
+outer: *Element,
+inner: *Element,
+bar: ?*Element = null,
 
 scroll_x: i32 = 0,
 scroll_y: i32 = 0,
 
-content_width: u16 = 0,
-content_height: u16 = 0,
-
 mode: ScrollMode = .vertical,
 
-pub fn init(alloc: Allocator, mode: ScrollMode) !*Scrollable {
+const Options = struct {
+    mode: ScrollMode = .vertical,
+    bar: bool = true,
+};
+
+pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
     const self = try alloc.create(Scrollable);
 
     const outer = try alloc.create(Element);
     outer.* = Element.init(alloc, .{
         .style = .{
             .overflow = .scroll,
+            .height = .{ .percent = 100 },
+            .width = .{ .percent = 100 },
+            .margin = if (!opts.bar) .{} else .{
+                .right = .{
+                    .point = 1,
+                },
+            },
         },
         .beforeDrawFn = beforeDrawFn,
         .afterDrawFn = afterDrawFn,
         .beforeHitFn = beforeHitFn,
+        .hitFn = hitGridFn,
         .afterHitFn = afterHitFn,
         .userdata = self,
     });
+
+    try outer.addEventListener(.wheel, onWheel);
 
     const inner = try alloc.create(Element);
     inner.* = Element.init(alloc, .{
         .style = .{
             .overflow = .visible,
+            .flex_shrink = 0,
         },
     });
 
@@ -50,13 +64,38 @@ pub fn init(alloc: Allocator, mode: ScrollMode) !*Scrollable {
     self.* = Scrollable{
         .outer = outer,
         .inner = inner,
-        .mode = mode,
+        .mode = opts.mode,
     };
+
+    if (opts.bar) {
+        const bar = try alloc.create(Element);
+        bar.* = Element.init(alloc, .{
+            .style = .{
+                .position_type = .absolute,
+                .width = .{
+                    .point = 1,
+                },
+                .position = .{ .right = .{ .point = 0 } },
+                .height = .{ .percent = 100 },
+            },
+            .drawFn = drawBar,
+            .zIndex = 10,
+            .userdata = self,
+        });
+
+        self.bar = bar;
+
+        try outer.addChild(bar);
+    }
 
     return self;
 }
 
 pub fn deinit(self: *Scrollable, alloc: Allocator) void {
+    if (self.bar) |bar| {
+        bar.deinit();
+        alloc.destroy(bar);
+    }
     self.outer.deinit();
     self.inner.deinit();
     alloc.destroy(self.outer);
@@ -64,71 +103,53 @@ pub fn deinit(self: *Scrollable, alloc: Allocator) void {
     alloc.destroy(self);
 }
 
-// pub fn scrollBy(self: *Scrollable, dx: i32, dy: i32) void {
-//     switch (self.mode) {
-//         .vertical => self.scroll_y = self.clampY(self.scroll_y + dy),
-//         .horizontal => self.scroll_x = self.clampX(self.scroll_x + dx),
-//         .both => {
-//             self.scroll_x = self.clampX(self.scroll_x + dx);
-//             self.scroll_y = self.clampY(self.scroll_y + dy);
-//         },
-//     }
-// }
-//
-// pub fn scrollTo(self: *Scrollable, x: i32, y: i32) void {
-//     self.scroll_x = self.clampX(x);
-//     self.scroll_y = self.clampY(y);
-// }
-//
-// fn clampX(self: *const Scrollable, x: i32) i32 {
-//     const max_scroll = self.maxScrollX();
-//     if (x < 0) return 0;
-//     if (x > max_scroll) return max_scroll;
-//     return x;
-// }
-//
-// fn clampY(self: *const Scrollable, y: i32) i32 {
-//     const max_scroll = self.maxScrollY();
-//     if (y < 0) return 0;
-//     if (y > max_scroll) return max_scroll;
-//     return y;
-// }
-//
-// pub fn maxScrollX(self: *const Scrollable) i32 {
-//     const viewport_width = self.outer.layout.width;
-//     if (self.content_width <= viewport_width) return 0;
-//     return @as(i32, self.content_width) - @as(i32, viewport_width);
-// }
-//
-// pub fn maxScrollY(self: *const Scrollable) i32 {
-//     const viewport_height = self.outer.layout.height;
-//     if (self.content_height <= viewport_height) return 0;
-//     return @as(i32, self.content_height) - @as(i32, viewport_height);
-// }
-//
-// pub fn updateContentSize(self: *Scrollable) void {
-//     var max_right: u16 = 0;
-//     var max_bottom: u16 = 0;
-//
-//     if (self.outer.childrens) |*childrens| {
-//         for (childrens.by_order.items) |child| {
-//             const child_right = child.layout.left + child.layout.width;
-//             const child_bottom = child.layout.top + child.layout.height;
-//
-//             if (child_right > max_right) max_right = child_right;
-//             if (child_bottom > max_bottom) max_bottom = child_bottom;
-//         }
-//     }
-//
-//     const parent_left = self.outer.layout.left;
-//     const parent_top = self.outer.layout.top;
-//
-//     self.content_width = if (max_right > parent_left) max_right - parent_left else 0;
-//     self.content_height = if (max_bottom > parent_top) max_bottom - parent_top else 0;
-//
-//     self.scroll_x = self.clampX(self.scroll_x);
-//     self.scroll_y = self.clampY(self.scroll_y);
-// }
+pub fn scrollBy(self: *Scrollable, dx: i32, dy: i32) void {
+    switch (self.mode) {
+        .vertical => self.scroll_y = self.clampY(self.scroll_y + dy),
+        .horizontal => self.scroll_x = self.clampX(self.scroll_x + dx),
+        .both => {
+            self.scroll_x = self.clampX(self.scroll_x + dx);
+            self.scroll_y = self.clampY(self.scroll_y + dy);
+        },
+    }
+}
+
+pub fn scrollTo(self: *Scrollable, x: i32, y: i32) void {
+    self.scroll_x = self.clampX(x);
+    self.scroll_y = self.clampY(y);
+}
+
+fn clampX(self: *const Scrollable, x: i32) i32 {
+    const max_scroll = self.maxScrollX();
+    if (x < 0) return 0;
+    if (x > max_scroll) return max_scroll;
+    return x;
+}
+
+fn clampY(self: *const Scrollable, y: i32) i32 {
+    const max_scroll = self.maxScrollY();
+    if (y < 0) return 0;
+    if (y > max_scroll) return max_scroll;
+    return y;
+}
+
+pub fn maxScrollX(self: *const Scrollable) i32 {
+    const outer = self.outer.layout.width;
+    const inner = self.inner.layout.width;
+
+    if (outer > inner) return @intCast(outer);
+
+    return @intCast(inner - outer);
+}
+
+pub fn maxScrollY(self: *const Scrollable) i32 {
+    const outer = self.outer.layout.height;
+    const inner = self.inner.layout.height;
+
+    if (outer > inner) return @intCast(outer);
+
+    return @intCast(inner - outer);
+}
 
 fn beforeDrawFn(element: *Element, buffer: *Buffer) void {
     const layout = element.layout;
@@ -136,13 +157,33 @@ fn beforeDrawFn(element: *Element, buffer: *Buffer) void {
     buffer.pushClip(layout.left, layout.top, layout.width, layout.height);
 }
 
-//NOTE:
-//update the inner left and top values,
-//then, call syncLayout for his childrens with recursion
 fn calculateLayout(element: *Element) void {
-    //take values from outer,
-    //update inner
-    //update childrens of inner
+    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+    const outer = self.outer;
+    const inner = self.inner;
+
+    inner.layout.left = subtractOffset(outer.layout.left, self.scroll_x);
+    inner.layout.top = subtractOffset(outer.layout.top, self.scroll_y);
+
+    applyLayout(inner);
+}
+
+fn applyLayout(parent: *Element) void {
+    if (parent.childrens) |*childrens| {
+        for (childrens.by_order.items) |child| {
+            child.layout.left = parent.layout.left + child.node.getLayoutLeft();
+            child.layout.top = parent.layout.top + child.node.getLayoutTop();
+
+            applyLayout(child);
+        }
+    }
+}
+
+fn subtractOffset(pos: u16, offset: i32) u16 {
+    const result = @as(i32, pos) - offset;
+    if (result < 0) return 0;
+    if (result > std.math.maxInt(u16)) return std.math.maxInt(u16);
+    return @intCast(result);
 }
 
 fn afterDrawFn(_: *Element, buffer: *Buffer) void {
@@ -150,6 +191,8 @@ fn afterDrawFn(_: *Element, buffer: *Buffer) void {
 }
 
 fn beforeHitFn(element: *Element, hit_grid: *HitGrid) void {
+    calculateLayout(element);
+
     const layout = element.layout;
 
     hit_grid.pushClip(layout.left, layout.top, layout.width, layout.height);
@@ -162,5 +205,46 @@ fn hitGridFn(element: *Element, hit_grid: *HitGrid) void {
 }
 
 fn afterHitFn(_: *Element, hit_grid: *HitGrid) void {
-    defer hit_grid.popClip();
+    hit_grid.popClip();
+}
+
+const scroll_step: i32 = 3;
+
+fn onWheel(element: *Element, data: Element.EventData) void {
+    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+    const mouse = data.wheel.mouse;
+
+    const dx: i32 = switch (mouse.button) {
+        .wheel_left => -scroll_step,
+        .wheel_right => scroll_step,
+        else => 0,
+    };
+
+    const dy: i32 = switch (mouse.button) {
+        .wheel_up => -scroll_step,
+        .wheel_down => scroll_step,
+        else => 0,
+    };
+
+    self.scrollBy(dx, dy);
+
+    if (element.context) |ctx| {
+        ctx.requestDraw();
+    }
+}
+
+fn drawBar(element: *Element, buffer: *Buffer) void {
+    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+
+    const height = element.layout.height;
+    const max = self.inner.layout.height;
+
+    if (max == 0 or height == 0) return;
+
+    const curr: u32 = if (self.scroll_y < 0) 0 else @intCast(self.scroll_y);
+    const bar_pos: u16 = @intCast((curr * height) / max);
+
+    buffer.fillRect(element.layout.left, element.layout.top, element.layout.width, element.layout.height, .{ .style = .{ .bg = .{ .rgb = .{ 255, 0, 0 } } } });
+
+    buffer.writeCell(element.layout.left, bar_pos, .{ .style = .{ .bg = .{ .rgb = .{ 0, 255, 0 } } } });
 }
