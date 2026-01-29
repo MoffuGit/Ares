@@ -58,3 +58,21 @@ I probably should check the existing framework and take ideas from there
 *   Left Half Block (U+258C): ▌
 
 *   Right Half Block (U+2590): ▐
+
+▏
+
+▔ Upper One Eighth Block
+
+▕ Lower one eigth
+
+▁
+
+████████████████████████████
+           │
+           │
+           │
+           ▐███████████████████
+           │
+           │
+███████████▌
+           │

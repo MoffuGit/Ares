@@ -168,7 +168,7 @@ pub fn dispatchEvent(target: *Element, ctx: *EventContext, data: Element.EventDa
     if (ctx.stopped) return;
 
     ctx.phase = .at_target;
-    target.emit(data);
+    target.dispatchEvent(data);
 
     if (ctx.stopped) return;
 
@@ -249,7 +249,8 @@ fn processHoverChange(_: *Window, prev_target: ?*Element, curr_target: ?*Element
     if (prev_target) |prev| {
         const is_leaving = curr_target == null or !prev.isAncestorOf(curr_target.?);
         if (is_leaving) {
-            prev.emit(.{ .mouse_leave = mouse });
+            prev.hovered = false;
+            prev.dispatchEvent(.{ .mouse_leave = mouse });
         }
 
         dispatchEvent(prev, &ctx, .{ .mouse_out = .{ .ctx = &ctx, .mouse = mouse } });
@@ -258,7 +259,8 @@ fn processHoverChange(_: *Window, prev_target: ?*Element, curr_target: ?*Element
     if (curr_target) |curr| {
         const is_entering = prev_target == null or !curr.isAncestorOf(prev_target.?);
         if (is_entering) {
-            curr.emit(.{ .mouse_enter = mouse });
+            curr.hovered = true;
+            curr.dispatchEvent(.{ .mouse_enter = mouse });
         }
         dispatchEvent(curr, &ctx, .{ .mouse_over = .{ .ctx = &ctx, .mouse = mouse } });
     }
@@ -278,7 +280,7 @@ fn capture(target: *Element, ctx: *EventContext, data: Element.EventData) void {
     var i: usize = depth;
     while (i > 0) {
         i -= 1;
-        path[i].emit(data);
+        path[i].dispatchEvent(data);
         if (ctx.stopped) return;
     }
 }
@@ -286,7 +288,7 @@ fn capture(target: *Element, ctx: *EventContext, data: Element.EventData) void {
 fn bubble(target: *Element, ctx: *EventContext, data: Element.EventData) void {
     var current = target.parent;
     while (current) |elem| : (current = elem.parent) {
-        elem.emit(data);
+        elem.dispatchEvent(data);
         if (ctx.stopped) return;
     }
 }
@@ -303,6 +305,7 @@ fn processMouseUp(self: *Window, target: *Element, mouse: vaxis.Mouse) void {
 
     if (self.pressed_on) |pressed| {
         if (pressed.dragging) {
+            pressed.dragging = false;
             dispatchEvent(pressed, &ctx, .{ .drag_end = .{ .ctx = &ctx, .mouse = mouse } });
         }
     }
@@ -319,6 +322,7 @@ fn processMouseMove(self: *Window, target: *Element, mouse: vaxis.Mouse) void {
     dispatchEvent(target, &ctx, .{ .mouse_move = .{ .ctx = &ctx, .mouse = mouse } });
     if (mouse.type == .drag) {
         if (self.pressed_on) |pressed| {
+            pressed.dragging = true;
             dispatchEvent(pressed, &ctx, .{ .drag = .{ .ctx = &ctx, .mouse = mouse } });
         }
     }
@@ -351,6 +355,7 @@ pub fn setFocus(self: *Window, element: ?*Element) void {
     const previous = self.focused;
 
     if (previous) |prev| {
+        prev.focused = false;
         prev.handleBlur();
     }
 
@@ -358,6 +363,7 @@ pub fn setFocus(self: *Window, element: ?*Element) void {
     self.rebuildFocusPath();
 
     if (element) |elem| {
+        elem.focused = true;
         elem.handleFocus();
     }
 

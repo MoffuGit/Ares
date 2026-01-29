@@ -232,24 +232,11 @@ pub fn addEventListener(self: *Element, event_type: EventType, callback: Callbac
     try self.listeners.getPtr(event_type).append(self.alloc, callback);
 }
 
-fn dispatchEvent(self: *Element, data: EventData) void {
+pub fn dispatchEvent(self: *Element, data: EventData) void {
     const callbacks = self.listeners.get(@as(EventType, data));
     for (callbacks.items) |callback| {
         callback(self, data);
     }
-}
-
-pub fn emit(self: *Element, data: EventData) void {
-    switch (@as(EventType, data)) {
-        .focus => self.focused = true,
-        .blur => self.focused = false,
-        .mouse_enter => self.hovered = true,
-        .mouse_leave => self.hovered = false,
-        .drag => self.dragging = true,
-        .drag_end => self.dragging = false,
-        else => {},
-    }
-    self.dispatchEvent(data);
 }
 
 pub fn syncLayout(self: *Element) void {
@@ -473,23 +460,23 @@ pub fn handleEvent(self: *Element, ctx: *EventContext, event: Event) void {
 }
 
 pub fn handleKeyPress(self: *Element, ctx: *EventContext, key: vaxis.Key) void {
-    self.emit(.{ .key_press = .{ .ctx = ctx, .key = key } });
+    self.dispatchEvent(.{ .key_press = .{ .ctx = ctx, .key = key } });
 }
 
 pub fn handleKeyRelease(self: *Element, ctx: *EventContext, key: vaxis.Key) void {
-    self.emit(.{ .key_release = .{ .ctx = ctx, .key = key } });
+    self.dispatchEvent(.{ .key_release = .{ .ctx = ctx, .key = key } });
 }
 
 pub fn handleFocus(self: *Element) void {
-    self.emit(.{ .focus = {} });
+    self.dispatchEvent(.{ .focus = {} });
 }
 
 pub fn handleBlur(self: *Element) void {
-    self.emit(.{ .blur = {} });
+    self.dispatchEvent(.{ .blur = {} });
 }
 
 pub fn handleResize(self: *Element, width: u16, height: u16) void {
-    self.emit(.{ .resize = .{ .width = width, .height = height } });
+    self.dispatchEvent(.{ .resize = .{ .width = width, .height = height } });
 }
 
 pub fn isAncestorOf(self: *Element, other: *Element) bool {
