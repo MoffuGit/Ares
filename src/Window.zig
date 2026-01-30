@@ -1,6 +1,7 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 const yoga = @import("element/Node.zig").yoga;
+const global = @import("global.zig");
 
 const Element = @import("element/mod.zig").Element;
 const Buffer = @import("Buffer.zig");
@@ -126,7 +127,8 @@ pub fn draw(self: *Window) !void {
         try screen.resizeBuffer(self.alloc, buffer, size);
     }
 
-    buffer.clear();
+    buffer.fill(.{ .style = .{ .bg = global.settings.theme.bg } });
+    // buffer.clear();
 
     self.root.draw(buffer);
 }

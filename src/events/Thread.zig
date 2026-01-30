@@ -88,6 +88,14 @@ fn handleEvent(self: *Thread, event: vaxis.Event) !void {
         .mouse => |mouse| {
             _ = self.mailbox.push(.{ .event = .{ .mouse = mouse } }, .instant);
         },
+        .color_scheme => |scheme| {
+            _ = self.mailbox.push(.{
+                .scheme = switch (scheme) {
+                    .dark => .dark,
+                    .light => .light,
+                },
+            }, .instant);
+        },
         else => {},
     }
 }

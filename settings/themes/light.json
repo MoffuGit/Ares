@@ -1,0 +1,11 @@
+{
+  "name": "light",
+  "colors": {
+    "background": "#fcfcfc",
+    "foreground": "#141414"
+  },
+  "theme": {
+    "bg": "background",
+    "fg": "foreground"
+  }
+}

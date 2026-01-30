@@ -6,6 +6,7 @@ const HitGrid = @import("HitGrid.zig");
 const Split = @import("split/mod.zig");
 const ClipRect = @import("ClipRect.zig");
 const Scrollable = @import("element/Scrollable.zig");
+const Settings = @import("settings/mod.zig");
 
 test {
     _ = Split;
@@ -16,4 +17,5 @@ test {
     _ = Window;
     _ = ClipRect;
     _ = Scrollable;
+    _ = Settings;
 }

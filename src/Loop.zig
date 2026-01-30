@@ -46,6 +46,7 @@ pub const Message = union(enum) {
     timer: TimerMessage,
     animation: AnimationMessage,
     event: Event,
+    scheme: App.Scheme,
 };
 
 pub const Mailbox = BlockingQueue(Message, 64);
@@ -267,6 +268,9 @@ fn drainMailbox(self: *Loop) !void {
             },
             .event => |evt| {
                 try self.app.window.handleEvent(evt);
+            },
+            .scheme => |appearance| {
+                try self.app.setScheme(appearance);
             },
         }
     }

@@ -1,5 +1,6 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
+const global = @import("global.zig");
 
 const Screen = @import("Screen.zig");
 
@@ -24,9 +25,11 @@ const App = @This();
 
 var tty_buffer: [1024]u8 = undefined;
 
+pub const Scheme = enum { light, dark };
+
 const Options = struct {
     userdata: ?*anyopaque = null,
-    root_opts: Element.Options = .{},
+    root: Element.Options = .{},
 };
 
 alloc: Allocator,
@@ -47,6 +50,8 @@ time: TimeManager,
 window: Window,
 app_context: AppContext,
 userdata: ?*anyopaque,
+
+scheme: Scheme = .light,
 
 pub fn create(alloc: Allocator, opts: Options) !*App {
     var self = try alloc.create(App);
@@ -84,7 +89,7 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
 
     var window = try Window.init(alloc, &self.screen, .{
         .app_context = &self.app_context,
-        .root_opts = opts.root_opts,
+        .root_opts = opts.root,
     });
     errdefer window.deinit();
 
@@ -160,7 +165,8 @@ pub fn run(self: *App) !void {
 
 pub fn draw(self: *App) !void {
     if (!self.window.needsDraw()) return;
-    self.window.markDrawn();
+    //WARN: defer or not defer
+    defer self.window.markDrawn();
 
     try self.window.draw();
 
@@ -169,4 +175,13 @@ pub fn draw(self: *App) !void {
 
 pub fn resize(self: *App, size: vaxis.Winsize) void {
     self.window.resize(size);
+}
+
+pub fn root(self: *App) *Element {
+    return self.window.root;
+}
+
+pub fn setScheme(self: *App, scheme: Scheme) !void {
+    self.scheme = scheme;
+    global.settings.updateTheme(self);
 }

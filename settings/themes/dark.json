@@ -1,0 +1,11 @@
+{
+  "name": "dark",
+  "colors": {
+    "background": "#0a0a0a",
+    "foreground": "#eeeeeeff"
+  },
+  "theme": {
+    "bg": "background",
+    "fg": "foreground"
+  }
+}

@@ -41,6 +41,7 @@ pub fn threadEnter(self: *Renderer) !void {
     try vx.setBracketedPaste(tty.writer(), true);
     try vx.subscribeToColorSchemeUpdates(tty.writer());
     try vx.setMouseMode(tty.writer(), true);
+    try vx.subscribeToColorSchemeUpdates(tty.writer());
 }
 
 pub fn resize(self: *Renderer, size: vaxis.Winsize) !void {
@@ -51,6 +52,8 @@ pub fn resize(self: *Renderer, size: vaxis.Winsize) !void {
 pub fn threadExit(self: *Renderer) void {
     const writer = self.tty.writer();
     writer.writeAll(vaxis.ctlseqs.in_band_resize_reset) catch {};
+    writer.writeAll(vaxis.ctlseqs.color_scheme_reset) catch {};
+
     writer.flush() catch {};
 }
 
