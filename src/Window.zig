@@ -127,8 +127,7 @@ pub fn draw(self: *Window) !void {
         try screen.resizeBuffer(self.alloc, buffer, size);
     }
 
-    buffer.fill(.{ .style = .{ .bg = global.settings.theme.bg } });
-    // buffer.clear();
+    buffer.clear();
 
     self.root.draw(buffer);
 }
