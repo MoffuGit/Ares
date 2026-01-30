@@ -97,17 +97,14 @@ pub fn load(self: *Settings, path: []const u8) LoadError!void {
     if (settings_error) |err| return err;
 }
 
-pub fn updateTheme(self: *Settings, app: *App) void {
-    const theme_name = switch (self.scheme) {
-        .dark => if (self.dark_theme.len == 0) "dark.json" else self.dark_theme,
-        .light => if (self.light_theme.len == 0) "light.json" else self.light_theme,
-        .system => switch (app.scheme.?) {
+pub fn updateSystemScheme(self: *Settings, scheme: App.Scheme) void {
+    if (self.scheme == .system) {
+        const name = switch (scheme) {
             .dark => if (self.dark_theme.len == 0) "dark.json" else self.dark_theme,
             .light => if (self.light_theme.len == 0) "light.json" else self.light_theme,
-        },
-    };
-
-    self.theme = self.themes.getPtr(theme_name) orelse &Theme.fallback;
+        };
+        self.theme = self.themes.getPtr(name) orelse &Theme.fallback;
+    }
 }
 
 pub fn create(alloc: Allocator) !*Settings {

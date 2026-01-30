@@ -39,7 +39,7 @@ pub fn keyPressFn(element: *Element, data: Element.EventData) void {
 
 pub fn schemeFn(app: *App) void {
     if (global.settings.scheme == .system) {
-        global.settings.updateTheme(app);
+        global.settings.updateSystemScheme(app.scheme orelse return);
         app.window.requestDraw();
     }
 }
