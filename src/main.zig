@@ -37,6 +37,13 @@ pub fn keyPressFn(element: *Element, data: Element.EventData) void {
     }
 }
 
+pub fn schemeFn(app: *App) void {
+    if (global.settings.scheme == .system) {
+        global.settings.updateTheme(app);
+        app.app_context.requestDraw();
+    }
+}
+
 pub fn main() !void {
     var gpa: GPA = .{};
     defer if (gpa.deinit() == .leak) {
@@ -55,10 +62,11 @@ pub fn main() !void {
                 .height = .{ .percent = 100 },
             },
         },
+        .schemeFn = schemeFn,
     });
     defer app.destroy();
 
-    global.settings.load("./settings/", app) catch {
+    global.settings.load("./settings/") catch {
         log.warn("Using default settings", .{});
     };
 

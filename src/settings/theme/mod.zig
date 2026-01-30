@@ -50,8 +50,10 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
     const bg = colors.get(json_theme.theme.bg) orelse return ParseError.ColorNotFound;
     const fg = colors.get(json_theme.theme.fg) orelse return ParseError.ColorNotFound;
 
+    const name = allocator.dupe(u8, json_theme.name) catch return ParseError.InvalidJson;
+
     return Theme{
-        .name = json_theme.name,
+        .name = name,
         .bg = bg,
         .fg = fg,
     };
@@ -92,6 +94,7 @@ test "parse theme" {
     ;
 
     const theme = try Theme.parse(std.testing.allocator, json_str);
+    defer std.testing.allocator.free(theme.name);
 
     try std.testing.expectEqualStrings("dark", theme.name);
     try std.testing.expectEqual(Color{ .rgba = .{ 10, 10, 10, 255 } }, theme.bg);

@@ -37,7 +37,7 @@ theme: *const Theme = &Theme.fallback,
 watcher: xev.Watcher = .{},
 fs: xev.FileSystem,
 
-pub fn load(self: *Settings, path: []const u8, app: *App) LoadError!void {
+pub fn load(self: *Settings, path: []const u8) LoadError!void {
     var settings_error: ?LoadError = null;
 
     const file = std.fs.path.join(self.alloc, &.{ path, "settings.json" }) catch return LoadError.OutOfMemory;
@@ -87,23 +87,14 @@ pub fn load(self: *Settings, path: []const u8, app: *App) LoadError!void {
         }
 
         const theme_name = switch (self.scheme) {
-            .dark => if (self.dark_theme.len == 0) "dark.json" else self.dark_theme,
+            .dark, .system => if (self.dark_theme.len == 0) "dark.json" else self.dark_theme,
             .light => if (self.light_theme.len == 0) "light.json" else self.light_theme,
-            .system => switch (app.scheme) {
-                .dark => if (self.dark_theme.len == 0) "dark.json" else self.dark_theme,
-                .light => if (self.light_theme.len == 0) "light.json" else self.light_theme,
-            },
         };
 
         self.theme = self.themes.getPtr(theme_name) orelse &Theme.fallback;
     }
 
     if (settings_error) |err| return err;
-}
-
-pub fn setAppearance(self: *Settings, appearance: Scheme, app: *App) void {
-    self.scheme = appearance;
-    self.updateTheme(app);
 }
 
 pub fn updateTheme(self: *Settings, app: *App) void {
@@ -137,10 +128,57 @@ pub fn create(alloc: Allocator) !*Settings {
 pub fn destroy(self: *Settings) void {
     if (self.dark_theme.len > 0) self.alloc.free(self.dark_theme);
     if (self.light_theme.len > 0) self.alloc.free(self.light_theme);
+    var it = self.themes.iterator();
+    while (it.next()) |entry| {
+        if (entry.value_ptr.name.len > 0) self.alloc.free(entry.value_ptr.name);
+    }
     self.themes.deinit(self.alloc);
     self.alloc.destroy(self);
 }
 
 test {
     _ = Theme;
+}
+
+test "load settings from settings folder" {
+    const alloc = std.testing.allocator;
+
+    var settings = Settings{
+        .alloc = alloc,
+        .fs = undefined,
+        .themes = .{},
+        .light_theme = "",
+        .dark_theme = "",
+        .scheme = .system,
+        .theme = &Theme.fallback,
+        .watcher = .{},
+    };
+    defer {
+        if (settings.dark_theme.len > 0) alloc.free(settings.dark_theme);
+        if (settings.light_theme.len > 0) alloc.free(settings.light_theme);
+        var it = settings.themes.iterator();
+        while (it.next()) |entry| {
+            if (entry.value_ptr.name.len > 0) alloc.free(entry.value_ptr.name);
+        }
+        settings.themes.deinit(alloc);
+    }
+
+    settings.load("settings") catch |err| {
+        std.debug.print("Load error: {}\n", .{err});
+        return err;
+    };
+
+    try std.testing.expectEqual(.system, settings.scheme);
+    try std.testing.expectEqualStrings("dark", settings.dark_theme);
+    try std.testing.expectEqualStrings("light", settings.light_theme);
+
+    const dark_theme = settings.themes.get("dark");
+    try std.testing.expect(dark_theme != null);
+    try std.testing.expectEqualStrings("dark", dark_theme.?.name);
+
+    const light_theme = settings.themes.get("light");
+    try std.testing.expect(light_theme != null);
+    try std.testing.expectEqualStrings("light", light_theme.?.name);
+
+    try std.testing.expect(settings.theme != &Theme.fallback);
 }

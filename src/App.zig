@@ -27,9 +27,12 @@ var tty_buffer: [1024]u8 = undefined;
 
 pub const Scheme = enum { light, dark };
 
+pub const SchemeFn = *const fn (app: *App) void;
+
 const Options = struct {
     userdata: ?*anyopaque = null,
     root: Element.Options = .{},
+    schemeFn: ?SchemeFn = null,
 };
 
 alloc: Allocator,
@@ -52,6 +55,7 @@ app_context: AppContext,
 userdata: ?*anyopaque,
 
 scheme: Scheme = .light,
+schemeFn: ?SchemeFn = null,
 
 pub fn create(alloc: Allocator, opts: Options) !*App {
     var self = try alloc.create(App);
@@ -107,6 +111,7 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
         .window = window,
         .userdata = opts.userdata,
         .app_context = undefined,
+        .schemeFn = opts.schemeFn,
     };
 
     self.app_context = .{
@@ -183,5 +188,7 @@ pub fn root(self: *App) *Element {
 
 pub fn setScheme(self: *App, scheme: Scheme) !void {
     self.scheme = scheme;
-    global.settings.updateTheme(self);
+    if (self.schemeFn) |callback| {
+        callback(self);
+    }
 }
