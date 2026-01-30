@@ -51,7 +51,7 @@ loop: Loop,
 time: TimeManager,
 
 window: Window,
-app_context: AppContext,
+context: AppContext,
 userdata: ?*anyopaque,
 
 scheme: ?Scheme = null,
@@ -92,7 +92,7 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
     errdefer time.deinit();
 
     var window = try Window.init(alloc, &self.screen, .{
-        .app_context = &self.app_context,
+        .app_context = &self.context,
         .root_opts = opts.root,
     });
     errdefer window.deinit();
@@ -110,11 +110,11 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
         .time = time,
         .window = window,
         .userdata = opts.userdata,
-        .app_context = undefined,
+        .context = undefined,
         .schemeFn = opts.schemeFn,
     };
 
-    self.app_context = .{
+    self.context = .{
         .mailbox = self.loop.mailbox,
         .wakeup = self.loop.wakeup,
         .needs_draw = &self.window.needs_draw,

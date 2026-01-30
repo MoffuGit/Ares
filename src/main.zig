@@ -52,9 +52,6 @@ pub fn main() !void {
 
     const alloc = gpa.allocator();
 
-    try global.init(alloc);
-    defer global.deinit();
-
     var app = try App.create(alloc, .{
         .root = .{
             .style = .{
@@ -66,9 +63,16 @@ pub fn main() !void {
     });
     defer app.destroy();
 
-    global.settings.load("./settings/") catch {
+    try global.init(alloc, &app.context);
+    defer global.deinit();
+
+    const settings = global.settings;
+
+    settings.load("./settings/") catch {
         log.warn("Using default settings", .{});
     };
+
+    settings.watch(&app.loop.loop);
 
     try app.root().addEventListener(.key_press, keyPressFn);
 
