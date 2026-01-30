@@ -70,7 +70,16 @@ fn threadMain_(self: *Thread) !void {
 
 fn handleEvent(self: *Thread, event: vaxis.Event) !void {
     switch (event) {
+        .color_scheme => |scheme| {
+            _ = self.mailbox.push(.{
+                .scheme = switch (scheme) {
+                    .dark => .dark,
+                    .light => .light,
+                },
+            }, .instant);
+        },
         .winsize => |size| {
+            vaxis.Tty.resetSignalHandler();
             _ = self.mailbox.push(.{ .resize = size }, .instant);
         },
         .key_press => |key| {
@@ -87,14 +96,6 @@ fn handleEvent(self: *Thread, event: vaxis.Event) !void {
         },
         .mouse => |mouse| {
             _ = self.mailbox.push(.{ .event = .{ .mouse = mouse } }, .instant);
-        },
-        .color_scheme => |scheme| {
-            _ = self.mailbox.push(.{
-                .scheme = switch (scheme) {
-                    .dark => .dark,
-                    .light => .light,
-                },
-            }, .instant);
         },
         else => {},
     }

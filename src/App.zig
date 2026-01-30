@@ -54,7 +54,7 @@ window: Window,
 app_context: AppContext,
 userdata: ?*anyopaque,
 
-scheme: Scheme = .light,
+scheme: ?Scheme = null,
 schemeFn: ?SchemeFn = null,
 
 pub fn create(alloc: Allocator, opts: Options) !*App {

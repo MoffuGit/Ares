@@ -112,6 +112,7 @@ pub fn deinit(self: *Loop) void {
     self.wakeup.deinit();
     self.reschedule_tick.deinit();
     self.mailbox.destroy(self.alloc);
+    self.loop.deinit();
 }
 
 pub fn run(self: *Loop) void {
@@ -248,6 +249,11 @@ fn drainMailbox(self: *Loop) !void {
 
     while (self.mailbox.pop()) |message| {
         switch (message) {
+            .scheme => |scheme| {
+                //HACK:
+                if (self.app.scheme == scheme) continue;
+                try self.app.setScheme(scheme);
+            },
             .resize => |size| {
                 self.app.resize(size);
             },
@@ -268,9 +274,6 @@ fn drainMailbox(self: *Loop) !void {
             },
             .event => |evt| {
                 try self.app.window.handleEvent(evt);
-            },
-            .scheme => |appearance| {
-                try self.app.setScheme(appearance);
             },
         }
     }

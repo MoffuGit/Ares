@@ -99,11 +99,11 @@ pub fn load(self: *Settings, path: []const u8) LoadError!void {
 
 pub fn updateTheme(self: *Settings, app: *App) void {
     const theme_name = switch (self.scheme) {
-        .dark => if (self.dark_theme.len == 0) "dark.josn" else self.dark_theme,
-        .light => if (self.light_theme.len == 0) "light.josn" else self.light_theme,
-        .system => switch (app.scheme) {
-            .dark => if (self.dark_theme.len == 0) "dark.josn" else self.dark_theme,
-            .light => if (self.light_theme.len == 0) "light.josn" else self.light_theme,
+        .dark => if (self.dark_theme.len == 0) "dark.json" else self.dark_theme,
+        .light => if (self.light_theme.len == 0) "light.json" else self.light_theme,
+        .system => switch (app.scheme.?) {
+            .dark => if (self.dark_theme.len == 0) "dark.json" else self.dark_theme,
+            .light => if (self.light_theme.len == 0) "light.json" else self.light_theme,
         },
     };
 

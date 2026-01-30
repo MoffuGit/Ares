@@ -55,6 +55,7 @@ pub fn deinit(self: *Thread) void {
     self.stop.deinit();
     self.wakeup.deinit();
     self.mailbox.destroy(self.alloc);
+    self.loop.deinit();
 }
 
 pub fn threadMain(self: *Thread) void {
