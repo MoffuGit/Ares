@@ -5,6 +5,7 @@ const Cell = vaxis.Cell;
 const Winsize = vaxis.Winsize;
 const Allocator = std.mem.Allocator;
 const ClipRect = @import("ClipRect.zig");
+pub const Element = @import("element/mod.zig");
 
 pub const Buffer = @This();
 

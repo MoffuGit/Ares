@@ -1,8 +1,10 @@
 const std = @import("std");
+const vaxis = @import("vaxis");
 const Element = @import("mod.zig").Element;
 const Buffer = @import("../Buffer.zig");
 const HitGrid = @import("../HitGrid.zig");
 const Allocator = std.mem.Allocator;
+const global = @import("../global.zig");
 
 pub const Scrollable = @This();
 
@@ -34,7 +36,7 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
         .style = .{
             .overflow = .scroll,
             .height = .{ .percent = 100 },
-            .width = .{ .percent = 100 },
+            .width = .{ .percent = 30 },
             .margin = if (!opts.bar) .{} else .{
                 .right = .{
                     .point = 1,
@@ -50,6 +52,8 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
     });
 
     try outer.addEventListener(.wheel, onWheel);
+    try outer.addEventListener(.mouse_over, mouseOver);
+    try outer.addEventListener(.mouse_out, mouseOut);
 
     const inner = try alloc.create(Element);
     inner.* = Element.init(alloc, .{
@@ -78,6 +82,7 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
                 .position = .{ .right = .{ .point = 0 } },
                 .height = .{ .percent = 100 },
             },
+            .visible = false,
             .drawFn = drawBar,
             .zIndex = 10,
             .userdata = self,
@@ -88,6 +93,7 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
 
         try bar.addEventListener(.click, onBarClick);
         try bar.addEventListener(.drag, onBarDrag);
+        try bar.addEventListener(.drag_end, onBarDragEnd);
 
         try outer.addChild(bar);
     }
@@ -105,6 +111,26 @@ pub fn deinit(self: *Scrollable, alloc: Allocator) void {
     alloc.destroy(self.outer);
     alloc.destroy(self.inner);
     alloc.destroy(self);
+}
+
+pub fn mouseOver(element: *Element, _: Element.EventData) void {
+    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+    if (self.bar) |bar| {
+        if (!bar.visible) {
+            bar.visible = true;
+            element.context.?.requestDraw();
+        }
+    }
+}
+
+pub fn mouseOut(element: *Element, _: Element.EventData) void {
+    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+    if (self.bar) |bar| {
+        if (bar.visible and !bar.dragging) {
+            bar.visible = false;
+            element.context.?.requestDraw();
+        }
+    }
 }
 
 pub fn scrollBy(self: *Scrollable, dx: i32, dy: i32) void {
@@ -237,9 +263,13 @@ fn onWheel(element: *Element, data: Element.EventData) void {
     }
 }
 
+fn withAlpha(color: vaxis.Color, alpha: u8) vaxis.Color {
+    const rgba = color.rgba;
+    return .{ .rgba = .{ rgba[0], rgba[1], rgba[2], alpha } };
+}
+
 fn drawBar(element: *Element, buffer: *Buffer) void {
     const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
-
     const height = element.layout.height;
     const max = self.inner.layout.height;
 
@@ -248,11 +278,25 @@ fn drawBar(element: *Element, buffer: *Buffer) void {
     const curr: u32 = if (self.scroll_y < 0) 0 else @intCast(self.scroll_y);
     const bar_pos: u16 = @intCast((curr * height) / max);
 
-    const char = "▐";
+    const alpha: u8 = if (element.hovered or element.dragging) 255 else 128;
 
-    buffer.fillRect(element.layout.left, element.layout.top, element.layout.width, element.layout.height, .{ .char = .{ .grapheme = char }, .style = .{ .fg = .{ .rgb = .{ 255, 0, 0 } } } });
+    buffer.fillRect(
+        element.layout.left,
+        element.layout.top,
+        element.layout.width,
+        element.layout.height,
+        .{
+            .style = .{
+                .bg = withAlpha(global.settings.theme.scrollTrack, alpha),
+            },
+        },
+    );
 
-    buffer.writeCell(element.layout.left, bar_pos, .{ .char = .{ .grapheme = char }, .style = .{ .fg = .{ .rgb = .{ 0, 255, 0 } } } });
+    buffer.writeCell(element.layout.left, bar_pos, .{
+        .style = .{
+            .bg = withAlpha(global.settings.theme.scrollBar, alpha),
+        },
+    });
 }
 
 fn getThumbPos(self: *const Scrollable) u16 {
@@ -300,6 +344,17 @@ fn onBarDrag(element: *Element, data: Element.EventData) void {
         const drag_y: u16 = @intCast(@max(0, mouse.row - bar_top));
         const new_scroll: i32 = @intCast((@as(u32, drag_y) * @as(u32, @intCast(max_scroll))) / bar_height);
         self.scrollTo(0, new_scroll);
+    }
+
+    if (element.context) |ctx| {
+        ctx.requestDraw();
+    }
+}
+
+fn onBarDragEnd(element: *Element, _: Element.EventData) void {
+    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+    if (!self.outer.hovered or !self.bar.?.hovered) {
+        self.bar.?.visible = false;
     }
 
     if (element.context) |ctx| {

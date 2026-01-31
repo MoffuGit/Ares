@@ -1,9 +1,11 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
-const element_mod = @import("../element/mod.zig");
-const Element = element_mod.Element;
-const Scrollable = element_mod.Scrollable;
-const Style = element_mod.Style;
+const global = @import("../global.zig");
+
+const elementpkg = @import("../element/mod.zig");
+const Element = elementpkg.Element;
+const Scrollable = elementpkg.Scrollable;
+const Style = elementpkg.Style;
 const Buffer = @import("../Buffer.zig");
 const worktree_mod = @import("mod.zig");
 const Worktree = worktree_mod.Worktree;
@@ -155,6 +157,10 @@ fn writeText(buffer: *Buffer, start_x: u16, y: u16, text: []const u8, max_width:
         if (start_x + col + w > max_width) break;
         buffer.writeCell(start_x + col, y, .{
             .char = .{ .grapheme = s, .width = @intCast(w) },
+            .style = .{
+                .bg = global.settings.theme.bg,
+                .fg = global.settings.theme.fg,
+            },
         });
         col += w;
     }

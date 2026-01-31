@@ -2,10 +2,14 @@
   "name": "dark",
   "colors": {
     "background": "#0a0a0a",
-    "foreground": "#eeeeeeff"
+    "foreground": "#eeeeeeff",
+    "scrollBar": "#666666",
+    "scrollTrack": "#333333"
   },
   "theme": {
     "bg": "background",
-    "fg": "foreground"
+    "fg": "foreground",
+    "scrollBar": "scrollBar",
+    "scrollTrack": "scrollTrack"
   }
 }

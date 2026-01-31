@@ -16,6 +16,7 @@ const EventContext = events.EventContext;
 const worktreepkg = @import("worktree/mod.zig");
 const Worktree = worktreepkg.Worktree;
 const FileTree = worktreepkg.FileTree;
+const Buffer = @import("Buffer.zig");
 
 const split = @import("split/mod.zig");
 const SplitTree = split.Tree;
@@ -44,6 +45,11 @@ pub fn schemeFn(app: *App) void {
     }
 }
 
+pub fn drawFn(element: *Element, buffer: *Buffer) void {
+    const layout = element.layout;
+    buffer.fillRect(layout.left, layout.top, layout.width, layout.height, .{ .style = .{ .bg = global.settings.theme.bg } });
+}
+
 pub fn main() !void {
     var gpa: GPA = .{};
     defer if (gpa.deinit() == .leak) {
@@ -58,6 +64,7 @@ pub fn main() !void {
                 .width = .{ .percent = 100 },
                 .height = .{ .percent = 100 },
             },
+            .drawFn = drawFn,
         },
         .schemeFn = schemeFn,
     });
@@ -76,19 +83,19 @@ pub fn main() !void {
 
     try app.root().addEventListener(.key_press, keyPressFn);
 
-    // const cwd = std.fs.cwd();
-    // var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    // const cwd_path = try cwd.realpath(".", &path_buf);
-    //
-    // var worktree = try Worktree.create(cwd_path, alloc);
-    // defer worktree.destroy();
-    //
-    // try worktree.initial_scan();
-    //
-    // const file_tree = try FileTree.create(alloc, worktree);
-    // defer file_tree.destroy(alloc);
-    //
-    // try app.window.root.addChild(file_tree.getElement());
+    const cwd = std.fs.cwd();
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const cwd_path = try cwd.realpath(".", &path_buf);
+
+    var worktree = try Worktree.create(cwd_path, alloc);
+    defer worktree.destroy();
+
+    try worktree.initial_scan();
+
+    const file_tree = try FileTree.create(alloc, worktree);
+    defer file_tree.destroy(alloc);
+
+    try app.window.root.addChild(file_tree.getElement());
 
     app.run() catch |err| {
         log.err("App exit with an err: {}", .{err});

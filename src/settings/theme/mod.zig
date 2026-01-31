@@ -8,11 +8,15 @@ pub const Color = vaxis.Color;
 name: []const u8 = "",
 bg: Color,
 fg: Color,
+scrollBar: Color,
+scrollTrack: Color,
 
 pub const fallback = Theme{
     .name = "fallback",
     .bg = Color{ .rgba = .{ 255, 30, 30, 255 } },
     .fg = Color{ .rgba = .{ 220, 220, 220, 255 } },
+    .scrollBar = Color{ .rgba = .{ 100, 100, 100, 255 } },
+    .scrollTrack = Color{ .rgba = .{ 50, 50, 50, 255 } },
 };
 
 pub const ParseError = error{
@@ -28,6 +32,8 @@ const JsonTheme = struct {
     theme: struct {
         bg: []const u8,
         fg: []const u8,
+        scrollBar: []const u8,
+        scrollTrack: []const u8,
     },
 };
 
@@ -49,6 +55,8 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
 
     const bg = colors.get(json_theme.theme.bg) orelse return ParseError.ColorNotFound;
     const fg = colors.get(json_theme.theme.fg) orelse return ParseError.ColorNotFound;
+    const scrollBar = colors.get(json_theme.theme.scrollBar) orelse return ParseError.ColorNotFound;
+    const scrollTrack = colors.get(json_theme.theme.scrollTrack) orelse return ParseError.ColorNotFound;
 
     const name = allocator.dupe(u8, json_theme.name) catch return ParseError.InvalidJson;
 
@@ -56,6 +64,8 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
         .name = name,
         .bg = bg,
         .fg = fg,
+        .scrollBar = scrollBar,
+        .scrollTrack = scrollTrack,
     };
 }
 
@@ -84,11 +94,15 @@ test "parse theme" {
         \\  "name": "dark",
         \\  "colors": {
         \\    "background": "#0a0a0a",
-        \\    "foreground": "#eeeeeeff"
+        \\    "foreground": "#eeeeeeff",
+        \\    "scrollBar": "#666666",
+        \\    "scrollTrack": "#333333"
         \\  },
         \\  "theme": {
         \\    "bg": "background",
-        \\    "fg": "foreground"
+        \\    "fg": "foreground",
+        \\    "scrollBar": "scrollBar",
+        \\    "scrollTrack": "scrollTrack"
         \\  }
         \\}
     ;
@@ -99,4 +113,6 @@ test "parse theme" {
     try std.testing.expectEqualStrings("dark", theme.name);
     try std.testing.expectEqual(Color{ .rgba = .{ 10, 10, 10, 255 } }, theme.bg);
     try std.testing.expectEqual(Color{ .rgba = .{ 238, 238, 238, 255 } }, theme.fg);
+    try std.testing.expectEqual(Color{ .rgba = .{ 102, 102, 102, 255 } }, theme.scrollBar);
+    try std.testing.expectEqual(Color{ .rgba = .{ 51, 51, 51, 255 } }, theme.scrollTrack);
 }
