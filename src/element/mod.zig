@@ -18,6 +18,7 @@ pub const AppContext = @import("../AppContext.zig");
 const events = @import("../events/mod.zig");
 pub const EventContext = events.EventContext;
 const Event = events.Event;
+const Mouse = events.Mouse;
 const Allocator = std.mem.Allocator;
 
 pub const Childrens = struct {
@@ -123,17 +124,17 @@ pub const EventData = union(EventType) {
     key_release: struct { ctx: *EventContext, key: vaxis.Key },
     focus: void,
     blur: void,
-    mouse_down: struct { ctx: *EventContext, mouse: vaxis.Mouse },
-    mouse_up: struct { ctx: *EventContext, mouse: vaxis.Mouse },
-    click: struct { ctx: *EventContext, mouse: vaxis.Mouse },
-    mouse_move: struct { ctx: *EventContext, mouse: vaxis.Mouse },
-    mouse_enter: vaxis.Mouse,
-    mouse_leave: vaxis.Mouse,
-    mouse_over: struct { ctx: *EventContext, mouse: vaxis.Mouse },
-    mouse_out: struct { ctx: *EventContext, mouse: vaxis.Mouse },
-    wheel: struct { ctx: *EventContext, mouse: vaxis.Mouse },
-    drag: struct { ctx: *EventContext, mouse: vaxis.Mouse },
-    drag_end: struct { ctx: *EventContext, mouse: vaxis.Mouse },
+    mouse_down: struct { ctx: *EventContext, mouse: Mouse },
+    mouse_up: struct { ctx: *EventContext, mouse: Mouse },
+    click: struct { ctx: *EventContext, mouse: Mouse },
+    mouse_move: struct { ctx: *EventContext, mouse: Mouse },
+    mouse_enter: Mouse,
+    mouse_leave: Mouse,
+    mouse_over: struct { ctx: *EventContext, mouse: Mouse },
+    mouse_out: struct { ctx: *EventContext, mouse: Mouse },
+    wheel: struct { ctx: *EventContext, mouse: Mouse },
+    drag: struct { ctx: *EventContext, mouse: Mouse },
+    drag_end: struct { ctx: *EventContext, mouse: Mouse },
     resize: struct { width: u16, height: u16 },
 };
 

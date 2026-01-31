@@ -11,6 +11,7 @@ const HitGrid = @import("HitGrid.zig");
 const events = @import("events/mod.zig");
 const EventContext = events.EventContext;
 const Event = events.Event;
+const Mouse = events.Mouse;
 
 pub const Elements = std.AutoHashMap(u64, *Element);
 const Allocator = std.mem.Allocator;
@@ -178,7 +179,8 @@ pub fn dispatchEvent(target: *Element, ctx: *EventContext, data: Element.EventDa
 
 pub fn handleEvent(self: *Window, event: Event) !void {
     if (event == .mouse) {
-        return self.handleMouseEvent(event.mouse);
+        const mouse = Mouse.fromVaxis(event.mouse, self.size);
+        return self.handleMouseEvent(mouse);
     }
 
     var ctx: EventContext = .{};
@@ -209,11 +211,8 @@ pub fn handleEvent(self: *Window, event: Event) !void {
     }
 }
 
-fn handleMouseEvent(self: *Window, mouse: vaxis.Mouse) void {
-    const col: u16 = if (mouse.col < 0) 0 else @intCast(mouse.col);
-    const row: u16 = if (mouse.row < 0) 0 else @intCast(mouse.row);
-
-    const curr = self.tryHit(col, row);
+fn handleMouseEvent(self: *Window, mouse: Mouse) void {
+    const curr = self.tryHit(mouse.col, mouse.row);
     const prev = self.hovered;
 
     self.processHoverChange(prev, curr, mouse);
@@ -242,7 +241,7 @@ fn handleMouseEvent(self: *Window, mouse: vaxis.Mouse) void {
     self.hovered = curr;
 }
 
-fn processHoverChange(_: *Window, prev_target: ?*Element, curr_target: ?*Element, mouse: vaxis.Mouse) void {
+fn processHoverChange(_: *Window, prev_target: ?*Element, curr_target: ?*Element, mouse: Mouse) void {
     if (prev_target == curr_target) return;
 
     var ctx: EventContext = .{};
@@ -294,13 +293,13 @@ fn bubble(target: *Element, ctx: *EventContext, data: Element.EventData) void {
     }
 }
 
-fn processMouseDown(self: *Window, target: *Element, mouse: vaxis.Mouse) void {
+fn processMouseDown(self: *Window, target: *Element, mouse: Mouse) void {
     self.pressed_on = target;
     var ctx: EventContext = .{};
     dispatchEvent(target, &ctx, .{ .mouse_down = .{ .ctx = &ctx, .mouse = mouse } });
 }
 
-fn processMouseUp(self: *Window, target: *Element, mouse: vaxis.Mouse) void {
+fn processMouseUp(self: *Window, target: *Element, mouse: Mouse) void {
     var ctx: EventContext = .{};
     dispatchEvent(target, &ctx, .{ .mouse_up = .{ .ctx = &ctx, .mouse = mouse } });
 
@@ -317,7 +316,7 @@ fn processMouseUp(self: *Window, target: *Element, mouse: vaxis.Mouse) void {
     self.pressed_on = null;
 }
 
-fn processMouseMove(self: *Window, target: *Element, mouse: vaxis.Mouse) void {
+fn processMouseMove(self: *Window, target: *Element, mouse: Mouse) void {
     var ctx: EventContext = .{};
 
     dispatchEvent(target, &ctx, .{ .mouse_move = .{ .ctx = &ctx, .mouse = mouse } });
@@ -329,7 +328,7 @@ fn processMouseMove(self: *Window, target: *Element, mouse: vaxis.Mouse) void {
     }
 }
 
-fn processWheel(_: *Window, target: *Element, mouse: vaxis.Mouse) void {
+fn processWheel(_: *Window, target: *Element, mouse: Mouse) void {
     var ctx: EventContext = .{};
     dispatchEvent(target, &ctx, .{ .wheel = .{ .ctx = &ctx, .mouse = mouse } });
 }

@@ -59,20 +59,19 @@ I probably should check the existing framework and take ideas from there
 
 *   Right Half Block (U+2590): ▐
 
-▏
+Lower one eighth ▁
+lower one quarter ▂
+lower three eighths ▃
+lower half ▄
+lower five eigth ▅
+lower three quarter ▆
+lower seven eighth ▇
+full block █
 
-▔ Upper One Eighth Block
-
-▕ Lower one eigth
-
-▁
-
-████████████████████████████
-           │
-           │
-           │
-           ▐███████████████████
-           │
-           │
-███████████▌
-           │
+upper one eight ▔
+upper one quarter 🮂
+upper three eights 🮃
+upper half ▀
+upper five eight 🮄
+upper three quarter 🮅
+upper sevne eight block 🮆

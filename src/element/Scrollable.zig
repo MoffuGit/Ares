@@ -238,21 +238,21 @@ fn afterHitFn(_: *Element, hit_grid: *HitGrid) void {
     hit_grid.popClip();
 }
 
-const scroll_step: i32 = 3;
+const SCROLL_STEP: i32 = 1;
 
 fn onWheel(element: *Element, data: Element.EventData) void {
     const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
     const mouse = data.wheel.mouse;
 
     const dx: i32 = switch (mouse.button) {
-        .wheel_left => -scroll_step,
-        .wheel_right => scroll_step,
+        .wheel_left => -SCROLL_STEP,
+        .wheel_right => SCROLL_STEP,
         else => 0,
     };
 
     const dy: i32 = switch (mouse.button) {
-        .wheel_up => -scroll_step,
-        .wheel_down => scroll_step,
+        .wheel_up => -SCROLL_STEP,
+        .wheel_down => SCROLL_STEP,
         else => 0,
     };
 
@@ -270,13 +270,18 @@ fn withAlpha(color: vaxis.Color, alpha: u8) vaxis.Color {
 
 fn drawBar(element: *Element, buffer: *Buffer) void {
     const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
-    const height = element.layout.height;
-    const max = self.inner.layout.height;
+    const bar_height = element.layout.height;
+    const content_height = self.inner.layout.height;
+    const viewport_height = self.outer.layout.height;
 
-    if (max == 0 or height == 0) return;
+    if (content_height == 0 or bar_height == 0 or viewport_height >= content_height) return;
 
+    const thumb_height: u16 = @max(1, @as(u16, @intCast((@as(u32, viewport_height) * bar_height) / content_height)));
+
+    const max_scroll = self.maxScrollY();
+    const scroll_range = bar_height - thumb_height;
     const curr: u32 = if (self.scroll_y < 0) 0 else @intCast(self.scroll_y);
-    const bar_pos: u16 = @intCast((curr * height) / max);
+    const thumb_pos: u16 = if (max_scroll > 0) @intCast((curr * scroll_range) / @as(u32, @intCast(max_scroll))) else 0;
 
     const alpha: u8 = if (element.hovered or element.dragging) 255 else 128;
 
@@ -292,11 +297,17 @@ fn drawBar(element: *Element, buffer: *Buffer) void {
         },
     );
 
-    buffer.writeCell(element.layout.left, bar_pos, .{
-        .style = .{
-            .bg = withAlpha(global.settings.theme.scrollBar, alpha),
+    buffer.fillRect(
+        element.layout.left,
+        element.layout.top + thumb_pos,
+        element.layout.width,
+        thumb_height,
+        .{
+            .style = .{
+                .bg = withAlpha(global.settings.theme.scrollBar, alpha),
+            },
         },
-    });
+    );
 }
 
 fn getThumbPos(self: *const Scrollable) u16 {
@@ -315,8 +326,8 @@ fn onBarClick(element: *Element, data: Element.EventData) void {
     const mouse = data.click.mouse;
 
     const thumb_pos = self.getThumbPos();
-    const bar_top: i16 = @intCast(element.layout.top);
-    const click_y: u16 = @intCast(@max(0, mouse.row - bar_top));
+    const bar_top: i32 = @intCast(element.layout.top);
+    const click_y: u16 = @intCast(@max(0, @as(i32, mouse.row) - bar_top));
 
     if (click_y != thumb_pos) {
         const bar_height = element.layout.height;
@@ -340,8 +351,8 @@ fn onBarDrag(element: *Element, data: Element.EventData) void {
     const max_scroll = self.maxScrollY();
 
     if (bar_height > 0) {
-        const bar_top: i16 = @intCast(element.layout.top);
-        const drag_y: u16 = @intCast(@max(0, mouse.row - bar_top));
+        const bar_top: i32 = @intCast(element.layout.top);
+        const drag_y: u16 = @intCast(@max(0, @as(i32, mouse.row) - bar_top));
         const new_scroll: i32 = @intCast((@as(u32, drag_y) * @as(u32, @intCast(max_scroll))) / bar_height);
         self.scrollTo(0, new_scroll);
     }

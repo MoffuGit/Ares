@@ -35,6 +35,7 @@ pub fn threadEnter(self: *Renderer) !void {
     const tty = self.tty;
 
     vx.caps.kitty_keyboard = true;
+    vx.caps.sgr_pixels = true;
 
     try vx.enterAltScreen(tty.writer());
     try vx.queryTerminal(tty.writer(), 1 * std.time.ns_per_s);
