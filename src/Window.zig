@@ -237,20 +237,30 @@ fn handleMouseEvent(self: *Window, mouse: Mouse) void {
             self.processWheel(target, mouse);
         }
     }
-
-    self.hovered = curr;
 }
 
+//NOTE:
+//this has problem but my brain is not working
+//it has something to do with the fact that prev is an ancestor of curr,
+//then you set self.hover to curr and then you go out of curr you dont update
+//the value of prev prev
 fn processHoverChange(_: *Window, prev_target: ?*Element, curr_target: ?*Element, mouse: Mouse) void {
     if (prev_target == curr_target) return;
 
     var ctx: EventContext = .{};
 
+    // self.hovered = curr;
     if (prev_target) |prev| {
         const is_leaving = curr_target == null or !prev.isAncestorOf(curr_target.?);
         if (is_leaving) {
             prev.hovered = false;
             prev.dispatchEvent(.{ .mouse_leave = mouse });
+            //
+            // var ancestor: ?*Element = prev.parent;
+            // while (ancestor) |a| : (ancestor = a.parent) {
+            //     if (curr_target != null and (a == curr_target.? or a.isAncestorOf(curr_target.?))) break;
+            //     a.hovered = false;
+            // }
         }
 
         dispatchEvent(prev, &ctx, .{ .mouse_out = .{ .ctx = &ctx, .mouse = mouse } });
@@ -261,6 +271,11 @@ fn processHoverChange(_: *Window, prev_target: ?*Element, curr_target: ?*Element
         if (is_entering) {
             curr.hovered = true;
             curr.dispatchEvent(.{ .mouse_enter = mouse });
+            //
+            // var ancestor: ?*Element = curr.parent;
+            // while (ancestor) |a| : (ancestor = a.parent) {
+            //     a.hovered = true;
+            // }
         }
         dispatchEvent(curr, &ctx, .{ .mouse_over = .{ .ctx = &ctx, .mouse = mouse } });
     }

@@ -425,7 +425,7 @@ fn onBarDragEnd(element: *Element, _: Element.EventData) void {
     const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
     self.drag_start_y_pixel = null;
 
-    if (!self.outer.hovered or !self.bar.?.hovered) {
+    if (!self.outer.hovered and !self.bar.?.hovered) {
         self.bar.?.visible = false;
     }
 
