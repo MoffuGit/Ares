@@ -21,6 +21,9 @@ bar: ?*Element = null,
 scroll_x: i32 = 0,
 scroll_y: i32 = 0,
 
+drag_start_y_pixel: ?i32 = null,
+drag_start_scroll_y: i32 = 0,
+
 mode: ScrollMode = .vertical,
 
 const Options = struct {
@@ -268,6 +271,10 @@ fn withAlpha(color: vaxis.Color, alpha: u8) vaxis.Color {
     return .{ .rgba = .{ rgba[0], rgba[1], rgba[2], alpha } };
 }
 
+const lower_blocks = [8][]const u8{ " ", "▁", "▂", "▃", "▄", "▅", "▆", "▇" };
+const upper_blocks = [8][]const u8{ " ", "▔", "🮂", "🮃", "▀", "🮄", "🮅", "🮆" };
+const full_block = "█";
+
 fn drawBar(element: *Element, buffer: *Buffer) void {
     const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
     const bar_height = element.layout.height;
@@ -276,38 +283,70 @@ fn drawBar(element: *Element, buffer: *Buffer) void {
 
     if (content_height == 0 or bar_height == 0 or viewport_height >= content_height) return;
 
-    const thumb_height: u16 = @max(1, @as(u16, @intCast((@as(u32, viewport_height) * bar_height) / content_height)));
+    const bar_height_eighths: u32 = @as(u32, bar_height) * 8;
+    const thumb_height_eighths: u32 = @max(8, (@as(u32, viewport_height) * bar_height_eighths) / content_height);
 
     const max_scroll = self.maxScrollY();
-    const scroll_range = bar_height - thumb_height;
+    const scroll_range_eighths: u32 = bar_height_eighths - thumb_height_eighths;
     const curr: u32 = if (self.scroll_y < 0) 0 else @intCast(self.scroll_y);
-    const thumb_pos: u16 = if (max_scroll > 0) @intCast((curr * scroll_range) / @as(u32, @intCast(max_scroll))) else 0;
+    const thumb_pos_eighths: u32 = if (max_scroll > 0) (curr * scroll_range_eighths) / @as(u32, @intCast(max_scroll)) else 0;
 
     const alpha: u8 = if (element.hovered or element.dragging) 255 else 128;
+    const track_color = withAlpha(global.settings.theme.scrollTrack, alpha);
+    const thumb_color = withAlpha(global.settings.theme.scrollBar, alpha);
 
     buffer.fillRect(
         element.layout.left,
         element.layout.top,
         element.layout.width,
         element.layout.height,
-        .{
-            .style = .{
-                .bg = withAlpha(global.settings.theme.scrollTrack, alpha),
-            },
-        },
+        .{ .style = .{ .bg = track_color } },
     );
 
-    buffer.fillRect(
-        element.layout.left,
-        element.layout.top + thumb_pos,
-        element.layout.width,
-        thumb_height,
-        .{
-            .style = .{
-                .bg = withAlpha(global.settings.theme.scrollBar, alpha),
-            },
-        },
-    );
+    const top_cell = thumb_pos_eighths / 8;
+    const top_frac = thumb_pos_eighths % 8;
+    const thumb_end_eighths = thumb_pos_eighths + thumb_height_eighths;
+    const bottom_cell = thumb_end_eighths / 8;
+    const bottom_frac = thumb_end_eighths % 8;
+
+    const bar_left = element.layout.left;
+    const bar_top = element.layout.top;
+
+    if (top_cell == bottom_cell) {
+        const char = lower_blocks[bottom_frac];
+        buffer.writeCell(bar_left, bar_top + @as(u16, @intCast(top_cell)), .{
+            .char = .{ .grapheme = char },
+            .style = .{ .fg = thumb_color, .bg = track_color },
+        });
+    } else {
+        if (top_frac > 0) {
+            const char = lower_blocks[8 - top_frac];
+            buffer.writeCell(bar_left, bar_top + @as(u16, @intCast(top_cell)), .{
+                .char = .{ .grapheme = char },
+                .style = .{ .fg = thumb_color, .bg = track_color },
+            });
+        }
+
+        const start_full = top_cell + if (top_frac > 0) @as(u32, 1) else @as(u32, 0);
+        const end_full = bottom_cell;
+        if (end_full > start_full) {
+            buffer.fillRect(
+                bar_left,
+                bar_top + @as(u16, @intCast(start_full)),
+                1,
+                @intCast(end_full - start_full),
+                .{ .style = .{ .bg = thumb_color } },
+            );
+        }
+
+        if (bottom_frac > 0 and bottom_cell < bar_height) {
+            const char = upper_blocks[bottom_frac];
+            buffer.writeCell(bar_left, bar_top + @as(u16, @intCast(bottom_cell)), .{
+                .char = .{ .grapheme = char },
+                .style = .{ .fg = thumb_color, .bg = track_color },
+            });
+        }
+    }
 }
 
 fn getThumbPos(self: *const Scrollable) u16 {
@@ -347,23 +386,45 @@ fn onBarClick(element: *Element, data: Element.EventData) void {
 fn onBarDrag(element: *Element, data: Element.EventData) void {
     const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
     const mouse = data.drag.mouse;
+    const ctx = element.context orelse return;
+    const size = ctx.window.size;
+
+    const current_y_pixel: i32 = mouse.pixel_row;
+
+    if (self.drag_start_y_pixel == null) {
+        self.drag_start_y_pixel = current_y_pixel;
+        self.drag_start_scroll_y = self.scroll_y;
+    }
+
+    const cell_height_pixels: i32 = @intCast(size.y_pixel / size.rows);
+    const eighth_pixels: i32 = @max(1, @divFloor(cell_height_pixels, 8));
+
+    const delta_pixels = current_y_pixel - self.drag_start_y_pixel.?;
+    const delta_eighths = @divFloor(delta_pixels, eighth_pixels);
+
     const bar_height = element.layout.height;
+    const content_height = self.inner.layout.height;
+    const viewport_height = self.outer.layout.height;
+
+    if (content_height <= viewport_height) return;
+
+    const thumb_height: u16 = @max(1, @as(u16, @intCast((@as(u32, viewport_height) * bar_height) / content_height)));
+    const thumb_travel_eighths: i32 = @as(i32, bar_height - thumb_height) * 8;
     const max_scroll = self.maxScrollY();
 
-    if (bar_height > 0) {
-        const bar_top: i32 = @intCast(element.layout.top);
-        const drag_y: u16 = @intCast(@max(0, @as(i32, mouse.row) - bar_top));
-        const new_scroll: i32 = @intCast((@as(u32, drag_y) * @as(u32, @intCast(max_scroll))) / bar_height);
+    if (thumb_travel_eighths > 0) {
+        const scroll_delta = @divFloor(delta_eighths * max_scroll, thumb_travel_eighths);
+        const new_scroll = self.drag_start_scroll_y + scroll_delta;
         self.scrollTo(0, new_scroll);
     }
 
-    if (element.context) |ctx| {
-        ctx.requestDraw();
-    }
+    ctx.requestDraw();
 }
 
 fn onBarDragEnd(element: *Element, _: Element.EventData) void {
     const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+    self.drag_start_y_pixel = null;
+
     if (!self.outer.hovered or !self.bar.?.hovered) {
         self.bar.?.visible = false;
     }
