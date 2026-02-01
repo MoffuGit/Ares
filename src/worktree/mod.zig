@@ -19,6 +19,7 @@ fn entryOrder(a: []const u8, b: []const u8) std.math.Order {
 pub const Entries = BPlusTree([]const u8, Entry, entryOrder);
 
 pub const Entry = struct {
+    id: u64,
     path: []const u8,
     kind: Kind,
 };
@@ -33,14 +34,13 @@ pub const Worktree = struct {
     alloc: Allocator,
 
     snapshot: Snapshot,
-    version: std.atomic.Value(u64) = .{ .raw = 0 },
 
     abs_path: []u8,
     root: []u8,
 
-    // monitor: Monitor,
-    // monitor_thread: MonitorThread,
-    // monitor_thr: std.Thread,
+    monitor: Monitor,
+    monitor_thread: MonitorThread,
+    monitor_thr: std.Thread,
 
     scanner: Scanner,
     scanner_thread: ScannerThread,
@@ -65,14 +65,14 @@ pub const Worktree = struct {
         const root = try alloc.dupe(u8, std.fs.path.basename(_abs_path));
         errdefer alloc.free(root);
 
-        // var monitor_thread = try MonitorThread.init(alloc, &self.monitor);
-        // errdefer monitor_thread.deinit();
+        var monitor_thread = try MonitorThread.init(alloc, &self.monitor);
+        errdefer monitor_thread.deinit();
 
         var scanner_thread = try ScannerThread.init(alloc, &self.scanner);
         errdefer scanner_thread.deinit();
 
-        // var monitor = try Monitor.init(alloc, self);
-        // errdefer monitor.deinit();
+        var monitor = try Monitor.init(alloc, self);
+        errdefer monitor.deinit();
 
         var scanner = try Scanner.init(alloc, self, &self.snapshot, _abs_path, root);
         errdefer scanner.deinit();
@@ -80,20 +80,30 @@ pub const Worktree = struct {
         var snapshot = try Snapshot.init(alloc);
         errdefer snapshot.deinit();
 
-        self.* = .{ .alloc = alloc, .snapshot = snapshot, .root = root, .abs_path = _abs_path, .scanner = scanner, .scanner_thread = scanner_thread, .scanner_thr = undefined };
-        // .monitor = monitor, .monitor_thread = monitor_thread, .monitor_thr = undefined
+        self.* = .{
+            .alloc = alloc,
+            .snapshot = snapshot,
+            .root = root,
+            .abs_path = _abs_path,
+            .scanner = scanner,
+            .scanner_thread = scanner_thread,
+            .scanner_thr = undefined,
+            .monitor = monitor,
+            .monitor_thread = monitor_thread,
+            .monitor_thr = undefined,
+        };
 
-        // self.monitor_thr = try std.Thread.spawn(.{}, MonitorThread.Thread.threadMain, .{&self.monitor_thread});
-        self.scanner_thr = try std.Thread.spawn(.{}, ScannerThread.Thread.threadMain, .{&self.scanner_thread});
+        self.monitor_thr = try std.Thread.spawn(.{}, MonitorThread.threadMain, .{&self.monitor_thread});
+        self.scanner_thr = try std.Thread.spawn(.{}, ScannerThread.threadMain, .{&self.scanner_thread});
     }
 
     pub fn deinit(self: *Worktree) void {
-        // {
-        //     self.monitor_thread.stop.notify() catch |err| {
-        //         log.err("error notifying monitor thread to stop, may stall err={}", .{err});
-        //     };
-        //     self.monitor_thr.join();
-        // }
+        {
+            self.monitor_thread.stop.notify() catch |err| {
+                log.err("error notifying monitor thread to stop, may stall err={}", .{err});
+            };
+            self.monitor_thr.join();
+        }
 
         {
             self.scanner_thread.stop.notify() catch |err| {
@@ -105,7 +115,8 @@ pub const Worktree = struct {
         self.scanner_thread.deinit();
         self.scanner.deinit();
 
-        // self.monitor.deinit();
+        self.monitor.deinit();
+        self.monitor_thread.deinit();
 
         self.snapshot.deinit();
 

@@ -248,7 +248,7 @@ fn processHoverChange(self: *Window, prev_target: ?*Element, curr_target: ?*Elem
         const is_leaving = curr_target == null or !prev.isAncestorOf(curr_target.?);
         prev.hovered = false;
         if (is_leaving) {
-            prev.dispatchEvent(.{ .mouse_leave = mouse });
+            dispatchEvent(prev, &ctx, .{ .mouse_leave = mouse });
         }
 
         dispatchEvent(prev, &ctx, .{ .mouse_out = .{ .ctx = &ctx, .mouse = mouse } });
@@ -258,7 +258,7 @@ fn processHoverChange(self: *Window, prev_target: ?*Element, curr_target: ?*Elem
         const is_entering = prev_target == null or !curr.isAncestorOf(prev_target.?);
         curr.hovered = true;
         if (is_entering) {
-            curr.dispatchEvent(.{ .mouse_enter = mouse });
+            dispatchEvent(curr, &ctx, .{ .mouse_enter = mouse });
         }
         dispatchEvent(curr, &ctx, .{ .mouse_over = .{ .ctx = &ctx, .mouse = mouse } });
     }

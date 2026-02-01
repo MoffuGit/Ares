@@ -5,6 +5,7 @@ const Worktree = worktreepkg.Worktree;
 const Entry = worktreepkg.Entry;
 const Kind = worktreepkg.Kind;
 const Snapshot = @import("../Snapshot.zig");
+const MonitorMessage = @import("../monitor/Message.zig").Message;
 
 pub const Scanner = @This();
 
@@ -42,11 +43,12 @@ pub fn process_scan(self: *Scanner, path: []const u8, abs_path: []const u8) !voi
         };
         const child_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ path, entry.name });
 
+        const id = self.snapshot.next_id.fetchAdd(1, .monotonic);
         {
             self.snapshot.mutex.lock();
             defer self.snapshot.mutex.unlock();
 
-            try self.snapshot.entries.insert(child_path, .{ .kind = kind, .path = child_path });
+            try self.snapshot.entries.insert(child_path, .{ .id = id, .kind = kind, .path = child_path });
             std.log.debug("{s}", .{child_path});
         }
 
@@ -54,6 +56,13 @@ pub fn process_scan(self: *Scanner, path: []const u8, abs_path: []const u8) !voi
             const child_abs_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ abs_path, entry.name });
             if (self.worktree.scanner_thread.mailbox.push(.{ .scan = .{ .abs_path = child_abs_path, .path = child_path } }, .instant) == 0) {
                 self.alloc.free(child_abs_path);
+            }
+
+            const monitor_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ abs_path, entry.name });
+            if (self.worktree.monitor_thread.mailbox.push(.{ .add = .{ .path = monitor_path, .id = id } }, .instant) == 0) {
+                self.alloc.free(monitor_path);
+            } else {
+                self.worktree.monitor_thread.wakeup.notify() catch {};
             }
         }
     }
@@ -81,11 +90,12 @@ pub fn initial_scan(self: *Scanner) !void {
         else => return error.InvalidKind,
     };
 
+    const id = self.snapshot.next_id.fetchAdd(1, .monotonic);
     {
         self.snapshot.mutex.lock();
         defer self.snapshot.mutex.unlock();
 
-        try self.snapshot.entries.insert(self.root, .{ .kind = kind, .path = self.root });
+        try self.snapshot.entries.insert(self.root, .{ .id = id, .kind = kind, .path = self.root });
 
         try self.snapshot.entries.print();
     }
@@ -93,5 +103,12 @@ pub fn initial_scan(self: *Scanner) !void {
     if (kind == .dir) {
         _ = self.worktree.scanner_thread.mailbox.push(.{ .scan = .{ .abs_path = self.abs_path, .path = self.root } }, .instant);
         try self.worktree.scanner_thread.wakeup.notify();
+
+        const monitor_path = try self.alloc.dupe(u8, self.abs_path);
+        if (self.worktree.monitor_thread.mailbox.push(.{ .add = .{ .path = monitor_path, .id = id } }, .instant) == 0) {
+            self.alloc.free(monitor_path);
+        } else {
+            self.worktree.monitor_thread.wakeup.notify() catch {};
+        }
     }
 }

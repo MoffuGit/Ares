@@ -7,6 +7,8 @@ pub const Snapshot = @This();
 
 mutex: std.Thread.Mutex = .{},
 alloc: Allocator,
+version: std.atomic.Value(u64) = .{ .raw = 0 },
+next_id: std.atomic.Value(u64) = .{ .raw = 1 },
 
 entries: Entries,
 
