@@ -3,7 +3,6 @@ const Allocator = std.mem.Allocator;
 const ClipRect = @import("ClipRect.zig");
 
 pub const HitGrid = @This();
-pub const Element = @import("element/mod.zig");
 
 pub const no_hit: u64 = std.math.maxInt(u64);
 
@@ -116,10 +115,6 @@ pub fn fillRect(self: *HitGrid, x: u16, y: u16, w: u16, h: u16, element_num: u64
             self.set(col, row, element_num);
         }
     }
-}
-
-pub fn hitElement(element: *Element, self: *HitGrid) void {
-    self.fillRect(element.layout.left, element.layout.top, element.layout.width, element.layout.height, element.num);
 }
 
 const testing = std.testing;

@@ -89,7 +89,7 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
             .drawFn = drawBar,
             .zIndex = 10,
             .userdata = self,
-            .hitFn = HitGrid.hitElement,
+            .hitFn = Element.hitSelf,
         });
 
         self.bar = bar;
@@ -295,13 +295,7 @@ fn drawBar(element: *Element, buffer: *Buffer) void {
     const track_color = withAlpha(global.settings.theme.scrollTrack, alpha);
     const thumb_color = withAlpha(global.settings.theme.scrollBar, alpha);
 
-    buffer.fillRect(
-        element.layout.left,
-        element.layout.top,
-        element.layout.width,
-        element.layout.height,
-        .{ .style = .{ .bg = track_color } },
-    );
+    element.fill(buffer, .{ .style = .{ .bg = track_color } });
 
     const top_cell = thumb_pos_eighths / 8;
     const top_frac = thumb_pos_eighths % 8;
@@ -323,7 +317,7 @@ fn drawBar(element: *Element, buffer: *Buffer) void {
             const char = lower_blocks[8 - top_frac];
             buffer.writeCell(bar_left, bar_top + @as(u16, @intCast(top_cell)), .{
                 .char = .{ .grapheme = char },
-                .style = .{ .fg = thumb_color, .bg = track_color },
+                .style = .{ .fg = thumb_color, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } },
             });
         }
 
@@ -343,7 +337,7 @@ fn drawBar(element: *Element, buffer: *Buffer) void {
             const char = upper_blocks[bottom_frac];
             buffer.writeCell(bar_left, bar_top + @as(u16, @intCast(bottom_cell)), .{
                 .char = .{ .grapheme = char },
-                .style = .{ .fg = thumb_color, .bg = track_color },
+                .style = .{ .fg = thumb_color, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } },
             });
         }
     }

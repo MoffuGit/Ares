@@ -39,7 +39,7 @@ pub fn create(alloc: Allocator, direction: Direction, left: *Node, right: *Node)
         },
         .zIndex = 10,
         .userdata = divider,
-        .hitFn = HitGrid.hitElement,
+        .hitFn = Element.hitSelf,
         .drawFn = draw,
     });
     try element.addEventListener(.drag, onDrag);

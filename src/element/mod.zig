@@ -240,6 +240,14 @@ pub fn dispatchEvent(self: *Element, data: EventData) void {
     }
 }
 
+pub fn fill(element: *Element, buffer: *Buffer, cell: vaxis.Cell) void {
+    buffer.fillRect(element.layout.left, element.layout.top, element.layout.width, element.layout.height, cell);
+}
+
+pub fn hitSelf(element: *Element, hit_grid: *HitGrid) void {
+    hit_grid.fillRect(element.layout.left, element.layout.top, element.layout.width, element.layout.height, element.num);
+}
+
 pub fn syncLayout(self: *Element) void {
     const old_width = self.layout.width;
     const old_height = self.layout.height;

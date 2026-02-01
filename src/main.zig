@@ -25,6 +25,12 @@ const log = std.log.scoped(.main);
 
 const global = @import("global.zig");
 
+var running: std.atomic.Value(bool) = .{ .raw = true };
+
+fn sigintHandler(_: c_int) callconv(.c) void {
+    running.store(false, .release);
+}
+
 pub fn keyPressFn(element: *Element, data: Element.EventData) void {
     const key_data = data.key_press;
     if (key_data.key.matches('c', .{ .ctrl = true })) {
@@ -46,8 +52,7 @@ pub fn schemeFn(app: *App) void {
 }
 
 pub fn drawFn(element: *Element, buffer: *Buffer) void {
-    const layout = element.layout;
-    buffer.fillRect(layout.left, layout.top, layout.width, layout.height, .{ .style = .{ .bg = global.settings.theme.bg } });
+    element.fill(buffer, .{ .style = .{ .bg = global.settings.theme.bg } });
 }
 
 pub fn main() !void {
@@ -91,6 +96,19 @@ pub fn main() !void {
     defer worktree.destroy();
 
     try worktree.initial_scan();
+
+    // const sigaction = std.posix.Sigaction{
+    //     .handler = .{ .handler = sigintHandler },
+    //     .mask = std.posix.sigemptyset(),
+    //     .flags = 0,
+    // };
+    // std.posix.sigaction(std.posix.SIG.INT, &sigaction, null);
+    //
+    // log.info("Running... Press Ctrl+C to exit", .{});
+    // while (running.load(.acquire)) {
+    //     std.Thread.sleep(100 * std.time.ns_per_ms);
+    // }
+    // log.info("Shutting down...", .{});
 
     const file_tree = try FileTree.create(alloc, worktree);
     defer file_tree.destroy(alloc);

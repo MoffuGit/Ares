@@ -9,11 +9,7 @@ const log = std.log.scoped(.worktree_monitor);
 
 pub const Thread = @This();
 
-pub const Mailbox = BlockingQueue(messagepkg.Message, 64);
-
-//NOTE:
-//add another queue, this time for kqueue Watchers,
-//they need to get deleted on the tick after calling watcher.cancel()
+pub const Mailbox = BlockingQueue(messagepkg.Message, 1024);
 
 alloc: Allocator,
 loop: xev.Loop,
@@ -58,6 +54,15 @@ pub fn init(alloc: Allocator, monitor: *Monitor) !Thread {
 }
 
 pub fn deinit(self: *Thread) void {
+    while (self.mailbox.pop()) |message| {
+        switch (message) {
+            .add => |data| {
+                self.alloc.free(data.path);
+            },
+            .remove => {},
+        }
+    }
+
     self.fs.deinit();
     self.wakeup.deinit();
     self.stop.deinit();
@@ -125,6 +130,8 @@ fn wakeupCallback(
 
     const s = self_.?;
 
+    s.monitor.cleanupCancelledWatchers();
+
     s.drainMailbox() catch |err| {
         log.err("error draining monitor mailbox err={}", .{err});
     };
@@ -136,11 +143,10 @@ fn drainMailbox(self: *Thread) !void {
     while (self.mailbox.pop()) |message| {
         switch (message) {
             .add => |data| {
-                log.debug("monitor received add_watcher message: '{s}' {}", .{ data.path, data.id });
-                self.alloc.free(data.path);
+                try self.monitor.addWatcher(&self.fs, data.path, data.id, Thread, self, fsEventsCallback);
             },
             .remove => |id| {
-                log.debug("monitor received remove_watcher message: '{}'", .{id});
+                self.monitor.removeWatcher(&self.fs, id);
             },
         }
     }

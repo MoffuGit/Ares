@@ -165,7 +165,7 @@ pub fn createView(alloc: Allocator, id: u64) !*Node {
         .zIndex = 20,
         .userdata = node,
         .beforeDrawFn = drawView,
-        .beforeHitFn = HitGrid.hitElement,
+        .beforeHitFn = Element.hitSelf,
     });
     try element.addEventListener(.click, clickView);
 
@@ -182,13 +182,7 @@ pub fn createView(alloc: Allocator, id: u64) !*Node {
 
 fn drawView(element: *Element, buffer: *Buffer) void {
     if (element.focused) {
-        buffer.fillRect(
-            element.layout.left,
-            element.layout.top,
-            element.layout.width,
-            element.layout.height,
-            .{ .style = .{ .bg = .{ .rgb = .{ 60, 0, 0 } } } },
-        );
+        element.fill(buffer, .{ .style = .{ .bg = .{ .rgb = .{ 60, 0, 0 } } } });
     }
 }
 

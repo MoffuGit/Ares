@@ -22,6 +22,21 @@ scrollable: *Scrollable,
 content: *Element,
 worktree: *Worktree,
 
+//NOTE:
+//every directory is collapsed by default,
+//because of that out initla size is for every
+//entry that is at the first level:
+//src/file1
+//src/file2
+//src/directory1
+//then, we can track when a directory gets open,
+//to add more height to the scroll,
+//we would draw only the element that can be in the outer view,
+//but we should keep track of the size of all expanded directories and files
+//probably we can iter over all worktree files and then
+//only update in base of the snapshot version and entry snapshot version
+//you only update the values that have a new snapshot value
+
 pub fn create(alloc: Allocator, wt: *Worktree) !*FileTree {
     const self = try alloc.create(FileTree);
 

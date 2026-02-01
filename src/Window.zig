@@ -49,7 +49,7 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
     root.* = Element.init(alloc, root_opts);
     root.context = opts.app_context;
     root.removed = false;
-    root.hitFn = HitGrid.hitElement;
+    root.hitFn = Element.hitSelf;
 
     var elements = Elements.init(alloc);
     try elements.put(root.num, root);

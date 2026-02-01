@@ -3,25 +3,107 @@ const xev = @import("../../global.zig").xev;
 const Allocator = std.mem.Allocator;
 const Worktree = @import("../mod.zig").Worktree;
 
+const log = std.log.scoped(.worktree_monitor);
+
 pub const Monitor = @This();
 
+pub const WatcherEntry = struct {
+    watcher: xev.FileSystem.Watcher,
+    path: []u8,
+    id: u64,
+};
+
 alloc: Allocator,
-watchers: std.AutoHashMap(usize, xev.Watcher),
+watchers: std.AutoHashMap(u64, *WatcherEntry),
+pending_cancel: std.ArrayListUnmanaged(*WatcherEntry),
 worktree: *Worktree,
 
 pub fn init(alloc: Allocator, worktree: *Worktree) !Monitor {
-    return .{ .watchers = .init(alloc), .alloc = alloc, .worktree = worktree };
+    return .{
+        .watchers = std.AutoHashMap(u64, *WatcherEntry).init(alloc),
+        .pending_cancel = .{},
+        .alloc = alloc,
+        .worktree = worktree,
+    };
 }
 
 pub fn deinit(self: *Monitor) void {
+    var it = self.watchers.valueIterator();
+    while (it.next()) |entry_ptr| {
+        const entry = entry_ptr.*;
+        self.alloc.free(entry.path);
+        self.alloc.destroy(entry);
+    }
     self.watchers.deinit();
+
+    for (self.pending_cancel.items) |entry| {
+        self.alloc.free(entry.path);
+        self.alloc.destroy(entry);
+    }
+    self.pending_cancel.deinit(self.alloc);
 }
 
-//You are going to receive events from the scanner
-//for adding or removing watchers, then, when a watcher notify an event, you would send
-//this event to the scanner for re scanning given path
-//
-//after removing a watcher you don't delete it instantly
-//you add it to a special queue, on the next loop tick
-//you check if the watcher is dead, then if the watcher is dead, you can
-//deallocate it
+pub fn addWatcher(
+    self: *Monitor,
+    fs: *xev.FileSystem,
+    path: []u8,
+    id: u64,
+    comptime Userdata: type,
+    userdata: ?*Userdata,
+    comptime callback: *const fn (?*Userdata, *xev.FileSystem.Watcher, []const u8, u32) xev.CallbackAction,
+) !void {
+    if (self.watchers.contains(id)) {
+        log.warn("watcher already exists for id={}, ignoring", .{id});
+        self.alloc.free(path);
+        return;
+    }
+
+    const entry = try self.alloc.create(WatcherEntry);
+    errdefer self.alloc.destroy(entry);
+
+    entry.* = .{
+        .watcher = .{},
+        .path = path,
+        .id = id,
+    };
+
+    fs.watch(path, &entry.watcher, Userdata, userdata, callback) catch |err| {
+        log.err("failed to start watcher for '{s}': {}", .{ path, err });
+        self.alloc.free(path);
+        self.alloc.destroy(entry);
+        return;
+    };
+
+    try self.watchers.put(id, entry);
+    log.debug("monitor added watcher: '{s}' id={}", .{ path, id });
+}
+
+pub fn removeWatcher(self: *Monitor, fs: *xev.FileSystem, id: u64) void {
+    if (self.watchers.fetchRemove(id)) |kv| {
+        const entry = kv.value;
+        fs.cancel(&entry.watcher);
+        self.pending_cancel.append(self.alloc, entry) catch |err| {
+            log.err("failed to add watcher to pending_cancel queue: {}", .{err});
+            self.alloc.free(entry.path);
+            self.alloc.destroy(entry);
+        };
+        log.debug("monitor removing watcher: id={}", .{id});
+    } else {
+        log.warn("no watcher found for id={}", .{id});
+    }
+}
+
+pub fn cleanupCancelledWatchers(self: *Monitor) void {
+    var i: usize = 0;
+    while (i < self.pending_cancel.items.len) {
+        const entry = self.pending_cancel.items[i];
+        if (entry.watcher.state() == .dead) {
+            log.debug("cleaning up dead watcher for id={}", .{entry.id});
+            self.alloc.free(entry.path);
+            self.alloc.destroy(entry);
+            _ = self.pending_cancel.swapRemove(i);
+        } else {
+            i += 1;
+        }
+    }
+}
