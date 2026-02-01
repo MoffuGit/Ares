@@ -97,19 +97,6 @@ pub fn main() !void {
 
     try worktree.initial_scan();
 
-    // const sigaction = std.posix.Sigaction{
-    //     .handler = .{ .handler = sigintHandler },
-    //     .mask = std.posix.sigemptyset(),
-    //     .flags = 0,
-    // };
-    // std.posix.sigaction(std.posix.SIG.INT, &sigaction, null);
-    //
-    // log.info("Running... Press Ctrl+C to exit", .{});
-    // while (running.load(.acquire)) {
-    //     std.Thread.sleep(100 * std.time.ns_per_ms);
-    // }
-    // log.info("Shutting down...", .{});
-
     const file_tree = try FileTree.create(alloc, worktree);
     defer file_tree.destroy(alloc);
 
