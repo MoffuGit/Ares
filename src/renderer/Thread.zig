@@ -8,10 +8,6 @@ const Renderer = @import("mod.zig");
 
 const Allocator = std.mem.Allocator;
 
-pub const Message = union(enum) { None: void };
-
-pub const Mailbox = BlockingQueue(Message, 64);
-
 const log = std.log.scoped(.renderer_thread);
 
 alloc: Allocator,
@@ -23,8 +19,6 @@ wakeup_c: xev.Completion = .{},
 
 stop: xev.Async,
 stop_c: xev.Completion = .{},
-
-mailbox: *Mailbox,
 
 renderer: *Renderer,
 
@@ -38,15 +32,11 @@ pub fn init(alloc: Allocator, renderer: *Renderer) !Thread {
     var stop_h = try xev.Async.init();
     errdefer stop_h.deinit();
 
-    var mailbox = try Mailbox.create(alloc);
-    errdefer mailbox.destroy(alloc);
-
     return .{
         .alloc = alloc,
         .renderer = renderer,
         .loop = loop,
         .stop = stop_h,
-        .mailbox = mailbox,
         .wakeup = wakeup_h,
     };
 }
@@ -54,7 +44,6 @@ pub fn init(alloc: Allocator, renderer: *Renderer) !Thread {
 pub fn deinit(self: *Thread) void {
     self.stop.deinit();
     self.wakeup.deinit();
-    self.mailbox.destroy(self.alloc);
     self.loop.deinit();
 }
 
@@ -104,21 +93,8 @@ fn wakeupCallback(
 
     const t = self_.?;
 
-    // When we wake up, we check the mailbox. Mailbox producers should
-    // wake up our thread after publishing.
-    t.drainMailbox() catch |err|
-        log.err("error draining mailbox err={}", .{err});
-
     t.renderer.renderFrame() catch |err|
         log.warn("error rendering err={}", .{err});
 
     return .rearm;
-}
-
-fn drainMailbox(self: *Thread) !void {
-    while (self.mailbox.pop()) |message| {
-        switch (message) {
-            else => {},
-        }
-    }
 }

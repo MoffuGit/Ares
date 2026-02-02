@@ -63,13 +63,9 @@ wakeup_c: xev.Completion = .{},
 stop: xev.Async,
 stop_c: xev.Completion = .{},
 
-reschedule_tick: xev.Async,
-reschedule_tick_c: xev.Completion = .{},
-
 tick_h: xev.Timer,
 tick_c: xev.Completion = .{},
-tick_cancel_c: xev.Completion = .{},
-tick_armed: bool = false,
+tick_active: bool = false,
 
 mailbox: *Mailbox,
 
@@ -85,9 +81,6 @@ pub fn init(alloc: Allocator, app: *App) !Loop {
     var stop_h = try xev.Async.init();
     errdefer stop_h.deinit();
 
-    var reschedule_tick_h = try xev.Async.init();
-    errdefer reschedule_tick_h.deinit();
-
     var tick_h = try xev.Timer.init();
     errdefer tick_h.deinit();
 
@@ -100,7 +93,6 @@ pub fn init(alloc: Allocator, app: *App) !Loop {
         .tick_h = tick_h,
         .loop = loop,
         .stop = stop_h,
-        .reschedule_tick = reschedule_tick_h,
         .mailbox = mailbox,
         .wakeup = wakeup_h,
     };
@@ -110,7 +102,6 @@ pub fn deinit(self: *Loop) void {
     self.stop.deinit();
     self.tick_h.deinit();
     self.wakeup.deinit();
-    self.reschedule_tick.deinit();
     self.mailbox.destroy(self.alloc);
     self.loop.deinit();
 }
@@ -125,7 +116,6 @@ pub fn run_(self: *Loop) !void {
     defer log.debug("loop exited", .{});
 
     self.wakeup.wait(&self.loop, &self.wakeup_c, Loop, self, wakeupCallback);
-    self.reschedule_tick.wait(&self.loop, &self.reschedule_tick_c, Loop, self, rescheduleTickCallback);
     self.stop.wait(&self.loop, &self.stop_c, Loop, self, stopCallback);
 
     try self.wakeup.notify();
@@ -157,67 +147,22 @@ fn wakeupCallback(
     return .rearm;
 }
 
-fn rescheduleTickCallback(
-    self_: ?*Loop,
-    _: *xev.Loop,
-    _: *xev.Completion,
-    r: xev.Async.WaitError!void,
-) xev.CallbackAction {
-    _ = r catch |err| {
-        log.err("error in reschedule_tick err={}", .{err});
-        return .rearm;
-    };
-
-    const l = self_.?;
-    l.scheduleNextTick();
-
-    return .rearm;
-}
-
 pub fn scheduleNextTick(self: *Loop) void {
-    const next_tick = self.app.time.peekNext() orelse {
-        self.tick_armed = false;
+    if (self.app.time.peekNext() == null) {
+        self.tick_active = false;
         return;
-    };
-
-    const now = std.time.microTimestamp();
-    const delay_us: u64 = @intCast(@max(0, next_tick.next - now));
-    const delay_ms: u64 = (delay_us + 999) / 1000;
-    const clamped_delay = @max(1, delay_ms);
-
-    if (self.tick_armed) {
-        self.tick_h.reset(&self.loop, &self.tick_c, &self.tick_cancel_c, clamped_delay, Loop, self, resetCallback);
-    } else {
-        self.tick_armed = true;
-        self.tick_h.run(
-            &self.loop,
-            &self.tick_c,
-            clamped_delay,
-            Loop,
-            self,
-            tickCallback,
-        );
     }
-}
 
-fn resetCallback(
-    self_: ?*Loop,
-    _: *xev.Loop,
-    _: *xev.Completion,
-    r: xev.Timer.RunError!void,
-) xev.CallbackAction {
-    const l: *Loop = self_ orelse return .disarm;
+    self.tick_active = true;
 
-    if (r) |_| {
-        const now = std.time.microTimestamp();
-        l.app.time.processDue(now) catch |err| {
-            log.err("tick error: {}", .{err});
-        };
-        l.tick_armed = false;
-        l.scheduleNextTick();
-    } else |_| {}
-
-    return .disarm;
+    self.tick_h.run(
+        &self.loop,
+        &self.tick_c,
+        6,
+        Loop,
+        self,
+        tickCallback,
+    );
 }
 
 fn tickCallback(
@@ -232,7 +177,7 @@ fn tickCallback(
         return .disarm;
     };
 
-    l.tick_armed = false;
+    l.tick_active = false;
 
     const now = std.time.microTimestamp();
     l.app.time.processDue(now) catch |err| {
