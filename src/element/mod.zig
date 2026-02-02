@@ -245,7 +245,6 @@ pub fn fill(element: *Element, buffer: *Buffer, cell: vaxis.Cell) void {
 }
 
 pub fn fillRounded(element: *Element, buffer: *Buffer, color: vaxis.Color, radius: f32) void {
-    element.fill(buffer, .{ .style = .{ .bg = color } });
     const layout = element.layout;
 
     const left: f32 = @floatFromInt(layout.left);
@@ -256,33 +255,53 @@ pub fn fillRounded(element: *Element, buffer: *Buffer, color: vaxis.Color, radiu
     const lower = "▄";
     const upper = "▀";
 
-    _ = width;
-    _ = height;
-
-    const cx = left + radius - 1;
-    const cy = top + ((radius - 1) / 2.0);
-
-    // Draw center point for debugging
-    const cx_cell: u16 = @intFromFloat(@floor(cx));
-    const cy_cell: u16 = @intFromFloat(@floor(cy));
-    const cy_frac = cy - @floor(cy);
-    const center_char = if (cy_frac < 0.5) upper else lower;
-
-    const fg: vaxis.Color = .{ .rgb = .{ 0, 255, 0 } };
     const r_squared = radius * radius;
 
-    // Fill the circle by iterating over half-cells
-    var py: f32 = -radius;
-    while (py <= radius) : (py += 1) {
-        var px: f32 = -radius;
-        while (px <= radius) : (px += 1) {
-            // Check if this point is inside the circle (strict to avoid single-cell protrusions)
-            if ((px * px) + (py * py) < r_squared) {
-                const curr_x = cx + px;
-                const curr_y = cy + (py / 2.0);
-                const curr_x_cell: u16 = @intFromFloat(@floor(curr_x));
-                const curr_y_cell: u16 = @intFromFloat(@floor(curr_y));
-                const curr_y_frac = curr_y - @floor(curr_y);
+    const tl_cx = left + radius - 1;
+    const tl_cy = top + ((radius - 1) / 2.0);
+    const tr_cx = left + width - radius;
+    const tr_cy = top + ((radius - 1) / 2.0);
+    const bl_cx = left + radius - 1;
+    const bl_cy = top + height - (radius / 2.0);
+    const br_cx = left + width - radius;
+    const br_cy = top + height - (radius / 2.0);
+
+    var py: f32 = 0;
+    while (py < height * 2) : (py += 1) {
+        var px: f32 = 0;
+        while (px < width) : (px += 1) {
+            const cell_x = left + px;
+            const cell_y = top + (py / 2.0);
+
+            const in_left_zone = px < radius;
+            const in_right_zone = px >= width - radius;
+            const in_top_zone = py < radius;
+            const in_bottom_zone = py >= height * 2 - radius;
+
+            var inside = true;
+
+            if (in_left_zone and in_top_zone) {
+                const dx = cell_x - tl_cx;
+                const dy = (cell_y - tl_cy) * 2.0;
+                inside = (dx * dx + dy * dy) < r_squared;
+            } else if (in_right_zone and in_top_zone) {
+                const dx = cell_x - tr_cx;
+                const dy = (cell_y - tr_cy) * 2.0;
+                inside = (dx * dx + dy * dy) < r_squared;
+            } else if (in_left_zone and in_bottom_zone) {
+                const dx = cell_x - bl_cx;
+                const dy = (cell_y - bl_cy) * 2.0;
+                inside = (dx * dx + dy * dy) < r_squared;
+            } else if (in_right_zone and in_bottom_zone) {
+                const dx = cell_x - br_cx;
+                const dy = (cell_y - br_cy) * 2.0;
+                inside = (dx * dx + dy * dy) < r_squared;
+            }
+
+            if (inside) {
+                const curr_x_cell: u16 = @intFromFloat(@floor(cell_x));
+                const curr_y_cell: u16 = @intFromFloat(@floor(cell_y));
+                const curr_y_frac = cell_y - @floor(cell_y);
                 const is_upper_now = curr_y_frac < 0.5;
                 const new_char = if (is_upper_now) upper else lower;
 
@@ -292,17 +311,15 @@ pub fn fillRounded(element: *Element, buffer: *Buffer, color: vaxis.Color, radiu
                     const is_lower = std.mem.eql(u8, g, lower);
                     const is_upper = std.mem.eql(u8, g, upper);
                     if ((is_lower and is_upper_now) or (is_upper and !is_upper_now)) {
-                        buffer.writeCell(curr_x_cell, curr_y_cell, .{ .char = .{ .grapheme = "█" }, .style = .{ .fg = fg, .bg = color } });
+                        buffer.writeCell(curr_x_cell, curr_y_cell, .{ .char = .{ .grapheme = "█" }, .style = .{ .fg = color } });
                         continue;
                     }
                 }
 
-                buffer.writeCell(curr_x_cell, curr_y_cell, .{ .char = .{ .grapheme = new_char }, .style = .{ .fg = fg, .bg = color } });
+                buffer.writeCell(curr_x_cell, curr_y_cell, .{ .char = .{ .grapheme = new_char }, .style = .{ .fg = color } });
             }
         }
     }
-
-    buffer.writeCell(cx_cell, cy_cell, .{ .char = .{ .grapheme = center_char }, .style = .{ .fg = .{ .rgb = .{ 255, 0, 0 } }, .bg = fg } });
 }
 
 pub fn hitSelf(element: *Element, hit_grid: *HitGrid) void {
