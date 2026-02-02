@@ -12,7 +12,7 @@ const vaxis = @import("vaxis");
 const Loop = @import("../Loop.zig");
 const Tick = Loop.Tick;
 const Buffer = @import("../Buffer.zig");
-const HitGrid = @import("../HitGrid.zig");
+pub const HitGrid = @import("../HitGrid.zig");
 
 pub const AppContext = @import("../AppContext.zig");
 const events = @import("../events/mod.zig");
@@ -324,6 +324,66 @@ pub fn fillRounded(element: *Element, buffer: *Buffer, color: vaxis.Color, radiu
 
 pub fn hitSelf(element: *Element, hit_grid: *HitGrid) void {
     hit_grid.fillRect(element.layout.left, element.layout.top, element.layout.width, element.layout.height, element.num);
+}
+
+pub fn hitRounded(element: *Element, hit_grid: *HitGrid, radius: f32) void {
+    const layout = element.layout;
+
+    const left: f32 = @floatFromInt(layout.left);
+    const top: f32 = @floatFromInt(layout.top);
+    const width: f32 = @floatFromInt(layout.width);
+    const height: f32 = @floatFromInt(layout.height);
+
+    const r_squared = radius * radius;
+
+    const tl_cx = left + radius - 1;
+    const tl_cy = top + ((radius - 1) / 2.0);
+    const tr_cx = left + width - radius;
+    const tr_cy = top + ((radius - 1) / 2.0);
+    const bl_cx = left + radius - 1;
+    const bl_cy = top + height - (radius / 2.0);
+    const br_cx = left + width - radius;
+    const br_cy = top + height - (radius / 2.0);
+
+    var py: f32 = 0;
+    while (py < height * 2) : (py += 1) {
+        var px: f32 = 0;
+        while (px < width) : (px += 1) {
+            const cell_x = left + px;
+            const cell_y = top + (py / 2.0);
+
+            const in_left_zone = px < radius;
+            const in_right_zone = px >= width - radius;
+            const in_top_zone = py < radius;
+            const in_bottom_zone = py >= height * 2 - radius;
+
+            var inside = true;
+
+            if (in_left_zone and in_top_zone) {
+                const dx = cell_x - tl_cx;
+                const dy = (cell_y - tl_cy) * 2.0;
+                inside = (dx * dx + dy * dy) < r_squared;
+            } else if (in_right_zone and in_top_zone) {
+                const dx = cell_x - tr_cx;
+                const dy = (cell_y - tr_cy) * 2.0;
+                inside = (dx * dx + dy * dy) < r_squared;
+            } else if (in_left_zone and in_bottom_zone) {
+                const dx = cell_x - bl_cx;
+                const dy = (cell_y - bl_cy) * 2.0;
+                inside = (dx * dx + dy * dy) < r_squared;
+            } else if (in_right_zone and in_bottom_zone) {
+                const dx = cell_x - br_cx;
+                const dy = (cell_y - br_cy) * 2.0;
+                inside = (dx * dx + dy * dy) < r_squared;
+            }
+
+            if (inside) {
+                const curr_x_cell: u16 = @intFromFloat(@floor(cell_x));
+                const curr_y_cell: u16 = @intFromFloat(@floor(cell_y));
+                hit_grid.set(curr_x_cell, curr_y_cell, element.num);
+            }
+        }
+    }
 }
 
 pub fn syncLayout(self: *Element) void {

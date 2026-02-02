@@ -147,10 +147,10 @@ pub fn destroy(self: *App) void {
 
     self.renderer_thread.deinit();
 
+    self.loop.deinit();
+
     self.window.deinit();
     self.time.deinit();
-
-    self.loop.deinit();
 
     self.renderer.deinit();
     self.tty.deinit();
