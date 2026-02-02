@@ -244,6 +244,67 @@ pub fn fill(element: *Element, buffer: *Buffer, cell: vaxis.Cell) void {
     buffer.fillRect(element.layout.left, element.layout.top, element.layout.width, element.layout.height, cell);
 }
 
+pub fn fillRounded(element: *Element, buffer: *Buffer, color: vaxis.Color, radius: f32) void {
+    element.fill(buffer, .{ .style = .{ .bg = color } });
+    const layout = element.layout;
+
+    const left: f32 = @floatFromInt(layout.left);
+    const top: f32 = @floatFromInt(layout.top);
+    const width: f32 = @floatFromInt(layout.width);
+    const height: f32 = @floatFromInt(layout.height);
+
+    const lower = "▄";
+    const upper = "▀";
+
+    _ = width;
+    _ = height;
+
+    const cx = left + radius - 1;
+    const cy = top + ((radius - 1) / 2.0);
+
+    // Draw center point for debugging
+    const cx_cell: u16 = @intFromFloat(@floor(cx));
+    const cy_cell: u16 = @intFromFloat(@floor(cy));
+    const cy_frac = cy - @floor(cy);
+    const center_char = if (cy_frac < 0.5) upper else lower;
+
+    const fg: vaxis.Color = .{ .rgb = .{ 0, 255, 0 } };
+    const r_squared = radius * radius;
+
+    // Fill the circle by iterating over half-cells
+    var py: f32 = -radius;
+    while (py <= radius) : (py += 1) {
+        var px: f32 = -radius;
+        while (px <= radius) : (px += 1) {
+            // Check if this point is inside the circle (strict to avoid single-cell protrusions)
+            if ((px * px) + (py * py) < r_squared) {
+                const curr_x = cx + px;
+                const curr_y = cy + (py / 2.0);
+                const curr_x_cell: u16 = @intFromFloat(@floor(curr_x));
+                const curr_y_cell: u16 = @intFromFloat(@floor(curr_y));
+                const curr_y_frac = curr_y - @floor(curr_y);
+                const is_upper_now = curr_y_frac < 0.5;
+                const new_char = if (is_upper_now) upper else lower;
+
+                const existing = buffer.readCell(curr_x_cell, curr_y_cell);
+                if (existing) |cell| {
+                    const g = cell.char.grapheme;
+                    const is_lower = std.mem.eql(u8, g, lower);
+                    const is_upper = std.mem.eql(u8, g, upper);
+                    if ((is_lower and is_upper_now) or (is_upper and !is_upper_now)) {
+                        buffer.writeCell(curr_x_cell, curr_y_cell, .{ .char = .{ .grapheme = "█" }, .style = .{ .fg = fg, .bg = color } });
+                        continue;
+                    }
+                }
+
+                buffer.writeCell(curr_x_cell, curr_y_cell, .{ .char = .{ .grapheme = new_char }, .style = .{ .fg = fg, .bg = color } });
+            }
+        }
+    }
+
+    buffer.writeCell(cx_cell, cy_cell, .{ .char = .{ .grapheme = center_char }, .style = .{ .fg = .{ .rgb = .{ 255, 0, 0 } }, .bg = fg } });
+}
+
 pub fn hitSelf(element: *Element, hit_grid: *HitGrid) void {
     hit_grid.fillRect(element.layout.left, element.layout.top, element.layout.width, element.layout.height, element.num);
 }

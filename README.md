@@ -165,3 +165,83 @@ lower half ▄
  ███████████
 ████████████
 ████████████
+
+pub fn fillRounded(element: *Element, buffer: *Buffer, color: vaxis.Color, radius: u16) void {
+    const left = element.layout.left;
+    const top = element.layout.top;
+    const width = element.layout.width;
+    const height = element.layout.height;
+
+    if (width == 0 or height == 0) return;
+
+    const sub_height = height * 2;
+    const r = @min(radius * 2, @min(width, sub_height) / 2);
+
+    if (r == 0) {
+        element.fill(buffer, .{ .style = .{ .bg = color } });
+        return;
+    }
+
+    var row: u16 = 0;
+    while (row < sub_height) : (row += 1) {
+        var col: u16 = 0;
+        while (col < width) : (col += 1) {
+            const in_top_left = col < r and row < r;
+            const in_top_right = col >= width - r and row < r;
+            const in_bottom_left = col < r and row >= sub_height - r;
+            const in_bottom_right = col >= width - r and row >= sub_height - r;
+
+            if (in_top_left) {
+                const dx = r - col;
+                const dy = r - row;
+                if (dx * dx + dy * dy > r * r) {
+                    continue;
+                }
+            } else if (in_top_right) {
+                const dx = col - (width - r - 1);
+                const dy = r - row;
+                if (dx * dx + dy * dy > r * r) {
+                    continue;
+                }
+            } else if (in_bottom_left) {
+                const dx = r - col;
+                const dy = row - (sub_height - r - 1);
+                if (dx * dx + dy * dy > r * r) {
+                    continue;
+                }
+            } else if (in_bottom_right) {
+                const dx = col - (width - r - 1);
+                const dy = row - (sub_height - r - 1);
+                if (dx * dx + dy * dy > r * r) {
+                    continue;
+                }
+            }
+
+            const cell_row = row / 2;
+            const is_top_half = (row % 2) == 0;
+
+            const cell = buffer.readCell(left + col, top + cell_row) orelse vaxis.Cell{};
+            const current_char = cell.char.grapheme;
+
+            const new_char: []const u8 = blk: {
+                if (is_top_half) {
+                    if (std.mem.eql(u8, current_char, "▄") or std.mem.eql(u8, current_char, "█")) {
+                        break :blk "█";
+                    }
+                    break :blk "▀";
+                } else {
+                    if (std.mem.eql(u8, current_char, "▀") or std.mem.eql(u8, current_char, "█")) {
+                        break :blk "█";
+                    }
+                    break :blk "▄";
+                }
+            };
+
+            const new_cell: vaxis.Cell = .{
+                .char = .{ .grapheme = new_char },
+                .style = .{ .fg = color },
+            };
+            buffer.setCell(left + col, top + cell_row, new_cell);
+        }
+    }
+}

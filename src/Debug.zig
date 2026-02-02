@@ -15,7 +15,7 @@ pub fn dumpToFile(window: *Window, path: []const u8) !void {
     defer file.close();
 
     var buf: [4096]u8 = undefined;
-    var file_writer = std.fs.File.Writer.init(file, &buf);
+    var file_writer = file.writer(&buf);
     const writer = &file_writer.interface;
     defer writer.flush() catch {};
 
@@ -49,7 +49,7 @@ fn dumpScreenCells(writer: anytype, buffer: *Buffer) !void {
             if (buffer.readCell(col, row)) |cell| {
                 const char = cell.char.grapheme;
                 if (char.len > 0) {
-                    try writer.writeAll(char);
+                    try writeGrapheme(writer, char);
                 } else {
                     try writer.writeByte(' ');
                 }
@@ -74,6 +74,10 @@ fn dumpScreenCells(writer: anytype, buffer: *Buffer) !void {
             }
         }
     }
+}
+
+fn writeGrapheme(writer: anytype, grapheme: []const u8) !void {
+    try writer.writeAll(grapheme);
 }
 
 fn isEmptyCell(cell: Cell) bool {

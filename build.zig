@@ -11,6 +11,16 @@ pub fn build(b: *std.Build) void {
     const yoga_lib = buildYogaLib(b, target, optimize);
     const yoga_mod = buildYogaModule(b, target, optimize);
 
+    // Ares library module
+    const ares_mod = b.createModule(.{
+        .root_source_file = b.path("src/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ares_mod.addImport("yoga", yoga_mod);
+    ares_mod.addImport("vaxis", vaxis_dep.module("vaxis"));
+    ares_mod.addImport("xev", xev_dep.module("xev"));
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -34,6 +44,32 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the application");
     run_step.dependOn(&run_cmd.step);
 
+    // Examples
+    const Example = enum {
+        simple,
+    };
+    const example_option = b.option(Example, "example", "Example to run (default: simple)") orelse .simple;
+    const example_step = b.step("example", "Run example");
+    const example = b.addExecutable(.{
+        .name = "example",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path(
+                b.fmt("examples/{s}.zig", .{@tagName(example_option)}),
+            ),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "ares", .module = ares_mod },
+            },
+        }),
+    });
+    example.linkLibrary(yoga_lib);
+    example.linkLibCpp();
+
+    const example_run = b.addRunArtifact(example);
+    example_step.dependOn(&example_run.step);
+
+    // Tests
     const test_filter = b.option([]const u8, "test-filter", "Filter for tests");
 
     const test_mod = b.createModule(.{

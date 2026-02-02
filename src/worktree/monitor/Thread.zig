@@ -100,19 +100,15 @@ fn stopCallback(
 }
 
 fn fsEventsCallback(
-    self: ?*Thread,
+    _: ?*Thread,
     _: *xev.FileSystem.Watcher,
-    path: []const u8,
-    r: u32,
+    _: []const u8,
+    _: u32,
 ) xev.CallbackAction {
-    const s = self.?;
-    const event = r;
 
-    log.info("monitor FsEvent on path '{s}': type='{}'", .{ path, event });
-
-    s.wakeup.notify() catch |err| {
-        log.err("Failed to notify monitor wakeup handle after fs event: {}", .{err});
-    };
+    //NOTE:
+    //my work is to send the events to the scanner for him
+    //to handle the update entries set
 
     return .rearm;
 }
