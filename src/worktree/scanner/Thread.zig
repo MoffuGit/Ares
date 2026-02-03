@@ -131,17 +131,10 @@ fn drainMailbox(self: *Thread) !void {
     }
 
     if (fs_events.count() > 0) {
-        var updated_entries = try self.scanner.process_events(&fs_events);
-        defer updated_entries.deinit();
-
-        for (updated_entries.updates.items) |update| {
-            switch (update) {
-                .add => |entry| log.debug("add: {s}", .{entry.path}),
-                .update => |entry| log.debug("update: {s}", .{entry.path}),
-                .delete => |path| log.debug("delete: {s}", .{path}),
-            }
-        }
+        const updated_entries = try self.scanner.process_events(&fs_events);
+        errdefer updated_entries.destroy();
 
         try updated_entries.apply(self.scanner.snapshot, self.scanner);
+        updated_entries.notifyApp(self.scanner);
     }
 }

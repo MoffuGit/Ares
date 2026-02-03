@@ -6,6 +6,7 @@ const Entry = worktreepkg.Entry;
 const Kind = worktreepkg.Kind;
 const Snapshot = @import("../Snapshot.zig");
 const MonitorMessage = @import("../monitor/Message.zig").Message;
+const AppEvent = @import("../../AppEvent.zig");
 
 pub const Scanner = @This();
 
@@ -18,23 +19,32 @@ pub const UpdatedEntriesSet = struct {
 
     alloc: Allocator,
     updates: std.ArrayListUnmanaged(Update),
+    applied: bool = false,
 
     pub fn init(alloc: Allocator) UpdatedEntriesSet {
         return .{
             .alloc = alloc,
             .updates = .{},
+            .applied = false,
         };
     }
 
     pub fn deinit(self: *UpdatedEntriesSet) void {
-        for (self.updates.items) |update| {
-            switch (update) {
-                .add => |entry| self.alloc.free(entry.path),
-                .update => {},
-                .delete => |path| self.alloc.free(path),
+        if (!self.applied) {
+            for (self.updates.items) |update| {
+                switch (update) {
+                    .add => |entry| self.alloc.free(entry.path),
+                    .update => {},
+                    .delete => |path| self.alloc.free(path),
+                }
             }
         }
         self.updates.deinit(self.alloc);
+    }
+
+    pub fn destroy(self: *UpdatedEntriesSet) void {
+        self.deinit();
+        self.alloc.destroy(self);
     }
 
     pub fn addEntry(self: *UpdatedEntriesSet, entry: Entry) !void {
@@ -109,6 +119,11 @@ pub const UpdatedEntriesSet = struct {
         }
 
         _ = snapshot.version.fetchAdd(1, .monotonic);
+        self.applied = true;
+    }
+
+    pub fn notifyApp(self: *UpdatedEntriesSet, scanner: *Scanner) void {
+        scanner.worktree.notifyAppEvent(.{ .worktree_updated = self });
     }
 };
 
@@ -173,9 +188,10 @@ pub fn process_scan(self: *Scanner, path: []const u8, abs_path: []const u8) !voi
     try self.worktree.scanner_thread.wakeup.notify();
 }
 
-pub fn process_events(self: *Scanner, fs_events: *std.AutoHashMap(u64, u32)) !UpdatedEntriesSet {
-    var result = UpdatedEntriesSet.init(self.alloc);
-    errdefer result.deinit();
+pub fn process_events(self: *Scanner, fs_events: *std.AutoHashMap(u64, u32)) !*UpdatedEntriesSet {
+    const result = try self.alloc.create(UpdatedEntriesSet);
+    result.* = UpdatedEntriesSet.init(self.alloc);
+    errdefer result.destroy();
 
     var it = fs_events.iterator();
     while (it.next()) |event| {
@@ -188,7 +204,7 @@ pub fn process_events(self: *Scanner, fs_events: *std.AutoHashMap(u64, u32)) !Up
         });
         defer self.alloc.free(abs_dir_path);
 
-        try self.diffDirectory(dir_path, abs_dir_path, &result);
+        try self.diffDirectory(dir_path, abs_dir_path, result);
     }
 
     return result;

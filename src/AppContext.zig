@@ -9,6 +9,8 @@ const AnimationMod = @import("element/Animation.zig");
 const BaseAnimation = AnimationMod.BaseAnimation;
 const Element = @import("element/mod.zig").Element;
 const Window = @import("Window.zig");
+const AppEvent = @import("AppEvent.zig");
+const App = @import("App.zig");
 
 const AppContext = @This();
 
@@ -18,6 +20,7 @@ wakeup: xev.Async,
 stop: xev.Async,
 needs_draw: *std.atomic.Value(bool),
 window: *Window,
+app: *App,
 
 pub fn addTick(self: *AppContext, tick: Tick) void {
     _ = self.mailbox.push(.{ .tick = tick }, .instant);
@@ -48,4 +51,8 @@ pub fn stopApp(self: *AppContext) !void {
 
 pub fn setFocus(self: *AppContext, element: ?*Element) void {
     self.window.setFocus(element);
+}
+
+pub fn subscribe(self: *AppContext, event_type: AppEvent.EventType, callback: AppEvent.Callback, userdata: ?*anyopaque) !void {
+    try self.app.subscribe(event_type, callback, userdata);
 }

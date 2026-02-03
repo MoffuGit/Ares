@@ -16,6 +16,7 @@ const Element = @import("element/mod.zig").Element;
 
 const TimeManager = @import("TimeManager.zig");
 const AppContext = @import("AppContext.zig");
+const AppEvent = @import("AppEvent.zig");
 
 const log = std.log.scoped(.app);
 
@@ -56,6 +57,8 @@ userdata: ?*anyopaque,
 
 scheme: ?Scheme = null,
 schemeFn: ?SchemeFn = null,
+
+app_listeners: AppEvent.Listeners = AppEvent.Listeners.initFill(.{}),
 
 pub fn create(alloc: Allocator, opts: Options) !*App {
     var self = try alloc.create(App);
@@ -121,6 +124,7 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
         .stop = self.loop.stop,
         .userdata = self.userdata,
         .window = &self.window,
+        .app = self,
     };
 
     self.events_thr = try std.Thread.spawn(.{}, EventsThread.threadMain, .{&self.events_thread});
@@ -155,6 +159,11 @@ pub fn destroy(self: *App) void {
     self.renderer.deinit();
     self.tty.deinit();
     self.screen.deinit();
+
+    for (&self.app_listeners.values) |*list| {
+        list.deinit(self.alloc);
+    }
+
     self.alloc.destroy(self);
 }
 
@@ -190,5 +199,23 @@ pub fn setScheme(self: *App, scheme: Scheme) !void {
     self.scheme = scheme;
     if (self.schemeFn) |callback| {
         callback(self);
+    }
+}
+
+pub fn subscribe(self: *App, event_type: AppEvent.EventType, callback: AppEvent.Callback, userdata: ?*anyopaque) !void {
+    try self.app_listeners.getPtr(event_type).append(self.alloc, .{
+        .callback = callback,
+        .userdata = userdata,
+    });
+}
+
+pub fn dispatchAppEvent(self: *App, data: AppEvent.EventData) void {
+    defer switch (data) {
+        .worktree_updated => |updated_entries| updated_entries.destroy(),
+    };
+
+    const subscriptions = self.app_listeners.get(@as(AppEvent.EventType, data));
+    for (subscriptions.items) |sub| {
+        sub.callback(data, sub.userdata);
     }
 }

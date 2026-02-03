@@ -92,13 +92,15 @@ pub fn main() !void {
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
     const cwd_path = try cwd.realpath(".", &path_buf);
 
-    var worktree = try Worktree.create(cwd_path, alloc);
+    var worktree = try Worktree.create(cwd_path, alloc, app.loop.mailbox, app.loop.wakeup);
     defer worktree.destroy();
 
     try worktree.initial_scan();
 
     const file_tree = try FileTree.create(alloc, worktree);
     defer file_tree.destroy(alloc);
+
+    try file_tree.subscribe(&app.context);
 
     try app.window.root.addChild(file_tree.getElement());
 

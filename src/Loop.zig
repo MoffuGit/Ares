@@ -13,6 +13,7 @@ const AnimationMod = @import("element/Animation.zig");
 const BaseAnimation = AnimationMod.BaseAnimation;
 const TimeManager = @import("TimeManager.zig");
 const Event = @import("events/Event.zig").Event;
+const AppEvent = @import("AppEvent.zig");
 
 pub const TickCallback = *const fn (userdata: ?*anyopaque, time: i64) ?Tick;
 
@@ -47,6 +48,7 @@ pub const Message = union(enum) {
     animation: AnimationMessage,
     event: Event,
     scheme: App.Scheme,
+    app_event: AppEvent.EventData,
 };
 
 pub const Mailbox = BlockingQueue(Message, 64);
@@ -99,6 +101,17 @@ pub fn init(alloc: Allocator, app: *App) !Loop {
 }
 
 pub fn deinit(self: *Loop) void {
+    while (self.mailbox.pop()) |message| {
+        switch (message) {
+            .app_event => |data| {
+                switch (data) {
+                    .worktree_updated => |updated_entries| updated_entries.destroy(),
+                }
+            },
+            else => {},
+        }
+    }
+
     self.stop.deinit();
     self.tick_h.deinit();
     self.wakeup.deinit();
@@ -219,6 +232,9 @@ fn drainMailbox(self: *Loop) !void {
             },
             .event => |evt| {
                 try self.app.window.handleEvent(evt);
+            },
+            .app_event => |data| {
+                self.app.dispatchAppEvent(data);
             },
         }
     }

@@ -11,6 +11,8 @@ const worktree_mod = @import("mod.zig");
 const Worktree = worktree_mod.Worktree;
 const Entry = worktree_mod.Entry;
 const Kind = worktree_mod.Kind;
+const AppEvent = @import("../AppEvent.zig");
+const AppContext = @import("../AppContext.zig");
 
 const Allocator = std.mem.Allocator;
 const gwidth = vaxis.gwidth.gwidth;
@@ -76,6 +78,19 @@ pub fn destroy(self: *FileTree, alloc: Allocator) void {
     alloc.destroy(self.content);
     self.scrollable.deinit(alloc);
     alloc.destroy(self);
+}
+
+pub fn subscribe(self: *FileTree, ctx: *AppContext) !void {
+    try ctx.subscribe(.worktree_updated, onWorktreeUpdated, self);
+}
+
+fn onWorktreeUpdated(data: AppEvent.EventData, userdata: ?*anyopaque) void {
+    const self: *FileTree = @ptrCast(@alignCast(userdata));
+    _ = data;
+
+    if (self.content.context) |ctx| {
+        ctx.requestDraw();
+    }
 }
 
 fn onClick(element: *Element, _: Element.EventData) void {
