@@ -2,6 +2,7 @@ const std = @import("std");
 const xev = @import("../../global.zig").xev;
 const Allocator = std.mem.Allocator;
 const Worktree = @import("../mod.zig").Worktree;
+const Thread = @import("Thread.zig");
 
 const log = std.log.scoped(.worktree_monitor);
 
@@ -11,6 +12,7 @@ pub const WatcherEntry = struct {
     watcher: xev.FileSystem.Watcher,
     path: []u8,
     id: u64,
+    thread: *Thread,
 };
 
 alloc: Allocator,
@@ -48,9 +50,8 @@ pub fn addWatcher(
     fs: *xev.FileSystem,
     path: []u8,
     id: u64,
-    comptime Userdata: type,
-    userdata: ?*Userdata,
-    comptime callback: *const fn (?*Userdata, *xev.FileSystem.Watcher, []const u8, u32) xev.CallbackAction,
+    thread: *Thread,
+    comptime callback: *const fn (?*WatcherEntry, *xev.FileSystem.Watcher, []const u8, u32) xev.CallbackAction,
 ) !void {
     if (self.watchers.contains(id)) {
         log.warn("watcher already exists for id={}, ignoring", .{id});
@@ -65,9 +66,10 @@ pub fn addWatcher(
         .watcher = .{},
         .path = path,
         .id = id,
+        .thread = thread,
     };
 
-    fs.watch(path, &entry.watcher, Userdata, userdata, callback) catch |err| {
+    fs.watch(path, &entry.watcher, WatcherEntry, entry, callback) catch |err| {
         log.err("failed to start watcher for '{s}': {}", .{ path, err });
         self.alloc.free(path);
         self.alloc.destroy(entry);

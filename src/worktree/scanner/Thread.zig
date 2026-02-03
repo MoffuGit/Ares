@@ -47,6 +47,7 @@ pub fn deinit(self: *Thread) void {
                 self.alloc.free(request.abs_path);
             },
             .initialScan => {},
+            .fsEvent => {},
         }
     }
 
@@ -106,6 +107,9 @@ fn wakeupCallback(
 }
 
 fn drainMailbox(self: *Thread) !void {
+    var fs_events = std.AutoHashMap(u64, u32).init(self.alloc);
+    defer fs_events.deinit();
+
     while (self.mailbox.pop()) |message| {
         switch (message) {
             .scan => |request| {
@@ -115,6 +119,29 @@ fn drainMailbox(self: *Thread) !void {
             .initialScan => {
                 try self.scanner.initial_scan();
             },
+            .fsEvent => |data| {
+                const entry = try fs_events.getOrPut(data.id);
+                if (entry.found_existing) {
+                    entry.value_ptr.* |= data.events;
+                } else {
+                    entry.value_ptr.* = data.events;
+                }
+            },
         }
+    }
+
+    if (fs_events.count() > 0) {
+        var updated_entries = try self.scanner.process_events(&fs_events);
+        defer updated_entries.deinit();
+
+        for (updated_entries.updates.items) |update| {
+            switch (update) {
+                .add => |entry| log.debug("add: {s}", .{entry.path}),
+                .update => |entry| log.debug("update: {s}", .{entry.path}),
+                .delete => |path| log.debug("delete: {s}", .{path}),
+            }
+        }
+
+        try updated_entries.apply(self.scanner.snapshot, self.scanner);
     }
 }

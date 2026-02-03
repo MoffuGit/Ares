@@ -9,6 +9,109 @@ const MonitorMessage = @import("../monitor/Message.zig").Message;
 
 pub const Scanner = @This();
 
+pub const UpdatedEntriesSet = struct {
+    pub const Update = union(enum) {
+        add: Entry,
+        update: Entry,
+        delete: []const u8,
+    };
+
+    alloc: Allocator,
+    updates: std.ArrayListUnmanaged(Update),
+
+    pub fn init(alloc: Allocator) UpdatedEntriesSet {
+        return .{
+            .alloc = alloc,
+            .updates = .{},
+        };
+    }
+
+    pub fn deinit(self: *UpdatedEntriesSet) void {
+        for (self.updates.items) |update| {
+            switch (update) {
+                .add => |entry| self.alloc.free(entry.path),
+                .update => {},
+                .delete => |path| self.alloc.free(path),
+            }
+        }
+        self.updates.deinit(self.alloc);
+    }
+
+    pub fn addEntry(self: *UpdatedEntriesSet, entry: Entry) !void {
+        try self.updates.append(self.alloc, .{ .add = entry });
+    }
+
+    pub fn updateEntry(self: *UpdatedEntriesSet, entry: Entry) !void {
+        try self.updates.append(self.alloc, .{ .update = entry });
+    }
+
+    pub fn deleteEntry(self: *UpdatedEntriesSet, path: []const u8) !void {
+        try self.updates.append(self.alloc, .{ .delete = path });
+    }
+
+    pub fn apply(self: *UpdatedEntriesSet, snapshot: *Snapshot, scanner: *Scanner) !void {
+        snapshot.mutex.lock();
+        defer snapshot.mutex.unlock();
+
+        for (self.updates.items) |*update| {
+            switch (update.*) {
+                .add => |entry| {
+                    try snapshot.entries.insert(entry.path, entry);
+                    try snapshot.id_to_path.put(entry.id, entry.path);
+
+                    // If it's a directory, add a watcher
+                    if (entry.kind == .dir) {
+                        const abs_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{
+                            scanner.abs_path[0 .. scanner.abs_path.len - scanner.root.len - 1],
+                            entry.path,
+                        });
+                        if (scanner.worktree.monitor_thread.mailbox.push(.{ .add = .{ .path = abs_path, .id = entry.id } }, .instant) == 0) {
+                            self.alloc.free(abs_path);
+                        } else {
+                            scanner.worktree.monitor_thread.wakeup.notify() catch {};
+                        }
+                    }
+
+                    // Transfer ownership - don't free in deinit
+                    update.* = .{ .update = entry };
+                },
+                .update => |entry| {
+                    if (snapshot.entries.get(entry.path) catch null) |existing| {
+                        var updated = existing;
+                        updated.kind = entry.kind;
+                        try snapshot.entries.insert(entry.path, updated);
+                    }
+                },
+                .delete => |path| {
+                    if (snapshot.entries.get(path) catch null) |existing| {
+                        const id = existing.id;
+                        const is_dir = existing.kind == .dir;
+
+                        // Remove from id_to_path
+                        _ = snapshot.id_to_path.remove(id);
+
+                        // Remove watcher if it's a directory
+                        if (is_dir) {
+                            if (scanner.worktree.monitor_thread.mailbox.push(.{ .remove = id }, .instant) != 0) {
+                                scanner.worktree.monitor_thread.wakeup.notify() catch {};
+                            }
+                        }
+                    }
+
+                    // Remove from entries
+                    _ = snapshot.entries.remove(path) catch null;
+
+                    // Free path - ownership transferred, mark as handled
+                    self.alloc.free(path);
+                    update.* = .{ .update = .{ .id = 0, .kind = .file, .path = "" } };
+                },
+            }
+        }
+
+        _ = snapshot.version.fetchAdd(1, .monotonic);
+    }
+};
+
 alloc: Allocator,
 worktree: *Worktree,
 
@@ -49,6 +152,7 @@ pub fn process_scan(self: *Scanner, path: []const u8, abs_path: []const u8) !voi
             defer self.snapshot.mutex.unlock();
 
             try self.snapshot.entries.insert(child_path, .{ .id = id, .kind = kind, .path = child_path });
+            try self.snapshot.id_to_path.put(id, child_path);
             std.log.debug("{s}", .{child_path});
         }
 
@@ -69,12 +173,97 @@ pub fn process_scan(self: *Scanner, path: []const u8, abs_path: []const u8) !voi
     try self.worktree.scanner_thread.wakeup.notify();
 }
 
-//NOTE:
-//the events are going to send the absolute path
-//you need to convert them into a valid key for the entries
-//for that you will need to remove the prefix of the string
-pub fn process_events(self: *Scanner) !void {
-    _ = self;
+pub fn process_events(self: *Scanner, fs_events: *std.AutoHashMap(u64, u32)) !UpdatedEntriesSet {
+    var result = UpdatedEntriesSet.init(self.alloc);
+    errdefer result.deinit();
+
+    var it = fs_events.iterator();
+    while (it.next()) |event| {
+        const id = event.key_ptr.*;
+        const dir_path = self.snapshot.id_to_path.get(id) orelse continue;
+
+        const abs_dir_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{
+            self.abs_path[0 .. self.abs_path.len - self.root.len - 1],
+            dir_path,
+        });
+        defer self.alloc.free(abs_dir_path);
+
+        try self.diffDirectory(dir_path, abs_dir_path, &result);
+    }
+
+    return result;
+}
+
+fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8, result: *UpdatedEntriesSet) !void {
+    var current_children = std.StringHashMap(Entry).init(self.alloc);
+    defer current_children.deinit();
+
+    // Collect current children from snapshot
+    {
+        self.snapshot.mutex.lock();
+        defer self.snapshot.mutex.unlock();
+
+        var entries_it = self.snapshot.entries.iter();
+        while (entries_it.next()) |entry| {
+            const entry_path = entry.key;
+            // Check if this is a direct child of dir_path
+            if (std.mem.startsWith(u8, entry_path, dir_path) and entry_path.len > dir_path.len) {
+                const suffix = entry_path[dir_path.len..];
+                if (suffix[0] == '/') {
+                    const rest = suffix[1..];
+                    // Direct child has no more slashes
+                    if (std.mem.indexOf(u8, rest, "/") == null) {
+                        try current_children.put(entry_path, entry.value);
+                    }
+                }
+            }
+        }
+    }
+
+    // Scan the actual directory
+    var dir = std.fs.openDirAbsolute(abs_dir_path, .{ .iterate = true }) catch |err| {
+        // Directory might have been deleted
+        if (err == error.FileNotFound) {
+            // Mark all current children as deleted
+            var children_it = current_children.iterator();
+            while (children_it.next()) |child| {
+                const deleted_path = try self.alloc.dupe(u8, child.key_ptr.*);
+                try result.deleteEntry(deleted_path);
+            }
+        }
+        return;
+    };
+    defer dir.close();
+
+    var iter = dir.iterate();
+    while (try iter.next()) |entry| {
+        const kind: Kind = switch (entry.kind) {
+            .directory => .dir,
+            .file => .file,
+            else => continue,
+        };
+
+        const child_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ dir_path, entry.name });
+
+        if (current_children.fetchRemove(child_path)) |existing| {
+            // Entry exists - check if kind changed
+            if (existing.value.kind != kind) {
+                try result.updateEntry(.{ .id = existing.value.id, .kind = kind, .path = existing.value.path });
+            }
+            self.alloc.free(child_path);
+        } else {
+            // New entry
+            const id = self.snapshot.next_id.fetchAdd(1, .monotonic);
+            try result.addEntry(.{ .id = id, .kind = kind, .path = child_path });
+        }
+    }
+
+    // Remaining entries in current_children were deleted
+    var remaining_it = current_children.iterator();
+    while (remaining_it.next()) |child| {
+        const deleted_path = try self.alloc.dupe(u8, child.key_ptr.*);
+        try result.deleteEntry(deleted_path);
+    }
 }
 
 pub fn initial_scan(self: *Scanner) !void {
@@ -98,6 +287,7 @@ pub fn initial_scan(self: *Scanner) !void {
         defer self.snapshot.mutex.unlock();
 
         try self.snapshot.entries.insert(root_path, .{ .id = id, .kind = kind, .path = root_path });
+        try self.snapshot.id_to_path.put(id, root_path);
 
         try self.snapshot.entries.print();
     }
