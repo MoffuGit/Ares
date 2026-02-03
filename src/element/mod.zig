@@ -322,6 +322,168 @@ pub fn fillRounded(element: *Element, buffer: *Buffer, color: vaxis.Color, radiu
     }
 }
 
+fn toLinear(c: f32) f32 {
+    return if (c >= 0.04045) std.math.pow(f32, (c + 0.055) / 1.055, 2.4) else c / 12.92;
+}
+
+pub const OkLab = struct { l: f32, a: f32, b: f32 };
+
+fn rgbaToOkLab(red: u8, green: u8, blue: u8) OkLab {
+    const r = toLinear(@as(f32, @floatFromInt(red)) / 255.0);
+    const g = toLinear(@as(f32, @floatFromInt(green)) / 255.0);
+    const b = toLinear(@as(f32, @floatFromInt(blue)) / 255.0);
+
+    var l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+    var m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+    var s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+
+    l = std.math.cbrt(l);
+    m = std.math.cbrt(m);
+    s = std.math.cbrt(s);
+
+    return .{
+        .l = l * 0.2104542553 + m * 0.7936177850 + s * -0.0040720468,
+        .a = l * 1.9779984951 + m * -2.4285922050 + s * 0.4505937099,
+        .b = l * 0.0259040371 + m * 0.7827717662 + s * -0.8086757660,
+    };
+}
+
+fn fromLinear(c: f32) f32 {
+    return if (c >= 0.0031308) 1.055 * std.math.pow(f32, c, 1.0 / 2.4) - 0.055 else 12.92 * c;
+}
+
+fn okLabToRgba(lab: OkLab) struct { r: u8, g: u8, b: u8 } {
+    const l = lab.l + 0.3963377774 * lab.a + 0.2158037573 * lab.b;
+    const m = lab.l - 0.1055613458 * lab.a - 0.0638541728 * lab.b;
+    const s = lab.l - 0.0894841775 * lab.a - 1.2914855480 * lab.b;
+
+    const l3 = l * l * l;
+    const m3 = m * m * m;
+    const s3 = s * s * s;
+
+    const r_linear = 4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3;
+    const g_linear = -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3;
+    const b_linear = -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3;
+
+    const r = fromLinear(r_linear);
+    const g = fromLinear(g_linear);
+    const b = fromLinear(b_linear);
+
+    return .{
+        .r = @intFromFloat(std.math.clamp(r * 255.0, 0.0, 255.0)),
+        .g = @intFromFloat(std.math.clamp(g * 255.0, 0.0, 255.0)),
+        .b = @intFromFloat(std.math.clamp(b * 255.0, 0.0, 255.0)),
+    };
+}
+
+fn lerpOkLab(a: OkLab, b_lab: OkLab, t: f32) OkLab {
+    return .{
+        .l = a.l + (b_lab.l - a.l) * t,
+        .a = a.a + (b_lab.a - a.a) * t,
+        .b = a.b + (b_lab.b - a.b) * t,
+    };
+}
+
+fn colorToOkLab(color: vaxis.Color) OkLab {
+    const rgba = color.rgba;
+    return rgbaToOkLab(rgba[0], rgba[1], rgba[2]);
+}
+
+fn okLabToColor(lab: OkLab, alpha: u8) vaxis.Color {
+    const rgb = okLabToRgba(lab);
+    return .{ .rgba = .{ rgb.r, rgb.g, rgb.b, alpha } };
+}
+
+pub const GradientDirection = enum {
+    horizontal,
+    vertical,
+};
+
+pub const ColorStop = struct {
+    position: f32,
+    color: vaxis.Color,
+};
+
+pub fn fillGradient(
+    element: *Element,
+    buffer: *Buffer,
+    stops: []const ColorStop,
+    direction: GradientDirection,
+    char: []const u8,
+) void {
+    if (stops.len == 0) return;
+    if (stops.len == 1) {
+        element.fill(buffer, .{ .style = .{ .bg = stops[0].color } });
+        return;
+    }
+
+    const layout = element.layout;
+    const left = layout.left;
+    const top = layout.top;
+    const width = layout.width;
+    const height = layout.height;
+
+    if (width == 0 or height == 0) return;
+
+    const total_steps: f32 = switch (direction) {
+        .horizontal => @floatFromInt(width),
+        .vertical => @as(f32, @floatFromInt(height)) * 2.0,
+    };
+
+    var py: u16 = 0;
+    while (py < height) : (py += 1) {
+        var px: u16 = 0;
+        while (px < width) : (px += 1) {
+            const bg_color: vaxis.Color = blk: {
+                const t: f32 = switch (direction) {
+                    .horizontal => @as(f32, @floatFromInt(px)) / total_steps,
+                    .vertical => @as(f32, @floatFromInt(py * 2)) / total_steps,
+                };
+                break :blk interpolateColor(stops, t);
+            };
+
+            const fg_color: vaxis.Color = blk: {
+                const t: f32 = switch (direction) {
+                    .horizontal => (@as(f32, @floatFromInt(px)) + 0.5) / total_steps,
+                    .vertical => (@as(f32, @floatFromInt(py * 2)) + 1.0) / total_steps,
+                };
+                break :blk interpolateColor(stops, t);
+            };
+
+            buffer.writeCell(left + px, top + py, .{
+                .char = .{ .grapheme = char },
+                .style = .{ .fg = fg_color, .bg = bg_color },
+            });
+        }
+    }
+}
+
+fn interpolateColor(stops: []const ColorStop, t: f32) vaxis.Color {
+    const clamped_t = std.math.clamp(t, 0.0, 1.0);
+
+    if (clamped_t <= stops[0].position) return stops[0].color;
+    if (clamped_t >= stops[stops.len - 1].position) return stops[stops.len - 1].color;
+
+    var i: usize = 0;
+    while (i < stops.len - 1) : (i += 1) {
+        if (clamped_t >= stops[i].position and clamped_t <= stops[i + 1].position) {
+            const segment_t = (clamped_t - stops[i].position) / (stops[i + 1].position - stops[i].position);
+
+            const lab_a = colorToOkLab(stops[i].color);
+            const lab_b = colorToOkLab(stops[i + 1].color);
+            const lerped = lerpOkLab(lab_a, lab_b, segment_t);
+
+            const alpha_a: f32 = @floatFromInt(stops[i].color.rgba[3]);
+            const alpha_b: f32 = @floatFromInt(stops[i + 1].color.rgba[3]);
+            const alpha: u8 = @intFromFloat(alpha_a + (alpha_b - alpha_a) * segment_t);
+
+            return okLabToColor(lerped, alpha);
+        }
+    }
+
+    return stops[stops.len - 1].color;
+}
+
 pub fn hitSelf(element: *Element, hit_grid: *HitGrid) void {
     hit_grid.fillRect(element.layout.left, element.layout.top, element.layout.width, element.layout.height, element.num);
 }
