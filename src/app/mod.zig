@@ -196,6 +196,10 @@ pub fn handleMessage(self: *App, msg: Message) !void {
             self.scheme = scheme;
             self.notifySubs(.{ .scheme = scheme });
         },
+        .worktreeUpdatedEntries => |entries| {
+            self.notifySubs(.{ .worktreeUpdatedEntries = entries });
+            entries.destroy();
+        },
     }
 }
 

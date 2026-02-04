@@ -6,6 +6,7 @@ const MonitorThread = @import("monitor/Thread.zig");
 
 const Scanner = @import("scanner/mod.zig");
 const ScannerThread = @import("scanner/Thread.zig");
+pub const UpdatedEntriesSet = Scanner.UpdatedEntriesSet;
 
 const Snapshot = @import("Snapshot.zig");
 
@@ -13,8 +14,7 @@ pub const FileTree = @import("FileTree.zig");
 
 const BPlusTree = @import("../datastruct/b_plus_tree.zig").BPlusTree;
 
-// const Loop = @import("../Loop.zig");
-// const AppEvent = @import("../AppEvent.zig");
+const Loop = @import("../app/Loop.zig");
 
 fn entryOrder(a: []const u8, b: []const u8) std.math.Order {
     return std.mem.order(u8, a, b);
@@ -24,7 +24,6 @@ pub const Entries = BPlusTree([]const u8, Entry, entryOrder);
 
 pub const Entry = struct {
     id: u64,
-    path: []const u8,
     kind: Kind,
 };
 
@@ -40,7 +39,8 @@ pub const Worktree = struct {
     snapshot: Snapshot,
 
     abs_path: []u8,
-    root: []u8,
+
+    app_loop: ?*Loop,
 
     monitor: Monitor,
     monitor_thread: MonitorThread,
@@ -50,9 +50,9 @@ pub const Worktree = struct {
     scanner_thread: ScannerThread,
     scanner_thr: std.Thread,
 
-    pub fn create(abs_path: []const u8, alloc: Allocator) !*Worktree {
+    pub fn create(abs_path: []const u8, alloc: Allocator, app_loop: ?*Loop) !*Worktree {
         const worktree = try alloc.create(Worktree);
-        try worktree.init(abs_path, alloc);
+        try worktree.init(abs_path, alloc, app_loop);
 
         return worktree;
     }
@@ -62,12 +62,12 @@ pub const Worktree = struct {
         self.alloc.destroy(self);
     }
 
-    pub fn init(self: *Worktree, abs_path: []const u8, alloc: Allocator) !void {
+    pub fn init(self: *Worktree, abs_path: []const u8, alloc: Allocator, app_loop: ?*Loop) !void {
         const _abs_path = try alloc.dupe(u8, abs_path);
         errdefer alloc.free(_abs_path);
 
-        const root = try alloc.dupe(u8, std.fs.path.basename(_abs_path));
-        errdefer alloc.free(root);
+        var snapshot = try Snapshot.init(alloc);
+        errdefer snapshot.deinit();
 
         var monitor_thread = try MonitorThread.init(alloc, &self.monitor);
         errdefer monitor_thread.deinit();
@@ -78,17 +78,14 @@ pub const Worktree = struct {
         var monitor = try Monitor.init(alloc, self);
         errdefer monitor.deinit();
 
-        var scanner = try Scanner.init(alloc, self, &self.snapshot, _abs_path, root);
+        var scanner = try Scanner.init(alloc, self, &self.snapshot, _abs_path);
         errdefer scanner.deinit();
-
-        var snapshot = try Snapshot.init(alloc);
-        errdefer snapshot.deinit();
 
         self.* = .{
             .alloc = alloc,
             .snapshot = snapshot,
-            .root = root,
             .abs_path = _abs_path,
+            .app_loop = app_loop,
             .scanner = scanner,
             .scanner_thread = scanner_thread,
             .scanner_thr = undefined,
@@ -99,6 +96,11 @@ pub const Worktree = struct {
 
         self.monitor_thr = try std.Thread.spawn(.{}, MonitorThread.threadMain, .{&self.monitor_thread});
         self.scanner_thr = try std.Thread.spawn(.{}, ScannerThread.threadMain, .{&self.scanner_thread});
+
+        _ = self.scanner_thread.mailbox.push(.initialScan, .instant);
+        self.scanner_thread.wakeup.notify() catch |err| {
+            log.err("error notifying scanner thread to wakeup, err={}", .{err});
+        };
     }
 
     pub fn deinit(self: *Worktree) void {
@@ -125,35 +127,20 @@ pub const Worktree = struct {
         self.snapshot.deinit();
 
         self.alloc.free(self.abs_path);
-        self.alloc.free(self.root);
 
         log.info("Worktree closed", .{});
     }
 
-    pub fn initial_scan(self: *Worktree) !void {
-        _ = self.scanner_thread.mailbox.push(.initialScan, .instant);
-        self.scanner_thread.wakeup.notify() catch |err| {
-            log.err("error notifying scanner thread to wakeup, err={}", .{err});
-        };
+    /// Send updated entries to the app loop. Returns true if successfully sent.
+    pub fn notifyUpdatedEntries(self: *Worktree, entries: *UpdatedEntriesSet) bool {
+        if (self.app_loop) |loop| {
+            if (loop.mailbox.push(.{ .app = .{ .worktreeUpdatedEntries = entries } }, .instant) != 0) {
+                loop.wakeup.notify() catch |err| {
+                    log.err("error notifying app loop: {}", .{err});
+                };
+                return true;
+            }
+        }
+        return false;
     }
-
-    // pub fn notifyAppEvent(self: *Worktree, data: AppEvent.EventData) void {
-    //     const should_destroy = blk: {
-    //         if (self.app_mailbox) |mailbox| {
-    //             if (mailbox.push(.{ .app_event = data }, .instant) != 0) {
-    //                 if (self.app_wakeup) |wakeup| {
-    //                     wakeup.notify() catch {};
-    //                 }
-    //                 break :blk false;
-    //             }
-    //         }
-    //         break :blk true;
-    //     };
-    //
-    //     if (should_destroy) {
-    //         switch (data) {
-    //             .worktree_updated => |updated_entries| updated_entries.destroy(),
-    //         }
-    //     }
-    // }
 };

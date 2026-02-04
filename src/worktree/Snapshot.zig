@@ -2,11 +2,13 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const worktreepkg = @import("mod.zig");
 const Entries = worktreepkg.Entries;
+const Kind = worktreepkg.Kind;
 
 pub const Snapshot = @This();
 
 mutex: std.Thread.Mutex = .{},
 alloc: Allocator,
+arena: std.heap.ArenaAllocator,
 version: std.atomic.Value(u64) = .{ .raw = 0 },
 next_id: std.atomic.Value(u64) = .{ .raw = 1 },
 
@@ -15,19 +17,67 @@ id_to_path: std.AutoHashMap(u64, []const u8),
 
 pub fn init(alloc: Allocator) !Snapshot {
     const entries = try Entries.init(alloc);
+    const arena = std.heap.ArenaAllocator.init(alloc);
 
     return .{
         .alloc = alloc,
+        .arena = arena,
         .entries = entries,
         .id_to_path = std.AutoHashMap(u64, []const u8).init(alloc),
     };
 }
 
 pub fn deinit(self: *Snapshot) void {
-    var it = self.entries.iter();
-    while (it.next()) |entry| {
-        self.alloc.free(entry.key);
-    }
     self.entries.deinit();
     self.id_to_path.deinit();
+    self.arena.deinit();
+}
+
+pub fn newId(self: *Snapshot) u64 {
+    return self.next_id.fetchAdd(1, .monotonic);
+}
+
+/// Interns a path into the arena. The returned slice is valid for the lifetime of the Snapshot.
+pub fn internPath(self: *Snapshot, parent: []const u8, name: []const u8) ![]const u8 {
+    const arena_alloc = self.arena.allocator();
+    if (parent.len == 0) {
+        return try arena_alloc.dupe(u8, name);
+    }
+    const path = try arena_alloc.alloc(u8, parent.len + 1 + name.len);
+    @memcpy(path[0..parent.len], parent);
+    path[parent.len] = '/';
+    @memcpy(path[parent.len + 1 ..], name);
+    return path;
+}
+
+/// Interns a standalone path into the arena.
+pub fn internPathSingle(self: *Snapshot, path: []const u8) ![]const u8 {
+    return try self.arena.allocator().dupe(u8, path);
+}
+
+/// Insert an entry with an already-interned path (from internPath/internPathSingle).
+pub fn insertInterned(self: *Snapshot, id: u64, path: []const u8, kind: Kind) !void {
+    try self.entries.insert(path, .{ .id = id, .kind = kind });
+    try self.id_to_path.put(id, path);
+}
+
+/// Insert with locking - path must already be interned.
+pub fn insertInternedLocked(self: *Snapshot, id: u64, path: []const u8, kind: Kind) !void {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+    try self.insertInterned(id, path, kind);
+}
+
+/// Remove an entry by path. Returns the entry if found.
+pub fn remove(self: *Snapshot, path: []const u8) !?worktreepkg.Entry {
+    if (try self.entries.remove(path)) |entry| {
+        _ = self.id_to_path.remove(entry.id);
+        return entry;
+    }
+    return null;
+}
+
+/// Get path by id (returns arena-owned slice, valid for Snapshot lifetime).
+pub fn getPathById(self: *Snapshot, id: u64) ?[]const u8 {
+    return self.id_to_path.get(id);
 }

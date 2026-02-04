@@ -1,42 +1,43 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
+const fmt = std.fmt;
 const worktreepkg = @import("../mod.zig");
+
 const Worktree = worktreepkg.Worktree;
 const Entry = worktreepkg.Entry;
 const Kind = worktreepkg.Kind;
+const Allocator = std.mem.Allocator;
 const Snapshot = @import("../Snapshot.zig");
 const MonitorMessage = @import("../monitor/Message.zig").Message;
-// const AppEvent = @import("../../AppEvent.zig");
 
 pub const Scanner = @This();
 
+/// Cross-thread update set. Uses IDs for add/update (lookup path from Snapshot),
+/// and owned path copy for delete (since path is removed from Snapshot).
 pub const UpdatedEntriesSet = struct {
     pub const Update = union(enum) {
-        add: Entry,
-        update: Entry,
-        delete: []const u8,
+        /// New entry added - lookup path via id from Snapshot
+        add: struct { id: u64, kind: Kind },
+        /// Entry updated - lookup path via id from Snapshot
+        update: struct { id: u64, kind: Kind },
+        /// Entry deleted - owns a copy of the path (no longer in Snapshot)
+        delete: struct { id: u64, path: []const u8 },
     };
 
     alloc: Allocator,
     updates: std.ArrayListUnmanaged(Update),
-    applied: bool = false,
 
     pub fn init(alloc: Allocator) UpdatedEntriesSet {
         return .{
             .alloc = alloc,
             .updates = .{},
-            .applied = false,
         };
     }
 
     pub fn deinit(self: *UpdatedEntriesSet) void {
-        if (!self.applied) {
-            for (self.updates.items) |update| {
-                switch (update) {
-                    .add => |entry| self.alloc.free(entry.path),
-                    .update => {},
-                    .delete => |path| self.alloc.free(path),
-                }
+        for (self.updates.items) |update| {
+            switch (update) {
+                .delete => |d| self.alloc.free(d.path),
+                else => {},
             }
         }
         self.updates.deinit(self.alloc);
@@ -47,108 +48,71 @@ pub const UpdatedEntriesSet = struct {
         self.alloc.destroy(self);
     }
 
-    pub fn addEntry(self: *UpdatedEntriesSet, entry: Entry) !void {
-        try self.updates.append(self.alloc, .{ .add = entry });
+    pub fn addEntry(self: *UpdatedEntriesSet, id: u64, kind: Kind) !void {
+        try self.updates.append(self.alloc, .{ .add = .{ .id = id, .kind = kind } });
     }
 
-    pub fn updateEntry(self: *UpdatedEntriesSet, entry: Entry) !void {
-        try self.updates.append(self.alloc, .{ .update = entry });
+    pub fn updateEntry(self: *UpdatedEntriesSet, id: u64, kind: Kind) !void {
+        try self.updates.append(self.alloc, .{ .update = .{ .id = id, .kind = kind } });
     }
 
-    pub fn deleteEntry(self: *UpdatedEntriesSet, path: []const u8) !void {
-        try self.updates.append(self.alloc, .{ .delete = path });
+    /// Delete entry - takes ownership of the path copy
+    pub fn deleteEntry(self: *UpdatedEntriesSet, id: u64, path: []const u8) !void {
+        try self.updates.append(self.alloc, .{ .delete = .{ .id = id, .path = path } });
     }
-
-    pub fn apply(self: *UpdatedEntriesSet, snapshot: *Snapshot, scanner: *Scanner) !void {
-        snapshot.mutex.lock();
-        defer snapshot.mutex.unlock();
-
-        for (self.updates.items) |*update| {
-            switch (update.*) {
-                .add => |entry| {
-                    try snapshot.entries.insert(entry.path, entry);
-                    try snapshot.id_to_path.put(entry.id, entry.path);
-
-                    // If it's a directory, add a watcher
-                    if (entry.kind == .dir) {
-                        const abs_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{
-                            scanner.abs_path[0 .. scanner.abs_path.len - scanner.root.len - 1],
-                            entry.path,
-                        });
-                        if (scanner.worktree.monitor_thread.mailbox.push(.{ .add = .{ .path = abs_path, .id = entry.id } }, .instant) == 0) {
-                            self.alloc.free(abs_path);
-                        } else {
-                            scanner.worktree.monitor_thread.wakeup.notify() catch {};
-                        }
-                    }
-
-                    // Transfer ownership - don't free in deinit
-                    update.* = .{ .update = entry };
-                },
-                .update => |entry| {
-                    if (snapshot.entries.get(entry.path) catch null) |existing| {
-                        var updated = existing;
-                        updated.kind = entry.kind;
-                        try snapshot.entries.insert(entry.path, updated);
-                    }
-                },
-                .delete => |path| {
-                    if (snapshot.entries.get(path) catch null) |existing| {
-                        const id = existing.id;
-                        const is_dir = existing.kind == .dir;
-
-                        // Remove from id_to_path
-                        _ = snapshot.id_to_path.remove(id);
-
-                        // Remove watcher if it's a directory
-                        if (is_dir) {
-                            if (scanner.worktree.monitor_thread.mailbox.push(.{ .remove = id }, .instant) != 0) {
-                                scanner.worktree.monitor_thread.wakeup.notify() catch {};
-                            }
-                        }
-                    }
-
-                    // Remove from entries
-                    _ = snapshot.entries.remove(path) catch null;
-
-                    // Free path - ownership transferred, mark as handled
-                    self.alloc.free(path);
-                    update.* = .{ .update = .{ .id = 0, .kind = .file, .path = "" } };
-                },
-            }
-        }
-
-        _ = snapshot.version.fetchAdd(1, .monotonic);
-        self.applied = true;
-    }
-
-    // pub fn notifyApp(self: *UpdatedEntriesSet, scanner: *Scanner) void {
-    //     scanner.worktree.notifyAppEvent(.{ .worktree_updated = self });
-    // }
 };
 
 alloc: Allocator,
 worktree: *Worktree,
 
-abs_path: []u8,
-root: []u8,
+abs_root: []const u8,
+root_name: []const u8,
 snapshot: *Snapshot,
 
-pub fn init(alloc: Allocator, worktree: *Worktree, snapshot: *Snapshot, abs_path: []u8, root: []u8) !Scanner {
-    const _root = try alloc.dupe(u8, root);
-    errdefer alloc.free(_root);
-    const _abs_path = try alloc.dupe(u8, abs_path);
-    errdefer alloc.free(_abs_path);
-
-    return .{ .alloc = alloc, .worktree = worktree, .abs_path = _abs_path, .root = _root, .snapshot = snapshot };
+pub fn init(alloc: Allocator, worktree: *Worktree, snapshot: *Snapshot, abs_root: []const u8) !Scanner {
+    return .{
+        .alloc = alloc,
+        .worktree = worktree,
+        .abs_root = abs_root,
+        .root_name = std.fs.path.basename(abs_root),
+        .snapshot = snapshot,
+    };
 }
 
 pub fn deinit(self: *Scanner) void {
-    self.alloc.free(self.abs_path);
-    self.alloc.free(self.root);
+    _ = self;
 }
 
-pub fn process_scan(self: *Scanner, path: []const u8, abs_path: []const u8) !void {
+/// Build absolute path on the stack from abs_root + relative path (stripping root_name prefix)
+/// rel_path is like "ares/src/file.zig", we need "/path/to/ares/src/file.zig"
+fn buildAbsPath(self: *Scanner, rel_path: []const u8, buf: []u8) ![]const u8 {
+    // rel_path starts with root_name, we need to replace it with abs_root
+    if (std.mem.eql(u8, rel_path, self.root_name)) {
+        // Just the root
+        return self.abs_root;
+    }
+    if (std.mem.startsWith(u8, rel_path, self.root_name) and rel_path.len > self.root_name.len and rel_path[self.root_name.len] == '/') {
+        // Strip root_name prefix and append to abs_root
+        const suffix = rel_path[self.root_name.len..]; // includes leading "/"
+        return try std.fmt.bufPrint(buf, "{s}{s}", .{ self.abs_root, suffix });
+    }
+    // Fallback - shouldn't happen with well-formed paths
+    return try std.fmt.bufPrint(buf, "{s}/{s}", .{ self.abs_root, rel_path });
+}
+
+/// Scan a directory by entry id (looks up path from Snapshot)
+pub fn process_scan_by_id(self: *Scanner, dir_id: u64) !void {
+    // Get the relative path from snapshot
+    const rel_path = blk: {
+        self.snapshot.mutex.lock();
+        defer self.snapshot.mutex.unlock();
+        break :blk self.snapshot.getPathById(dir_id) orelse return;
+    };
+
+    // Build abs path on stack
+    var abs_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const abs_path = try self.buildAbsPath(rel_path, &abs_buf);
+
     var dir = try std.fs.openDirAbsolute(abs_path, .{ .iterate = true });
     defer dir.close();
 
@@ -159,34 +123,39 @@ pub fn process_scan(self: *Scanner, path: []const u8, abs_path: []const u8) !voi
             .file => .file,
             else => continue,
         };
-        const child_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ path, entry.name });
 
-        const id = self.snapshot.next_id.fetchAdd(1, .monotonic);
-        {
+        const id = self.snapshot.newId();
+
+        // Intern path into snapshot arena
+        const child_path = blk: {
             self.snapshot.mutex.lock();
             defer self.snapshot.mutex.unlock();
 
-            try self.snapshot.entries.insert(child_path, .{ .id = id, .kind = kind, .path = child_path });
-            try self.snapshot.id_to_path.put(id, child_path);
-            std.log.debug("{s}", .{child_path});
-        }
+            const interned = try self.snapshot.internPath(rel_path, entry.name);
+            try self.snapshot.insertInterned(id, interned, kind);
+            break :blk interned;
+        };
+        _ = child_path;
 
         if (kind == .dir) {
-            const child_abs_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ abs_path, entry.name });
-            if (self.worktree.scanner_thread.mailbox.push(.{ .scan = .{ .abs_path = child_abs_path, .path = child_path } }, .instant) == 0) {
-                self.alloc.free(child_abs_path);
+            // Queue scan for child directory (by id)
+            if (self.worktree.scanner_thread.mailbox.push(.{ .scan_dir = id }, .instant) != 0) {
+                self.worktree.scanner_thread.wakeup.notify() catch {};
             }
 
-            const monitor_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ abs_path, entry.name });
-            if (self.worktree.monitor_thread.mailbox.push(.{ .add = .{ .path = monitor_path, .id = id } }, .instant) == 0) {
-                self.alloc.free(monitor_path);
-            } else {
+            // Queue monitor watcher (by id)
+            if (self.worktree.monitor_thread.mailbox.push(.{ .add = id }, .instant) != 0) {
                 self.worktree.monitor_thread.wakeup.notify() catch {};
             }
         }
     }
-    try self.worktree.scanner_thread.wakeup.notify();
 }
+
+/// Stores path + entry info for diffing (path is arena-owned, just a reference)
+const ChildInfo = struct {
+    path: []const u8,
+    entry: Entry,
+};
 
 pub fn process_events(self: *Scanner, fs_events: *std.AutoHashMap(u64, u32)) !*UpdatedEntriesSet {
     const result = try self.alloc.create(UpdatedEntriesSet);
@@ -196,13 +165,17 @@ pub fn process_events(self: *Scanner, fs_events: *std.AutoHashMap(u64, u32)) !*U
     var it = fs_events.iterator();
     while (it.next()) |event| {
         const id = event.key_ptr.*;
-        const dir_path = self.snapshot.id_to_path.get(id) orelse continue;
 
-        const abs_dir_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{
-            self.abs_path[0 .. self.abs_path.len - self.root.len - 1],
-            dir_path,
-        });
-        defer self.alloc.free(abs_dir_path);
+        // Get path from snapshot
+        const dir_path = blk: {
+            self.snapshot.mutex.lock();
+            defer self.snapshot.mutex.unlock();
+            break :blk self.snapshot.getPathById(id) orelse continue;
+        };
+
+        // Build abs path on stack
+        var abs_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const abs_dir_path = try self.buildAbsPath(dir_path, &abs_buf);
 
         try self.diffDirectory(dir_path, abs_dir_path, result);
     }
@@ -211,7 +184,8 @@ pub fn process_events(self: *Scanner, fs_events: *std.AutoHashMap(u64, u32)) !*U
 }
 
 fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8, result: *UpdatedEntriesSet) !void {
-    var current_children = std.StringHashMap(Entry).init(self.alloc);
+    // Use ChildInfo to store path reference + entry
+    var current_children = std.AutoHashMap(u64, ChildInfo).init(self.alloc);
     defer current_children.deinit();
 
     // Collect current children from snapshot
@@ -229,7 +203,10 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
                     const rest = suffix[1..];
                     // Direct child has no more slashes
                     if (std.mem.indexOf(u8, rest, "/") == null) {
-                        try current_children.put(entry_path, entry.value);
+                        try current_children.put(entry.value.id, .{
+                            .path = entry_path,
+                            .entry = entry.value,
+                        });
                     }
                 }
             }
@@ -240,16 +217,20 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
     var dir = std.fs.openDirAbsolute(abs_dir_path, .{ .iterate = true }) catch |err| {
         // Directory might have been deleted
         if (err == error.FileNotFound) {
-            // Mark all current children as deleted
-            var children_it = current_children.iterator();
+            // Mark all current children as deleted - need to copy paths for cross-thread
+            var children_it = current_children.valueIterator();
             while (children_it.next()) |child| {
-                const deleted_path = try self.alloc.dupe(u8, child.key_ptr.*);
-                try result.deleteEntry(deleted_path);
+                const deleted_path = try self.alloc.dupe(u8, child.path);
+                try result.deleteEntry(child.entry.id, deleted_path);
             }
         }
         return;
     };
     defer dir.close();
+
+    // Track which entries we've seen by building temp path and looking up
+    var seen_ids = std.AutoHashMap(u64, void).init(self.alloc);
+    defer seen_ids.deinit();
 
     var iter = dir.iterate();
     while (try iter.next()) |entry| {
@@ -259,68 +240,97 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
             else => continue,
         };
 
-        const child_path = try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ dir_path, entry.name });
+        // Look up if this child exists in snapshot
+        const existing_id: ?u64 = blk: {
+            self.snapshot.mutex.lock();
+            defer self.snapshot.mutex.unlock();
 
-        if (current_children.fetchRemove(child_path)) |existing| {
-            // Entry exists - check if kind changed
-            if (existing.value.kind != kind) {
-                try result.updateEntry(.{ .id = existing.value.id, .kind = kind, .path = existing.value.path });
+            // Build child path to check
+            const child_path = try self.snapshot.internPath(dir_path, entry.name);
+            if (self.snapshot.entries.get(child_path) catch null) |existing| {
+                break :blk existing.id;
             }
-            self.alloc.free(child_path);
+            // Path was interned but entry doesn't exist - that's fine, arena owns it
+            break :blk null;
+        };
+
+        if (existing_id) |id| {
+            try seen_ids.put(id, {});
+            if (current_children.get(id)) |child_info| {
+                // Entry exists - check if kind changed
+                if (child_info.entry.kind != kind) {
+                    try result.updateEntry(id, kind);
+                }
+            }
         } else {
-            // New entry
-            const id = self.snapshot.next_id.fetchAdd(1, .monotonic);
-            try result.addEntry(.{ .id = id, .kind = kind, .path = child_path });
+            // New entry - intern and insert
+            self.snapshot.mutex.lock();
+            defer self.snapshot.mutex.unlock();
+
+            const id = self.snapshot.newId();
+            const interned_path = try self.snapshot.internPath(dir_path, entry.name);
+            try self.snapshot.insertInterned(id, interned_path, kind);
+            try result.addEntry(id, kind);
+
+            // If directory, queue for scanning and monitoring
+            if (kind == .dir) {
+                if (self.worktree.scanner_thread.mailbox.push(.{ .scan_dir = id }, .instant) != 0) {
+                    self.worktree.scanner_thread.wakeup.notify() catch {};
+                }
+                if (self.worktree.monitor_thread.mailbox.push(.{ .add = id }, .instant) != 0) {
+                    self.worktree.monitor_thread.wakeup.notify() catch {};
+                }
+            }
         }
     }
 
-    // Remaining entries in current_children were deleted
+    // Remaining entries in current_children that weren't seen were deleted
     var remaining_it = current_children.iterator();
-    while (remaining_it.next()) |child| {
-        const deleted_path = try self.alloc.dupe(u8, child.key_ptr.*);
-        try result.deleteEntry(deleted_path);
+    while (remaining_it.next()) |kv| {
+        if (!seen_ids.contains(kv.key_ptr.*)) {
+            // Copy path for cross-thread (owned by UpdatedEntriesSet)
+            const deleted_path = try self.alloc.dupe(u8, kv.value_ptr.path);
+            try result.deleteEntry(kv.key_ptr.*, deleted_path);
+        }
     }
 }
 
 pub fn initial_scan(self: *Scanner) !void {
-    const fd = try std.posix.open(self.abs_path, .{}, 0);
-    defer std.posix.close(fd);
+    var dir = std.fs.openDirAbsolute(self.abs_root, .{}) catch |err| {
+        if (err == error.NotDir) {
+            // It's a file, not a directory
+            const id = self.snapshot.newId();
+            self.snapshot.mutex.lock();
+            defer self.snapshot.mutex.unlock();
 
-    const fstat = try std.posix.fstat(fd);
-    const stat = std.fs.File.Stat.fromPosix(fstat);
-
-    const kind: Kind = switch (stat.kind) {
-        .file => .file,
-        .directory => .dir,
-        else => return error.InvalidKind,
+            const root_path = try self.snapshot.internPathSingle(self.root_name);
+            try self.snapshot.insertInterned(id, root_path, .file);
+            return;
+        }
+        return err;
     };
+    dir.close();
 
-    const id = self.snapshot.next_id.fetchAdd(1, .monotonic);
-    const root_path = try self.alloc.dupe(u8, self.root);
-    errdefer self.alloc.free(root_path);
+    // It's a directory
+    const id = self.snapshot.newId();
     {
         self.snapshot.mutex.lock();
         defer self.snapshot.mutex.unlock();
 
-        try self.snapshot.entries.insert(root_path, .{ .id = id, .kind = kind, .path = root_path });
-        try self.snapshot.id_to_path.put(id, root_path);
+        // Root entry uses the directory basename (e.g., "ares")
+        const root_path = try self.snapshot.internPathSingle(self.root_name);
+        try self.snapshot.insertInterned(id, root_path, .dir);
 
         try self.snapshot.entries.print();
     }
 
-    if (kind == .dir) {
-        const scan_abs_path = try self.alloc.dupe(u8, self.abs_path);
-        if (self.worktree.scanner_thread.mailbox.push(.{ .scan = .{ .abs_path = scan_abs_path, .path = root_path } }, .instant) == 0) {
-            self.alloc.free(scan_abs_path);
-        } else {
-            try self.worktree.scanner_thread.wakeup.notify();
-        }
+    // Queue scan for root directory (by id)
+    if (self.worktree.scanner_thread.mailbox.push(.{ .scan_dir = id }, .instant) != 0) {
+        self.worktree.scanner_thread.wakeup.notify() catch {};
+    }
 
-        const monitor_path = try self.alloc.dupe(u8, self.abs_path);
-        if (self.worktree.monitor_thread.mailbox.push(.{ .add = .{ .path = monitor_path, .id = id } }, .instant) == 0) {
-            self.alloc.free(monitor_path);
-        } else {
-            self.worktree.monitor_thread.wakeup.notify() catch {};
-        }
+    // Queue monitor watcher for root (by id)
+    if (self.worktree.monitor_thread.mailbox.push(.{ .add = id }, .instant) != 0) {
+        self.worktree.monitor_thread.wakeup.notify() catch {};
     }
 }

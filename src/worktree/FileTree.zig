@@ -169,7 +169,8 @@ fn draw(element: *Element, buffer: *Buffer) void {
         const row_y = y + @as(u16, @intCast(row));
 
         col = writeText(buffer, x, row_y, icon, buffer.width);
-        _ = writeText(buffer, x + col, row_y, entry.value.path, buffer.width);
+        // Use B+Tree key as the path (arena-owned)
+        _ = writeText(buffer, x + col, row_y, entry.key, buffer.width);
 
         index += 1;
         row += 1;

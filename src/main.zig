@@ -14,7 +14,6 @@ const FileTree = worktreepkg.FileTree;
 const GPA = std.heap.GeneralPurposeAllocator(.{});
 
 //TODO:
-//make the worktree an event producer
 //create structures for app userdata(workspace, worktree)
 //create primitives(scroll, floating view)
 //create reusable styled ui components
@@ -105,6 +104,7 @@ pub fn main() !void {
     var worktree = try Worktree.create(
         cwd_path,
         alloc,
+        &app.loop,
     );
     defer worktree.destroy();
 

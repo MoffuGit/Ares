@@ -41,15 +41,8 @@ pub fn init(alloc: Allocator, scanner: *Scanner) !Thread {
 }
 
 pub fn deinit(self: *Thread) void {
-    while (self.mailbox.pop()) |message| {
-        switch (message) {
-            .scan => |request| {
-                self.alloc.free(request.abs_path);
-            },
-            .initialScan => {},
-            .fsEvent => {},
-        }
-    }
+    // No cleanup needed - messages are now ID-based (no owned strings)
+    while (self.mailbox.pop()) |_| {}
 
     self.wakeup.deinit();
     self.stop.deinit();
@@ -112,9 +105,8 @@ fn drainMailbox(self: *Thread) !void {
 
     while (self.mailbox.pop()) |message| {
         switch (message) {
-            .scan => |request| {
-                defer self.alloc.free(request.abs_path);
-                try self.scanner.process_scan(request.path, request.abs_path);
+            .scan_dir => |dir_id| {
+                try self.scanner.process_scan_by_id(dir_id);
             },
             .initialScan => {
                 try self.scanner.initial_scan();
@@ -132,9 +124,10 @@ fn drainMailbox(self: *Thread) !void {
 
     if (fs_events.count() > 0) {
         const updated_entries = try self.scanner.process_events(&fs_events);
-        errdefer updated_entries.destroy();
 
-        // try updated_entries.apply(self.scanner.snapshot, self.scanner);
-        // updated_entries.notifyApp(self.scanner);
+        // Send to app loop; if it fails, destroy the entries ourselves
+        if (!self.scanner.worktree.notifyUpdatedEntries(updated_entries)) {
+            updated_entries.destroy();
+        }
     }
 }
