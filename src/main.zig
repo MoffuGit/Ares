@@ -108,8 +108,6 @@ pub fn main() !void {
     );
     defer worktree.destroy();
 
-    try worktree.initial_scan();
-
     const file_tree = try FileTree.create(alloc, worktree);
     defer file_tree.destroy(alloc);
 

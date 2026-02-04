@@ -66,6 +66,10 @@ fn threadMain_(self: *Thread) !void {
     }
 }
 
+//NOTE:
+//the string that's part of key press and release
+//can get deallocated after a while, if i start having problems with that
+//is because i should store a copy and use the copy instead
 fn handleEvent(self: *Thread, event: vaxis.Event) !void {
     const mailbox = self.loop.mailbox;
 
