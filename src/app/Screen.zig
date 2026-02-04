@@ -1,8 +1,9 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
+
 const Allocator = std.mem.Allocator;
-const Buffer = @import("Buffer.zig");
 const Cell = vaxis.Cell;
+const Buffer = @import("Buffer.zig");
 
 pub const Screen = @This();
 

@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Element = @import("../element/mod.zig").Element;
+const Element = @import("element/mod.zig").Element;
 
 pub const Phase = enum {
     capturing,

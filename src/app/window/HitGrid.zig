@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ClipRect = @import("ClipRect.zig");
+const ClipRect = @import("../ClipRect.zig");
 
 pub const HitGrid = @This();
 

@@ -1,14 +1,14 @@
 const std = @import("std");
-const builtin = @import("builtin");
+
 const Settings = @import("settings/mod.zig");
 const Allocator = std.mem.Allocator;
-const AppContext = @import("AppContext.zig");
+const Context = @import("app/mod.zig").Context;
 
 pub const xev = @import("xev").Dynamic;
 
 pub var settings: *Settings = undefined;
 
-pub fn init(alloc: Allocator, context: *AppContext) !void {
+pub fn init(alloc: Allocator, context: *Context) !void {
     settings = try Settings.create(alloc, context);
 }
 

@@ -1,10 +1,10 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 const Element = @import("mod.zig").Element;
-const Buffer = @import("../Buffer.zig");
+const Buffer = @import("../../Buffer.zig");
 const HitGrid = @import("../HitGrid.zig");
 const Allocator = std.mem.Allocator;
-const global = @import("../global.zig");
+const global = @import("../../../global.zig");
 
 pub const Scrollable = @This();
 
@@ -381,7 +381,7 @@ fn onBarDrag(element: *Element, data: Element.EventData) void {
     const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
     const mouse = data.drag.mouse;
     const ctx = element.context orelse return;
-    const size = ctx.window.size;
+    const size = ctx.app.window.size;
 
     const current_y_pixel: i32 = mouse.pixel_row;
 

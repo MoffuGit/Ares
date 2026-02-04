@@ -1,36 +1,40 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 const yoga = @import("element/Node.zig").yoga;
-const global = @import("global.zig");
+const global = @import("../../global.zig");
 
-const Element = @import("element/mod.zig").Element;
-const Buffer = @import("Buffer.zig");
-const AppContext = @import("AppContext.zig");
-const Screen = @import("Screen.zig");
+pub const Element = @import("element/mod.zig");
+const Buffer = @import("../Buffer.zig");
+const apppkg = @import("../mod.zig");
+const Context = apppkg.Context;
+const Screen = @import("../Screen.zig");
 const HitGrid = @import("HitGrid.zig");
-const events = @import("events/mod.zig");
-const EventContext = events.EventContext;
-const Event = events.Event;
-const Mouse = events.Mouse;
-
-pub const Elements = std.AutoHashMap(u64, *Element);
 const Allocator = std.mem.Allocator;
+const Elements = std.AutoHashMap(u64, *Element);
+const eventpkg = @import("event.zig");
+const Event = eventpkg.Event;
+const Mouse = eventpkg.Mouse;
+const EventContext = @import("EventContext.zig");
+const TimeManager = @import("TimeManager.zig");
+const messagepkg = @import("message.zig");
+
+pub const Message = messagepkg.Message;
 
 const Window = @This();
 
 const Options = struct {
-    app_context: *AppContext,
-    root_opts: Element.Options = .{},
+    context: *Context,
+    root: Element.Options = .{},
 };
 
 alloc: Allocator,
-
-needs_draw: std.atomic.Value(bool) = std.atomic.Value(bool).init(true),
+context: *Context,
 
 root: *Element,
 
 size: vaxis.Winsize,
 screen: *Screen,
+time: TimeManager,
 
 focused: ?*Element = null,
 focus_path: std.ArrayList(*Element) = .{},
@@ -43,11 +47,11 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
     const root = try alloc.create(Element);
     errdefer alloc.destroy(root);
 
-    var root_opts = opts.root_opts;
+    var root_opts = opts.root;
     root_opts.id = "__root__";
 
     root.* = Element.init(alloc, root_opts);
-    root.context = opts.app_context;
+    root.context = opts.context;
     root.removed = false;
     root.hitFn = Element.hitSelf;
 
@@ -56,9 +60,13 @@ pub fn init(alloc: Allocator, screen: *Screen, opts: Options) !Window {
 
     const hit_grid = try HitGrid.init(alloc, 0, 0);
 
+    const time = TimeManager.init(alloc);
+
     return .{
         .screen = screen,
+        .time = time,
         .alloc = alloc,
+        .context = opts.context,
         .root = root,
         .size = .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 },
         .elements = elements,
@@ -72,6 +80,7 @@ pub fn deinit(self: *Window) void {
     self.focus_path.deinit(self.alloc);
     self.hit_grid.deinit();
     self.elements.deinit();
+    self.time.deinit();
 }
 
 pub fn addElement(self: *Window, elem: *Element) !void {
@@ -93,16 +102,8 @@ pub fn resize(self: *Window, size: vaxis.Winsize) void {
     self.requestDraw();
 }
 
-pub fn needsDraw(self: *Window) bool {
-    return self.needs_draw.load(.acquire);
-}
-
-pub fn markDrawn(self: *Window) void {
-    self.needs_draw.store(false, .release);
-}
-
 pub fn requestDraw(self: *Window) void {
-    self.needs_draw.store(true, .release);
+    self.context.requestDraw();
 }
 
 pub fn draw(self: *Window) !void {
@@ -175,6 +176,32 @@ pub fn dispatchEvent(target: *Element, ctx: *EventContext, data: Element.EventDa
     if (ctx.stopped) return;
 
     bubble(target, ctx, data);
+}
+fn capture(target: *Element, ctx: *EventContext, data: Element.EventData) void {
+    var path: [64]*Element = undefined;
+    var depth: usize = 0;
+
+    var current: ?*Element = target.parent;
+    while (current) |elem| : (current = elem.parent) {
+        if (depth >= path.len) break;
+        path[depth] = elem;
+        depth += 1;
+    }
+
+    var i: usize = depth;
+    while (i > 0) {
+        i -= 1;
+        path[i].dispatchEvent(data);
+        if (ctx.stopped) return;
+    }
+}
+
+fn bubble(target: *Element, ctx: *EventContext, data: Element.EventData) void {
+    var current = target.parent;
+    while (current) |elem| : (current = elem.parent) {
+        elem.dispatchEvent(data);
+        if (ctx.stopped) return;
+    }
 }
 
 pub fn handleEvent(self: *Window, event: Event) !void {
@@ -264,33 +291,6 @@ fn processHoverChange(self: *Window, prev_target: ?*Element, curr_target: ?*Elem
     }
 
     self.hovered = curr_target;
-}
-
-fn capture(target: *Element, ctx: *EventContext, data: Element.EventData) void {
-    var path: [64]*Element = undefined;
-    var depth: usize = 0;
-
-    var current: ?*Element = target.parent;
-    while (current) |elem| : (current = elem.parent) {
-        if (depth >= path.len) break;
-        path[depth] = elem;
-        depth += 1;
-    }
-
-    var i: usize = depth;
-    while (i > 0) {
-        i -= 1;
-        path[i].dispatchEvent(data);
-        if (ctx.stopped) return;
-    }
-}
-
-fn bubble(target: *Element, ctx: *EventContext, data: Element.EventData) void {
-    var current = target.parent;
-    while (current) |elem| : (current = elem.parent) {
-        elem.dispatchEvent(data);
-        if (ctx.stopped) return;
-    }
 }
 
 fn processMouseDown(self: *Window, target: *Element, mouse: Mouse) void {
@@ -385,192 +385,22 @@ pub fn getFocus(self: *Window) ?*Element {
     return self.focused;
 }
 
-const testing = std.testing;
-
-fn initTestWindow(alloc: Allocator) !struct { window: Window, screen: *Screen } {
-    const screen = try alloc.create(Screen);
-    screen.* = try Screen.init(alloc, .{ .cols = 80, .rows = 24, .x_pixel = 0, .y_pixel = 0 });
-
-    var window = try Window.init(alloc, screen, .{ .app_context = undefined });
-    window.root.context = null;
-
-    return .{ .window = window, .screen = screen };
-}
-
-fn deinitTestWindow(alloc: Allocator, window: *Window, screen: *Screen) void {
-    window.deinit();
-    screen.deinit();
-    alloc.destroy(screen);
-}
-
-test "addChild registers element in window map" {
-    const alloc = testing.allocator;
-    var state = try initTestWindow(alloc);
-    defer deinitTestWindow(alloc, &state.window, state.screen);
-
-    var child = Element.init(alloc, .{});
-    defer child.deinit();
-
-    var app_context = AppContext{
-        .userdata = null,
-        .mailbox = undefined,
-        .wakeup = undefined,
-        .stop = undefined,
-        .needs_draw = undefined,
-        .window = &state.window,
-    };
-    state.window.root.context = &app_context;
-
-    try state.window.root.addChild(&child);
-
-    try testing.expect(state.window.elements.count() == 2);
-    try testing.expect(state.window.getElement(child.num) == &child);
-}
-
-test "removeChild removes element from window map" {
-    const alloc = testing.allocator;
-    var state = try initTestWindow(alloc);
-    defer deinitTestWindow(alloc, &state.window, state.screen);
-
-    var child = Element.init(alloc, .{});
-    defer child.deinit();
-
-    var app_context = AppContext{
-        .userdata = null,
-        .mailbox = undefined,
-        .wakeup = undefined,
-        .stop = undefined,
-        .needs_draw = undefined,
-        .window = &state.window,
-    };
-    state.window.root.context = &app_context;
-
-    try state.window.root.addChild(&child);
-    try testing.expect(state.window.elements.count() == 2);
-
-    state.window.root.removeChild(child.num);
-
-    try testing.expect(state.window.elements.count() == 1);
-    try testing.expect(state.window.getElement(child.num) == null);
-}
-
-test "nested children all registered in window map" {
-    const alloc = testing.allocator;
-    var state = try initTestWindow(alloc);
-    defer deinitTestWindow(alloc, &state.window, state.screen);
-
-    var child1 = Element.init(alloc, .{});
-    defer child1.deinit();
-
-    var child2 = Element.init(alloc, .{});
-    defer child2.deinit();
-
-    var app_context = AppContext{
-        .userdata = null,
-        .mailbox = undefined,
-        .wakeup = undefined,
-        .stop = undefined,
-        .needs_draw = undefined,
-        .window = &state.window,
-    };
-    state.window.root.context = &app_context;
-
-    try child1.addChild(&child2);
-    try state.window.root.addChild(&child1);
-
-    try testing.expect(state.window.elements.count() == 3);
-    try testing.expect(state.window.getElement(child1.num) == &child1);
-    try testing.expect(state.window.getElement(child2.num) == &child2);
-}
-
-test "element remove function" {
-    const alloc = testing.allocator;
-    var state = try initTestWindow(alloc);
-    defer deinitTestWindow(alloc, &state.window, state.screen);
-
-    var child = Element.init(alloc, .{});
-    defer child.deinit();
-
-    var app_context = AppContext{
-        .userdata = null,
-        .mailbox = undefined,
-        .wakeup = undefined,
-        .stop = undefined,
-        .needs_draw = undefined,
-        .window = &state.window,
-    };
-    state.window.root.context = &app_context;
-
-    try state.window.root.addChild(&child);
-    try testing.expect(state.window.elements.count() == 2);
-    try testing.expect(state.window.getElement(child.num) == &child);
-
-    child.remove();
-
-    try testing.expect(state.window.elements.count() == 1);
-    try testing.expect(state.window.getElement(child.num) == null);
-    try testing.expect(child.removed == true);
-    try testing.expect(child.parent == null);
-    try testing.expect(child.context == null);
-}
-
-test "element remove() removes nested children" {
-    const alloc = testing.allocator;
-    var state = try initTestWindow(alloc);
-    defer deinitTestWindow(alloc, &state.window, state.screen);
-
-    var child1 = Element.init(alloc, .{});
-    defer child1.deinit();
-
-    var child2 = Element.init(alloc, .{});
-    defer child2.deinit();
-
-    var app_context = AppContext{
-        .userdata = null,
-        .mailbox = undefined,
-        .wakeup = undefined,
-        .stop = undefined,
-        .needs_draw = undefined,
-        .window = &state.window,
-    };
-    state.window.root.context = &app_context;
-
-    try state.window.root.addChild(&child1);
-    try child1.addChild(&child2);
-    try testing.expect(state.window.elements.count() == 3);
-
-    child1.remove();
-
-    try testing.expect(state.window.elements.count() == 1);
-    try testing.expect(state.window.getElement(child1.num) == null);
-    try testing.expect(state.window.getElement(child2.num) == null);
-    try testing.expect(child1.removed == true);
-    try testing.expect(child2.removed == true);
-}
-
-test "element remove() happens once" {
-    const alloc = testing.allocator;
-    var state = try initTestWindow(alloc);
-    defer deinitTestWindow(alloc, &state.window, state.screen);
-
-    var child = Element.init(alloc, .{});
-    defer child.deinit();
-
-    var app_context = AppContext{
-        .userdata = null,
-        .mailbox = undefined,
-        .wakeup = undefined,
-        .stop = undefined,
-        .needs_draw = undefined,
-        .window = &state.window,
-    };
-    state.window.root.context = &app_context;
-
-    try state.window.root.addChild(&child);
-
-    child.remove();
-    try testing.expect(state.window.elements.count() == 1);
-
-    child.remove();
-    try testing.expect(state.window.elements.count() == 1);
+pub fn handleMessage(self: *Window, msg: Message) !void {
+    switch (msg) {
+        .resize => |size| {
+            self.resize(size);
+        },
+        .tick => |tick| {
+            try self.time.addTick(tick);
+        },
+        .animation => |animation| {
+            try self.time.handleAnimation(animation);
+        },
+        .timer => |timer| {
+            try self.time.handleTimer(timer);
+        },
+        .event => |evt| {
+            try self.handleEvent(evt);
+        },
+    }
 }

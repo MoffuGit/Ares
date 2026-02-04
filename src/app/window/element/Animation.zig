@@ -1,11 +1,12 @@
 const std = @import("std");
-const Loop = @import("../Loop.zig");
-const Tick = Loop.Tick;
+const messagepkg = @import("../message.zig");
+const Tick = messagepkg.Tick;
 const Timer = @import("Timer.zig");
 const AnimState = Timer.State;
 const Easing = @import("Easing.zig").Type;
 
-const AppContext = @import("../AppContext.zig");
+const apppkg = @import("../../mod.zig");
+const Context = apppkg.Context;
 
 pub const BaseAnimation = struct {
     id: u64 = 0,
@@ -16,7 +17,7 @@ pub const BaseAnimation = struct {
     easing: Easing = .linear,
     repeat: bool = false,
     anim_state: AnimState = .idle,
-    context: ?*AppContext = null,
+    context: ?*Context = null,
 
     tickFn: *const fn (self: *BaseAnimation, time: i64) ?Tick,
 
@@ -39,8 +40,8 @@ pub fn Animation(comptime State: type) type {
         const Self = @This();
 
         pub const UpdateFn = *const fn (start: State, end: State, progress: f32) State;
-        pub const Callback = *const fn (userdata: ?*anyopaque, state: State, ctx: *AppContext) void;
-        pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: *AppContext) void;
+        pub const Callback = *const fn (userdata: ?*anyopaque, state: State, ctx: *Context) void;
+        pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: *Context) void;
 
         base: BaseAnimation,
 

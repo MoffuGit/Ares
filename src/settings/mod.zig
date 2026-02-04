@@ -1,9 +1,11 @@
 const std = @import("std");
 const xev = @import("../global.zig").xev;
+const vaxis = @import("vaxis");
 const Allocator = std.mem.Allocator;
 const Theme = @import("theme/mod.zig");
-const App = @import("../App.zig");
-const AppContext = @import("../AppContext.zig");
+const App = @import("../lib.zig").App;
+const Context = App.Context;
+const EventData = App.EventData;
 
 pub const Settings = @This();
 
@@ -29,10 +31,10 @@ const JsonSettings = struct {
 };
 
 alloc: Allocator,
-context: *AppContext,
+context: *Context,
 
 scheme: Scheme = .system,
-system_scheme: App.Scheme = .dark,
+system_scheme: vaxis.Color.Scheme = .dark,
 
 themes: Themes = .{},
 
@@ -104,6 +106,8 @@ pub fn load(self: *Settings, path: []const u8) LoadError!void {
         self.theme = self.getTheme();
     }
 
+    self.watch(&self.context.app.loop.loop);
+
     if (settings_error) |err| return err;
 }
 
@@ -115,7 +119,7 @@ pub fn getTheme(self: *Settings) *const Theme {
     return self.themes.getPtr(name) orelse &Theme.fallback;
 }
 
-pub fn updateSystemScheme(self: *Settings, scheme: App.Scheme) void {
+pub fn updateSystemScheme(self: *Settings, scheme: vaxis.Color.Scheme) void {
     self.system_scheme = scheme;
 
     self.theme = self.getTheme();
@@ -205,10 +209,12 @@ fn themesCallback(
     s.theme = s.getTheme();
     s.context.requestDraw();
 
+    s.context.app.loop.wakeup.notify() catch {};
+
     return .rearm;
 }
 
-pub fn create(alloc: Allocator, context: *AppContext) !*Settings {
+pub fn create(alloc: Allocator, context: *Context) !*Settings {
     const self = try alloc.create(Settings);
     errdefer alloc.destroy(self);
 
@@ -221,7 +227,21 @@ pub fn create(alloc: Allocator, context: *AppContext) !*Settings {
         .fs = fs,
     };
 
+    try context.subscribe(.scheme, .{
+        .userdata = self,
+        .callback = schemeFn,
+    });
+
     return self;
+}
+
+pub fn schemeFn(userdata: ?*anyopaque, data: EventData) void {
+    const scheme = data.scheme;
+    const self: *Settings = @ptrCast(@alignCast(userdata.?));
+
+    self.updateSystemScheme(scheme);
+
+    self.context.requestDraw();
 }
 
 pub fn destroy(self: *Settings) void {

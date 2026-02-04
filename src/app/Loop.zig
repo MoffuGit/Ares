@@ -1,59 +1,25 @@
 pub const Loop = @This();
 
 const std = @import("std");
-const xev = @import("global.zig").xev;
+const xev = @import("../global.zig").xev;
 const vaxis = @import("vaxis");
-const BlockingQueue = @import("datastruct/blocking_queue.zig").BlockingQueue;
+const log = std.log.scoped(.loop);
 
+const BlockingQueue = @import("../datastruct/blocking_queue.zig").BlockingQueue;
 const Allocator = std.mem.Allocator;
 
-const App = @import("App.zig");
-const Timer = @import("element/Timer.zig");
-const AnimationMod = @import("element/Animation.zig");
-const BaseAnimation = AnimationMod.BaseAnimation;
-const TimeManager = @import("TimeManager.zig");
-const Event = @import("events/Event.zig").Event;
-const AppEvent = @import("AppEvent.zig");
+const App = @import("mod.zig");
+const Window = @import("window/mod.zig");
 
-pub const TickCallback = *const fn (userdata: ?*anyopaque, time: i64) ?Tick;
-
-pub const Tick = struct {
-    next: i64,
-    callback: TickCallback,
-    userdata: ?*anyopaque = null,
-
-    pub fn lessThan(_: void, a: Tick, b: Tick) std.math.Order {
-        return std.math.order(a.next, b.next);
-    }
-};
-
-pub const TimerMessage = union(enum) {
-    start: *Timer,
-    pause: u64,
-    _resume: u64,
-    cancel: u64,
-};
-
-pub const AnimationMessage = union(enum) {
-    start: *BaseAnimation,
-    pause: u64,
-    _resume: u64,
-    cancel: u64,
-};
+const WindowMessage = Window.Message;
+const AppMessage = App.Message;
 
 pub const Message = union(enum) {
-    resize: vaxis.Winsize,
-    tick: Tick,
-    timer: TimerMessage,
-    animation: AnimationMessage,
-    event: Event,
-    scheme: App.Scheme,
-    app_event: AppEvent.EventData,
+    window: WindowMessage,
+    app: AppMessage,
 };
 
 pub const Mailbox = BlockingQueue(Message, 64);
-
-const log = std.log.scoped(.loop);
 
 alloc: Allocator,
 
@@ -70,7 +36,6 @@ tick_c: xev.Completion = .{},
 tick_active: bool = false,
 
 mailbox: *Mailbox,
-
 app: *App,
 
 pub fn init(alloc: Allocator, app: *App) !Loop {
@@ -101,17 +66,6 @@ pub fn init(alloc: Allocator, app: *App) !Loop {
 }
 
 pub fn deinit(self: *Loop) void {
-    while (self.mailbox.pop()) |message| {
-        switch (message) {
-            .app_event => |data| {
-                switch (data) {
-                    .worktree_updated => |updated_entries| updated_entries.destroy(),
-                }
-            },
-            else => {},
-        }
-    }
-
     self.stop.deinit();
     self.tick_h.deinit();
     self.wakeup.deinit();
@@ -119,13 +73,13 @@ pub fn deinit(self: *Loop) void {
     self.loop.deinit();
 }
 
-pub fn run(self: *Loop) void {
-    self.run_() catch |err| {
+pub fn threadMain(self: *Loop) void {
+    self.threadMain_() catch |err| {
         log.warn("error in loop err={}", .{err});
     };
 }
 
-pub fn run_(self: *Loop) !void {
+pub fn threadMain_(self: *Loop) !void {
     defer log.debug("loop exited", .{});
 
     self.wakeup.wait(&self.loop, &self.wakeup_c, Loop, self, wakeupCallback);
@@ -154,14 +108,14 @@ fn wakeupCallback(
     l.drainMailbox() catch |err|
         log.err("error draining mailbox err={}", .{err});
 
-    l.app.draw() catch |err|
+    l.app.drawWindow() catch |err|
         log.err("draw error: {}", .{err});
 
     return .rearm;
 }
 
 pub fn scheduleNextTick(self: *Loop) void {
-    if (self.app.time.peekNext() == null) {
+    if (self.app.window.time.peekNext() == null) {
         self.tick_active = false;
         return;
     }
@@ -193,7 +147,7 @@ fn tickCallback(
     l.tick_active = false;
 
     const now = std.time.microTimestamp();
-    l.app.time.processDue(now) catch |err| {
+    l.app.window.time.processDue(now) catch |err| {
         log.err("tick error: {}", .{err});
     };
 
@@ -203,45 +157,18 @@ fn tickCallback(
 }
 
 fn drainMailbox(self: *Loop) !void {
-    var needs_reschedule = false;
-
     while (self.mailbox.pop()) |message| {
         switch (message) {
-            .scheme => |scheme| {
-                //HACK:
-                if (self.app.scheme == scheme) continue;
-                try self.app.setScheme(scheme);
+            .window => |msg| {
+                try self.app.window.handleMessage(msg);
             },
-            .resize => |size| {
-                self.app.resize(size);
-            },
-            .tick => |tick| {
-                if (try self.app.time.addTick(tick)) {
-                    needs_reschedule = true;
-                }
-            },
-            .animation => |animation| {
-                if (try self.app.time.handleAnimation(animation)) {
-                    needs_reschedule = true;
-                }
-            },
-            .timer => |timer| {
-                if (try self.app.time.handleTimer(timer)) {
-                    needs_reschedule = true;
-                }
-            },
-            .event => |evt| {
-                try self.app.window.handleEvent(evt);
-            },
-            .app_event => |data| {
-                self.app.dispatchAppEvent(data);
+            .app => |msg| {
+                try self.app.handleMessage(msg);
             },
         }
     }
 
-    if (needs_reschedule) {
-        self.scheduleNextTick();
-    }
+    self.scheduleNextTick();
 }
 
 fn stopCallback(

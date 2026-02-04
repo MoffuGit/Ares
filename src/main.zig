@@ -1,46 +1,69 @@
 const std = @import("std");
 const datastruct = @import("datastruct/mod.zig");
-const yoga = @import("yoga");
+const log = std.log.scoped(.main);
+const global = @import("global.zig");
+const lib = @import("lib.zig");
 
-const Element = @import("element/mod.zig").Element;
-const Debug = @import("Debug.zig");
-
-const vaxis = @import("vaxis");
-const Cell = vaxis.Cell;
-
-const GPA = std.heap.GeneralPurposeAllocator(.{});
-
-const App = @import("App.zig");
-const events = @import("events/mod.zig");
-const EventContext = events.EventContext;
+const App = lib.App;
+const Element = lib.Element;
+const Buffer = lib.Buffer;
 const worktreepkg = @import("worktree/mod.zig");
 const Worktree = worktreepkg.Worktree;
 const FileTree = worktreepkg.FileTree;
-const Buffer = @import("Buffer.zig");
 
-const split = @import("split/mod.zig");
-const SplitTree = split.Tree;
+const GPA = std.heap.GeneralPurposeAllocator(.{});
 
-const log = std.log.scoped(.main);
-
-const global = @import("global.zig");
-
-var running: std.atomic.Value(bool) = .{ .raw = true };
-
-fn sigintHandler(_: c_int) callconv(.c) void {
-    running.store(false, .release);
-}
+//TODO:
+//make the worktree an event producer
+//create structures for app userdata(workspace, worktree)
+//create primitives(scroll, floating view)
+//create reusable styled ui components
+//create app component(filetree)
+//add metadata to entries
+//update the filetree
+//improve btree ranges
+//
+//NOTE:
+//about the app context userdata, i think is a good place to add my Editor state struct
+//it should contains things like workspaces, tabs, splits, code editors,
+//i need to think what information it will have every struct and what's going to be his view,
+//i think the one i can think well what's going to contains the the workspace, the other ones
+//i will think them latter, they are not that imporant right now
+//the workspace, the file tree sidebar and floating file tree with serach can be the first parts to get
+//impl because there are almost done,
+//
+//NOTE:
+//another thing, it should be good to be capable of taking ranges from my b tree,
+//and returning a n iterator that move inside this range, it would be better to what
+//we do on the diffDirectory function, and it should be nice to add a counter inisde the b tree
+//for knowing the ammount of entries,
+//
+//NOTE:
+//another thing, it would be nice to store inside every Entry metadata from every file and directory,
+//this could give you better events, things like, file got bigger or smaller, read them again,
+//or more things to shod on the file tree, cool shit
+//NOTE:
+//every directory is collapsed by default,
+//because of that out initla size is for every
+//entry that is at the first level:
+//src/file1
+//src/file2
+//src/directory1
+//then, we can track when a directory gets open,
+//to add more height to the scroll,
+//we would draw only the element that can be in the outer view,
+//but we should keep track of the size of all expanded directories and files
+//probably we can iter over all worktree files and then
+//only update in base of the snapshot version and entry snapshot version
+//you only update the values that have a new snapshot value
 
 pub fn keyPressFn(element: *Element, data: Element.EventData) void {
     const key_data = data.key_press;
     if (key_data.key.matches('c', .{ .ctrl = true })) {
-        if (element.context) |app_ctx| {
-            app_ctx.stopApp() catch {};
+        if (element.context) |ctx| {
+            ctx.stop() catch {};
         }
         key_data.ctx.stopPropagation();
-    }
-    if (key_data.key.matches('d', .{ .ctrl = true })) {
-        Debug.dumpToFile(element.context.?.window, "debugWindow.txt") catch {};
     }
 }
 
@@ -63,16 +86,7 @@ pub fn main() !void {
 
     const alloc = gpa.allocator();
 
-    var app = try App.create(alloc, .{
-        .root = .{
-            .style = .{
-                .width = .{ .percent = 100 },
-                .height = .{ .percent = 100 },
-            },
-            .drawFn = drawFn,
-        },
-        .schemeFn = schemeFn,
-    });
+    var app = try App.create(alloc, .{ .root = .{ .drawFn = drawFn } });
     defer app.destroy();
 
     try global.init(alloc, &app.context);
@@ -84,15 +98,14 @@ pub fn main() !void {
         log.warn("Using default settings", .{});
     };
 
-    settings.watch(&app.loop.loop);
-
-    try app.root().addEventListener(.key_press, keyPressFn);
-
     const cwd = std.fs.cwd();
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
     const cwd_path = try cwd.realpath(".", &path_buf);
 
-    var worktree = try Worktree.create(cwd_path, alloc, app.loop.mailbox, app.loop.wakeup);
+    var worktree = try Worktree.create(
+        cwd_path,
+        alloc,
+    );
     defer worktree.destroy();
 
     try worktree.initial_scan();
@@ -100,7 +113,7 @@ pub fn main() !void {
     const file_tree = try FileTree.create(alloc, worktree);
     defer file_tree.destroy(alloc);
 
-    try file_tree.subscribe(&app.context);
+    try app.root().addEventListener(.key_press, keyPressFn);
 
     try app.window.root.addChild(file_tree.getElement());
 

@@ -1,8 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Loop = @import("Loop.zig");
-const Tick = Loop.Tick;
+const message = @import("message.zig");
+const Tick = message.Tick;
+const AnimationMessage = message.AnimationMessage;
+const TimerMessage = message.TimerMessage;
 
 const Timer = @import("element/Timer.zig");
 const AnimationMod = @import("element/Animation.zig");
@@ -11,8 +13,6 @@ const BaseAnimation = AnimationMod.BaseAnimation;
 const Ticks = std.PriorityQueue(Tick, void, Tick.lessThan);
 
 const TimeManager = @This();
-const AnimationMessage = @import("Loop.zig").AnimationMessage;
-const TimerMessage = @import("Loop.zig").TimerMessage;
 
 timers: std.AutoHashMap(u64, *Timer),
 animations: std.AutoHashMap(u64, *BaseAnimation),
@@ -33,39 +33,30 @@ pub fn deinit(self: *TimeManager) void {
     self.timers.deinit();
 }
 
-pub fn handleAnimation(self: *TimeManager, animation: AnimationMessage) !bool {
+pub fn handleAnimation(self: *TimeManager, animation: AnimationMessage) !void {
     switch (animation) {
-        .start => |a| return try self.startAnimation(a),
-        ._resume => |id| return self.resumeAnimation(id),
+        .start => |a| try self.startAnimation(a),
+        ._resume => |id| try self.resumeAnimation(id),
         .cancel => |id| self.cancelAnimation(id),
         .pause => |id| self.pauseAnimation(id),
     }
-
-    return false;
 }
 
-pub fn handleTimer(self: *TimeManager, timer: TimerMessage) !bool {
+pub fn handleTimer(self: *TimeManager, timer: TimerMessage) !void {
     switch (timer) {
-        .start => |t| return try self.startTimer(t),
-        ._resume => |id| return self.resumeTimer(id),
+        .start => |t| try self.startTimer(t),
+        ._resume => |id| try self.resumeTimer(id),
         .cancel => |id| self.cancelTimer(id),
         .pause => |id| self.pauseTimer(id),
     }
-
-    return false;
 }
 
 pub fn peekNext(self: *TimeManager) ?Tick {
     return self.ticks.peek();
 }
 
-pub fn addTick(self: *TimeManager, tick: Tick) !bool {
-    const old = self.ticks.peek();
-    const was_empty = (old == null);
-
+pub fn addTick(self: *TimeManager, tick: Tick) !void {
     try self.ticks.add(tick);
-
-    return was_empty or (old != null and tick.next < old.?.next);
 }
 
 pub fn processDue(self: *TimeManager, now: i64) !void {
@@ -118,12 +109,12 @@ fn registerTimer(self: *TimeManager, timer: *Timer) !void {
     try self.timers.put(timer.id, timer);
 }
 
-pub fn startTimer(self: *TimeManager, timer: *Timer) !bool {
+pub fn startTimer(self: *TimeManager, timer: *Timer) !void {
     if (timer.id == 0) {
         try self.registerTimer(timer);
     }
     timer.state = .active;
-    return try self.addTick(timer.toTick());
+    try self.addTick(timer.toTick());
 }
 
 pub fn pauseTimer(self: *TimeManager, id: u64) void {
@@ -134,14 +125,13 @@ pub fn pauseTimer(self: *TimeManager, id: u64) void {
     }
 }
 
-pub fn resumeTimer(self: *TimeManager, id: u64) !bool {
+pub fn resumeTimer(self: *TimeManager, id: u64) !void {
     if (self.timers.get(id)) |timer| {
         if (timer.state == .paused) {
             timer.state = .active;
-            return try self.addTick(timer.toTick());
+            try self.addTick(timer.toTick());
         }
     }
-    return false;
 }
 
 pub fn cancelTimer(self: *TimeManager, id: u64) void {
@@ -156,14 +146,14 @@ fn registerAnimation(self: *TimeManager, animation: *BaseAnimation) !void {
     try self.animations.put(animation.id, animation);
 }
 
-pub fn startAnimation(self: *TimeManager, animation: *BaseAnimation) !bool {
+pub fn startAnimation(self: *TimeManager, animation: *BaseAnimation) !void {
     if (animation.id == 0) {
         try self.registerAnimation(animation);
     }
     animation.anim_state = .active;
     animation.start_time = std.time.microTimestamp();
     animation.elapsed_at_pause = 0;
-    return try self.addTick(animation.toTick());
+    try self.addTick(animation.toTick());
 }
 
 pub fn pauseAnimation(self: *TimeManager, id: u64) void {
@@ -174,16 +164,15 @@ pub fn pauseAnimation(self: *TimeManager, id: u64) void {
     }
 }
 
-pub fn resumeAnimation(self: *TimeManager, id: u64) !bool {
+pub fn resumeAnimation(self: *TimeManager, id: u64) !void {
     if (self.animations.get(id)) |animation| {
         if (animation.anim_state == .paused) {
             const now = std.time.microTimestamp();
             animation.start_time = now - animation.elapsed_at_pause;
             animation.anim_state = .active;
-            return try self.addTick(animation.toTick());
+            try self.addTick(animation.toTick());
         }
     }
-    return false;
 }
 
 pub fn cancelAnimation(self: *TimeManager, id: u64) void {

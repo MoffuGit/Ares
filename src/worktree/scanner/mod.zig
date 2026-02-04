@@ -6,7 +6,7 @@ const Entry = worktreepkg.Entry;
 const Kind = worktreepkg.Kind;
 const Snapshot = @import("../Snapshot.zig");
 const MonitorMessage = @import("../monitor/Message.zig").Message;
-const AppEvent = @import("../../AppEvent.zig");
+// const AppEvent = @import("../../AppEvent.zig");
 
 pub const Scanner = @This();
 
@@ -122,9 +122,9 @@ pub const UpdatedEntriesSet = struct {
         self.applied = true;
     }
 
-    pub fn notifyApp(self: *UpdatedEntriesSet, scanner: *Scanner) void {
-        scanner.worktree.notifyAppEvent(.{ .worktree_updated = self });
-    }
+    // pub fn notifyApp(self: *UpdatedEntriesSet, scanner: *Scanner) void {
+    //     scanner.worktree.notifyAppEvent(.{ .worktree_updated = self });
+    // }
 };
 
 alloc: Allocator,

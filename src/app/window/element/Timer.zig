@@ -1,10 +1,11 @@
 pub const Timer = @This();
 
 const std = @import("std");
-const Loop = @import("../Loop.zig");
-const Tick = Loop.Tick;
+const messagepkg = @import("../message.zig");
+const Tick = messagepkg.Tick;
 
-const AppContext = @import("../AppContext.zig");
+const apppkg = @import("../../mod.zig");
+const Context = apppkg.Context;
 
 pub const State = enum {
     idle,
@@ -14,8 +15,8 @@ pub const State = enum {
     completed,
 };
 
-pub const Callback = *const fn (userdata: ?*anyopaque, ctx: *AppContext) void;
-pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: *AppContext) void;
+pub const Callback = *const fn (userdata: ?*anyopaque, ctx: *Context) void;
+pub const CompleteCallback = *const fn (userdata: ?*anyopaque, ctx: *Context) void;
 
 pub const Repeat = union(enum) {
     forever,
@@ -28,7 +29,7 @@ callback: Callback,
 userdata: ?*anyopaque = null,
 repeat: Repeat = .forever,
 state: State = .idle,
-context: ?*AppContext = null,
+context: ?*Context = null,
 on_complete: ?CompleteCallback = null,
 
 pub fn start(self: *Timer) void {

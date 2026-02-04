@@ -1,81 +1,31 @@
-pub const Animation = @import("Animation.zig");
-pub const Timer = @import("Timer.zig");
-pub const Style = @import("Style.zig");
-pub const Node = @import("Node.zig");
-pub const Scrollable = @import("Scrollable.zig");
+const std = @import("std");
+const vaxis = @import("vaxis");
+const messagepkg = @import("../message.zig");
+const eventpkg = @import("../event.zig");
 
 pub var element_counter: std.atomic.Value(u64) = .init(0);
 
-const std = @import("std");
-const vaxis = @import("vaxis");
-
-const Loop = @import("../Loop.zig");
-const Tick = Loop.Tick;
-const Buffer = @import("../Buffer.zig");
-pub const HitGrid = @import("../HitGrid.zig");
-
-pub const AppContext = @import("../AppContext.zig");
-const events = @import("../events/mod.zig");
-pub const EventContext = events.EventContext;
-const Event = events.Event;
-const Mouse = events.Mouse;
+const Animation = @import("Animation.zig");
+const Timer = @import("Timer.zig");
+const Style = @import("Style.zig");
+const Node = @import("Node.zig");
+pub const Scrollable = @import("Scrollable.zig");
+const Buffer = @import("../../Buffer.zig");
+const HitGrid = @import("../HitGrid.zig");
+const apppkg = @import("../../mod.zig");
+const Context = apppkg.Context;
+const EventContext = @import("../EventContext.zig");
+const Event = eventpkg.Event;
+const Mouse = eventpkg.Mouse;
 const Allocator = std.mem.Allocator;
+const Childrens = @import("Childrens.zig");
 
-pub const Childrens = struct {
-    by_order: std.ArrayList(*Element) = .{},
-    by_z_index: std.ArrayList(*Element) = .{},
-
-    pub fn len(self: *Childrens) usize {
-        return self.by_order.items.len;
-    }
-
-    pub fn deinit(self: *Childrens, alloc: std.mem.Allocator) void {
-        self.by_order.deinit(alloc);
-        self.by_z_index.deinit(alloc);
-    }
-
-    pub fn add(self: *Childrens, child: *Element, alloc: Allocator) !void {
-        try self.by_order.append(alloc, child);
-        try self.insertByZIndex(child, alloc);
-    }
-
-    pub fn insert(self: *Childrens, child: *Element, index: usize, alloc: Allocator) !void {
-        try self.by_order.insert(alloc, index, child);
-        try self.insertByZIndex(child, alloc);
-    }
-
-    fn insertByZIndex(self: *Childrens, child: *Element, alloc: Allocator) !void {
-        const insert_idx = blk: {
-            var idx: usize = 0;
-            for (self.by_z_index.items) |c| {
-                if (c.zIndex > child.zIndex) break :blk idx;
-                idx += 1;
-            }
-            break :blk idx;
-        };
-        try self.by_z_index.insert(alloc, insert_idx, child);
-    }
-
-    pub fn remove(self: *Childrens, num: u64) ?*Element {
-        var removed_child: ?*Element = null;
-
-        for (self.by_order.items, 0..) |child, idx| {
-            if (num == child.num) {
-                removed_child = self.by_order.orderedRemove(idx);
-                break;
-            }
-        }
-
-        for (self.by_z_index.items, 0..) |child, idx| {
-            if (num == child.num) {
-                _ = self.by_z_index.orderedRemove(idx);
-                break;
-            }
-        }
-
-        return removed_child;
-    }
-};
+pub const Callback = *const fn (element: *Element, data: EventData) void;
+pub const CallbackList = std.ArrayListUnmanaged(Callback);
+pub const EventListeners = std.EnumArray(EventType, CallbackList);
+pub const DrawFn = *const fn (element: *Element, buffer: *Buffer) void;
+pub const HitFn = *const fn (element: *Element, hit_grid: *HitGrid) void;
+pub const UpdateFn = *const fn (element: *Element) void;
 
 pub const Layout = struct {
     left: u16 = 0,
@@ -138,15 +88,6 @@ pub const EventData = union(EventType) {
     resize: struct { width: u16, height: u16 },
 };
 
-pub const Callback = *const fn (element: *Element, data: EventData) void;
-pub const CallbackList = std.ArrayListUnmanaged(Callback);
-pub const EventListeners = std.EnumArray(EventType, CallbackList);
-
-pub const DrawFn = *const fn (element: *Element, buffer: *Buffer) void;
-pub const HitFn = *const fn (element: *Element, hit_grid: *HitGrid) void;
-
-pub const UpdateFn = *const fn (element: *Element) void;
-
 pub const Options = struct {
     id: ?[]const u8 = null,
     visible: bool = true,
@@ -185,7 +126,7 @@ layout: Layout = .{},
 
 style: Style = .{},
 
-context: ?*AppContext = null,
+context: ?*Context = null,
 
 userdata: ?*anyopaque = null,
 
@@ -661,9 +602,9 @@ pub fn hit(self: *Element, hit_grid: *HitGrid) void {
     }
 }
 
-pub fn setContext(self: *Element, ctx: *AppContext) !void {
+pub fn setContext(self: *Element, ctx: *Context) !void {
     self.context = ctx;
-    try ctx.window.addElement(self);
+    try ctx.app.window.addElement(self);
 
     if (self.childrens) |*childrens| {
         for (childrens.by_order.items) |child| {

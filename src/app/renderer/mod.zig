@@ -1,25 +1,22 @@
-pub const Renderer = @This();
-
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 const vaxis = @import("vaxis");
+
+const Allocator = std.mem.Allocator;
 const Screen = @import("../Screen.zig");
+const SharedContext = @import("../SharedContext.zig");
+
+pub const Renderer = @This();
 
 alloc: Allocator,
 
 size: vaxis.Winsize,
-vx: vaxis.Vaxis,
 
-tty: *vaxis.Tty,
-
+shared_context: *SharedContext,
 screen: *Screen,
 
-pub fn init(alloc: Allocator, tty: *vaxis.Tty, screen: *Screen) !Renderer {
-    const vx = try vaxis.init(alloc, .{});
-
+pub fn init(alloc: Allocator, shared: *SharedContext, screen: *Screen) !Renderer {
     return .{
-        .vx = vx,
-        .tty = tty,
+        .shared_context = shared,
         .alloc = alloc,
         .screen = screen,
         .size = .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 },
@@ -27,12 +24,15 @@ pub fn init(alloc: Allocator, tty: *vaxis.Tty, screen: *Screen) !Renderer {
 }
 
 pub fn deinit(self: *Renderer) void {
-    self.vx.deinit(self.alloc, self.tty.writer());
+    _ = self;
+    // TODO: migrate vx and tty fields from old_src
+    // self.vx.deinit(self.alloc, self.tty.writer());
 }
 
 pub fn threadEnter(self: *Renderer) !void {
-    const vx = &self.vx;
-    const tty = self.tty;
+    const shared = self.shared_context;
+    const vx = &shared.vx;
+    const tty = &shared.tty;
 
     vx.caps.kitty_keyboard = true;
     vx.caps.sgr_pixels = true;
@@ -42,16 +42,16 @@ pub fn threadEnter(self: *Renderer) !void {
     try vx.setBracketedPaste(tty.writer(), true);
     try vx.subscribeToColorSchemeUpdates(tty.writer());
     try vx.setMouseMode(tty.writer(), true);
-    try vx.subscribeToColorSchemeUpdates(tty.writer());
 }
 
 pub fn resize(self: *Renderer, size: vaxis.Winsize) !void {
-    try self.vx.resize(self.alloc, self.tty.writer(), size);
+    const shared = self.shared_context;
+    try shared.vx.resize(self.alloc, shared.tty.writer(), size);
     self.size = size;
 }
 
 pub fn threadExit(self: *Renderer) void {
-    const writer = self.tty.writer();
+    const writer = self.shared_context.tty.writer();
     writer.writeAll(vaxis.ctlseqs.color_scheme_reset) catch {};
     writer.writeAll(vaxis.ctlseqs.in_band_resize_reset) catch {};
 
@@ -60,6 +60,7 @@ pub fn threadExit(self: *Renderer) void {
 
 pub fn renderFrame(self: *Renderer) !void {
     const screen = self.screen;
+    const shared = self.shared_context;
 
     const buffer = screen.currentBuffer() orelse return;
 
@@ -77,9 +78,9 @@ pub fn renderFrame(self: *Renderer) !void {
 
         try self.resize(size);
 
-        screen.width_method = self.vx.caps.unicode;
+        screen.width_method = shared.vx.caps.unicode;
     }
 
     var vaxis_screen = screen.toVaxisScreen(buffer);
-    try self.vx.render(&vaxis_screen, self.tty.writer());
+    try shared.vx.render(&vaxis_screen, shared.tty.writer());
 }

@@ -2,21 +2,19 @@ const std = @import("std");
 const vaxis = @import("vaxis");
 const global = @import("../global.zig");
 
-const elementpkg = @import("../element/mod.zig");
-const Element = elementpkg.Element;
-const Scrollable = elementpkg.Scrollable;
-const Style = elementpkg.Style;
-const Buffer = @import("../Buffer.zig");
+const Element = @import("../lib.zig").Element;
+const Scrollable = Element.Scrollable;
+const Style = Element.Style;
+const Buffer = @import("../lib.zig").Buffer;
 const worktree_mod = @import("mod.zig");
 const Worktree = worktree_mod.Worktree;
 const Entry = worktree_mod.Entry;
 const Kind = worktree_mod.Kind;
-const AppEvent = @import("../AppEvent.zig");
-const AppContext = @import("../AppContext.zig");
+// const AppEvent = @import("../AppEvent.zig");
+// const AppContext = @import("../AppContext.zig");
 
 const Allocator = std.mem.Allocator;
 const gwidth = vaxis.gwidth.gwidth;
-const HitGrid = @import("../HitGrid.zig");
 
 pub const FileTree = @This();
 
@@ -64,7 +62,7 @@ pub fn create(alloc: Allocator, wt: *Worktree) !*FileTree {
         .worktree = wt,
     };
 
-    try scrollable.outer.addEventListener(.click, onClick);
+    // try scrollable.outer.addEventListener(.click, onClick);
 
     return self;
 }
@@ -80,24 +78,24 @@ pub fn destroy(self: *FileTree, alloc: Allocator) void {
     alloc.destroy(self);
 }
 
-pub fn subscribe(self: *FileTree, ctx: *AppContext) !void {
-    try ctx.subscribe(.worktree_updated, onWorktreeUpdated, self);
-}
+// pub fn subscribe(self: *FileTree, ctx: *AppContext) !void {
+//     try ctx.subscribe(.worktree_updated, onWorktreeUpdated, self);
+// }
 
-fn onWorktreeUpdated(data: AppEvent.EventData, userdata: ?*anyopaque) void {
-    const self: *FileTree = @ptrCast(@alignCast(userdata));
-    _ = data;
+// fn onWorktreeUpdated(data: AppEvent.EventData, userdata: ?*anyopaque) void {
+//     const self: *FileTree = @ptrCast(@alignCast(userdata));
+//     _ = data;
+//
+//     if (self.content.context) |ctx| {
+//         ctx.requestDraw();
+//     }
+// }
 
-    if (self.content.context) |ctx| {
-        ctx.requestDraw();
-    }
-}
-
-fn onClick(element: *Element, _: Element.EventData) void {
-    if (element.context) |ctx| {
-        ctx.setFocus(element);
-    }
-}
+// fn onClick(element: *Element, _: Element.EventData) void {
+//     if (element.context) |ctx| {
+//         ctx.setFocus(element);
+//     }
+// }
 
 fn onMouseEnter(element: *Element, _: Element.EventData) void {
     const self: *Scrollable = @ptrCast(@alignCast(element.userdata));

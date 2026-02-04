@@ -134,7 +134,7 @@ fn drainMailbox(self: *Thread) !void {
         const updated_entries = try self.scanner.process_events(&fs_events);
         errdefer updated_entries.destroy();
 
-        try updated_entries.apply(self.scanner.snapshot, self.scanner);
-        updated_entries.notifyApp(self.scanner);
+        // try updated_entries.apply(self.scanner.snapshot, self.scanner);
+        // updated_entries.notifyApp(self.scanner);
     }
 }

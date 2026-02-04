@@ -1,14 +1,13 @@
-pub const Thread = @This();
-
 const std = @import("std");
-const xev = @import("../global.zig").xev;
+const xev = @import("../../global.zig").xev;
 const vaxis = @import("vaxis");
-const BlockingQueue = @import("../datastruct/blocking_queue.zig").BlockingQueue;
-const Renderer = @import("mod.zig");
+const log = std.log.scoped(.renderer_thread);
 
+const BlockingQueue = @import("../../datastruct/blocking_queue.zig").BlockingQueue;
+const Renderer = @import("mod.zig");
 const Allocator = std.mem.Allocator;
 
-const log = std.log.scoped(.renderer_thread);
+pub const Thread = @This();
 
 alloc: Allocator,
 
