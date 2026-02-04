@@ -15,12 +15,8 @@ const GPA = std.heap.GeneralPurposeAllocator(.{});
 
 //TODO:
 //create structures for app userdata(workspace, worktree)
-//create primitives(scroll, floating view)
-//create reusable styled ui components
-//create app component(filetree)
 //add metadata to entries
 //update the filetree
-//improve btree ranges
 //
 //NOTE:
 //about the app context userdata, i think is a good place to add my Editor state struct
@@ -30,12 +26,6 @@ const GPA = std.heap.GeneralPurposeAllocator(.{});
 //i will think them latter, they are not that imporant right now
 //the workspace, the file tree sidebar and floating file tree with serach can be the first parts to get
 //impl because there are almost done,
-//
-//NOTE:
-//another thing, it should be good to be capable of taking ranges from my b tree,
-//and returning a n iterator that move inside this range, it would be better to what
-//we do on the diffDirectory function, and it should be nice to add a counter inisde the b tree
-//for knowing the ammount of entries,
 //
 //NOTE:
 //another thing, it would be nice to store inside every Entry metadata from every file and directory,
