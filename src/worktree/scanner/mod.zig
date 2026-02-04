@@ -188,27 +188,33 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
     var current_children = std.AutoHashMap(u64, ChildInfo).init(self.alloc);
     defer current_children.deinit();
 
-    // Collect current children from snapshot
+    // Collect current children from snapshot using range iterator
+    // Range starts at "dir_path/" (first possible child) and we stop when prefix no longer matches
     {
         self.snapshot.mutex.lock();
         defer self.snapshot.mutex.unlock();
 
-        var entries_it = self.snapshot.entries.iter();
+        // Build the prefix for children: "dir_path/"
+        var prefix_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const prefix = std.fmt.bufPrint(&prefix_buf, "{s}/", .{dir_path}) catch return;
+
+        // Use rangeFrom to start at first entry >= prefix
+        var entries_it = self.snapshot.entries.rangeFrom(prefix);
         while (entries_it.next()) |entry| {
             const entry_path = entry.key;
-            // Check if this is a direct child of dir_path
-            if (std.mem.startsWith(u8, entry_path, dir_path) and entry_path.len > dir_path.len) {
-                const suffix = entry_path[dir_path.len..];
-                if (suffix[0] == '/') {
-                    const rest = suffix[1..];
-                    // Direct child has no more slashes
-                    if (std.mem.indexOf(u8, rest, "/") == null) {
-                        try current_children.put(entry.value.id, .{
-                            .path = entry_path,
-                            .entry = entry.value,
-                        });
-                    }
-                }
+
+            // Stop if we've moved past entries that start with our prefix
+            if (!std.mem.startsWith(u8, entry_path, prefix)) {
+                break;
+            }
+
+            // Check if this is a direct child (no more slashes after prefix)
+            const rest = entry_path[prefix.len..];
+            if (std.mem.indexOf(u8, rest, "/") == null) {
+                try current_children.put(entry.value.id, .{
+                    .path = entry_path,
+                    .entry = entry.value,
+                });
             }
         }
     }

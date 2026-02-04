@@ -759,6 +759,128 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             }
         };
 
+        /// Bound type for range queries
+        pub const Bound = union(enum) {
+            /// No bound (unbounded)
+            unbounded,
+            /// Inclusive bound (includes the key)
+            inclusive: K,
+            /// Exclusive bound (excludes the key)
+            exclusive: K,
+        };
+
+        /// Iterator over a range of keys in the B+ tree
+        pub const RangeIterator = struct {
+            leaf: ?*Node,
+            index: usize,
+            end_bound: Bound,
+
+            /// Initialize a range iterator starting from a specific bound
+            pub fn init(tree: *const Self, start_bound: Bound, end_bound: Bound) RangeIterator {
+                const start_leaf = switch (start_bound) {
+                    .unbounded => findLeftmostLeaf(tree.root),
+                    .inclusive => |key| findLeafForKey(tree.root, key),
+                    .exclusive => |key| findLeafForKey(tree.root, key),
+                };
+
+                if (start_leaf == null) {
+                    return .{ .leaf = null, .index = 0, .end_bound = end_bound };
+                }
+
+                const leaf = start_leaf.?;
+                const start_index: usize = switch (start_bound) {
+                    .unbounded => 0,
+                    .inclusive => |key| findIndexInLeaf(leaf, key, true),
+                    .exclusive => |key| findIndexInLeaf(leaf, key, false),
+                };
+
+                return .{
+                    .leaf = leaf,
+                    .index = start_index,
+                    .end_bound = end_bound,
+                };
+            }
+
+            fn findLeftmostLeaf(node: *Node) ?*Node {
+                var current: ?*Node = node;
+                while (current) |n| {
+                    switch (n.*) {
+                        .Internal => |*internal| {
+                            if (internal.len == 0) return null;
+                            current = internal.childs[0];
+                        },
+                        .Leaf => return current,
+                    }
+                }
+                return null;
+            }
+
+            fn findLeafForKey(node: *Node, key: K) ?*Node {
+                var current: *Node = node;
+                while (true) {
+                    switch (current.*) {
+                        .Internal => |*internal| {
+                            if (internal.len == 0) return null;
+                            var idx: u16 = 1;
+                            while (idx < internal.len) {
+                                switch (comp(key, internal.keys[idx])) {
+                                    .lt => break,
+                                    .eq, .gt => idx += 1,
+                                }
+                            }
+                            current = internal.childs[idx - 1];
+                        },
+                        .Leaf => return current,
+                    }
+                }
+            }
+
+            fn findIndexInLeaf(node: *Node, key: K, inclusive: bool) usize {
+                const leaf = node.Leaf;
+                var i: usize = 0;
+                while (i < leaf.len) {
+                    switch (comp(key, leaf.keys[i])) {
+                        .lt => return i,
+                        .eq => return if (inclusive) i else i + 1,
+                        .gt => i += 1,
+                    }
+                }
+                return i;
+            }
+
+            fn isAtOrPastEnd(self: *RangeIterator, key: K) bool {
+                return switch (self.end_bound) {
+                    .unbounded => false,
+                    .inclusive => |end_key| comp(key, end_key) == .gt,
+                    .exclusive => |end_key| comp(key, end_key) != .lt,
+                };
+            }
+
+            pub fn next(self: *RangeIterator) ?struct { key: K, value: V } {
+                while (self.leaf) |node| {
+                    if (node.is_leaf()) {
+                        const leaf = node.Leaf;
+                        if (self.index < leaf.len) {
+                            const key = leaf.keys[self.index];
+                            // Check if we've passed the end bound
+                            if (self.isAtOrPastEnd(key)) {
+                                self.leaf = null;
+                                return null;
+                            }
+                            self.index += 1;
+                            return .{ .key = key, .value = leaf.items[self.index - 1] };
+                        } else {
+                            self.leaf = leaf.next;
+                            self.index = 0;
+                        }
+                    } else {
+                        unreachable;
+                    }
+                }
+                return null;
+            }
+        };
+
         pub fn init(alloc: Allocator) !Self {
             const root = try alloc.create(Node);
             root.* = .{ .Leaf = .{} };
@@ -807,6 +929,26 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
 
         pub fn iter(self: *Self) Iterator {
             return Iterator.init(self);
+        }
+
+        /// Create a range iterator over [start, end] (both inclusive)
+        pub fn range(self: *Self, start: K, end: K) RangeIterator {
+            return RangeIterator.init(self, .{ .inclusive = start }, .{ .inclusive = end });
+        }
+
+        /// Create a range iterator from start (inclusive) to end of tree
+        pub fn rangeFrom(self: *Self, start: K) RangeIterator {
+            return RangeIterator.init(self, .{ .inclusive = start }, .unbounded);
+        }
+
+        /// Create a range iterator from start of tree to end (inclusive)
+        pub fn rangeTo(self: *Self, end: K) RangeIterator {
+            return RangeIterator.init(self, .unbounded, .{ .inclusive = end });
+        }
+
+        /// Create a range iterator with custom bounds
+        pub fn rangeWithBounds(self: *Self, start_bound: Bound, end_bound: Bound) RangeIterator {
+            return RangeIterator.init(self, start_bound, end_bound);
         }
 
         pub fn print(self: *const Self) !void {
@@ -1300,4 +1442,142 @@ test "B+ Tree with string keys" {
 
     // Test deletion of a non-existent key
     try testing.expectEqual(error.NotFound, tree.remove("mango"));
+}
+
+test "B+ Tree range iterator - inclusive range" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    // Insert values 0-19
+    for (0..20) |key| {
+        try tree.insert(key, key + 100);
+    }
+
+    // Test range [5, 10] inclusive
+    var range_iter = tree.range(5, 10);
+    var count: usize = 0;
+    var expected_key: usize = 5;
+
+    while (range_iter.next()) |entry| {
+        try testing.expectEqual(expected_key, entry.key);
+        try testing.expectEqual(expected_key + 100, entry.value);
+        expected_key += 1;
+        count += 1;
+    }
+
+    try testing.expectEqual(6, count); // 5, 6, 7, 8, 9, 10
+}
+
+test "B+ Tree range iterator - rangeFrom" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    for (0..20) |key| {
+        try tree.insert(key, key + 100);
+    }
+
+    // Test from 15 to end
+    var range_iter = tree.rangeFrom(15);
+    var count: usize = 0;
+    var expected_key: usize = 15;
+
+    while (range_iter.next()) |entry| {
+        try testing.expectEqual(expected_key, entry.key);
+        expected_key += 1;
+        count += 1;
+    }
+
+    try testing.expectEqual(5, count); // 15, 16, 17, 18, 19
+}
+
+test "B+ Tree range iterator - rangeTo" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    for (0..20) |key| {
+        try tree.insert(key, key + 100);
+    }
+
+    // Test from start to 4
+    var range_iter = tree.rangeTo(4);
+    var count: usize = 0;
+    var expected_key: usize = 0;
+
+    while (range_iter.next()) |entry| {
+        try testing.expectEqual(expected_key, entry.key);
+        expected_key += 1;
+        count += 1;
+    }
+
+    try testing.expectEqual(5, count); // 0, 1, 2, 3, 4
+}
+
+test "B+ Tree range iterator - exclusive bounds" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    for (0..20) |key| {
+        try tree.insert(key, key + 100);
+    }
+
+    // Test (5, 10) exclusive on both ends
+    var range_iter = tree.rangeWithBounds(.{ .exclusive = 5 }, .{ .exclusive = 10 });
+    var count: usize = 0;
+    var expected_key: usize = 6;
+
+    while (range_iter.next()) |entry| {
+        try testing.expectEqual(expected_key, entry.key);
+        expected_key += 1;
+        count += 1;
+    }
+
+    try testing.expectEqual(4, count); // 6, 7, 8, 9
+}
+
+test "B+ Tree range iterator with string keys" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree([]const u8, usize, string_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    try tree.insert("apple", 10);
+    try tree.insert("banana", 20);
+    try tree.insert("cherry", 30);
+    try tree.insert("date", 40);
+    try tree.insert("elderberry", 35);
+    try tree.insert("fig", 45);
+    try tree.insert("grape", 50);
+
+    // Range from "banana" to "elderberry" inclusive
+    var range_iter = tree.range("banana", "elderberry");
+    var results: std.ArrayListUnmanaged([]const u8) = .{};
+    defer results.deinit(alloc);
+
+    while (range_iter.next()) |entry| {
+        try results.append(alloc, entry.key);
+    }
+
+    try testing.expectEqual(4, results.items.len);
+    try testing.expectEqualStrings("banana", results.items[0]);
+    try testing.expectEqualStrings("cherry", results.items[1]);
+    try testing.expectEqualStrings("date", results.items[2]);
+    try testing.expectEqualStrings("elderberry", results.items[3]);
 }
