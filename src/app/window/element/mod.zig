@@ -299,7 +299,10 @@ pub fn fillRounded(element: *Element, buffer: *Buffer, color: vaxis.Color, radiu
 
 pub fn print(element: *Element, buffer: *Buffer, segments: []const Segment, opts: PrintOptions) PrintResult {
     const layout = element.layout;
-    const base_x = layout.left + layout.padding.left + layout.border.left;
+    var base_x = layout.left + layout.padding.left + layout.border.left;
+    if (opts.text_align == .center) {
+        base_x += layout.width / 2;
+    }
     const base_y = layout.top + layout.padding.top + layout.border.top;
     const content_width = layout.width -| (layout.padding.left + layout.padding.right + layout.border.left + layout.border.right);
     const content_height = layout.height -| (layout.padding.top + layout.padding.bottom + layout.border.top + layout.border.bottom);

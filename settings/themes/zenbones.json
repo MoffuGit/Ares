@@ -1,11 +1,13 @@
 {
-  "name": "dark",
+  "name": "zenbones",
   "colors": {
-    "background": "#0a0a0a",
-    "foreground": "#eeeeeeff",
+    "background": "#030202",
+    "foreground": "#BBB2AF",
+    "forr": "#6E6763",
+    "mutesFg": "#BBB2AF",
     "scrollBar": "#666666",
     "scrollTrack": "#333333",
-    "border-900": "#484848",
+    "border-900": "#2B2421",
     "border-800": "#3c3c3c"
   },
   "theme": {

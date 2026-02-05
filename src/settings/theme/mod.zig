@@ -10,6 +10,7 @@ bg: Color,
 fg: Color,
 scrollBar: Color,
 scrollTrack: Color,
+border: Color,
 
 pub const fallback = Theme{
     .name = "fallback",
@@ -17,6 +18,7 @@ pub const fallback = Theme{
     .fg = Color{ .rgba = .{ 220, 220, 220, 255 } },
     .scrollBar = Color{ .rgba = .{ 100, 100, 100, 255 } },
     .scrollTrack = Color{ .rgba = .{ 50, 50, 50, 255 } },
+    .border = Color{ .rgba = .{ 0, 255, 0, 255 } },
 };
 
 pub const ParseError = error{
@@ -34,6 +36,7 @@ const JsonTheme = struct {
         fg: []const u8,
         scrollBar: []const u8,
         scrollTrack: []const u8,
+        border: []const u8,
     },
 };
 
@@ -57,6 +60,7 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
     const fg = colors.get(json_theme.theme.fg) orelse return ParseError.ColorNotFound;
     const scrollBar = colors.get(json_theme.theme.scrollBar) orelse return ParseError.ColorNotFound;
     const scrollTrack = colors.get(json_theme.theme.scrollTrack) orelse return ParseError.ColorNotFound;
+    const border = colors.get(json_theme.theme.border) orelse return ParseError.ColorNotFound;
 
     const name = allocator.dupe(u8, json_theme.name) catch return ParseError.InvalidJson;
 
@@ -66,6 +70,7 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
         .fg = fg,
         .scrollBar = scrollBar,
         .scrollTrack = scrollTrack,
+        .border = border,
     };
 }
 

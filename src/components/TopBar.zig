@@ -26,7 +26,7 @@ pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
         .userdata = self,
         .style = .{
             .width = .{ .percent = 100 },
-            .height = .{ .point = 1 },
+            .height = .{ .point = 2 },
             .flex_shrink = 0,
         },
     });
@@ -56,6 +56,8 @@ fn draw(element: *Element, buffer: *Buffer) void {
 
     if (self.workspace.project) |project| {
         const root_name = std.fs.path.basename(project.worktree.abs_path);
-        _ = element.print(buffer, &.{.{ .text = root_name }}, .{});
+        _ = element.print(buffer, &.{.{ .text = root_name, .style = .{ .fg = self.settings.theme.fg } }}, .{ .text_align = .center });
     }
+
+    buffer.fillRect(element.layout.left, element.layout.top + 1, element.layout.width, 1, .{ .char = .{ .grapheme = "─" }, .style = .{ .bg = self.settings.theme.bg, .fg = self.settings.theme.border } });
 }

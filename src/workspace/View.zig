@@ -1,7 +1,9 @@
 const std = @import("std");
 const lib = @import("../lib.zig");
+const global = @import("../global.zig");
 const Element = lib.Element;
 const Buffer = lib.Buffer;
+const Settings = @import("../settings/mod.zig");
 
 const View = @This();
 
@@ -84,9 +86,10 @@ pub fn getElement(self: *View) *Element {
 }
 
 fn drawCenter(element: *Element, buffer: *Buffer) void {
-    element.fill(buffer, .{ .style = .{ .bg = .{ .rgb = .{ 255, 0, 0 } } } });
+    const theme = global.settings.theme;
+    element.fill(buffer, .{ .style = .{ .bg = theme.bg } });
 }
 
 fn drawBottomBar(element: *Element, buffer: *Buffer) void {
-    element.fill(buffer, .{ .style = .{ .bg = .{ .rgb = .{ 0, 0, 255 } } } });
+    element.fill(buffer, .{ .style = .{ .bg = .{ .rgb = .{ 23, 18, 16 } } } });
 }
