@@ -849,61 +849,53 @@ pub fn hit(self: *Element, hit_grid: *HitGrid) void {
 
 pub fn setContext(self: *Element, ctx: *Context) !void {
     self.context = ctx;
-    self.removed = false;
     try ctx.app.window.addElement(self);
 
     if (self.childrens) |*childrens| {
-        for (childrens.by_order.items, 0..) |child, index| {
-            self.node.insertChild(child.node, index);
+        for (childrens.by_order.items) |child| {
             try child.setContext(ctx);
         }
     }
 }
 
-pub fn remove(self: *Element) void {
-    self.removeWithChildren(true);
-}
-
-pub fn removeWithChildren(self: *Element, recursive: bool) void {
-    if (self.removed) return;
-
-    if (self.parent) |parent| {
-        parent.removeChildInternal(self.num, recursive);
-    } else {
-        self.markRemovedFromTree();
-    }
-}
-
-fn markRemovedFromTree(self: *Element) void {
-    if (self.removed) return;
-
+pub fn removeContext(self: *Element) void {
     if (self.context) |ctx| {
         ctx.app.window.removeElement(self.num);
-    }
+        self.context = null;
 
-    self.context = null;
-    self.removed = true;
-
-    self.dispatchEvent(.{ .remove = {} });
-
-    if (self.childrens) |*childrens| {
-        for (childrens.by_order.items) |child| {
-            child.markRemovedFromTree();
+        if (self.childrens) |*childrens| {
+            for (childrens.by_order.items) |child| {
+                child.removeContext();
+            }
         }
     }
 }
 
-fn removeChildInternal(self: *Element, num: u64, remove_from_list: bool) void {
+pub fn markRemoved(self: *Element, removed: bool) void {
+    self.removed = removed;
+
     if (self.childrens) |*childrens| {
-        if (remove_from_list) {
-            const child = childrens.remove(num) orelse return;
-            self.node.removeChild(child.node);
-            child.parent = null;
-            child.markRemovedFromTree();
-        } else {
-            const child = childrens.get(num) orelse return;
-            self.node.removeChild(child.node);
-            child.markRemovedFromTree();
+        for (childrens.by_order.items) |child| {
+            child.markRemoved(removed);
+        }
+    }
+}
+
+pub fn remove(self: *Element) void {
+    if (self.removed) return;
+
+    if (self.parent) |parent| {
+        parent.removeChild(self.num);
+    } else {
+        self.removeContext();
+        self.markRemoved(true);
+    }
+}
+
+pub fn removeChildrens(self: *Element) void {
+    if (self.childrens) |childrens| {
+        for (childrens.by_order.items) |child| {
+            self.removeChild(child.num);
         }
     }
 }
@@ -914,7 +906,7 @@ pub fn addChild(self: *Element, child: *Element) !void {
     }
 
     child.parent = self;
-    child.removed = false;
+    child.markRemoved(false);
 
     if (self.context) |ctx| {
         try child.setContext(ctx);
@@ -931,7 +923,8 @@ pub fn insertChild(self: *Element, child: *Element, index: usize) !void {
     }
 
     child.parent = self;
-    child.removed = false;
+
+    child.markRemoved(false);
 
     if (self.context) |ctx| {
         try child.setContext(ctx);
@@ -948,13 +941,10 @@ pub fn removeChild(self: *Element, num: u64) void {
 
         self.node.removeChild(child.node);
 
-        if (child.context) |ctx| {
-            ctx.app.window.removeElement(num);
-        }
+        child.removeContext();
+        child.markRemoved(true);
 
         child.parent = null;
-        child.context = null;
-        child.removed = true;
 
         child.dispatchEvent(.{ .remove = {} });
     }
