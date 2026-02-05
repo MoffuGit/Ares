@@ -38,6 +38,15 @@ fn insertByZIndex(self: *Childrens, child: *Element, alloc: Allocator) !void {
     try self.by_z_index.insert(alloc, insert_idx, child);
 }
 
+pub fn get(self: *Childrens, num: u64) ?*Element {
+    for (self.by_order.items) |child| {
+        if (num == child.num) {
+            return child;
+        }
+    }
+    return null;
+}
+
 pub fn remove(self: *Childrens, num: u64) ?*Element {
     var removed_child: ?*Element = null;
 

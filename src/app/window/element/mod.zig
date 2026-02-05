@@ -849,34 +849,61 @@ pub fn hit(self: *Element, hit_grid: *HitGrid) void {
 
 pub fn setContext(self: *Element, ctx: *Context) !void {
     self.context = ctx;
+    self.removed = false;
     try ctx.app.window.addElement(self);
 
     if (self.childrens) |*childrens| {
-        for (childrens.by_order.items) |child| {
+        for (childrens.by_order.items, 0..) |child, index| {
+            self.node.insertChild(child.node, index);
             try child.setContext(ctx);
         }
     }
 }
 
 pub fn remove(self: *Element) void {
+    self.removeWithChildren(true);
+}
+
+pub fn removeWithChildren(self: *Element, recursive: bool) void {
     if (self.removed) return;
 
     if (self.parent) |parent| {
-        parent.removeChild(self.num);
+        parent.removeChildInternal(self.num, recursive);
     } else {
-        if (self.context) |ctx| {
-            ctx.window.removeElement(self.num);
-        }
-
-        self.context = null;
-        self.removed = true;
-
-        self.dispatchEvent(.{ .remove = {} });
+        self.markRemovedFromTree();
     }
+}
+
+fn markRemovedFromTree(self: *Element) void {
+    if (self.removed) return;
+
+    if (self.context) |ctx| {
+        ctx.app.window.removeElement(self.num);
+    }
+
+    self.context = null;
+    self.removed = true;
+
+    self.dispatchEvent(.{ .remove = {} });
 
     if (self.childrens) |*childrens| {
         for (childrens.by_order.items) |child| {
-            child.remove();
+            child.markRemovedFromTree();
+        }
+    }
+}
+
+fn removeChildInternal(self: *Element, num: u64, remove_from_list: bool) void {
+    if (self.childrens) |*childrens| {
+        if (remove_from_list) {
+            const child = childrens.remove(num) orelse return;
+            self.node.removeChild(child.node);
+            child.parent = null;
+            child.markRemovedFromTree();
+        } else {
+            const child = childrens.get(num) orelse return;
+            self.node.removeChild(child.node);
+            child.markRemovedFromTree();
         }
     }
 }
@@ -922,7 +949,7 @@ pub fn removeChild(self: *Element, num: u64) void {
         self.node.removeChild(child.node);
 
         if (child.context) |ctx| {
-            ctx.window.removeElement(num);
+            ctx.app.window.removeElement(num);
         }
 
         child.parent = null;
