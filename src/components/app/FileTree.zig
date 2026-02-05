@@ -40,7 +40,7 @@ worktree: *Worktree,
 pub fn create(alloc: Allocator, wt: *Worktree) !*FileTree {
     const self = try alloc.create(FileTree);
 
-    const scrollable = try Scrollable.init(alloc, .{});
+    const scrollable = try Scrollable.init(alloc, .{ .outer = .{ .width = .{ .percent = 30 }, .height = .{ .percent = 100 } } });
 
     const content = try alloc.create(Element);
     content.* = Element.init(alloc, .{

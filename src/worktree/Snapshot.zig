@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const worktreepkg = @import("mod.zig");
 const Entries = worktreepkg.Entries;
 const Kind = worktreepkg.Kind;
+const Stat = worktreepkg.Stat;
 
 pub const Snapshot = @This();
 
@@ -56,16 +57,16 @@ pub fn internPathSingle(self: *Snapshot, path: []const u8) ![]const u8 {
 }
 
 /// Insert an entry with an already-interned path (from internPath/internPathSingle).
-pub fn insertInterned(self: *Snapshot, id: u64, path: []const u8, kind: Kind) !void {
-    try self.entries.insert(path, .{ .id = id, .kind = kind });
+pub fn insertInterned(self: *Snapshot, id: u64, path: []const u8, kind: Kind, stat: Stat) !void {
+    try self.entries.insert(path, .{ .id = id, .kind = kind, .stat = stat });
     try self.id_to_path.put(id, path);
 }
 
 /// Insert with locking - path must already be interned.
-pub fn insertInternedLocked(self: *Snapshot, id: u64, path: []const u8, kind: Kind) !void {
+pub fn insertInternedLocked(self: *Snapshot, id: u64, path: []const u8, kind: Kind, stat: Stat) !void {
     self.mutex.lock();
     defer self.mutex.unlock();
-    try self.insertInterned(id, path, kind);
+    try self.insertInterned(id, path, kind, stat);
 }
 
 /// Remove an entry by path. Returns the entry if found.

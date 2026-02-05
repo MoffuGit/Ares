@@ -10,8 +10,6 @@ pub const UpdatedEntriesSet = Scanner.UpdatedEntriesSet;
 
 const Snapshot = @import("Snapshot.zig");
 
-pub const FileTree = @import("FileTree.zig");
-
 const BPlusTree = @import("../datastruct/b_plus_tree.zig").BPlusTree;
 
 const Loop = @import("../app/Loop.zig");
@@ -22,9 +20,23 @@ fn entryOrder(a: []const u8, b: []const u8) std.math.Order {
 
 pub const Entries = BPlusTree([]const u8, Entry, entryOrder);
 
+pub const Stat = struct {
+    /// File size in bytes (0 for directories)
+    size: u64 = 0,
+    /// Last modification time (nanoseconds since epoch)
+    mtime: i128 = 0,
+    /// Last access time (nanoseconds since epoch)
+    atime: i128 = 0,
+    /// Creation time (nanoseconds since epoch, if available)
+    ctime: i128 = 0,
+    /// File mode/permissions
+    mode: u32 = 0,
+};
+
 pub const Entry = struct {
     id: u64,
     kind: Kind,
+    stat: Stat = .{},
 };
 
 pub const Kind = enum { file, dir };

@@ -5,11 +5,11 @@ const eventpkg = @import("../event.zig");
 
 pub var element_counter: std.atomic.Value(u64) = .init(0);
 
-const Animation = @import("Animation.zig");
-const Timer = @import("Timer.zig");
-const Style = @import("Style.zig");
-const Node = @import("Node.zig");
-pub const Scrollable = @import("Scrollable.zig");
+pub const Animation = @import("Animation.zig");
+pub const Timer = @import("Timer.zig");
+pub const Style = @import("Style.zig");
+pub const Node = @import("Node.zig");
+
 const Buffer = @import("../../Buffer.zig");
 const HitGrid = @import("../HitGrid.zig");
 const apppkg = @import("../../mod.zig");

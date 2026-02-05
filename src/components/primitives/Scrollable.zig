@@ -29,23 +29,24 @@ mode: ScrollMode = .vertical,
 const Options = struct {
     mode: ScrollMode = .vertical,
     bar: bool = true,
+    outer: Element.Style,
 };
 
 pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
     const self = try alloc.create(Scrollable);
 
+    var style = opts.outer;
+
+    style.overflow = .scroll;
+    style.margin = if (!opts.bar) .{} else .{
+        .right = .{
+            .point = 1,
+        },
+    };
+
     const outer = try alloc.create(Element);
     outer.* = Element.init(alloc, .{
-        .style = .{
-            .overflow = .scroll,
-            .height = .{ .percent = 100 },
-            .width = .{ .percent = 30 },
-            .margin = if (!opts.bar) .{} else .{
-                .right = .{
-                    .point = 1,
-                },
-            },
-        },
+        .style = style,
         .beforeDrawFn = beforeDrawFn,
         .afterDrawFn = afterDrawFn,
         .beforeHitFn = beforeHitFn,

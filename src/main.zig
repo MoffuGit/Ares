@@ -7,15 +7,13 @@ const lib = @import("lib.zig");
 const App = lib.App;
 const Element = lib.Element;
 const Buffer = lib.Buffer;
-const worktreepkg = @import("worktree/mod.zig");
-const Worktree = worktreepkg.Worktree;
-const FileTree = worktreepkg.FileTree;
+const Workspace = @import("workspace/mod.zig").Workspace;
+const FileTree = @import("components/app/FileTree.zig");
 
 const GPA = std.heap.GeneralPurposeAllocator(.{});
 
 //TODO:
 //create structures for app userdata(workspace, worktree)
-//add metadata to entries
 //update the filetree
 //
 //NOTE:
@@ -26,25 +24,6 @@ const GPA = std.heap.GeneralPurposeAllocator(.{});
 //i will think them latter, they are not that imporant right now
 //the workspace, the file tree sidebar and floating file tree with serach can be the first parts to get
 //impl because there are almost done,
-//
-//NOTE:
-//another thing, it would be nice to store inside every Entry metadata from every file and directory,
-//this could give you better events, things like, file got bigger or smaller, read them again,
-//or more things to shod on the file tree, cool shit
-//NOTE:
-//every directory is collapsed by default,
-//because of that out initla size is for every
-//entry that is at the first level:
-//src/file1
-//src/file2
-//src/directory1
-//then, we can track when a directory gets open,
-//to add more height to the scroll,
-//we would draw only the element that can be in the outer view,
-//but we should keep track of the size of all expanded directories and files
-//probably we can iter over all worktree files and then
-//only update in base of the snapshot version and entry snapshot version
-//you only update the values that have a new snapshot value
 
 pub fn keyPressFn(element: *Element, data: Element.EventData) void {
     const key_data = data.key_press;
@@ -91,14 +70,12 @@ pub fn main() !void {
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
     const cwd_path = try cwd.realpath(".", &path_buf);
 
-    var worktree = try Worktree.create(
-        cwd_path,
-        alloc,
-        &app.loop,
-    );
-    defer worktree.destroy();
+    var workspace = try Workspace.create(alloc, &app.context);
+    defer workspace.destroy();
 
-    const file_tree = try FileTree.create(alloc, worktree);
+    try workspace.openProject(cwd_path);
+
+    const file_tree = try FileTree.create(alloc, workspace.project.?.worktree);
     defer file_tree.destroy(alloc);
 
     try app.root().addEventListener(.key_press, keyPressFn);

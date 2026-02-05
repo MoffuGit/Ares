@@ -5,6 +5,7 @@ const worktreepkg = @import("../mod.zig");
 const Worktree = worktreepkg.Worktree;
 const Entry = worktreepkg.Entry;
 const Kind = worktreepkg.Kind;
+const Stat = worktreepkg.Stat;
 const Allocator = std.mem.Allocator;
 const Snapshot = @import("../Snapshot.zig");
 const MonitorMessage = @import("../monitor/Message.zig").Message;
@@ -124,18 +125,19 @@ pub fn process_scan_by_id(self: *Scanner, dir_id: u64) !void {
             else => continue,
         };
 
+        // Get file stat
+        const stat = self.getEntryStat(dir, entry.name) catch Stat{};
+
         const id = self.snapshot.newId();
 
         // Intern path into snapshot arena
-        const child_path = blk: {
+        {
             self.snapshot.mutex.lock();
             defer self.snapshot.mutex.unlock();
 
             const interned = try self.snapshot.internPath(rel_path, entry.name);
-            try self.snapshot.insertInterned(id, interned, kind);
-            break :blk interned;
-        };
-        _ = child_path;
+            try self.snapshot.insertInterned(id, interned, kind, stat);
+        }
 
         if (kind == .dir) {
             // Queue scan for child directory (by id)
@@ -149,6 +151,19 @@ pub fn process_scan_by_id(self: *Scanner, dir_id: u64) !void {
             }
         }
     }
+}
+
+/// Get file stats for an entry
+fn getEntryStat(self: *Scanner, dir: std.fs.Dir, name: []const u8) !Stat {
+    _ = self;
+    const stat = try dir.statFile(name);
+    return .{
+        .size = stat.size,
+        .mtime = stat.mtime,
+        .atime = stat.atime,
+        .ctime = stat.ctime,
+        .mode = @intCast(stat.mode),
+    };
 }
 
 /// Stores path + entry info for diffing (path is arena-owned, just a reference)
@@ -269,13 +284,15 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
                 }
             }
         } else {
-            // New entry - intern and insert
+            // New entry - get stat and insert
+            const stat = self.getEntryStat(dir, entry.name) catch Stat{};
+
             self.snapshot.mutex.lock();
             defer self.snapshot.mutex.unlock();
 
             const id = self.snapshot.newId();
             const interned_path = try self.snapshot.internPath(dir_path, entry.name);
-            try self.snapshot.insertInterned(id, interned_path, kind);
+            try self.snapshot.insertInterned(id, interned_path, kind, stat);
             try result.addEntry(id, kind);
 
             // If directory, queue for scanning and monitoring
@@ -302,6 +319,9 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
 }
 
 pub fn initial_scan(self: *Scanner) !void {
+    // Get stat for root
+    const root_stat = self.getRootStat() catch Stat{};
+
     var dir = std.fs.openDirAbsolute(self.abs_root, .{}) catch |err| {
         if (err == error.NotDir) {
             // It's a file, not a directory
@@ -310,7 +330,7 @@ pub fn initial_scan(self: *Scanner) !void {
             defer self.snapshot.mutex.unlock();
 
             const root_path = try self.snapshot.internPathSingle(self.root_name);
-            try self.snapshot.insertInterned(id, root_path, .file);
+            try self.snapshot.insertInterned(id, root_path, .file, root_stat);
             return;
         }
         return err;
@@ -325,7 +345,7 @@ pub fn initial_scan(self: *Scanner) !void {
 
         // Root entry uses the directory basename (e.g., "ares")
         const root_path = try self.snapshot.internPathSingle(self.root_name);
-        try self.snapshot.insertInterned(id, root_path, .dir);
+        try self.snapshot.insertInterned(id, root_path, .dir, root_stat);
 
         try self.snapshot.entries.print();
     }
@@ -339,4 +359,18 @@ pub fn initial_scan(self: *Scanner) !void {
     if (self.worktree.monitor_thread.mailbox.push(.{ .add = id }, .instant) != 0) {
         self.worktree.monitor_thread.wakeup.notify() catch {};
     }
+}
+
+/// Get stat for the root path
+fn getRootStat(self: *Scanner) !Stat {
+    const file = try std.fs.openFileAbsolute(self.abs_root, .{});
+    defer file.close();
+    const stat = try file.stat();
+    return .{
+        .size = stat.size,
+        .mtime = stat.mtime,
+        .atime = stat.atime,
+        .ctime = stat.ctime,
+        .mode = @intCast(stat.mode),
+    };
 }
