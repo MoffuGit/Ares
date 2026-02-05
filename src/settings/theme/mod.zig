@@ -8,7 +8,11 @@ pub const Color = vaxis.Color;
 name: []const u8 = "",
 bg: Color,
 fg: Color,
-scrollBar: Color,
+primaryBg: Color,
+primaryFg: Color,
+mutedBg: Color,
+mutedFg: Color,
+scrollThumb: Color,
 scrollTrack: Color,
 border: Color,
 
@@ -16,7 +20,11 @@ pub const fallback = Theme{
     .name = "fallback",
     .bg = Color{ .rgba = .{ 255, 30, 30, 255 } },
     .fg = Color{ .rgba = .{ 220, 220, 220, 255 } },
-    .scrollBar = Color{ .rgba = .{ 100, 100, 100, 255 } },
+    .primaryBg = Color{ .rgba = .{ 40, 40, 40, 255 } },
+    .primaryFg = Color{ .rgba = .{ 200, 200, 200, 255 } },
+    .mutedBg = Color{ .rgba = .{ 60, 60, 60, 255 } },
+    .mutedFg = Color{ .rgba = .{ 160, 160, 160, 255 } },
+    .scrollThumb = Color{ .rgba = .{ 100, 100, 100, 255 } },
     .scrollTrack = Color{ .rgba = .{ 50, 50, 50, 255 } },
     .border = Color{ .rgba = .{ 0, 255, 0, 255 } },
 };
@@ -34,7 +42,11 @@ const JsonTheme = struct {
     theme: struct {
         bg: []const u8,
         fg: []const u8,
-        scrollBar: []const u8,
+        primaryBg: []const u8,
+        primaryFg: []const u8,
+        mutedBg: []const u8,
+        mutedFg: []const u8,
+        scrollThumb: []const u8,
         scrollTrack: []const u8,
         border: []const u8,
     },
@@ -58,7 +70,11 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
 
     const bg = colors.get(json_theme.theme.bg) orelse return ParseError.ColorNotFound;
     const fg = colors.get(json_theme.theme.fg) orelse return ParseError.ColorNotFound;
-    const scrollBar = colors.get(json_theme.theme.scrollBar) orelse return ParseError.ColorNotFound;
+    const primaryBg = colors.get(json_theme.theme.primaryBg) orelse return ParseError.ColorNotFound;
+    const primaryFg = colors.get(json_theme.theme.primaryFg) orelse return ParseError.ColorNotFound;
+    const mutedBg = colors.get(json_theme.theme.mutedBg) orelse return ParseError.ColorNotFound;
+    const mutedFg = colors.get(json_theme.theme.mutedFg) orelse return ParseError.ColorNotFound;
+    const scrollThumb = colors.get(json_theme.theme.scrollThumb) orelse return ParseError.ColorNotFound;
     const scrollTrack = colors.get(json_theme.theme.scrollTrack) orelse return ParseError.ColorNotFound;
     const border = colors.get(json_theme.theme.border) orelse return ParseError.ColorNotFound;
 
@@ -68,7 +84,11 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
         .name = name,
         .bg = bg,
         .fg = fg,
-        .scrollBar = scrollBar,
+        .primaryBg = primaryBg,
+        .primaryFg = primaryFg,
+        .mutedBg = mutedBg,
+        .mutedFg = mutedFg,
+        .scrollThumb = scrollThumb,
         .scrollTrack = scrollTrack,
         .border = border,
     };
@@ -100,14 +120,23 @@ test "parse theme" {
         \\  "colors": {
         \\    "background": "#0a0a0a",
         \\    "foreground": "#eeeeeeff",
-        \\    "scrollBar": "#666666",
-        \\    "scrollTrack": "#333333"
+        \\    "scrollThumb": "#666666",
+        \\    "scrollTrack": "#333333",
+        \\    "primaryBg": "#1a1a1a",
+        \\    "primaryFg": "#ffffff",
+        \\    "mutedBg": "#2a2a2a",
+        \\    "mutedFg": "#888888"
         \\  },
         \\  "theme": {
         \\    "bg": "background",
         \\    "fg": "foreground",
-        \\    "scrollBar": "scrollBar",
-        \\    "scrollTrack": "scrollTrack"
+        \\    "primaryBg": "primaryBg",
+        \\    "primaryFg": "primaryFg",
+        \\    "mutedBg": "mutedBg",
+        \\    "mutedFg": "mutedFg",
+        \\    "scrollThumb": "scrollThumb",
+        \\    "scrollTrack": "scrollTrack",
+        \\    "border": "scrollTrack"
         \\  }
         \\}
     ;
@@ -118,6 +147,10 @@ test "parse theme" {
     try std.testing.expectEqualStrings("dark", theme.name);
     try std.testing.expectEqual(Color{ .rgba = .{ 10, 10, 10, 255 } }, theme.bg);
     try std.testing.expectEqual(Color{ .rgba = .{ 238, 238, 238, 255 } }, theme.fg);
-    try std.testing.expectEqual(Color{ .rgba = .{ 102, 102, 102, 255 } }, theme.scrollBar);
+    try std.testing.expectEqual(Color{ .rgba = .{ 26, 26, 26, 255 } }, theme.primaryBg);
+    try std.testing.expectEqual(Color{ .rgba = .{ 255, 255, 255, 255 } }, theme.primaryFg);
+    try std.testing.expectEqual(Color{ .rgba = .{ 42, 42, 42, 255 } }, theme.mutedBg);
+    try std.testing.expectEqual(Color{ .rgba = .{ 136, 136, 136, 255 } }, theme.mutedFg);
+    try std.testing.expectEqual(Color{ .rgba = .{ 102, 102, 102, 255 } }, theme.scrollThumb);
     try std.testing.expectEqual(Color{ .rgba = .{ 51, 51, 51, 255 } }, theme.scrollTrack);
 }

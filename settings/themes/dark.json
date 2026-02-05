@@ -3,15 +3,23 @@
   "colors": {
     "background": "#0a0a0a",
     "foreground": "#eeeeeeff",
-    "scrollBar": "#666666",
+    "scrollThumb": "#666666",
     "scrollTrack": "#333333",
     "border-900": "#484848",
-    "border-800": "#3c3c3c"
+    "border-800": "#3c3c3c",
+    "primaryBg": "#1a1a1a",
+    "primaryFg": "#ffffff",
+    "mutedBg": "#2a2a2a",
+    "mutedFg": "#888888"
   },
   "theme": {
     "bg": "background",
     "fg": "foreground",
-    "scrollBar": "scrollBar",
+    "primaryBg": "primaryBg",
+    "primaryFg": "primaryFg",
+    "mutedBg": "mutedBg",
+    "mutedFg": "mutedFg",
+    "scrollThumb": "scrollThumb",
     "scrollTrack": "scrollTrack",
     "border": "border-900"
   }

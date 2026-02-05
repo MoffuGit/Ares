@@ -1,15 +1,25 @@
 {
   "name": "light",
   "colors": {
-    "background": "#fcfcfc",
+    "background": "#F0EEED",
     "foreground": "#141414",
-    "scrollBar": "#999999",
-    "scrollTrack": "#cccccc"
+    "scrollThumb": "#999999",
+    "scrollTrack": "#cccccc",
+    "border-900": "#BDB4AF",
+    "primaryBg": "#FFFFFF",
+    "primaryFg": "#000000",
+    "mutedBg": "#E0DEDD",
+    "mutedFg": "#666666"
   },
   "theme": {
     "bg": "background",
     "fg": "foreground",
-    "scrollBar": "scrollBar",
-    "scrollTrack": "scrollTrack"
+    "primaryBg": "primaryBg",
+    "primaryFg": "primaryFg",
+    "mutedBg": "mutedBg",
+    "mutedFg": "mutedFg",
+    "scrollThumb": "scrollThumb",
+    "scrollTrack": "scrollTrack",
+    "border": "border-900"
   }
 }

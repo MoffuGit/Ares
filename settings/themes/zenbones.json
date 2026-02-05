@@ -5,15 +5,24 @@
     "foreground": "#BBB2AF",
     "forr": "#6E6763",
     "mutesFg": "#BBB2AF",
-    "scrollBar": "#666666",
+    "scrollThumb": "#666666",
     "scrollTrack": "#333333",
     "border-900": "#2B2421",
-    "border-800": "#3c3c3c"
+    "border-800": "#3c3c3c",
+    "primaryBg": "#1A1615",
+    "primaryFg": "#BBB2AF",
+    "mutedBg": "#080606",
+    "mutedBlaskdjf;alg": "#171210",
+    "mutedFg": "#6E6763"
   },
   "theme": {
     "bg": "background",
     "fg": "foreground",
-    "scrollBar": "scrollBar",
+    "primaryBg": "primaryBg",
+    "primaryFg": "primaryFg",
+    "mutedBg": "mutedBg",
+    "mutedFg": "mutedFg",
+    "scrollThumb": "scrollThumb",
     "scrollTrack": "scrollTrack",
     "border": "border-900"
   }
