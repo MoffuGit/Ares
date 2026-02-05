@@ -1,4 +1,5 @@
 const std = @import("std");
+const vaxis = @import("vaxis");
 const Worktree = @import("../worktree/mod.zig").Worktree;
 const Context = @import("../app/mod.zig").Context;
 

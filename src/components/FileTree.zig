@@ -1,12 +1,12 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
-const global = @import("../../global.zig");
+const global = @import("../global.zig");
 
-const Element = @import("../../lib.zig").Element;
-const Scrollable = @import("../primitives/Scrollable.zig");
+const Element = @import("../lib.zig").Element;
+const Scrollable = @import("primitives/Scrollable.zig");
 const Style = Element.Style;
-const Buffer = @import("../../lib.zig").Buffer;
-const worktree_mod = @import("../../worktree/mod.zig");
+const Buffer = @import("../lib.zig").Buffer;
+const worktree_mod = @import("../worktree/mod.zig");
 const Worktree = worktree_mod.Worktree;
 const Entry = worktree_mod.Entry;
 const Kind = worktree_mod.Kind;

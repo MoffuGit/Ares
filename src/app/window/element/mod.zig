@@ -1,5 +1,7 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
+const unicode = vaxis.unicode;
+const gwidth = vaxis.gwidth.gwidth;
 const messagepkg = @import("../message.zig");
 const eventpkg = @import("../event.zig");
 
@@ -101,6 +103,38 @@ pub const Options = struct {
     hitFn: ?HitFn = null,
     afterHitFn: ?HitFn = null,
     updateFn: ?UpdateFn = null,
+};
+
+pub const Segment = struct {
+    text: []const u8,
+    style: vaxis.Style = .{},
+};
+
+pub const TextAlign = enum {
+    left,
+    center,
+    right,
+    justify,
+};
+
+pub const PrintOptions = struct {
+    row_offset: u16 = 0,
+    col_offset: u16 = 0,
+    wrap: Wrap = .grapheme,
+    text_align: TextAlign = .left,
+    commit: bool = true,
+
+    pub const Wrap = enum {
+        grapheme,
+        word,
+        none,
+    };
+};
+
+pub const PrintResult = struct {
+    col: u16,
+    row: u16,
+    overflow: bool,
 };
 
 pub const Element = @This();
@@ -262,6 +296,214 @@ pub fn fillRounded(element: *Element, buffer: *Buffer, color: vaxis.Color, radiu
         }
     }
 }
+
+pub fn print(element: *Element, buffer: *Buffer, segments: []const Segment, opts: PrintOptions) PrintResult {
+    const layout = element.layout;
+    const base_x = layout.left + layout.padding.left + layout.border.left;
+    const base_y = layout.top + layout.padding.top + layout.border.top;
+    const content_width = layout.width -| (layout.padding.left + layout.padding.right + layout.border.left + layout.border.right);
+    const content_height = layout.height -| (layout.padding.top + layout.padding.bottom + layout.border.top + layout.border.bottom);
+
+    var row = opts.row_offset;
+    switch (opts.wrap) {
+        .grapheme => {
+            var col: u16 = opts.col_offset;
+            const overflow: bool = blk: for (segments) |segment| {
+                var iter = unicode.graphemeIterator(segment.text);
+                while (iter.next()) |grapheme| {
+                    if (col >= content_width) {
+                        row += 1;
+                        col = 0;
+                    }
+                    if (row >= content_height) break :blk true;
+                    const s = grapheme.bytes(segment.text);
+                    if (std.mem.eql(u8, s, "\n")) {
+                        row +|= 1;
+                        col = 0;
+                        continue;
+                    }
+                    const w: u16 = @intCast(gwidth(s, .unicode));
+                    if (w == 0) continue;
+                    if (opts.commit) buffer.writeCell(base_x + col, base_y + row, .{
+                        .char = .{
+                            .grapheme = s,
+                            .width = @intCast(w),
+                        },
+                        .style = segment.style,
+                    });
+                    col += w;
+                }
+            } else false;
+            if (col >= content_width) {
+                row += 1;
+                col = 0;
+            }
+            return .{
+                .row = row,
+                .col = col,
+                .overflow = overflow,
+            };
+        },
+        .word => {
+            var col: u16 = opts.col_offset;
+            var overflow: bool = false;
+            var soft_wrapped: bool = false;
+            outer: for (segments) |segment| {
+                var line_iter: LineIterator = .{ .buf = segment.text };
+                while (line_iter.next()) |line| {
+                    defer {
+                        if (line_iter.has_break) {
+                            soft_wrapped = false;
+                            row += 1;
+                            col = 0;
+                        }
+                    }
+                    var ws_iter: WhitespaceTokenizer = .{ .buf = line };
+                    while (ws_iter.next()) |token| {
+                        switch (token) {
+                            .whitespace => |len| {
+                                if (soft_wrapped) continue;
+                                for (0..len) |_| {
+                                    if (col >= content_width) {
+                                        col = 0;
+                                        row += 1;
+                                        break;
+                                    }
+                                    if (opts.commit) {
+                                        buffer.writeCell(base_x + col, base_y + row, .{
+                                            .char = .{
+                                                .grapheme = " ",
+                                                .width = 1,
+                                            },
+                                            .style = segment.style,
+                                        });
+                                    }
+                                    col += 1;
+                                }
+                            },
+                            .word => |word| {
+                                const width: u16 = @intCast(gwidth(word, .unicode));
+                                if (width + col > content_width and width < content_width) {
+                                    row += 1;
+                                    col = 0;
+                                }
+
+                                var grapheme_iterator = unicode.graphemeIterator(word);
+                                while (grapheme_iterator.next()) |grapheme| {
+                                    soft_wrapped = false;
+                                    if (row >= content_height) {
+                                        overflow = true;
+                                        break :outer;
+                                    }
+                                    const s = grapheme.bytes(word);
+                                    const w: u16 = @intCast(gwidth(s, .unicode));
+                                    if (opts.commit) buffer.writeCell(base_x + col, base_y + row, .{
+                                        .char = .{
+                                            .grapheme = s,
+                                            .width = @intCast(w),
+                                        },
+                                        .style = segment.style,
+                                    });
+                                    col += w;
+                                    if (col >= content_width) {
+                                        row += 1;
+                                        col = 0;
+                                        soft_wrapped = true;
+                                    }
+                                }
+                            },
+                        }
+                    }
+                }
+            }
+            return .{
+                .row = row,
+                .col = col,
+                .overflow = overflow,
+            };
+        },
+        .none => {
+            var col: u16 = opts.col_offset;
+            const overflow: bool = blk: for (segments) |segment| {
+                var iter = unicode.graphemeIterator(segment.text);
+                while (iter.next()) |grapheme| {
+                    if (col >= content_width) break :blk true;
+                    const s = grapheme.bytes(segment.text);
+                    if (std.mem.eql(u8, s, "\n")) break :blk true;
+                    const w: u16 = @intCast(gwidth(s, .unicode));
+                    if (w == 0) continue;
+                    if (opts.commit) buffer.writeCell(base_x + col, base_y + row, .{
+                        .char = .{
+                            .grapheme = s,
+                            .width = @intCast(w),
+                        },
+                        .style = segment.style,
+                    });
+                    col +|= w;
+                }
+            } else false;
+            return .{
+                .row = row,
+                .col = col,
+                .overflow = overflow,
+            };
+        },
+    }
+}
+
+pub fn printSegment(element: *Element, buffer: *Buffer, segment: Segment, opts: PrintOptions) PrintResult {
+    return element.print(buffer, &.{segment}, opts);
+}
+
+const LineIterator = struct {
+    buf: []const u8,
+    index: usize = 0,
+    has_break: bool = false,
+
+    pub fn next(self: *LineIterator) ?[]const u8 {
+        if (self.index >= self.buf.len) return null;
+        const start = self.index;
+        while (self.index < self.buf.len) : (self.index += 1) {
+            if (self.buf[self.index] == '\n') {
+                self.has_break = true;
+                const end = self.index;
+                self.index += 1;
+                return self.buf[start..end];
+            }
+        }
+        self.has_break = false;
+        return self.buf[start..self.index];
+    }
+};
+
+const WhitespaceTokenizer = struct {
+    buf: []const u8,
+    index: usize = 0,
+
+    const Token = union(enum) {
+        whitespace: usize,
+        word: []const u8,
+    };
+
+    pub fn next(self: *WhitespaceTokenizer) ?Token {
+        if (self.index >= self.buf.len) return null;
+
+        if (self.buf[self.index] == ' ' or self.buf[self.index] == '\t') {
+            var count: usize = 0;
+            while (self.index < self.buf.len and (self.buf[self.index] == ' ' or self.buf[self.index] == '\t')) {
+                count += 1;
+                self.index += 1;
+            }
+            return .{ .whitespace = count };
+        }
+
+        const start = self.index;
+        while (self.index < self.buf.len and self.buf[self.index] != ' ' and self.buf[self.index] != '\t') {
+            self.index += 1;
+        }
+        return .{ .word = self.buf[start..self.index] };
+    }
+};
 
 fn toLinear(c: f32) f32 {
     return if (c >= 0.04045) std.math.pow(f32, (c + 0.055) / 1.055, 2.4) else c / 12.92;

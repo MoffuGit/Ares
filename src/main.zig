@@ -8,22 +8,8 @@ const App = lib.App;
 const Element = lib.Element;
 const Buffer = lib.Buffer;
 const Workspace = @import("workspace/mod.zig").Workspace;
-const FileTree = @import("components/app/FileTree.zig");
 
 const GPA = std.heap.GeneralPurposeAllocator(.{});
-
-//TODO:
-//create structures for app userdata(workspace, worktree)
-//update the filetree
-//
-//NOTE:
-//about the app context userdata, i think is a good place to add my Editor state struct
-//it should contains things like workspaces, tabs, splits, code editors,
-//i need to think what information it will have every struct and what's going to be his view,
-//i think the one i can think well what's going to contains the the workspace, the other ones
-//i will think them latter, they are not that imporant right now
-//the workspace, the file tree sidebar and floating file tree with serach can be the first parts to get
-//impl because there are almost done,
 
 pub fn keyPressFn(element: *Element, data: Element.EventData) void {
     const key_data = data.key_press;
@@ -42,10 +28,6 @@ pub fn schemeFn(app: *App) void {
     }
 }
 
-pub fn drawFn(element: *Element, buffer: *Buffer) void {
-    element.fill(buffer, .{ .style = .{ .bg = global.settings.theme.bg } });
-}
-
 pub fn main() !void {
     var gpa: GPA = .{};
     defer if (gpa.deinit() == .leak) {
@@ -54,8 +36,10 @@ pub fn main() !void {
 
     const alloc = gpa.allocator();
 
-    var app = try App.create(alloc, .{ .root = .{ .drawFn = drawFn } });
+    var app = try App.create(alloc, .{});
     defer app.destroy();
+
+    try app.root().addEventListener(.key_press, keyPressFn);
 
     try global.init(alloc, &app.context);
     defer global.deinit();
@@ -74,13 +58,6 @@ pub fn main() !void {
     defer workspace.destroy();
 
     try workspace.openProject(cwd_path);
-
-    const file_tree = try FileTree.create(alloc, workspace.project.?.worktree);
-    defer file_tree.destroy(alloc);
-
-    try app.root().addEventListener(.key_press, keyPressFn);
-
-    try app.window.root.addChild(file_tree.getElement());
 
     app.run() catch |err| {
         log.err("App exit with an err: {}", .{err});
