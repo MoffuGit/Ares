@@ -183,6 +183,17 @@ fn onUpdate(element: *Element) void {
     element.node.setHeight(.{ .point = height });
 }
 
+fn isLastAtLevel(self: *FileTree, from: usize, level: u16) bool {
+    const all = self.visible_entries.items;
+    for (all[from + 1 ..]) |next_id| {
+        const next_path = self.worktree.snapshot.getPathById(next_id) orelse continue;
+        const next_depth: u16 = @intCast(std.mem.count(u8, next_path, "/"));
+        if (next_depth < level) return true;
+        if (next_depth == level) return false;
+    }
+    return true;
+}
+
 fn draw(element: *Element, buffer: *Buffer) void {
     const self: *FileTree = @ptrCast(@alignCast(element.userdata));
 
@@ -204,16 +215,19 @@ fn draw(element: *Element, buffer: *Buffer) void {
     self.worktree.snapshot.mutex.lock();
     defer self.worktree.snapshot.mutex.unlock();
 
-    const end = @min(skip + max_visible, self.visible_entries.items.len);
-    for (self.visible_entries.items[skip..end], 0..) |id, row| {
+    const all = self.visible_entries.items;
+    const end = @min(skip + max_visible, all.len);
+    for (skip..end) |abs_i| {
+        const id = all[abs_i];
         const path = self.worktree.snapshot.getPathById(id) orelse continue;
         const entry = self.worktree.snapshot.entries.get(path) catch continue;
+        const row = abs_i - skip;
 
         const is_selected = self.selected_entry != null and self.selected_entry.? == id;
 
         const icon: []const u8 = switch (entry.kind) {
             .dir => if (self.expanded_entries.contains(entry.id)) " " else "󰉋 ",
-            .file => " ",
+            .file => "  ",
         };
 
         const row_y = outer_y + @as(u16, @intCast(row));
@@ -229,7 +243,9 @@ fn draw(element: *Element, buffer: *Buffer) void {
         const guide_style: vaxis.Cell.Style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } };
         var d: u16 = 0;
         while (d < depth) : (d += 1) {
-            _ = element.print(buffer, &.{.{ .text = "│ ", .style = guide_style }}, .{ .row_offset = @intCast(print_row_offset), .col_offset = d * 2 });
+            const last = self.isLastAtLevel(abs_i, d + 1);
+            const guide: []const u8 = if (d == depth - 1 and last) "┕ " else if (last) "  " else "│ ";
+            _ = element.print(buffer, &.{.{ .text = guide, .style = guide_style }}, .{ .row_offset = @intCast(print_row_offset), .col_offset = d * 2 });
         }
 
         const indent: u16 = depth * 2;
