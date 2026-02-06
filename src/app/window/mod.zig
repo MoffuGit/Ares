@@ -175,6 +175,7 @@ pub fn dispatchEvent(target: *Element, ctx: *EventContext, data: Element.EventDa
 
     if (ctx.stopped) return;
 
+    ctx.phase = .bubbling;
     bubble(target, ctx, data);
 }
 fn capture(target: *Element, ctx: *EventContext, data: Element.EventData) void {

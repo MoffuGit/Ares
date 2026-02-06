@@ -67,8 +67,8 @@ pub fn create(alloc: Allocator, side: Side, initial_size: u16) !*Dock {
 
     try element.addEventListener(.drag, onDrag);
     try element.addEventListener(.drag_end, onBarDragEnd);
-    try element.addEventListener(.mouse_enter, mouseEnter);
-    try element.addEventListener(.mouse_leave, mouseLeave);
+    try element.addEventListener(.mouse_over, mouseOver);
+    try element.addEventListener(.mouse_out, mouseOut);
 
     dock.* = .{
         .element = element,
@@ -167,12 +167,15 @@ fn draw(element: *Element, buffer: *Buffer) void {
     }
 }
 
-fn mouseEnter(element: *Element, _: Element.EventData) void {
-    element.context.?.app.screen.mouse_shape = .pointer;
-    element.context.?.requestDraw();
+fn mouseOver(element: *Element, data: Element.EventData) void {
+    const ctx = data.mouse_over.ctx;
+    if (ctx.phase == .at_target) {
+        element.context.?.app.screen.mouse_shape = .pointer;
+        element.context.?.requestDraw();
+    }
 }
 
-fn mouseLeave(element: *Element, _: Element.EventData) void {
+fn mouseOut(element: *Element, _: Element.EventData) void {
     element.context.?.app.screen.mouse_shape = .default;
     element.context.?.requestDraw();
 }

@@ -35,8 +35,6 @@ worktree: *Worktree,
 //only update in base of the snapshot version and entry snapshot version
 //you only update the values that have a new snapshot value
 
-//NOTE:
-//check the size and how it shoudl expand
 pub fn create(alloc: Allocator, wt: *Worktree) !*FileTree {
     const self = try alloc.create(FileTree);
 
@@ -64,8 +62,6 @@ pub fn create(alloc: Allocator, wt: *Worktree) !*FileTree {
         .worktree = wt,
     };
 
-    // try scrollable.outer.addEventListener(.click, onClick);
-
     return self;
 }
 
@@ -78,43 +74,6 @@ pub fn destroy(self: *FileTree, alloc: Allocator) void {
     alloc.destroy(self.content);
     self.scrollable.deinit(alloc);
     alloc.destroy(self);
-}
-
-// pub fn subscribe(self: *FileTree, ctx: *AppContext) !void {
-//     try ctx.subscribe(.worktree_updated, onWorktreeUpdated, self);
-// }
-
-// fn onWorktreeUpdated(data: AppEvent.EventData, userdata: ?*anyopaque) void {
-//     const self: *FileTree = @ptrCast(@alignCast(userdata));
-//     _ = data;
-//
-//     if (self.content.context) |ctx| {
-//         ctx.requestDraw();
-//     }
-// }
-
-// fn onClick(element: *Element, _: Element.EventData) void {
-//     if (element.context) |ctx| {
-//         ctx.setFocus(element);
-//     }
-// }
-
-fn onMouseEnter(element: *Element, _: Element.EventData) void {
-    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
-    const file_tree: *FileTree = @ptrCast(@alignCast(self.userdata));
-    file_tree.hovered = true;
-    if (element.context) |ctx| {
-        ctx.requestDraw();
-    }
-}
-
-fn onMouseLeave(element: *Element, _: Element.EventData) void {
-    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
-    const file_tree: *FileTree = @ptrCast(@alignCast(self.userdata));
-    file_tree.hovered = false;
-    if (element.context) |ctx| {
-        ctx.requestDraw();
-    }
 }
 
 fn onUpdate(element: *Element) void {

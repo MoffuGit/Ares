@@ -61,6 +61,7 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
     try outer.addEventListener(.wheel, onWheel);
     try outer.addEventListener(.mouse_over, mouseOver);
     try outer.addEventListener(.mouse_out, mouseOut);
+    try outer.addEventListener(.drag, onDraw);
 
     const inner = try alloc.create(Element);
     inner.* = Element.init(alloc, .{
@@ -379,6 +380,11 @@ fn onBarClick(element: *Element, data: Element.EventData) void {
             }
         }
     }
+}
+
+fn onDraw(_: *Element, data: Element.EventData) void {
+    const ctx = data.drag.ctx;
+    if (ctx.phase == .at_target) ctx.stopPropagation();
 }
 
 fn onBarDrag(element: *Element, data: Element.EventData) void {
