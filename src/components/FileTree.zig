@@ -247,7 +247,9 @@ fn draw(element: *Element, buffer: *Buffer) void {
         const display_name = if (std.mem.lastIndexOfScalar(u8, path, '/')) |sep| path[sep + 1 ..] else path;
         const depth: u16 = @intCast(std.mem.count(u8, path, "/"));
 
-        const guide_style: vaxis.Cell.Style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } };
+        var guide_fg = global.settings.theme.fg.rgba;
+        guide_fg[3] = 70;
+        const guide_style: vaxis.Cell.Style = .{ .fg = .{ .rgba = guide_fg }, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } };
         var d: u16 = 0;
         while (d < depth) : (d += 1) {
             const last = self.isLastAtLevel(abs_i, d + 1);
