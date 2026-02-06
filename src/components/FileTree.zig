@@ -24,7 +24,6 @@ alloc: Allocator,
 scrollable: *Scrollable,
 content: *Element,
 worktree: *Worktree,
-initialized: bool = false,
 
 expanded_entries: std.AutoHashMap(u64, void),
 visible_entries: std.ArrayList(u64) = .{},
@@ -122,23 +121,19 @@ fn onClick(element: *Element, data: Element.EventData) void {
 
 fn onWorktreeUpdated(userdata: ?*anyopaque, _: subspkg.EventData) void {
     const self: *FileTree = @ptrCast(@alignCast(userdata));
-    if (self.initialized) return;
-    self.initialized = true;
 
-    {
-        self.worktree.snapshot.mutex.lock();
-        defer self.worktree.snapshot.mutex.unlock();
+    var it = self.worktree.snapshot.entries.iter();
 
-        var it = self.worktree.snapshot.entries.iter();
-        while (it.next()) |entry| {
-            if (std.mem.indexOfScalar(u8, entry.key, '/') != null) continue;
-            if (entry.value.kind == .dir) {
-                self.expanded_entries.put(entry.value.id, {}) catch {};
-            }
+    if (it.next()) |root| {
+        if (root.value.kind == .dir) {
+            self.expanded_entries.put(root.value.id, {}) catch {};
         }
     }
 
     self.rebuildVisibleEntries();
+    if (self.content.context) |ctx| {
+        ctx.requestDraw();
+    }
 }
 
 fn rebuildVisibleEntries(self: *FileTree) void {
@@ -257,10 +252,27 @@ fn draw(element: *Element, buffer: *Buffer) void {
         while (d < depth) : (d += 1) {
             const last = self.isLastAtLevel(abs_i, d + 1);
             const guide: []const u8 = if (d == depth - 1 and last) "└" else if (last) " " else "│";
-            _ = element.print(buffer, &.{.{ .text = guide, .style = guide_style }}, .{ .row_offset = @intCast(print_row_offset), .col_offset = d * 2 });
+            _ = element.print(
+                buffer,
+                &.{.{ .text = guide, .style = guide_style }},
+                .{ .row_offset = @intCast(print_row_offset), .col_offset = d * 2 },
+            );
         }
 
         const indent: u16 = depth * 2;
-        _ = element.print(buffer, &.{ .{ .text = icon, .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } } }, .{ .text = display_name, .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } } } }, .{ .row_offset = @intCast(print_row_offset), .col_offset = indent, .wrap = .none });
+        _ = element.print(
+            buffer,
+            &.{
+                .{
+                    .text = icon,
+                    .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } },
+                },
+                .{
+                    .text = display_name,
+                    .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } },
+                },
+            },
+            .{ .row_offset = @intCast(print_row_offset), .col_offset = indent, .wrap = .none },
+        );
     }
 }
