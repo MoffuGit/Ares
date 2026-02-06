@@ -94,8 +94,8 @@ pub fn destroy(self: *FileTree, alloc: Allocator) void {
 fn onClick(element: *Element, data: Element.EventData) void {
     const self: *FileTree = @ptrCast(@alignCast(element.userdata));
     const mouse = data.click.mouse;
-    const row_in_element = mouse.row -| element.layout.top;
-    const index = @as(usize, @intCast(self.scrollable.scroll_y)) + row_in_element;
+    const row_in_viewport = mouse.row -| self.scrollable.outer.layout.top;
+    const index = @as(usize, @intCast(self.scrollable.scroll_y)) + row_in_viewport;
     if (index < self.visible_entries.items.len) {
         const id = self.visible_entries.items[index];
         self.selected_entry = id;
@@ -163,16 +163,28 @@ fn appendDirectChildren(self: *FileTree, dir_path: []const u8) void {
     var prefix_buf: [std.fs.max_path_bytes]u8 = undefined;
     const prefix = std.fmt.bufPrint(&prefix_buf, "{s}/", .{dir_path}) catch return;
 
-    var range_it = self.worktree.snapshot.entries.rangeFrom(prefix);
-    while (range_it.next()) |entry| {
+    // dirs first
+    var dir_it = self.worktree.snapshot.entries.rangeFrom(prefix);
+    while (dir_it.next()) |entry| {
         if (!std.mem.startsWith(u8, entry.key, prefix)) break;
         const rest = entry.key[prefix.len..];
         if (std.mem.indexOfScalar(u8, rest, '/') != null) continue;
+        if (entry.value.kind != .dir) continue;
         self.visible_entries.append(self.alloc, entry.value.id) catch continue;
 
-        if (entry.value.kind == .dir and self.expanded_entries.contains(entry.value.id)) {
+        if (self.expanded_entries.contains(entry.value.id)) {
             self.appendDirectChildren(entry.key);
         }
+    }
+
+    // then files
+    var file_it = self.worktree.snapshot.entries.rangeFrom(prefix);
+    while (file_it.next()) |entry| {
+        if (!std.mem.startsWith(u8, entry.key, prefix)) break;
+        const rest = entry.key[prefix.len..];
+        if (std.mem.indexOfScalar(u8, rest, '/') != null) continue;
+        if (entry.value.kind != .file) continue;
+        self.visible_entries.append(self.alloc, entry.value.id) catch continue;
     }
 }
 
@@ -227,7 +239,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
 
         const icon: []const u8 = switch (entry.kind) {
             .dir => if (self.expanded_entries.contains(entry.id)) " " else "󰉋 ",
-            .file => "  ",
+            .file => " ",
         };
 
         const row_y = outer_y + @as(u16, @intCast(row));
@@ -244,11 +256,11 @@ fn draw(element: *Element, buffer: *Buffer) void {
         var d: u16 = 0;
         while (d < depth) : (d += 1) {
             const last = self.isLastAtLevel(abs_i, d + 1);
-            const guide: []const u8 = if (d == depth - 1 and last) "┕ " else if (last) "  " else "│ ";
+            const guide: []const u8 = if (d == depth - 1 and last) "└" else if (last) " " else "│";
             _ = element.print(buffer, &.{.{ .text = guide, .style = guide_style }}, .{ .row_offset = @intCast(print_row_offset), .col_offset = d * 2 });
         }
 
         const indent: u16 = depth * 2;
-        _ = element.print(buffer, &.{ .{ .text = icon, .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } } }, .{ .text = display_name, .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } } } }, .{ .row_offset = @intCast(print_row_offset), .col_offset = indent });
+        _ = element.print(buffer, &.{ .{ .text = icon, .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } } }, .{ .text = display_name, .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } } } }, .{ .row_offset = @intCast(print_row_offset), .col_offset = indent, .wrap = .none });
     }
 }
