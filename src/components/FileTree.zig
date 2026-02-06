@@ -97,7 +97,25 @@ fn onClick(element: *Element, data: Element.EventData) void {
     const row_in_element = mouse.row -| element.layout.top;
     const index = @as(usize, @intCast(self.scrollable.scroll_y)) + row_in_element;
     if (index < self.visible_entries.items.len) {
-        self.selected_entry = self.visible_entries.items[index];
+        const id = self.visible_entries.items[index];
+        self.selected_entry = id;
+
+        const is_dir = blk: {
+            self.worktree.snapshot.mutex.lock();
+            defer self.worktree.snapshot.mutex.unlock();
+            const path = self.worktree.snapshot.getPathById(id) orelse break :blk false;
+            const entry = self.worktree.snapshot.entries.get(path) catch break :blk false;
+            break :blk entry.kind == .dir;
+        };
+
+        if (is_dir) {
+            if (self.expanded_entries.contains(id)) {
+                _ = self.expanded_entries.remove(id);
+            } else {
+                self.expanded_entries.put(id, {}) catch {};
+            }
+            self.rebuildVisibleEntries();
+        }
     }
     element.context.?.requestDraw();
 }
@@ -107,13 +125,54 @@ fn onWorktreeUpdated(userdata: ?*anyopaque, _: subspkg.EventData) void {
     if (self.initialized) return;
     self.initialized = true;
 
+    {
+        self.worktree.snapshot.mutex.lock();
+        defer self.worktree.snapshot.mutex.unlock();
+
+        var it = self.worktree.snapshot.entries.iter();
+        while (it.next()) |entry| {
+            if (std.mem.indexOfScalar(u8, entry.key, '/') != null) continue;
+            if (entry.value.kind == .dir) {
+                self.expanded_entries.put(entry.value.id, {}) catch {};
+            }
+        }
+    }
+
+    self.rebuildVisibleEntries();
+}
+
+fn rebuildVisibleEntries(self: *FileTree) void {
+    self.visible_entries.clearRetainingCapacity();
+
     self.worktree.snapshot.mutex.lock();
     defer self.worktree.snapshot.mutex.unlock();
 
     var it = self.worktree.snapshot.entries.iter();
     while (it.next()) |entry| {
-        if (std.mem.count(u8, entry.key, "/") != 1) continue;
+        if (std.mem.indexOfScalar(u8, entry.key, '/') != null) continue;
+
         self.visible_entries.append(self.alloc, entry.value.id) catch continue;
+
+        if (entry.value.kind == .dir and self.expanded_entries.contains(entry.value.id)) {
+            self.appendDirectChildren(entry.key);
+        }
+    }
+}
+
+fn appendDirectChildren(self: *FileTree, dir_path: []const u8) void {
+    var prefix_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const prefix = std.fmt.bufPrint(&prefix_buf, "{s}/", .{dir_path}) catch return;
+
+    var range_it = self.worktree.snapshot.entries.rangeFrom(prefix);
+    while (range_it.next()) |entry| {
+        if (!std.mem.startsWith(u8, entry.key, prefix)) break;
+        const rest = entry.key[prefix.len..];
+        if (std.mem.indexOfScalar(u8, rest, '/') != null) continue;
+        self.visible_entries.append(self.alloc, entry.value.id) catch continue;
+
+        if (entry.value.kind == .dir and self.expanded_entries.contains(entry.value.id)) {
+            self.appendDirectChildren(entry.key);
+        }
     }
 }
 
@@ -134,8 +193,9 @@ fn draw(element: *Element, buffer: *Buffer) void {
         },
     });
 
-    const x = element.layout.left;
-    const y = element.layout.top;
+    const outer_x = self.scrollable.outer.layout.left;
+    const outer_y = self.scrollable.outer.layout.top;
+    const element_y = element.layout.top;
     const viewport_height = self.scrollable.outer.layout.height;
 
     const skip: usize = @intCast(self.scrollable.scroll_y);
@@ -150,34 +210,29 @@ fn draw(element: *Element, buffer: *Buffer) void {
         const entry = self.worktree.snapshot.entries.get(path) catch continue;
 
         const is_selected = self.selected_entry != null and self.selected_entry.? == id;
-        const bg: vaxis.Color = if (is_selected) .{ .rgb = .{ 255, 0, 0 } } else global.settings.theme.bg;
 
         const icon: []const u8 = switch (entry.kind) {
-            .dir => ">",
+            .dir => if (self.expanded_entries.contains(entry.id)) " " else "󰉋 ",
             .file => " ",
         };
 
-        const row_y = y + @as(u16, @intCast(row));
-        const col = writeText(buffer, x, row_y, icon, buffer.width, bg);
-        _ = writeText(buffer, x + col, row_y, path, buffer.width, bg);
-    }
-}
+        const row_y = outer_y + @as(u16, @intCast(row));
+        const print_row_offset = outer_y + @as(u16, @intCast(row)) -| element_y;
 
-fn writeText(buffer: *Buffer, start_x: u16, y: u16, text: []const u8, max_width: u16, bg: vaxis.Color) u16 {
-    var col: u16 = 0;
-    var iter = vaxis.unicode.graphemeIterator(text);
-    while (iter.next()) |grapheme| {
-        const s = grapheme.bytes(text);
-        const w = gwidth(s, .unicode);
-        if (start_x + col + w > max_width) break;
-        buffer.writeCell(start_x + col, y, .{
-            .char = .{ .grapheme = s, .width = @intCast(w) },
-            .style = .{
-                .bg = bg,
-                .fg = global.settings.theme.fg,
-            },
-        });
-        col += w;
+        if (is_selected) {
+            buffer.fillRect(outer_x, row_y, element.layout.width, 1, .{ .style = .{ .bg = global.settings.theme.mutedBg } });
+        }
+
+        const display_name = if (std.mem.lastIndexOfScalar(u8, path, '/')) |sep| path[sep + 1 ..] else path;
+        const depth: u16 = @intCast(std.mem.count(u8, path, "/"));
+
+        const guide_style: vaxis.Cell.Style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } };
+        var d: u16 = 0;
+        while (d < depth) : (d += 1) {
+            _ = element.print(buffer, &.{.{ .text = "│ ", .style = guide_style }}, .{ .row_offset = @intCast(print_row_offset), .col_offset = d * 2 });
+        }
+
+        const indent: u16 = depth * 2;
+        _ = element.print(buffer, &.{ .{ .text = icon, .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } } }, .{ .text = display_name, .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } } } }, .{ .row_offset = @intCast(print_row_offset), .col_offset = indent });
     }
-    return col;
 }
