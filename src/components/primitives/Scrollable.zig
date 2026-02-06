@@ -6,9 +6,6 @@ const HitGrid = @import("../../app/window/HitGrid.zig");
 const Allocator = std.mem.Allocator;
 const global = @import("../../global.zig");
 
-//NOTE:
-//check better ways to set the position of the scrollbar
-
 pub const Scrollable = @This();
 
 pub const ScrollMode = enum {
@@ -184,7 +181,7 @@ pub fn maxScrollY(self: *const Scrollable) i32 {
     const outer = self.outer.layout.height;
     const inner = self.inner.layout.height;
 
-    if (outer > inner) return @intCast(outer);
+    if (outer > inner) return 0;
 
     return @intCast(inner - outer);
 }

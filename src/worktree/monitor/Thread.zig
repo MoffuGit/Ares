@@ -178,29 +178,20 @@ fn wakeupCallback(
 
 fn drainMailbox(self: *Thread) !void {
     const wt = self.monitor.worktree;
-    const root_name = std.fs.path.basename(wt.abs_path);
 
     while (self.mailbox.pop()) |message| {
         switch (message) {
             .add => |id| {
-                // Lookup path from snapshot and build absolute path
-                const rel_path = blk: {
+                const abs_path = blk: {
                     wt.snapshot.mutex.lock();
                     defer wt.snapshot.mutex.unlock();
-                    break :blk wt.snapshot.getPathById(id) orelse continue;
+                    break :blk wt.snapshot.getAbsPathById(id) orelse continue;
                 };
 
-                // Build absolute path (owned by Monitor/WatcherEntry)
-                // rel_path is like "ares/src", abs_path is "/path/to/ares"
-                // We need to replace "ares" prefix with abs_path
-                const abs_path = if (std.mem.eql(u8, rel_path, root_name))
-                    try self.alloc.dupe(u8, wt.abs_path)
-                else if (std.mem.startsWith(u8, rel_path, root_name) and rel_path.len > root_name.len and rel_path[root_name.len] == '/')
-                    try std.fmt.allocPrint(self.alloc, "{s}{s}", .{ wt.abs_path, rel_path[root_name.len..] })
-                else
-                    try std.fmt.allocPrint(self.alloc, "{s}/{s}", .{ wt.abs_path, rel_path });
+                const copy_abs_path = try self.alloc.dupe(u8, abs_path);
+                errdefer self.alloc.free(copy_abs_path);
 
-                try self.monitor.addWatcher(&self.fs, abs_path, id, self, fsEventsCallback);
+                try self.monitor.addWatcher(&self.fs, copy_abs_path, id, self, fsEventsCallback);
             },
             .remove => |id| {
                 self.monitor.removeWatcher(&self.fs, id);

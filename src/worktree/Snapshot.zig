@@ -15,6 +15,7 @@ next_id: std.atomic.Value(u64) = .{ .raw = 1 },
 
 entries: Entries,
 id_to_path: std.AutoHashMap(u64, []const u8),
+id_to_abs_path: std.AutoHashMap(u64, []const u8),
 
 pub fn init(alloc: Allocator) !Snapshot {
     const entries = try Entries.init(alloc);
@@ -25,12 +26,14 @@ pub fn init(alloc: Allocator) !Snapshot {
         .arena = arena,
         .entries = entries,
         .id_to_path = std.AutoHashMap(u64, []const u8).init(alloc),
+        .id_to_abs_path = std.AutoHashMap(u64, []const u8).init(alloc),
     };
 }
 
 pub fn deinit(self: *Snapshot) void {
     self.entries.deinit();
     self.id_to_path.deinit();
+    self.id_to_abs_path.deinit();
     self.arena.deinit();
 }
 
@@ -57,22 +60,25 @@ pub fn internPathSingle(self: *Snapshot, path: []const u8) ![]const u8 {
 }
 
 /// Insert an entry with an already-interned path (from internPath/internPathSingle).
-pub fn insertInterned(self: *Snapshot, id: u64, path: []const u8, kind: Kind, stat: Stat) !void {
+pub fn insertInterned(self: *Snapshot, id: u64, path: []const u8, abs_path: []const u8, kind: Kind, stat: Stat) !void {
     try self.entries.insert(path, .{ .id = id, .kind = kind, .stat = stat });
     try self.id_to_path.put(id, path);
+    const interned_abs = try self.arena.allocator().dupe(u8, abs_path);
+    try self.id_to_abs_path.put(id, interned_abs);
 }
 
 /// Insert with locking - path must already be interned.
-pub fn insertInternedLocked(self: *Snapshot, id: u64, path: []const u8, kind: Kind, stat: Stat) !void {
+pub fn insertInternedLocked(self: *Snapshot, id: u64, path: []const u8, abs_path: []const u8, kind: Kind, stat: Stat) !void {
     self.mutex.lock();
     defer self.mutex.unlock();
-    try self.insertInterned(id, path, kind, stat);
+    try self.insertInterned(id, path, abs_path, kind, stat);
 }
 
 /// Remove an entry by path. Returns the entry if found.
 pub fn remove(self: *Snapshot, path: []const u8) !?worktreepkg.Entry {
     if (try self.entries.remove(path)) |entry| {
         _ = self.id_to_path.remove(entry.id);
+        _ = self.id_to_abs_path.remove(entry.id);
         return entry;
     }
     return null;
@@ -81,4 +87,9 @@ pub fn remove(self: *Snapshot, path: []const u8) !?worktreepkg.Entry {
 /// Get path by id (returns arena-owned slice, valid for Snapshot lifetime).
 pub fn getPathById(self: *Snapshot, id: u64) ?[]const u8 {
     return self.id_to_path.get(id);
+}
+
+/// Get absolute path by id (returns arena-owned slice, valid for Snapshot lifetime).
+pub fn getAbsPathById(self: *Snapshot, id: u64) ?[]const u8 {
+    return self.id_to_abs_path.get(id);
 }

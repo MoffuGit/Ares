@@ -136,7 +136,8 @@ pub fn process_scan_by_id(self: *Scanner, dir_id: u64) !void {
             defer self.snapshot.mutex.unlock();
 
             const interned = try self.snapshot.internPath(rel_path, entry.name);
-            try self.snapshot.insertInterned(id, interned, kind, stat);
+            const interned_abs = try self.snapshot.internPath(abs_path, entry.name);
+            try self.snapshot.insertInterned(id, interned, interned_abs, kind, stat);
         }
 
         if (kind == .dir) {
@@ -292,7 +293,8 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
 
             const id = self.snapshot.newId();
             const interned_path = try self.snapshot.internPath(dir_path, entry.name);
-            try self.snapshot.insertInterned(id, interned_path, kind, stat);
+            const interned_abs = try self.snapshot.internPath(abs_dir_path, entry.name);
+            try self.snapshot.insertInterned(id, interned_path, interned_abs, kind, stat);
             try result.addEntry(id, kind);
 
             // If directory, queue for scanning and monitoring
@@ -330,7 +332,8 @@ pub fn initial_scan(self: *Scanner) !void {
             defer self.snapshot.mutex.unlock();
 
             const root_path = try self.snapshot.internPathSingle(self.root_name);
-            try self.snapshot.insertInterned(id, root_path, .file, root_stat);
+            const root_abs = try self.snapshot.internPathSingle(self.abs_root);
+            try self.snapshot.insertInterned(id, root_path, root_abs, .file, root_stat);
             return;
         }
         return err;
@@ -345,7 +348,8 @@ pub fn initial_scan(self: *Scanner) !void {
 
         // Root entry uses the directory basename (e.g., "ares")
         const root_path = try self.snapshot.internPathSingle(self.root_name);
-        try self.snapshot.insertInterned(id, root_path, .dir, root_stat);
+        const root_abs = try self.snapshot.internPathSingle(self.abs_root);
+        try self.snapshot.insertInterned(id, root_path, root_abs, .dir, root_stat);
 
         try self.snapshot.entries.print();
     }

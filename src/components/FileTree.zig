@@ -87,7 +87,8 @@ fn onUpdate(element: *Element) void {
 
         var it = self.worktree.snapshot.entries.iter();
 
-        while (it.next()) |_| {
+        while (it.next()) |entry| {
+            if (std.mem.count(u8, entry.key, "/") != 1) continue;
             height += 1.0;
         }
     }
@@ -121,6 +122,8 @@ fn draw(element: *Element, buffer: *Buffer) void {
     var row: usize = 0;
 
     while (it.next()) |entry| {
+        if (std.mem.count(u8, entry.key, "/") != 1) continue;
+
         if (index < skip) {
             index += 1;
             continue;
