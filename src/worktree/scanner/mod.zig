@@ -190,8 +190,11 @@ pub fn process_events(self: *Scanner, fs_events: *std.AutoHashMap(u64, u32)) !*U
         };
 
         // Build abs path on stack
-        var abs_buf: [std.fs.max_path_bytes]u8 = undefined;
-        const abs_dir_path = try self.buildAbsPath(dir_path, &abs_buf);
+        const abs_dir_path = blk: {
+            self.snapshot.mutex.lock();
+            defer self.snapshot.mutex.unlock();
+            break :blk self.snapshot.getAbsPathById(id) orelse continue;
+        };
 
         try self.diffDirectory(dir_path, abs_dir_path, result);
     }
@@ -244,6 +247,10 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
             while (children_it.next()) |child| {
                 const deleted_path = try self.alloc.dupe(u8, child.path);
                 try result.deleteEntry(child.entry.id, deleted_path);
+
+                self.snapshot.mutex.lock();
+                defer self.snapshot.mutex.unlock();
+                _ = self.snapshot.remove(deleted_path) catch {};
             }
         }
         return;
@@ -316,6 +323,10 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
             // Copy path for cross-thread (owned by UpdatedEntriesSet)
             const deleted_path = try self.alloc.dupe(u8, kv.value_ptr.path);
             try result.deleteEntry(kv.key_ptr.*, deleted_path);
+
+            self.snapshot.mutex.lock();
+            defer self.snapshot.mutex.unlock();
+            _ = self.snapshot.remove(deleted_path) catch {};
         }
     }
 }

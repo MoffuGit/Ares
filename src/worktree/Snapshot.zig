@@ -76,12 +76,10 @@ pub fn insertInternedLocked(self: *Snapshot, id: u64, path: []const u8, abs_path
 
 /// Remove an entry by path. Returns the entry if found.
 pub fn remove(self: *Snapshot, path: []const u8) !?worktreepkg.Entry {
-    if (try self.entries.remove(path)) |entry| {
-        _ = self.id_to_path.remove(entry.id);
-        _ = self.id_to_abs_path.remove(entry.id);
-        return entry;
-    }
-    return null;
+    const entry = self.entries.remove(path) catch return null;
+    _ = self.id_to_path.remove(entry.id);
+    _ = self.id_to_abs_path.remove(entry.id);
+    return entry;
 }
 
 /// Get path by id (returns arena-owned slice, valid for Snapshot lifetime).
