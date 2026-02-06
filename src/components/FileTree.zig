@@ -20,6 +20,9 @@ scrollable: *Scrollable,
 content: *Element,
 worktree: *Worktree,
 
+expanded_entries: std.AutoHashMap(u64, void),
+visible_entries: std.ArrayList(u64) = .{},
+
 //NOTE:
 //every directory is collapsed by default,
 //because of that out initla size is for every
@@ -34,6 +37,10 @@ worktree: *Worktree,
 //probably we can iter over all worktree files and then
 //only update in base of the snapshot version and entry snapshot version
 //you only update the values that have a new snapshot value
+//we iter the full snapshot once at the start, we create our visible state of entries, and our folded and expanded directories,
+//then, we update the visibles entries in base of the events(snapshot update, click, fodl unfould),
+//then, the scroll update this inner height in base of the ammounf of visiles entries,
+//for the draw we iter over the visivles entries
 
 pub fn create(alloc: Allocator, wt: *Worktree) !*FileTree {
     const self = try alloc.create(FileTree);
@@ -56,7 +63,11 @@ pub fn create(alloc: Allocator, wt: *Worktree) !*FileTree {
 
     try scrollable.inner.addChild(content);
 
+    const map = std.AutoHashMap(u64, void).init(alloc);
+    errdefer map.deinit();
+
     self.* = .{
+        .expanded_entries = map,
         .scrollable = scrollable,
         .content = content,
         .worktree = wt,
@@ -70,6 +81,8 @@ pub fn getElement(self: *FileTree) *Element {
 }
 
 pub fn destroy(self: *FileTree, alloc: Allocator) void {
+    self.expanded_entries.deinit();
+    self.visible_entries.deinit(alloc);
     self.content.deinit();
     alloc.destroy(self.content);
     self.scrollable.deinit(alloc);
