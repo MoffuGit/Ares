@@ -182,7 +182,7 @@ fn mouseOut(element: *Element, _: Element.EventData) void {
 
 fn onDrag(element: *Element, data: Element.EventData) void {
     const evt_data = data.drag;
-    if (evt_data.ctx.phase == .capturing) return;
+    if (evt_data.ctx.phase != .at_target) return;
 
     element.context.?.app.screen.mouse_shape = .pointer;
 
