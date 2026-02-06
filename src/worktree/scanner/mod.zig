@@ -321,12 +321,10 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
 }
 
 pub fn initial_scan(self: *Scanner) !void {
-    // Get stat for root
     const root_stat = self.getRootStat() catch Stat{};
 
     var dir = std.fs.openDirAbsolute(self.abs_root, .{}) catch |err| {
         if (err == error.NotDir) {
-            // It's a file, not a directory
             const id = self.snapshot.newId();
             self.snapshot.mutex.lock();
             defer self.snapshot.mutex.unlock();
@@ -340,28 +338,78 @@ pub fn initial_scan(self: *Scanner) !void {
     };
     dir.close();
 
-    // It's a directory
     const id = self.snapshot.newId();
     {
         self.snapshot.mutex.lock();
         defer self.snapshot.mutex.unlock();
 
-        // Root entry uses the directory basename (e.g., "ares")
         const root_path = try self.snapshot.internPathSingle(self.root_name);
         const root_abs = try self.snapshot.internPathSingle(self.abs_root);
         try self.snapshot.insertInterned(id, root_path, root_abs, .dir, root_stat);
-
-        try self.snapshot.entries.print();
     }
 
-    // Queue scan for root directory (by id)
-    if (self.worktree.scanner_thread.mailbox.push(.{ .scan_dir = id }, .instant) != 0) {
-        self.worktree.scanner_thread.wakeup.notify() catch {};
-    }
+    try self.scanRecursive(id);
 
-    // Queue monitor watcher for root (by id)
     if (self.worktree.monitor_thread.mailbox.push(.{ .add = id }, .instant) != 0) {
         self.worktree.monitor_thread.wakeup.notify() catch {};
+    }
+
+    const result = try self.alloc.create(UpdatedEntriesSet);
+    result.* = UpdatedEntriesSet.init(self.alloc);
+    if (!self.worktree.notifyUpdatedEntries(result)) {
+        result.destroy();
+    }
+}
+
+fn scanRecursive(self: *Scanner, dir_id: u64) !void {
+    const rel_path = blk: {
+        self.snapshot.mutex.lock();
+        defer self.snapshot.mutex.unlock();
+        break :blk self.snapshot.getPathById(dir_id) orelse return;
+    };
+
+    var abs_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const abs_path = try self.buildAbsPath(rel_path, &abs_buf);
+
+    var child_dirs: std.ArrayList(u64) = .{};
+    defer child_dirs.deinit(self.alloc);
+
+    {
+        var d = try std.fs.openDirAbsolute(abs_path, .{ .iterate = true });
+        defer d.close();
+
+        var iter = d.iterate();
+        while (try iter.next()) |entry| {
+            const kind: Kind = switch (entry.kind) {
+                .directory => .dir,
+                .file => .file,
+                else => continue,
+            };
+
+            const stat = self.getEntryStat(d, entry.name) catch Stat{};
+            const child_id = self.snapshot.newId();
+
+            {
+                self.snapshot.mutex.lock();
+                defer self.snapshot.mutex.unlock();
+
+                const interned = try self.snapshot.internPath(rel_path, entry.name);
+                const interned_abs = try self.snapshot.internPath(abs_path, entry.name);
+                try self.snapshot.insertInterned(child_id, interned, interned_abs, kind, stat);
+            }
+
+            if (kind == .dir) {
+                try child_dirs.append(self.alloc, child_id);
+
+                if (self.worktree.monitor_thread.mailbox.push(.{ .add = child_id }, .instant) != 0) {
+                    self.worktree.monitor_thread.wakeup.notify() catch {};
+                }
+            }
+        }
+    }
+
+    for (child_dirs.items) |child_id| {
+        try self.scanRecursive(child_id);
     }
 }
 
