@@ -7,26 +7,26 @@ const Buffer = lib.Buffer;
 const Workspace = lib.Workspace;
 const Settings = @import("../settings/mod.zig");
 
-const TopBar = @This();
+const BottomBar = @This();
 
 element: *Element,
 settings: *Settings,
 workspace: *Workspace,
 
-pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
-    const self = try alloc.create(TopBar);
+pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*BottomBar {
+    const self = try alloc.create(BottomBar);
     errdefer alloc.destroy(self);
 
     const element = try alloc.create(Element);
     errdefer alloc.destroy(element);
 
     element.* = Element.init(alloc, .{
-        .id = "top-bar",
+        .id = "bottom-bar",
         .drawFn = draw,
         .userdata = self,
         .style = .{
             .width = .{ .percent = 100 },
-            .height = .{ .point = 2 },
+            .height = .{ .point = 1 },
             .flex_shrink = 0,
         },
     });
@@ -40,22 +40,17 @@ pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
     return self;
 }
 
-pub fn destroy(self: *TopBar, alloc: std.mem.Allocator) void {
+pub fn destroy(self: *BottomBar, alloc: std.mem.Allocator) void {
     self.element.deinit();
     alloc.destroy(self.element);
     alloc.destroy(self);
 }
 
-pub fn getElement(self: *TopBar) *Element {
+pub fn getElement(self: *BottomBar) *Element {
     return self.element;
 }
 
 fn draw(element: *Element, buffer: *Buffer) void {
-    const self: *TopBar = @ptrCast(@alignCast(element.userdata));
+    const self: *BottomBar = @ptrCast(@alignCast(element.userdata));
     element.fill(buffer, .{ .style = .{ .bg = self.settings.theme.bg } });
-
-    if (self.workspace.project) |project| {
-        const root_name = std.fs.path.basename(project.worktree.abs_path);
-        _ = element.print(buffer, &.{.{ .text = root_name, .style = .{ .fg = self.settings.theme.fg } }}, .{ .text_align = .center });
-    }
 }

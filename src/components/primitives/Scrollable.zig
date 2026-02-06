@@ -6,6 +6,9 @@ const HitGrid = @import("../../app/window/HitGrid.zig");
 const Allocator = std.mem.Allocator;
 const global = @import("../../global.zig");
 
+//NOTE:
+//check better ways to set the position of the scrollbar
+
 pub const Scrollable = @This();
 
 pub const ScrollMode = enum {
@@ -294,7 +297,7 @@ fn drawBar(element: *Element, buffer: *Buffer) void {
 
     const alpha: u8 = if (element.hovered or element.dragging) 255 else 128;
     const track_color = withAlpha(global.settings.theme.scrollTrack, alpha);
-    const thumb_color = withAlpha(global.settings.theme.scrollBar, alpha);
+    const thumb_color = withAlpha(global.settings.theme.scrollThumb, alpha);
 
     element.fill(buffer, .{ .style = .{ .bg = track_color } });
 
@@ -383,6 +386,8 @@ fn onBarDrag(element: *Element, data: Element.EventData) void {
     const mouse = data.drag.mouse;
     const ctx = element.context orelse return;
     const size = ctx.app.window.size;
+
+    data.drag.ctx.stopPropagation();
 
     const current_y_pixel: i32 = mouse.pixel_row;
 

@@ -2,18 +2,18 @@
   "name": "zenbones",
   "colors": {
     "background": "#030202",
-    "foreground": "#BBB2AF",
+    "foreground": "#F0EEEE",
     "forr": "#6E6763",
     "mutesFg": "#BBB2AF",
     "scrollThumb": "#666666",
     "scrollTrack": "#333333",
-    "border-900": "#2B2421",
+    "border-900": "#171210",
     "border-800": "#3c3c3c",
     "primaryBg": "#1A1615",
     "primaryFg": "#BBB2AF",
     "mutedBg": "#080606",
-    "mutedBlaskdjf;alg": "#171210",
-    "mutedFg": "#6E6763"
+    "floatingWIndow": "#171210",
+    "mutedFg": "#DCD4D3"
   },
   "theme": {
     "bg": "background",

@@ -10,8 +10,6 @@ const worktree_mod = @import("../worktree/mod.zig");
 const Worktree = worktree_mod.Worktree;
 const Entry = worktree_mod.Entry;
 const Kind = worktree_mod.Kind;
-// const AppEvent = @import("../AppEvent.zig");
-// const AppContext = @import("../AppContext.zig");
 
 const Allocator = std.mem.Allocator;
 const gwidth = vaxis.gwidth.gwidth;
@@ -37,10 +35,14 @@ worktree: *Worktree,
 //only update in base of the snapshot version and entry snapshot version
 //you only update the values that have a new snapshot value
 
+//NOTE:
+//check the size and how it shoudl expand
 pub fn create(alloc: Allocator, wt: *Worktree) !*FileTree {
     const self = try alloc.create(FileTree);
 
-    const scrollable = try Scrollable.init(alloc, .{ .outer = .{ .width = .{ .percent = 30 }, .height = .{ .percent = 100 } } });
+    const scrollable = try Scrollable.init(alloc, .{
+        .outer = .{ .width = .{ .percent = 100 }, .height = .{ .percent = 100 } },
+    });
 
     const content = try alloc.create(Element);
     content.* = Element.init(alloc, .{
@@ -137,6 +139,13 @@ fn onUpdate(element: *Element) void {
 
 fn draw(element: *Element, buffer: *Buffer) void {
     const self: *FileTree = @ptrCast(@alignCast(element.userdata));
+
+    element.fill(buffer, .{
+        .style = .{
+            .bg = global.settings.theme.bg,
+            .fg = global.settings.theme.fg,
+        },
+    });
 
     const x = element.layout.left;
     const y = element.layout.top;
