@@ -205,8 +205,8 @@ fn draw(element: *Element, buffer: *Buffer) void {
         },
     });
 
-    const x = element.layout.left;
-    const y = element.layout.top;
+    const outer_x = self.scrollable.outer.layout.left;
+    const outer_y = self.scrollable.outer.layout.top;
     const element_y = element.layout.top;
     const viewport_height = self.scrollable.outer.layout.height;
 
@@ -231,11 +231,11 @@ fn draw(element: *Element, buffer: *Buffer) void {
             .file => " ",
         };
 
-        const row_y = y + @as(u16, @intCast(row));
-        const print_row_offset = y + @as(u16, @intCast(row)) -| element_y;
+        const row_y = outer_y + @as(u16, @intCast(row));
+        const print_row_offset = outer_y + @as(u16, @intCast(row)) -| element_y;
 
         if (is_selected) {
-            buffer.fillRect(x - 1, row_y, element.layout.width, 1, .{ .style = .{ .bg = global.settings.theme.mutedBg } });
+            buffer.fillRect(outer_x, row_y, element.layout.width, 1, .{ .style = .{ .bg = global.settings.theme.mutedBg } });
         }
 
         const display_name = if (std.mem.lastIndexOfScalar(u8, path, '/')) |sep| path[sep + 1 ..] else path;
