@@ -47,6 +47,7 @@ pub fn create(alloc: Allocator, wt: *Worktree, ctx: *Context) !*FileTree {
         .style = .{
             .flex_shrink = 0,
             .width = .{ .percent = 100 },
+            .margin = .{ .all = .{ .point = 1 } },
         },
     });
 
@@ -74,7 +75,9 @@ pub fn create(alloc: Allocator, wt: *Worktree, ctx: *Context) !*FileTree {
 }
 
 pub fn hitFn(element: *Element, grid: *HitGrid) void {
-    element.hitSelf(grid);
+    const self: *FileTree = @ptrCast(@alignCast(element.userdata));
+    const layout = self.scrollable.outer.layout;
+    grid.fillRect(element.layout.left, element.layout.top, layout.width, layout.height, element.num);
 }
 
 pub fn getElement(self: *FileTree) *Element {
@@ -94,7 +97,7 @@ fn onClick(element: *Element, data: Element.EventData) void {
     const self: *FileTree = @ptrCast(@alignCast(element.userdata));
     const mouse = data.click.mouse;
     const row_in_viewport = mouse.row -| self.scrollable.outer.layout.top;
-    const index = @as(usize, @intCast(self.scrollable.scroll_y)) + row_in_viewport;
+    const index = @as(usize, @intCast(self.scrollable.scroll_y)) + row_in_viewport - self.content.layout.margin.top;
     if (index < self.visible_entries.items.len) {
         const id = self.visible_entries.items[index];
         self.selected_entry = id;
@@ -212,12 +215,12 @@ fn draw(element: *Element, buffer: *Buffer) void {
     });
 
     const outer_x = self.scrollable.outer.layout.left;
-    const outer_y = self.scrollable.outer.layout.top;
+    const outer_y = self.scrollable.outer.layout.top + element.layout.margin.top;
     const element_y = element.layout.top;
     const viewport_height = self.scrollable.outer.layout.height;
 
     const skip: usize = @intCast(self.scrollable.scroll_y);
-    const max_visible: usize = @intCast(viewport_height);
+    const max_visible: usize = @intCast(viewport_height - 2);
 
     self.worktree.snapshot.mutex.lock();
     defer self.worktree.snapshot.mutex.unlock();
@@ -252,8 +255,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
         const guide_style: vaxis.Cell.Style = .{ .fg = .{ .rgba = guide_fg }, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } };
         var d: u16 = 0;
         while (d < depth) : (d += 1) {
-            const last = self.isLastAtLevel(abs_i, d + 1);
-            const guide: []const u8 = if (d == depth - 1 and last) "└" else if (last) " " else "│";
+            const guide = "│";
             _ = element.print(
                 buffer,
                 &.{.{ .text = guide, .style = guide_style }},
