@@ -46,7 +46,9 @@ pub fn create(alloc: Allocator, project: *Project, ctx: *Context) !*FileTree {
         .style = .{
             .flex_shrink = 0,
             .width = .{ .percent = 100 },
-            .margin = .{ .all = .{ .point = 1 } },
+            .margin = .{
+                .horizontal = .{ .point = 1 },
+            },
         },
     });
 
@@ -96,7 +98,7 @@ fn onClick(element: *Element, data: Element.EventData) void {
     const self: *FileTree = @ptrCast(@alignCast(element.userdata));
     const mouse = data.click.mouse;
     const row_in_viewport = mouse.row -| self.scrollable.outer.layout.top;
-    const index = @as(usize, @intCast(self.scrollable.scroll_y)) + row_in_viewport - self.content.layout.margin.top;
+    const index = @as(usize, @intCast(self.scrollable.scroll_y)) + row_in_viewport;
     if (index < self.visible_entries.items.len) {
         const id = self.visible_entries.items[index];
 
@@ -220,7 +222,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
     const viewport_height = self.scrollable.outer.layout.height;
 
     const skip: usize = @intCast(self.scrollable.scroll_y);
-    const max_visible: usize = @intCast(viewport_height - 2);
+    const max_visible: usize = @intCast(viewport_height);
 
     self.project.worktree.snapshot.mutex.lock();
     defer self.project.worktree.snapshot.mutex.unlock();
