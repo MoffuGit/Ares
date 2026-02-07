@@ -58,4 +58,8 @@ fn draw(element: *Element, buffer: *Buffer) void {
         const root_name = std.fs.path.basename(project.worktree.abs_path);
         _ = element.print(buffer, &.{.{ .text = root_name, .style = .{ .fg = self.settings.theme.fg } }}, .{ .text_align = .center });
     }
+
+    var border = self.settings.theme.border.rgba;
+    border[3] = 170;
+    buffer.fillRect(element.layout.left, element.layout.top + 1, element.layout.width, 1, .{ .char = .{ .grapheme = "▁" }, .style = .{ .fg = .{ .rgba = border } } });
 }
