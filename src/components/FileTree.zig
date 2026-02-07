@@ -195,17 +195,6 @@ fn onUpdate(element: *Element) void {
     element.node.setHeight(.{ .point = height });
 }
 
-fn isLastAtLevel(self: *FileTree, from: usize, level: u16) bool {
-    const all = self.visible_entries.items;
-    for (all[from + 1 ..]) |next_id| {
-        const next_path = self.project.worktree.snapshot.getPathById(next_id) orelse continue;
-        const next_depth: u16 = @intCast(std.mem.count(u8, next_path, "/"));
-        if (next_depth < level) return true;
-        if (next_depth == level) return false;
-    }
-    return true;
-}
-
 fn draw(element: *Element, buffer: *Buffer) void {
     const self: *FileTree = @ptrCast(@alignCast(element.userdata));
 
