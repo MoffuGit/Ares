@@ -57,7 +57,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
     const tab_count = self.workspace.tabs.count();
     if (tab_count > 0) {
         const layout = element.layout;
-        const content_width = layout.width -| (layout.padding.left + layout.padding.right + layout.border.left + layout.border.right);
+        const content_width = layout.width -| (layout.padding.left + layout.padding.right + layout.border.left + layout.border.right + 1);
         const tabs_width: u16 = @intCast(tab_count * 2 -| 1);
         const right_offset: u16 = content_width -| tabs_width;
         const tabs = &self.workspace.tabs;
@@ -70,7 +70,9 @@ fn draw(element: *Element, buffer: *Buffer) void {
                 rgba[3] = 100;
                 fg = .{ .rgba = rgba };
             }
-            _ = element.print(buffer, &.{.{ .text = "▄", .style = .{ .fg = fg } }}, .{ .col_offset = col, .row_offset = 1 });
+            _ = element.print(buffer, &.{.{ .text = "▄", .style = .{ .fg = fg } }}, .{
+                .col_offset = col,
+            });
         }
     }
 
