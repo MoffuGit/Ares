@@ -233,7 +233,7 @@ pub fn openProject(self: *Workspace, abs_path: []const u8) !void {
         project.destroy(self.alloc);
     }
     self.project = try Project.create(self.alloc, abs_path, self.ctx);
-    self.file_tree = try FileTree.create(self.alloc, self.project.?.worktree, self.ctx);
+    self.file_tree = try FileTree.create(self.alloc, self.project.?, self.ctx);
 }
 
 pub fn closeProject(self: *Workspace) void {

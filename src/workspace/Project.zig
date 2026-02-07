@@ -8,6 +8,8 @@ const Project = @This();
 ctx: *Context,
 worktree: *Worktree,
 
+selected_entry: ?u64 = null,
+
 pub fn create(alloc: std.mem.Allocator, abs_path: []const u8, ctx: *Context) !*Project {
     const project = try alloc.create(Project);
     errdefer alloc.destroy(project);

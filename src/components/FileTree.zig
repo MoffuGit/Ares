@@ -6,6 +6,7 @@ const lib = @import("../lib.zig");
 const Element = lib.Element;
 const Buffer = lib.Buffer;
 const HitGrid = lib.HitGrid;
+const Project = @import("../workspace/Project.zig");
 const Scrollable = @import("primitives/Scrollable.zig");
 const Style = Element.Style;
 const worktree_mod = @import("../worktree/mod.zig");
@@ -23,14 +24,12 @@ pub const FileTree = @This();
 alloc: Allocator,
 scrollable: *Scrollable,
 content: *Element,
-worktree: *Worktree,
+project: *Project,
 
 expanded_entries: std.AutoHashMap(u64, void),
 visible_entries: std.ArrayList(u64) = .{},
 
-selected_entry: ?u64 = null,
-
-pub fn create(alloc: Allocator, wt: *Worktree, ctx: *Context) !*FileTree {
+pub fn create(alloc: Allocator, project: *Project, ctx: *Context) !*FileTree {
     const self = try alloc.create(FileTree);
 
     const scrollable = try Scrollable.init(alloc, .{
@@ -61,7 +60,7 @@ pub fn create(alloc: Allocator, wt: *Worktree, ctx: *Context) !*FileTree {
         .expanded_entries = map,
         .scrollable = scrollable,
         .content = content,
-        .worktree = wt,
+        .project = project,
     };
 
     try ctx.subscribe(.worktreeUpdatedEntries, .{
@@ -100,13 +99,12 @@ fn onClick(element: *Element, data: Element.EventData) void {
     const index = @as(usize, @intCast(self.scrollable.scroll_y)) + row_in_viewport - self.content.layout.margin.top;
     if (index < self.visible_entries.items.len) {
         const id = self.visible_entries.items[index];
-        self.selected_entry = id;
 
         const is_dir = blk: {
-            self.worktree.snapshot.mutex.lock();
-            defer self.worktree.snapshot.mutex.unlock();
-            const path = self.worktree.snapshot.getPathById(id) orelse break :blk false;
-            const entry = self.worktree.snapshot.entries.get(path) catch break :blk false;
+            self.project.worktree.snapshot.mutex.lock();
+            defer self.project.worktree.snapshot.mutex.unlock();
+            const path = self.project.worktree.snapshot.getPathById(id) orelse break :blk false;
+            const entry = self.project.worktree.snapshot.entries.get(path) catch break :blk false;
             break :blk entry.kind == .dir;
         };
 
@@ -117,6 +115,8 @@ fn onClick(element: *Element, data: Element.EventData) void {
                 self.expanded_entries.put(id, {}) catch {};
             }
             self.rebuildVisibleEntries();
+        } else {
+            self.project.selected_entry = id;
         }
     }
     element.context.?.requestDraw();
@@ -125,7 +125,7 @@ fn onClick(element: *Element, data: Element.EventData) void {
 fn onWorktreeUpdated(userdata: ?*anyopaque, _: subspkg.EventData) void {
     const self: *FileTree = @ptrCast(@alignCast(userdata));
 
-    var it = self.worktree.snapshot.entries.iter();
+    var it = self.project.worktree.snapshot.entries.iter();
 
     if (it.next()) |root| {
         if (root.value.kind == .dir) {
@@ -142,10 +142,10 @@ fn onWorktreeUpdated(userdata: ?*anyopaque, _: subspkg.EventData) void {
 fn rebuildVisibleEntries(self: *FileTree) void {
     self.visible_entries.clearRetainingCapacity();
 
-    self.worktree.snapshot.mutex.lock();
-    defer self.worktree.snapshot.mutex.unlock();
+    self.project.worktree.snapshot.mutex.lock();
+    defer self.project.worktree.snapshot.mutex.unlock();
 
-    var it = self.worktree.snapshot.entries.iter();
+    var it = self.project.worktree.snapshot.entries.iter();
     while (it.next()) |entry| {
         if (std.mem.indexOfScalar(u8, entry.key, '/') != null) continue;
 
@@ -162,7 +162,7 @@ fn appendDirectChildren(self: *FileTree, dir_path: []const u8) void {
     const prefix = std.fmt.bufPrint(&prefix_buf, "{s}/", .{dir_path}) catch return;
 
     // dirs first
-    var dir_it = self.worktree.snapshot.entries.rangeFrom(prefix);
+    var dir_it = self.project.worktree.snapshot.entries.rangeFrom(prefix);
     while (dir_it.next()) |entry| {
         if (!std.mem.startsWith(u8, entry.key, prefix)) break;
         const rest = entry.key[prefix.len..];
@@ -176,7 +176,7 @@ fn appendDirectChildren(self: *FileTree, dir_path: []const u8) void {
     }
 
     // then files
-    var file_it = self.worktree.snapshot.entries.rangeFrom(prefix);
+    var file_it = self.project.worktree.snapshot.entries.rangeFrom(prefix);
     while (file_it.next()) |entry| {
         if (!std.mem.startsWith(u8, entry.key, prefix)) break;
         const rest = entry.key[prefix.len..];
@@ -196,7 +196,7 @@ fn onUpdate(element: *Element) void {
 fn isLastAtLevel(self: *FileTree, from: usize, level: u16) bool {
     const all = self.visible_entries.items;
     for (all[from + 1 ..]) |next_id| {
-        const next_path = self.worktree.snapshot.getPathById(next_id) orelse continue;
+        const next_path = self.project.worktree.snapshot.getPathById(next_id) orelse continue;
         const next_depth: u16 = @intCast(std.mem.count(u8, next_path, "/"));
         if (next_depth < level) return true;
         if (next_depth == level) return false;
@@ -222,18 +222,18 @@ fn draw(element: *Element, buffer: *Buffer) void {
     const skip: usize = @intCast(self.scrollable.scroll_y);
     const max_visible: usize = @intCast(viewport_height - 2);
 
-    self.worktree.snapshot.mutex.lock();
-    defer self.worktree.snapshot.mutex.unlock();
+    self.project.worktree.snapshot.mutex.lock();
+    defer self.project.worktree.snapshot.mutex.unlock();
 
     const all = self.visible_entries.items;
     const end = @min(skip + max_visible, all.len);
     for (skip..end) |abs_i| {
         const id = all[abs_i];
-        const path = self.worktree.snapshot.getPathById(id) orelse continue;
-        const entry = self.worktree.snapshot.entries.get(path) catch continue;
+        const path = self.project.worktree.snapshot.getPathById(id) orelse continue;
+        const entry = self.project.worktree.snapshot.entries.get(path) catch continue;
         const row = abs_i - skip;
 
-        const is_selected = self.selected_entry != null and self.selected_entry.? == id;
+        const is_selected = self.project.selected_entry != null and self.project.selected_entry.? == id;
 
         const icon: []const u8 = switch (entry.kind) {
             .dir => if (self.expanded_entries.contains(entry.id)) " " else "󰉋 ",
