@@ -11,6 +11,7 @@ const Buffer = lib.Buffer;
 const global = @import("../global.zig");
 
 pub const Project = @import("Project.zig");
+pub const Tabs = @import("Tabs.zig");
 
 pub const Workspace = @This();
 
@@ -33,6 +34,8 @@ top_dock: ?*Dock,
 bottom_dock: ?*Dock,
 
 file_tree: ?*FileTree,
+
+tabs: Tabs,
 
 pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const workspace = try alloc.create(Workspace);
@@ -123,6 +126,7 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         .top_dock = null,
         .bottom_dock = null,
         .file_tree = null,
+        .tabs = Tabs.init(alloc),
     };
     return workspace;
 }
@@ -136,6 +140,7 @@ pub fn destroy(self: *Workspace) void {
     if (self.project) |project| {
         project.destroy(self.alloc);
     }
+    self.tabs.deinit();
     self.center.deinit();
     self.center_column.deinit();
     self.center_wrapper.deinit();
@@ -253,6 +258,28 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
 
     if (key_data.key.matches('l', .{ .super = true })) {
         self.toggleDock(.left) catch {};
+        key_data.ctx.stopPropagation();
+        element.context.?.requestDraw();
+    }
+
+    if (key_data.key.matches('t', .{ .ctrl = true })) {
+        _ = self.tabs.createTab() catch {};
+        key_data.ctx.stopPropagation();
+        element.context.?.requestDraw();
+    }
+
+    if (key_data.key.matches('\t', .{ .shift = true })) {
+        self.tabs.selectPrev();
+        key_data.ctx.stopPropagation();
+        element.context.?.requestDraw();
+    } else if (key_data.key.matches('\t', .{})) {
+        self.tabs.selectNext();
+        key_data.ctx.stopPropagation();
+        element.context.?.requestDraw();
+    }
+
+    if (key_data.key.matches('q', .{ .ctrl = true })) {
+        self.tabs.closeSelected();
         key_data.ctx.stopPropagation();
         element.context.?.requestDraw();
     }
