@@ -303,9 +303,9 @@ pub fn print(element: *Element, buffer: *Buffer, segments: []const Segment, opts
     if (opts.text_align == .center) {
         base_x += layout.width / 2;
     }
-    const base_y = layout.top + layout.padding.top + layout.border.top;
-    const content_width = layout.width -| (layout.padding.left + layout.padding.right + layout.border.left + layout.border.right);
-    const content_height = layout.height -| (layout.padding.top + layout.padding.bottom + layout.border.top + layout.border.bottom);
+    const base_y = layout.top;
+    const content_width = layout.width;
+    const content_height = layout.height;
 
     var row = opts.row_offset;
     switch (opts.wrap) {
@@ -430,15 +430,14 @@ pub fn print(element: *Element, buffer: *Buffer, segments: []const Segment, opts
             const overflow: bool = blk: for (segments) |segment| {
                 var iter = unicode.graphemeIterator(segment.text);
                 while (iter.next()) |grapheme| {
-                    if (col >= content_width) break :blk true;
                     const s = grapheme.bytes(segment.text);
                     if (std.mem.eql(u8, s, "\n")) break :blk true;
                     const w: u16 = @intCast(gwidth(s, .unicode));
                     if (w == 0) continue;
+                    if (col + w > content_width) break :blk true;
                     if (opts.commit) buffer.writeCell(base_x + col, base_y + row, .{
                         .char = .{
                             .grapheme = s,
-                            .width = @intCast(w),
                         },
                         .style = segment.style,
                     });

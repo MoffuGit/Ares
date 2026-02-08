@@ -197,13 +197,6 @@ fn onUpdate(element: *Element) void {
 fn draw(element: *Element, buffer: *Buffer) void {
     const self: *FileTree = @ptrCast(@alignCast(element.userdata));
 
-    element.fill(buffer, .{
-        .style = .{
-            .bg = global.settings.theme.bg,
-            .fg = global.settings.theme.fg,
-        },
-    });
-
     const span = self.scrollable.visibleRowSpan(element);
     const outer_top = self.scrollable.outer.layout.top;
     const print_base: u16 = outer_top -| element.layout.top;
@@ -229,7 +222,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
 
         if (is_selected) {
             const screen_y = element.layout.top + print_row;
-            buffer.fillRect(self.scrollable.outer.layout.left, screen_y, element.layout.width, 1, .{ .style = .{ .bg = global.settings.theme.mutedBg } });
+            buffer.fillRect(self.scrollable.outer.layout.left, screen_y, element.layout.width -| 1, 1, .{ .style = .{ .bg = global.settings.theme.mutedBg } });
         }
 
         const display_name = if (std.mem.lastIndexOfScalar(u8, path, '/')) |sep| path[sep + 1 ..] else path;

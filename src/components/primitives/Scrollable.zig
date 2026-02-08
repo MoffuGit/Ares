@@ -301,7 +301,6 @@ fn withAlpha(color: vaxis.Color, alpha: u8) vaxis.Color {
 
 const lower_blocks = [8][]const u8{ " ", "▁", "▂", "▃", "▄", "▅", "▆", "▇" };
 const upper_blocks = [8][]const u8{ " ", "▔", "🮂", "🮃", "▀", "🮄", "🮅", "🮆" };
-const full_block = "█";
 
 fn drawBar(element: *Element, buffer: *Buffer) void {
     const self: *Scrollable = @ptrCast(@alignCast(element.userdata));

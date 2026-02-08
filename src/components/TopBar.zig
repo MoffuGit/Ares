@@ -26,7 +26,7 @@ pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
         .userdata = self,
         .style = .{
             .width = .{ .percent = 100 },
-            .height = .{ .point = 1 },
+            .height = .{ .point = 2 },
             .flex_shrink = 0,
         },
     });
@@ -101,4 +101,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
             }
         }
     }
+    buffer.fillRect(element.layout.left, element.layout.top + 1, element.layout.width, 1, .{ .char = .{
+        .grapheme = "▀",
+    }, .style = .{ .bg = self.settings.theme.mutedBg, .fg = self.settings.theme.bg } });
 }

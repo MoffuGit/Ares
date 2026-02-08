@@ -46,11 +46,6 @@ pub fn create(alloc: Allocator, side: Side, initial_size: u16) !*Dock {
             .left, .right => .{
                 .width = .{ .point = @floatFromInt(initial_size) },
                 .height = .{ .percent = 100 },
-                .padding = .{
-                    .right = .{
-                        .point = 1,
-                    },
-                },
                 .flex_shrink = 0,
             },
             .top, .bottom => .{
@@ -99,7 +94,7 @@ fn hit(element: *Element, hit_grid: *HitGrid) void {
 
     switch (self.side) {
         .left => {
-            hit_grid.fillRect(layout.left + layout.width -| BORDER_SIZE, layout.top, BORDER_SIZE, layout.height, element.num);
+            hit_grid.fillRect(layout.left + layout.width -| BORDER_SIZE, layout.top, BORDER_SIZE + 1, layout.height, element.num);
         },
         .right => {
             hit_grid.fillRect(layout.left, layout.top, BORDER_SIZE, layout.height, element.num);
@@ -124,13 +119,13 @@ fn draw(element: *Element, buffer: *Buffer) void {
 
     switch (self.side) {
         .left => {
-            const char = if (element.hovered or element.dragging) "▍" else "▏";
+            const char = if (element.hovered or element.dragging) "🮈" else "▕";
             const col = layout.left + layout.width -| BORDER_SIZE;
             var row: u16 = 0;
             while (row < layout.height) : (row += 1) {
                 buffer.writeCell(col, layout.top + row, .{
                     .char = .{ .grapheme = char },
-                    .style = .{ .fg = self.settings.theme.border, .bg = theme.mutedBg },
+                    .style = .{ .fg = self.settings.theme.border, .bg = theme.bg },
                 });
             }
         },
