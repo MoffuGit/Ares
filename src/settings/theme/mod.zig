@@ -31,7 +31,7 @@ pub const fallback = Theme{
 };
 
 pub fn getFileTypeColor(self: Theme, key: []const u8) Color {
-    return self.fileType.get(key) orelse self.fileType.get("fallback").?;
+    return self.fileType.get(key) orelse self.fileType.get("default").?;
 }
 
 pub fn deinit(self: *Theme, allocator: std.mem.Allocator) void {
@@ -49,7 +49,6 @@ pub const ParseError = error{
 const JsonTheme = struct {
     name: []const u8,
     colors: std.json.ArrayHashMap([]const u8),
-    fileType: ?std.json.ArrayHashMap([]const u8) = null,
     theme: struct {
         bg: []const u8,
         fg: []const u8,
@@ -60,6 +59,7 @@ const JsonTheme = struct {
         scrollThumb: []const u8,
         scrollTrack: []const u8,
         border: []const u8,
+        fileType: ?std.json.ArrayHashMap([]const u8) = null,
     },
 };
 
@@ -90,14 +90,14 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
     const border = colors.get(json_theme.theme.border) orelse return ParseError.ColorNotFound;
 
     var file_type_colors = std.StringHashMapUnmanaged(Color){};
-    if (json_theme.fileType) |ft| {
+    if (json_theme.theme.fileType) |ft| {
         var ft_it = ft.map.iterator();
         while (ft_it.next()) |entry| {
-            const color = parseHexColor(entry.value_ptr.*) catch return ParseError.InvalidRgba;
+            const color = colors.get(entry.value_ptr.*) orelse return ParseError.ColorNotFound;
             const key = allocator.dupe(u8, entry.key_ptr.*) catch return ParseError.InvalidJson;
             file_type_colors.put(allocator, key, color) catch return ParseError.InvalidJson;
         }
-        if (file_type_colors.get("fallback") == null) return ParseError.MissingField;
+        if (file_type_colors.get("default") == null) return ParseError.MissingField;
     }
 
     const name = allocator.dupe(u8, json_theme.name) catch return ParseError.InvalidJson;
@@ -190,12 +190,10 @@ test "parse theme with fileType" {
         \\    "primaryBg": "#1a1a1a",
         \\    "primaryFg": "#ffffff",
         \\    "mutedBg": "#2a2a2a",
-        \\    "mutedFg": "#888888"
-        \\  },
-        \\  "fileType": {
-        \\    "fallback": "#cccccc",
-        \\    "rust": "#dea584",
-        \\    "zig": "#f7a41d"
+        \\    "mutedFg": "#888888",
+        \\    "rustColor": "#dea584",
+        \\    "zigColor": "#f7a41d",
+        \\    "defaultFileColor": "#cccccc"
         \\  },
         \\  "theme": {
         \\    "bg": "background",
@@ -206,7 +204,12 @@ test "parse theme with fileType" {
         \\    "mutedFg": "mutedFg",
         \\    "scrollThumb": "scrollThumb",
         \\    "scrollTrack": "scrollTrack",
-        \\    "border": "scrollTrack"
+        \\    "border": "scrollTrack",
+        \\    "fileType": {
+        \\      "default": "defaultFileColor",
+        \\      "rust": "rustColor",
+        \\      "zig": "zigColor"
+        \\    }
         \\  }
         \\}
     ;
@@ -231,10 +234,8 @@ test "parse theme fileType missing fallback" {
         \\    "primaryBg": "#1a1a1a",
         \\    "primaryFg": "#ffffff",
         \\    "mutedBg": "#2a2a2a",
-        \\    "mutedFg": "#888888"
-        \\  },
-        \\  "fileType": {
-        \\    "rust": "#dea584"
+        \\    "mutedFg": "#888888",
+        \\    "rustColor": "#dea584"
         \\  },
         \\  "theme": {
         \\    "bg": "background",
@@ -245,7 +246,10 @@ test "parse theme fileType missing fallback" {
         \\    "mutedFg": "mutedFg",
         \\    "scrollThumb": "scrollThumb",
         \\    "scrollTrack": "scrollTrack",
-        \\    "border": "scrollTrack"
+        \\    "border": "scrollTrack",
+        \\    "fileType": {
+        \\      "rust": "rustColor"
+        \\    }
         \\  }
         \\}
     ;
