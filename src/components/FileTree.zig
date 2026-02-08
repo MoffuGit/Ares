@@ -47,7 +47,7 @@ pub fn create(alloc: Allocator, project: *Project, ctx: *Context) !*FileTree {
             .flex_shrink = 0,
             .width = .{ .percent = 100 },
             .margin = .{
-                .horizontal = .{ .point = 1 },
+                .all = .{ .point = 1 },
             },
         },
     });
@@ -97,8 +97,7 @@ pub fn destroy(self: *FileTree, alloc: Allocator) void {
 fn onClick(element: *Element, data: Element.EventData) void {
     const self: *FileTree = @ptrCast(@alignCast(element.userdata));
     const mouse = data.click.mouse;
-    const row_in_viewport = mouse.row -| self.scrollable.outer.layout.top;
-    const index = @as(usize, @intCast(self.scrollable.scroll_y)) + row_in_viewport;
+    const index = self.scrollable.childRowFromScreenY(element, mouse.row) orelse return;
     if (index < self.visible_entries.items.len) {
         const id = self.visible_entries.items[index];
 
@@ -205,24 +204,18 @@ fn draw(element: *Element, buffer: *Buffer) void {
         },
     });
 
-    const outer_x = self.scrollable.outer.layout.left;
-    const outer_y = self.scrollable.outer.layout.top;
-    const element_y = element.layout.top;
-    const viewport_height = self.scrollable.outer.layout.height;
-
-    const skip: usize = @intCast(self.scrollable.scroll_y);
-    const max_visible: usize = @intCast(viewport_height);
+    const span = self.scrollable.visibleRowSpan(element);
 
     self.project.worktree.snapshot.mutex.lock();
     defer self.project.worktree.snapshot.mutex.unlock();
 
     const all = self.visible_entries.items;
-    const end = @min(skip + max_visible, all.len);
-    for (skip..end) |abs_i| {
+    const end = @min(span.end, all.len);
+    for (span.start..end) |abs_i| {
         const id = all[abs_i];
         const path = self.project.worktree.snapshot.getPathById(id) orelse continue;
         const entry = self.project.worktree.snapshot.entries.get(path) catch continue;
-        const row = abs_i - skip;
+        const row: u16 = @intCast(abs_i);
 
         const is_selected = self.project.selected_entry != null and self.project.selected_entry.? == id;
 
@@ -231,11 +224,9 @@ fn draw(element: *Element, buffer: *Buffer) void {
             .file => " ",
         };
 
-        const row_y = outer_y + @as(u16, @intCast(row));
-        const print_row_offset = outer_y + @as(u16, @intCast(row)) -| element_y;
-
         if (is_selected) {
-            buffer.fillRect(outer_x, row_y, element.layout.width, 1, .{ .style = .{ .bg = global.settings.theme.mutedBg } });
+            const screen_y = element.layout.top + row;
+            buffer.fillRect(element.layout.left, screen_y, element.layout.width, 1, .{ .style = .{ .bg = global.settings.theme.mutedBg } });
         }
 
         const display_name = if (std.mem.lastIndexOfScalar(u8, path, '/')) |sep| path[sep + 1 ..] else path;
@@ -250,7 +241,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
             _ = element.print(
                 buffer,
                 &.{.{ .text = guide, .style = guide_style }},
-                .{ .row_offset = @intCast(print_row_offset), .col_offset = d * 2 },
+                .{ .row_offset = row, .col_offset = d * 2 },
             );
         }
 
@@ -267,7 +258,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
                     .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } },
                 },
             },
-            .{ .row_offset = @intCast(print_row_offset), .col_offset = indent, .wrap = .none },
+            .{ .row_offset = row, .col_offset = indent, .wrap = .none },
         );
     }
 }

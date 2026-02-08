@@ -91,3 +91,5 @@ right half block ▐
 right five eighth 🮉
 right three quarter 🮊
 right seven eighths 🮋
+🯦
+🯧

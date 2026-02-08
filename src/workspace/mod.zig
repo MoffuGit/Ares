@@ -37,6 +37,8 @@ file_tree: ?*FileTree,
 
 tabs: Tabs,
 
+tab_content: *Element,
+
 pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const workspace = try alloc.create(Workspace);
     errdefer alloc.destroy(workspace);
@@ -52,6 +54,9 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
 
     const center = try alloc.create(Element);
     errdefer alloc.destroy(center);
+
+    const tab_content = try alloc.create(Element);
+    errdefer alloc.destroy(tab_content);
 
     element.* = Element.init(alloc, .{
         .id = "workspace",
@@ -94,12 +99,23 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         },
     });
 
+    tab_content.* = Element.init(alloc, .{
+        .id = "tab-content",
+        .userdata = workspace,
+        .drawFn = drawTabContent,
+        .style = .{
+            .width = .{ .percent = 100 },
+            .height = .{ .percent = 100 },
+        },
+    });
+
     const top_bar = try TopBar.create(alloc, workspace);
     errdefer top_bar.destroy(alloc);
 
     const bottom_bar = try BottomBar.create(alloc, workspace);
     errdefer bottom_bar.destroy(alloc);
 
+    try center.addChild(tab_content);
     try center_column.addChild(center);
     try center_wrapper.addChild(center_column);
 
@@ -118,6 +134,7 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         .center_wrapper = center_wrapper,
         .center_column = center_column,
         .center = center,
+        .tab_content = tab_content,
         .element = element,
         .top_bar = top_bar,
         .bottom_bar = bottom_bar,
@@ -128,6 +145,9 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         .file_tree = null,
         .tabs = Tabs.init(alloc),
     };
+
+    _ = workspace.tabs.createTab() catch {};
+
     return workspace;
 }
 
@@ -141,6 +161,8 @@ pub fn destroy(self: *Workspace) void {
         project.destroy(self.alloc);
     }
     self.tabs.deinit();
+    self.tab_content.deinit();
+    self.alloc.destroy(self.tab_content);
     self.center.deinit();
     self.center_column.deinit();
     self.center_wrapper.deinit();
@@ -252,6 +274,39 @@ pub fn closeProject(self: *Workspace) void {
     }
 }
 
+pub fn syncTabToProject(self: *Workspace) void {
+    const project = self.project orelse return;
+    if (self.tabs.getSelectedTab()) |tab| {
+        project.selected_entry = tab.selected_entry;
+    } else {
+        project.selected_entry = null;
+    }
+}
+
+pub fn saveProjectToTab(self: *Workspace) void {
+    const project = self.project orelse return;
+    if (self.tabs.getSelectedTab()) |tab| {
+        tab.selected_entry = project.selected_entry;
+    }
+}
+
+fn drawTabContent(element: *Element, buffer: *Buffer) void {
+    const self: *Workspace = @ptrCast(@alignCast(element.userdata));
+    const project = self.project orelse return;
+    const entry_id = project.selected_entry orelse return;
+
+    var snapshot = project.worktree.snapshot;
+    snapshot.mutex.lock();
+    defer snapshot.mutex.unlock();
+
+    if (snapshot.getPathById(entry_id)) |path| {
+        const theme = global.settings.theme;
+        _ = element.print(buffer, &.{.{ .text = path, .style = .{ .fg = theme.fg } }}, .{
+            .text_align = .center,
+        });
+    }
+}
+
 fn onKeyPress(element: *Element, data: Element.EventData) void {
     const self: *Workspace = @ptrCast(@alignCast(element.userdata));
     const key_data = data.key_press;
@@ -263,23 +318,30 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
     }
 
     if (key_data.key.matches('t', .{ .ctrl = true })) {
+        self.saveProjectToTab();
         _ = self.tabs.createTab() catch {};
+        self.syncTabToProject();
         key_data.ctx.stopPropagation();
         element.context.?.requestDraw();
     }
 
     if (key_data.key.matches('\t', .{ .shift = true })) {
+        self.saveProjectToTab();
         self.tabs.selectPrev();
+        self.syncTabToProject();
         key_data.ctx.stopPropagation();
         element.context.?.requestDraw();
     } else if (key_data.key.matches('\t', .{})) {
+        self.saveProjectToTab();
         self.tabs.selectNext();
+        self.syncTabToProject();
         key_data.ctx.stopPropagation();
         element.context.?.requestDraw();
     }
 
     if (key_data.key.matches('q', .{ .ctrl = true })) {
         self.tabs.closeSelected();
+        self.syncTabToProject();
         key_data.ctx.stopPropagation();
         element.context.?.requestDraw();
     }

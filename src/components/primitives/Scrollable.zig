@@ -181,6 +181,34 @@ pub fn maxScrollY(self: *const Scrollable) i32 {
     return @intCast(inner - outer);
 }
 
+pub const RowSpan = struct { start: usize, end: usize };
+
+pub fn visibleRowSpan(self: *const Scrollable, child: *const Element) RowSpan {
+    const vp_top: i32 = @intCast(self.outer.layout.top);
+    const vp_bot: i32 = vp_top + @as(i32, @intCast(self.outer.layout.height));
+
+    const ch_top: i32 = @intCast(child.layout.top);
+    const ch_bot: i32 = ch_top + @as(i32, @intCast(child.layout.height));
+
+    const vis_top: i32 = @max(vp_top, ch_top);
+    const vis_bot: i32 = @min(vp_bot, ch_bot);
+    if (vis_bot <= vis_top) return .{ .start = 0, .end = 0 };
+
+    return .{
+        .start = @intCast(vis_top - ch_top),
+        .end = @intCast(vis_bot - ch_top),
+    };
+}
+
+pub fn childRowFromScreenY(self: *const Scrollable, child: *const Element, screen_row: u16) ?usize {
+    _ = self;
+    const child_top: i32 = @intCast(child.layout.top);
+    const y: i32 = @as(i32, @intCast(screen_row)) - child_top;
+    if (y < 0) return null;
+    if (y >= @as(i32, @intCast(child.layout.height))) return null;
+    return @intCast(y);
+}
+
 fn beforeDrawFn(element: *Element, buffer: *Buffer) void {
     const layout = element.layout;
 

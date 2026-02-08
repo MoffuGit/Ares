@@ -4,7 +4,12 @@ const Tabs = @This();
 
 pub const Id = u64;
 
-items: std.ArrayListUnmanaged(Id) = .{},
+pub const Tab = struct {
+    id: Id,
+    selected_entry: ?u64 = null,
+};
+
+items: std.ArrayListUnmanaged(Tab) = .{},
 selected: ?usize = null,
 alloc: std.mem.Allocator,
 next_id: Id = 1,
@@ -31,12 +36,12 @@ pub fn deinit(self: *Tabs) void {
 
 pub fn open(self: *Tabs, id: Id) !void {
     for (self.items.items) |item| {
-        if (item == id) {
+        if (item.id == id) {
             self.selectById(id);
             return;
         }
     }
-    try self.items.append(self.alloc, id);
+    try self.items.append(self.alloc, .{ .id = id });
     self.selected = self.items.items.len - 1;
 }
 
@@ -97,7 +102,19 @@ pub fn move(self: *Tabs, from: usize, to: usize) void {
 
 pub fn getSelected(self: *const Tabs) ?Id {
     const sel = self.selected orelse return null;
-    return self.items.items[sel];
+    return self.items.items[sel].id;
+}
+
+pub fn getSelectedTab(self: *Tabs) ?*Tab {
+    const sel = self.selected orelse return null;
+    return &self.items.items[sel];
+}
+
+pub fn getTabById(self: *Tabs, id: Id) ?*Tab {
+    for (self.items.items) |*item| {
+        if (item.id == id) return item;
+    }
+    return null;
 }
 
 pub fn count(self: *const Tabs) usize {
@@ -106,7 +123,7 @@ pub fn count(self: *const Tabs) usize {
 
 pub fn indexOf(self: *const Tabs, id: Id) ?usize {
     for (self.items.items, 0..) |item, i| {
-        if (item == id) return i;
+        if (item.id == id) return i;
     }
     return null;
 }

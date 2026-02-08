@@ -24,9 +24,10 @@ pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
         .id = "top-bar",
         .drawFn = draw,
         .userdata = self,
+        .zIndex = 10,
         .style = .{
             .width = .{ .percent = 100 },
-            .height = .{ .point = 2 },
+            .height = .{ .point = 1 },
             .flex_shrink = 0,
         },
     });
@@ -52,10 +53,12 @@ pub fn getElement(self: *TopBar) *Element {
 
 fn draw(element: *Element, buffer: *Buffer) void {
     const self: *TopBar = @ptrCast(@alignCast(element.userdata));
-    element.fill(buffer, .{ .style = .{ .bg = self.settings.theme.bg } });
+    buffer.fillRect(element.layout.left, element.layout.top, element.layout.width, 1, .{ .style = .{
+        .bg = self.settings.theme.bg,
+    } });
 
     const tab_count = self.workspace.tabs.count();
-    if (tab_count > 0) {
+    if (tab_count > 1) {
         const layout = element.layout;
         const content_width = layout.width -| (layout.padding.left + layout.padding.right + layout.border.left + layout.border.right + 1);
         const tabs_width: u16 = @intCast(tab_count * 2 -| 1);
@@ -70,16 +73,13 @@ fn draw(element: *Element, buffer: *Buffer) void {
                 rgba[3] = 100;
                 fg = .{ .rgba = rgba };
             }
-            _ = element.print(buffer, &.{.{ .text = "▄", .style = .{ .fg = fg } }}, .{
+            _ = element.print(buffer, &.{.{ .text = "■", .style = .{ .fg = fg } }}, .{
                 .col_offset = col,
             });
         }
     }
 
     if (self.workspace.project) |project| {
-        const root_name = std.fs.path.basename(project.worktree.abs_path);
-        _ = element.print(buffer, &.{.{ .text = root_name, .style = .{ .fg = self.settings.theme.fg } }}, .{ .text_align = .center });
-
         if (project.selected_entry) |id| {
             var snapshot = project.worktree.snapshot;
 
@@ -89,8 +89,19 @@ fn draw(element: *Element, buffer: *Buffer) void {
             if (snapshot.getPathById(id)) |path| {
                 var fg = self.settings.theme.fg.rgba;
                 fg[3] = 200;
-                _ = element.print(buffer, &.{.{ .text = path, .style = .{ .fg = .{ .rgba = fg } } }}, .{ .col_offset = 1 });
+                _ = element.print(
+                    buffer,
+                    &.{
+                        .{ .text = "▎" },
+                        .{ .text = path, .style = .{ .fg = .{ .rgba = fg } } },
+                    },
+                    .{ .col_offset = 1 },
+                );
             }
         }
     }
+
+    buffer.fillRect(element.layout.left, element.layout.top + 1, element.layout.width, 1, .{ .char = .{
+        .grapheme = "▀",
+    }, .style = .{ .bg = .{ .rgba = .{ 0, 0, 0, 0 } }, .fg = self.settings.theme.bg } });
 }
