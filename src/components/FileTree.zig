@@ -205,6 +205,8 @@ fn draw(element: *Element, buffer: *Buffer) void {
     });
 
     const span = self.scrollable.visibleRowSpan(element);
+    const outer_top = self.scrollable.outer.layout.top;
+    const print_base: u16 = outer_top -| element.layout.top;
 
     self.project.worktree.snapshot.mutex.lock();
     defer self.project.worktree.snapshot.mutex.unlock();
@@ -215,7 +217,8 @@ fn draw(element: *Element, buffer: *Buffer) void {
         const id = all[abs_i];
         const path = self.project.worktree.snapshot.getPathById(id) orelse continue;
         const entry = self.project.worktree.snapshot.entries.get(path) catch continue;
-        const row: u16 = @intCast(abs_i);
+        const vp_row: u16 = @intCast(abs_i - span.start);
+        const print_row = print_base + vp_row;
 
         const is_selected = self.project.selected_entry != null and self.project.selected_entry.? == id;
 
@@ -225,8 +228,8 @@ fn draw(element: *Element, buffer: *Buffer) void {
         };
 
         if (is_selected) {
-            const screen_y = element.layout.top + row;
-            buffer.fillRect(element.layout.left, screen_y, element.layout.width, 1, .{ .style = .{ .bg = global.settings.theme.mutedBg } });
+            const screen_y = element.layout.top + print_row;
+            buffer.fillRect(self.scrollable.outer.layout.left, screen_y, element.layout.width, 1, .{ .style = .{ .bg = global.settings.theme.mutedBg } });
         }
 
         const display_name = if (std.mem.lastIndexOfScalar(u8, path, '/')) |sep| path[sep + 1 ..] else path;
@@ -241,7 +244,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
             _ = element.print(
                 buffer,
                 &.{.{ .text = guide, .style = guide_style }},
-                .{ .row_offset = row, .col_offset = d * 2 },
+                .{ .row_offset = print_row, .col_offset = d * 2 },
             );
         }
 
@@ -258,7 +261,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
                     .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } },
                 },
             },
-            .{ .row_offset = row, .col_offset = indent, .wrap = .none },
+            .{ .row_offset = print_row, .col_offset = indent, .wrap = .none },
         );
     }
 }

@@ -53,7 +53,7 @@ pub fn getElement(self: *TopBar) *Element {
 
 fn draw(element: *Element, buffer: *Buffer) void {
     const self: *TopBar = @ptrCast(@alignCast(element.userdata));
-    buffer.fillRect(element.layout.left, element.layout.top, element.layout.width, 1, .{ .style = .{
+    element.fill(buffer, .{ .style = .{
         .bg = self.settings.theme.bg,
     } });
 
@@ -101,7 +101,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
         }
     }
 
-    buffer.fillRect(element.layout.left, element.layout.top + 1, element.layout.width, 1, .{ .char = .{
-        .grapheme = "▀",
-    }, .style = .{ .bg = .{ .rgba = .{ 0, 0, 0, 0 } }, .fg = self.settings.theme.bg } });
+    // buffer.fillRect(element.layout.left, element.layout.top + 1, element.layout.width, 1, .{ .char = .{
+    //     .grapheme = "▀",
+    // }, .style = .{ .bg = .{ .rgba = .{ 0, 0, 0, 0 } }, .fg = self.settings.theme.bg } });
 }

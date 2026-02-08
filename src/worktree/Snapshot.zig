@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const worktreepkg = @import("mod.zig");
 const Entries = worktreepkg.Entries;
 const Kind = worktreepkg.Kind;
+const FileType = worktreepkg.FileType;
 const Stat = worktreepkg.Stat;
 
 pub const Snapshot = @This();
@@ -60,18 +61,18 @@ pub fn internPathSingle(self: *Snapshot, path: []const u8) ![]const u8 {
 }
 
 /// Insert an entry with an already-interned path (from internPath/internPathSingle).
-pub fn insertInterned(self: *Snapshot, id: u64, path: []const u8, abs_path: []const u8, kind: Kind, stat: Stat) !void {
-    try self.entries.insert(path, .{ .id = id, .kind = kind, .stat = stat });
+pub fn insertInterned(self: *Snapshot, id: u64, path: []const u8, abs_path: []const u8, kind: Kind, file_type: FileType, stat: Stat) !void {
+    try self.entries.insert(path, .{ .id = id, .kind = kind, .file_type = file_type, .stat = stat });
     try self.id_to_path.put(id, path);
     const interned_abs = try self.arena.allocator().dupe(u8, abs_path);
     try self.id_to_abs_path.put(id, interned_abs);
 }
 
 /// Insert with locking - path must already be interned.
-pub fn insertInternedLocked(self: *Snapshot, id: u64, path: []const u8, abs_path: []const u8, kind: Kind, stat: Stat) !void {
+pub fn insertInternedLocked(self: *Snapshot, id: u64, path: []const u8, abs_path: []const u8, kind: Kind, file_type: FileType, stat: Stat) !void {
     self.mutex.lock();
     defer self.mutex.unlock();
-    try self.insertInterned(id, path, abs_path, kind, stat);
+    try self.insertInterned(id, path, abs_path, kind, file_type, stat);
 }
 
 /// Remove an entry by path. Returns the entry if found.

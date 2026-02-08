@@ -5,6 +5,7 @@ const worktreepkg = @import("../mod.zig");
 const Worktree = worktreepkg.Worktree;
 const Entry = worktreepkg.Entry;
 const Kind = worktreepkg.Kind;
+const FileType = worktreepkg.FileType;
 const Stat = worktreepkg.Stat;
 const Allocator = std.mem.Allocator;
 const Snapshot = @import("../Snapshot.zig");
@@ -127,6 +128,7 @@ pub fn process_scan_by_id(self: *Scanner, dir_id: u64) !void {
 
         // Get file stat
         const stat = self.getEntryStat(dir, entry.name) catch Stat{};
+        const file_type: FileType = if (kind == .file) FileType.fromName(entry.name) else .unknown;
 
         const id = self.snapshot.newId();
 
@@ -137,7 +139,7 @@ pub fn process_scan_by_id(self: *Scanner, dir_id: u64) !void {
 
             const interned = try self.snapshot.internPath(rel_path, entry.name);
             const interned_abs = try self.snapshot.internPath(abs_path, entry.name);
-            try self.snapshot.insertInterned(id, interned, interned_abs, kind, stat);
+            try self.snapshot.insertInterned(id, interned, interned_abs, kind, file_type, stat);
         }
 
         if (kind == .dir) {
@@ -294,6 +296,7 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
         } else {
             // New entry - get stat and insert
             const stat = self.getEntryStat(dir, entry.name) catch Stat{};
+            const file_type: FileType = if (kind == .file) FileType.fromName(entry.name) else .unknown;
 
             self.snapshot.mutex.lock();
             defer self.snapshot.mutex.unlock();
@@ -301,7 +304,7 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
             const id = self.snapshot.newId();
             const interned_path = try self.snapshot.internPath(dir_path, entry.name);
             const interned_abs = try self.snapshot.internPath(abs_dir_path, entry.name);
-            try self.snapshot.insertInterned(id, interned_path, interned_abs, kind, stat);
+            try self.snapshot.insertInterned(id, interned_path, interned_abs, kind, file_type, stat);
             try result.addEntry(id, kind);
 
             // If directory, queue for scanning and monitoring
@@ -342,7 +345,7 @@ pub fn initial_scan(self: *Scanner) !void {
 
             const root_path = try self.snapshot.internPathSingle(self.root_name);
             const root_abs = try self.snapshot.internPathSingle(self.abs_root);
-            try self.snapshot.insertInterned(id, root_path, root_abs, .file, root_stat);
+            try self.snapshot.insertInterned(id, root_path, root_abs, .file, FileType.fromName(self.root_name), root_stat);
             return;
         }
         return err;
@@ -356,7 +359,7 @@ pub fn initial_scan(self: *Scanner) !void {
 
         const root_path = try self.snapshot.internPathSingle(self.root_name);
         const root_abs = try self.snapshot.internPathSingle(self.abs_root);
-        try self.snapshot.insertInterned(id, root_path, root_abs, .dir, root_stat);
+        try self.snapshot.insertInterned(id, root_path, root_abs, .dir, .unknown, root_stat);
     }
 
     try self.scanRecursive(id);
@@ -398,6 +401,7 @@ fn scanRecursive(self: *Scanner, dir_id: u64) !void {
             };
 
             const stat = self.getEntryStat(d, entry.name) catch Stat{};
+            const file_type: FileType = if (kind == .file) FileType.fromName(entry.name) else .unknown;
             const child_id = self.snapshot.newId();
 
             {
@@ -406,7 +410,7 @@ fn scanRecursive(self: *Scanner, dir_id: u64) !void {
 
                 const interned = try self.snapshot.internPath(rel_path, entry.name);
                 const interned_abs = try self.snapshot.internPath(abs_path, entry.name);
-                try self.snapshot.insertInterned(child_id, interned, interned_abs, kind, stat);
+                try self.snapshot.insertInterned(child_id, interned, interned_abs, kind, file_type, stat);
             }
 
             if (kind == .dir) {
