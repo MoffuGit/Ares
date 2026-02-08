@@ -92,3 +92,27 @@ pub fn getPathById(self: *Snapshot, id: u64) ?[]const u8 {
 pub fn getAbsPathById(self: *Snapshot, id: u64) ?[]const u8 {
     return self.id_to_abs_path.get(id);
 }
+
+/// Get an owned copy of the path by id. Caller owns the returned slice.
+pub fn clonePathById(self: *Snapshot, alloc: Allocator, id: u64) ?[]const u8 {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+    const path = self.id_to_path.get(id) orelse return null;
+    return alloc.dupe(u8, path) catch return null;
+}
+
+/// Get an owned copy of the absolute path by id. Caller owns the returned slice.
+pub fn cloneAbsPathById(self: *Snapshot, alloc: Allocator, id: u64) ?[]const u8 {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+    const abs_path = self.id_to_abs_path.get(id) orelse return null;
+    return alloc.dupe(u8, abs_path) catch return null;
+}
+
+/// Get a copy of an entry by id, with locking.
+pub fn getEntryById(self: *Snapshot, id: u64) ?worktreepkg.Entry {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+    const path = self.id_to_path.get(id) orelse return null;
+    return self.entries.get(path) catch return null;
+}

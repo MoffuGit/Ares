@@ -13,7 +13,8 @@
     "primaryFg": "#BBB2AF",
     "mutedBg": "#080606",
     "floatingWIndow": "#171210",
-    "mutedFg": "#DCD4D3"
+    "mutedFg": "#DCD4D3",
+    "defaultFileColor": "#BBB2AF"
   },
   "theme": {
     "bg": "background",
@@ -24,6 +25,9 @@
     "mutedFg": "mutedFg",
     "scrollThumb": "scrollThumb",
     "scrollTrack": "scrollTrack",
-    "border": "border-900"
+    "border": "border-900",
+    "fileType": {
+      "default": "defaultFileColor"
+    }
   }
 }

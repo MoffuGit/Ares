@@ -70,7 +70,7 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
 
     try element.addEventListener(.key_press, onKeyPress);
 
-    center_wrapper.* = Element.init(alloc, .{ .id = "center-wrapper", .style = .{
+    center_wrapper.* = Element.init(alloc, .{ .id = "center-wrapper", .zIndex = 10, .style = .{
         .flex_grow = 1,
         .flex_direction = .row,
     }, .drawFn = (struct {

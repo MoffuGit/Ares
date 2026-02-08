@@ -197,7 +197,13 @@ fn themesCallback(
         if (s.themes.getPtr(name)) |existing| {
             s.alloc.free(theme.name);
             theme.name = existing.name;
+            var old_ft = existing.fileType;
             existing.* = theme;
+            var ft_it = old_ft.keyIterator();
+            while (ft_it.next()) |key| {
+                s.alloc.free(key.*);
+            }
+            old_ft.deinit(s.alloc);
         } else {
             s.themes.put(s.alloc, theme.name, theme) catch {
                 s.alloc.free(theme.name);
@@ -250,7 +256,7 @@ pub fn destroy(self: *Settings) void {
     if (self.light_theme.len > 0) self.alloc.free(self.light_theme);
     var it = self.themes.iterator();
     while (it.next()) |entry| {
-        if (entry.value_ptr.name.len > 0) self.alloc.free(entry.value_ptr.name);
+        entry.value_ptr.deinit(self.alloc);
     }
     self.themes.deinit(self.alloc);
     self.fs.deinit();
@@ -282,7 +288,7 @@ test "load settings from settings folder" {
         if (settings.light_theme.len > 0) alloc.free(settings.light_theme);
         var it = settings.themes.iterator();
         while (it.next()) |entry| {
-            if (entry.value_ptr.name.len > 0) alloc.free(entry.value_ptr.name);
+            entry.value_ptr.deinit(alloc);
         }
         settings.themes.deinit(alloc);
     }

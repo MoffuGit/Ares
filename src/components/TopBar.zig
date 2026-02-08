@@ -24,7 +24,6 @@ pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
         .id = "top-bar",
         .drawFn = draw,
         .userdata = self,
-        .zIndex = 10,
         .style = .{
             .width = .{ .percent = 100 },
             .height = .{ .point = 1 },
@@ -81,27 +80,25 @@ fn draw(element: *Element, buffer: *Buffer) void {
 
     if (self.workspace.project) |project| {
         if (project.selected_entry) |id| {
-            var snapshot = project.worktree.snapshot;
+            const snapshot = &project.worktree.snapshot;
 
-            snapshot.mutex.lock();
-            defer snapshot.mutex.unlock();
+            if (snapshot.getEntryById(id)) |entry| {
+                if (snapshot.getPathById(id)) |path| {
+                    const file_color = self.settings.theme.getFileTypeColor(entry.file_type.toString());
 
-            if (snapshot.getPathById(id)) |path| {
-                var fg = self.settings.theme.fg.rgba;
-                fg[3] = 200;
-                _ = element.print(
-                    buffer,
-                    &.{
-                        .{ .text = "▎" },
-                        .{ .text = path, .style = .{ .fg = .{ .rgba = fg } } },
-                    },
-                    .{ .col_offset = 1 },
-                );
+                    var fg = self.settings.theme.fg.rgba;
+                    fg[3] = 200;
+
+                    _ = element.print(
+                        buffer,
+                        &.{
+                            .{ .text = "▎", .style = .{ .fg = file_color } },
+                            .{ .text = path, .style = .{ .fg = .{ .rgba = fg } } },
+                        },
+                        .{ .col_offset = 1 },
+                    );
+                }
             }
         }
     }
-
-    // buffer.fillRect(element.layout.left, element.layout.top + 1, element.layout.width, 1, .{ .char = .{
-    //     .grapheme = "▀",
-    // }, .style = .{ .bg = .{ .rgba = .{ 0, 0, 0, 0 } }, .fg = self.settings.theme.bg } });
 }

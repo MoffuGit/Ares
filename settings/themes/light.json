@@ -9,7 +9,9 @@
     "primaryBg": "#FFFFFF",
     "primaryFg": "#000000",
     "mutedBg": "#E0DEDD",
-    "mutedFg": "#666666"
+    "mutedFg": "#666666",
+    "defaultFileColor": "#666666",
+    "zig": "#c89a00"
   },
   "theme": {
     "bg": "background",
@@ -20,6 +22,10 @@
     "mutedFg": "mutedFg",
     "scrollThumb": "scrollThumb",
     "scrollTrack": "scrollTrack",
-    "border": "border-900"
+    "border": "border-900",
+    "fileType": {
+      "default": "defaultFileColor",
+      "zig": "zig"
+    }
   }
 }

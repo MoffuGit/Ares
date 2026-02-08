@@ -36,6 +36,10 @@ pub fn getFileTypeColor(self: Theme, key: []const u8) Color {
 
 pub fn deinit(self: *Theme, allocator: std.mem.Allocator) void {
     allocator.free(self.name);
+    var it = self.fileType.keyIterator();
+    while (it.next()) |key| {
+        allocator.free(key.*);
+    }
     self.fileType.deinit(allocator);
 }
 

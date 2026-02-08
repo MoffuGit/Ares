@@ -103,6 +103,37 @@ pub const FileType = enum {
         if (std.mem.eql(u8, e, "lua")) return .lua;
         return .unknown;
     }
+
+    pub fn toString(self: FileType) []const u8 {
+        return switch (self) {
+            .zig => "zig",
+            .c => "c",
+            .cpp => "cpp",
+            .h => "h",
+            .py => "py",
+            .js => "js",
+            .ts => "ts",
+            .json => "json",
+            .xml => "xml",
+            .yaml => "yaml",
+            .toml => "toml",
+            .md => "md",
+            .txt => "txt",
+            .html => "html",
+            .css => "css",
+            .sh => "sh",
+            .go => "go",
+            .rs => "rs",
+            .java => "java",
+            .rb => "rb",
+            .lua => "lua",
+            .makefile => "makefile",
+            .dockerfile => "dockerfile",
+            .gitignore => "gitignore",
+            .license => "license",
+            .unknown => "unknown",
+        };
+    }
 };
 
 const Allocator = std.mem.Allocator;
