@@ -15,6 +15,7 @@ mutedFg: Color,
 scrollThumb: Color,
 scrollTrack: Color,
 border: Color,
+fileType: std.StringHashMapUnmanaged(Color) = .{},
 
 pub const fallback = Theme{
     .name = "fallback",
@@ -29,6 +30,15 @@ pub const fallback = Theme{
     .border = Color{ .rgba = .{ 0, 255, 0, 255 } },
 };
 
+pub fn getFileTypeColor(self: Theme, key: []const u8) Color {
+    return self.fileType.get(key) orelse self.fileType.get("fallback").?;
+}
+
+pub fn deinit(self: *Theme, allocator: std.mem.Allocator) void {
+    allocator.free(self.name);
+    self.fileType.deinit(allocator);
+}
+
 pub const ParseError = error{
     InvalidRgba,
     ColorNotFound,
@@ -39,6 +49,7 @@ pub const ParseError = error{
 const JsonTheme = struct {
     name: []const u8,
     colors: std.json.ArrayHashMap([]const u8),
+    fileType: ?std.json.ArrayHashMap([]const u8) = null,
     theme: struct {
         bg: []const u8,
         fg: []const u8,
@@ -78,6 +89,17 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
     const scrollTrack = colors.get(json_theme.theme.scrollTrack) orelse return ParseError.ColorNotFound;
     const border = colors.get(json_theme.theme.border) orelse return ParseError.ColorNotFound;
 
+    var file_type_colors = std.StringHashMapUnmanaged(Color){};
+    if (json_theme.fileType) |ft| {
+        var ft_it = ft.map.iterator();
+        while (ft_it.next()) |entry| {
+            const color = parseHexColor(entry.value_ptr.*) catch return ParseError.InvalidRgba;
+            const key = allocator.dupe(u8, entry.key_ptr.*) catch return ParseError.InvalidJson;
+            file_type_colors.put(allocator, key, color) catch return ParseError.InvalidJson;
+        }
+        if (file_type_colors.get("fallback") == null) return ParseError.MissingField;
+    }
+
     const name = allocator.dupe(u8, json_theme.name) catch return ParseError.InvalidJson;
 
     return Theme{
@@ -91,6 +113,7 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
         .scrollThumb = scrollThumb,
         .scrollTrack = scrollTrack,
         .border = border,
+        .fileType = file_type_colors,
     };
 }
 
@@ -141,8 +164,8 @@ test "parse theme" {
         \\}
     ;
 
-    const theme = try Theme.parse(std.testing.allocator, json_str);
-    defer std.testing.allocator.free(theme.name);
+    var theme = try Theme.parse(std.testing.allocator, json_str);
+    defer theme.deinit(std.testing.allocator);
 
     try std.testing.expectEqualStrings("dark", theme.name);
     try std.testing.expectEqual(Color{ .rgba = .{ 10, 10, 10, 255 } }, theme.bg);
@@ -153,4 +176,80 @@ test "parse theme" {
     try std.testing.expectEqual(Color{ .rgba = .{ 136, 136, 136, 255 } }, theme.mutedFg);
     try std.testing.expectEqual(Color{ .rgba = .{ 102, 102, 102, 255 } }, theme.scrollThumb);
     try std.testing.expectEqual(Color{ .rgba = .{ 51, 51, 51, 255 } }, theme.scrollTrack);
+}
+
+test "parse theme with fileType" {
+    const json_str =
+        \\{
+        \\  "name": "dark",
+        \\  "colors": {
+        \\    "background": "#0a0a0a",
+        \\    "foreground": "#eeeeee",
+        \\    "scrollThumb": "#666666",
+        \\    "scrollTrack": "#333333",
+        \\    "primaryBg": "#1a1a1a",
+        \\    "primaryFg": "#ffffff",
+        \\    "mutedBg": "#2a2a2a",
+        \\    "mutedFg": "#888888"
+        \\  },
+        \\  "fileType": {
+        \\    "fallback": "#cccccc",
+        \\    "rust": "#dea584",
+        \\    "zig": "#f7a41d"
+        \\  },
+        \\  "theme": {
+        \\    "bg": "background",
+        \\    "fg": "foreground",
+        \\    "primaryBg": "primaryBg",
+        \\    "primaryFg": "primaryFg",
+        \\    "mutedBg": "mutedBg",
+        \\    "mutedFg": "mutedFg",
+        \\    "scrollThumb": "scrollThumb",
+        \\    "scrollTrack": "scrollTrack",
+        \\    "border": "scrollTrack"
+        \\  }
+        \\}
+    ;
+
+    var theme = try Theme.parse(std.testing.allocator, json_str);
+    defer theme.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(Color{ .rgba = .{ 222, 165, 132, 255 } }, theme.getFileTypeColor("rust"));
+    try std.testing.expectEqual(Color{ .rgba = .{ 247, 164, 29, 255 } }, theme.getFileTypeColor("zig"));
+    try std.testing.expectEqual(Color{ .rgba = .{ 204, 204, 204, 255 } }, theme.getFileTypeColor("lua"));
+}
+
+test "parse theme fileType missing fallback" {
+    const json_str =
+        \\{
+        \\  "name": "dark",
+        \\  "colors": {
+        \\    "background": "#0a0a0a",
+        \\    "foreground": "#eeeeee",
+        \\    "scrollThumb": "#666666",
+        \\    "scrollTrack": "#333333",
+        \\    "primaryBg": "#1a1a1a",
+        \\    "primaryFg": "#ffffff",
+        \\    "mutedBg": "#2a2a2a",
+        \\    "mutedFg": "#888888"
+        \\  },
+        \\  "fileType": {
+        \\    "rust": "#dea584"
+        \\  },
+        \\  "theme": {
+        \\    "bg": "background",
+        \\    "fg": "foreground",
+        \\    "primaryBg": "primaryBg",
+        \\    "primaryFg": "primaryFg",
+        \\    "mutedBg": "mutedBg",
+        \\    "mutedFg": "mutedFg",
+        \\    "scrollThumb": "scrollThumb",
+        \\    "scrollTrack": "scrollTrack",
+        \\    "border": "scrollTrack"
+        \\  }
+        \\}
+    ;
+
+    const result = Theme.parse(std.testing.allocator, json_str);
+    try std.testing.expectError(ParseError.MissingField, result);
 }
