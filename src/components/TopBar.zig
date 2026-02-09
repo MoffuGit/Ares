@@ -25,8 +25,9 @@ pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
         .drawFn = draw,
         .userdata = self,
         .style = .{
-            .width = .{ .percent = 100 },
+            .width = .stretch,
             .height = .{ .point = 2 },
+            .margin = .{ .horizontal = .{ .point = 1 } },
             .flex_shrink = 0,
         },
     });
@@ -59,20 +60,20 @@ fn draw(element: *Element, buffer: *Buffer) void {
     const tab_count = self.workspace.tabs.count();
     if (tab_count > 1) {
         const layout = element.layout;
-        const content_width = layout.width -| (layout.padding.left + layout.padding.right + layout.border.left + layout.border.right + 1);
-        const tabs_width: u16 = @intCast(tab_count * 2 -| 1);
+        const content_width = layout.width;
+        const tabs_width: u16 = @intCast(tab_count);
         const right_offset: u16 = content_width -| tabs_width;
         const tabs = &self.workspace.tabs;
         for (tabs.items.items, 0..) |_, i| {
             const is_selected = if (tabs.selected) |sel| sel == i else false;
-            const col = right_offset + @as(u16, @intCast(i * 2));
+            const col = right_offset + @as(u16, @intCast(i));
             var fg = if (is_selected) self.settings.theme.fg else self.settings.theme.fg;
             if (!is_selected) {
                 var rgba = fg.rgba;
-                rgba[3] = 100;
+                rgba[3] = 80;
                 fg = .{ .rgba = rgba };
             }
-            _ = element.print(buffer, &.{.{ .text = "■", .style = .{ .fg = fg } }}, .{
+            _ = element.print(buffer, &.{.{ .text = "🮇", .style = .{ .fg = fg } }}, .{
                 .col_offset = col,
             });
         }
@@ -95,13 +96,13 @@ fn draw(element: *Element, buffer: *Buffer) void {
                             .{ .text = "▎", .style = .{ .fg = file_color } },
                             .{ .text = path, .style = .{ .fg = .{ .rgba = fg } } },
                         },
-                        .{ .col_offset = 1 },
+                        .{},
                     );
                 }
             }
         }
     }
-    buffer.fillRect(element.layout.left, element.layout.top + 1, element.layout.width, 1, .{ .char = .{
+    buffer.fillRect(element.layout.left -| 1, element.layout.top + 1, element.layout.width + 2, 1, .{ .char = .{
         .grapheme = "▀",
     }, .style = .{ .bg = self.settings.theme.mutedBg, .fg = self.settings.theme.bg } });
 }
