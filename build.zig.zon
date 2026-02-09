@@ -37,8 +37,8 @@
             .hash = "libxev-0.0.0-86vtc2-pFAD09Lq7ShCbgupFNVaErAJgtUeS6ahACf2J",
         },
         .vaxis = .{
-            .url = "git+https://github.com/MoffuGit/libvaxis.git#9fad09b271a225678905441d6764d042ff55899e",
-            .hash = "vaxis-0.5.1-BWNV_HJaCQCgYFzEZ7sCps36H_fb9O0zB5lqb0eqSash",
+            .url = "git+https://github.com/MoffuGit/libvaxis.git#520bb32aa265fe86ee62e87d6695ef6756b5674e",
+            .hash = "vaxis-0.5.1-BWNV_J9bCQDzk6nO8XfCHic-Xq8tFXYOxHjsxLZbdXWy",
         },
     },
     .paths = .{""},

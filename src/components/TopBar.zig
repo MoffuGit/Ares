@@ -87,14 +87,13 @@ fn draw(element: *Element, buffer: *Buffer) void {
                 if (snapshot.getPathById(id)) |path| {
                     const file_color = self.settings.theme.getFileTypeColor(entry.file_type.toString());
 
-                    var fg = self.settings.theme.fg.rgba;
-                    fg[3] = 200;
+                    const fg = self.settings.theme.fg.setAlpha(0.78);
 
                     _ = element.print(
                         buffer,
                         &.{
                             .{ .text = "▎", .style = .{ .fg = file_color } },
-                            .{ .text = path, .style = .{ .fg = .{ .rgba = fg } } },
+                            .{ .text = path, .style = .{ .fg = fg } },
                         },
                         .{},
                     );

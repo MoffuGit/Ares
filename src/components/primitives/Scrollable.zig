@@ -294,9 +294,8 @@ fn onWheel(element: *Element, data: Element.EventData) void {
     }
 }
 
-fn withAlpha(color: vaxis.Color, alpha: u8) vaxis.Color {
-    const rgba = color.rgba;
-    return .{ .rgba = .{ rgba[0], rgba[1], rgba[2], alpha } };
+fn withAlpha(color: vaxis.Color, alpha: f32) vaxis.Color {
+    return color.setAlpha(alpha);
 }
 
 const lower_blocks = [8][]const u8{ " ", "▁", "▂", "▃", "▄", "▅", "▆", "▇" };
@@ -318,7 +317,7 @@ fn drawBar(element: *Element, buffer: *Buffer) void {
     const curr: u32 = if (self.scroll_y < 0) 0 else @intCast(self.scroll_y);
     const thumb_pos_eighths: u32 = if (max_scroll > 0) (curr * scroll_range_eighths) / @as(u32, @intCast(max_scroll)) else 0;
 
-    const alpha: u8 = if (element.hovered or element.dragging) 255 else 128;
+    const alpha: f32 = if (element.hovered or element.dragging) 1.0 else 0.5;
     const track_color = withAlpha(global.settings.theme.scrollTrack, alpha);
     const thumb_color = withAlpha(global.settings.theme.scrollThumb, alpha);
 
