@@ -94,7 +94,7 @@ fn hit(element: *Element, hit_grid: *HitGrid) void {
 
     switch (self.side) {
         .left => {
-            hit_grid.fillRect(layout.left + layout.width -| BORDER_SIZE, layout.top, BORDER_SIZE + 1, layout.height, element.num);
+            hit_grid.fillRect(layout.left + layout.width -| BORDER_SIZE, layout.top -| 1, BORDER_SIZE + 1, layout.height, element.num);
         },
         .right => {
             hit_grid.fillRect(layout.left, layout.top, BORDER_SIZE, layout.height, element.num);
@@ -117,13 +117,27 @@ fn draw(element: *Element, buffer: *Buffer) void {
         .style = .{ .bg = theme.bg, .fg = theme.fg },
     });
 
+    buffer.fillRect(layout.left, layout.top -| 1, layout.width, 1, .{ .style = .{
+        .bg = theme.bg,
+    } });
+
     switch (self.side) {
         .left => {
-            const char = if (element.hovered or element.dragging) "🮈" else "▕";
+            const char = "▕";
+
             const col = layout.left + layout.width -| BORDER_SIZE;
             var row: u16 = 0;
-            while (row < layout.height) : (row += 1) {
-                buffer.writeCell(col, layout.top + row, .{
+            while (row <= layout.height) : (row += 1) {
+                if (row == 0) {
+                    const alpha: u8 = if (element.hovered or element.dragging) 160 else 80;
+                    buffer.writeCell(col, layout.top -| 1 + row, .{
+                        .char = .{ .grapheme = "▄" },
+                        .style = .{ .fg = .{ .rgba = .{ 40, 113, 180, alpha } }, .bg = theme.bg },
+                    });
+
+                    continue;
+                }
+                buffer.writeCell(col, layout.top -| 1 + row, .{
                     .char = .{ .grapheme = char },
                     .style = .{ .fg = self.settings.theme.border, .bg = theme.bg },
                 });

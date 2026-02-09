@@ -47,7 +47,7 @@ pub fn create(alloc: Allocator, project: *Project, ctx: *Context) !*FileTree {
             .flex_shrink = 0,
             .width = .stretch,
             .margin = .{
-                .all = .{ .point = 1 },
+                .horizontal = .{ .point = 1 },
             },
         },
     });
@@ -222,7 +222,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
 
         if (is_selected) {
             const screen_y = element.layout.top + print_row;
-            buffer.fillRect(self.scrollable.outer.layout.left, screen_y, element.layout.width -| 1, 1, .{ .style = .{ .bg = global.settings.theme.mutedBg } });
+            buffer.fillRect(self.scrollable.outer.layout.left, screen_y, element.layout.width, 1, .{ .style = .{ .bg = global.settings.theme.mutedBg } });
         }
 
         const display_name = if (std.mem.lastIndexOfScalar(u8, path, '/')) |sep| path[sep + 1 ..] else path;
