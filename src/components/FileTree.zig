@@ -45,7 +45,7 @@ pub fn create(alloc: Allocator, project: *Project, ctx: *Context) !*FileTree {
         .hitFn = hitFn,
         .style = .{
             .flex_shrink = 0,
-            .width = .{ .percent = 100 },
+            .width = .stretch,
             .margin = .{
                 .all = .{ .point = 1 },
             },
