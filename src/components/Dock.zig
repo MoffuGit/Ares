@@ -34,7 +34,7 @@ side: Side,
 size: u16,
 settings: *Settings,
 
-pub fn create(alloc: Allocator, side: Side, initial_size: u16) !*Dock {
+pub fn create(alloc: Allocator, side: Side, size: u16, visible: bool) !*Dock {
     const dock = try alloc.create(Dock);
     errdefer alloc.destroy(dock);
 
@@ -44,13 +44,13 @@ pub fn create(alloc: Allocator, side: Side, initial_size: u16) !*Dock {
     element.* = Element.init(alloc, .{
         .style = switch (side) {
             .left, .right => .{
-                .width = .{ .point = @floatFromInt(initial_size) },
+                .width = .{ .point = @floatFromInt(size) },
                 .height = .{ .percent = 100 },
                 .flex_shrink = 0,
             },
             .top, .bottom => .{
                 .width = .{ .percent = 100 },
-                .height = .{ .point = @floatFromInt(initial_size) },
+                .height = .{ .point = @floatFromInt(size) },
                 .flex_shrink = 0,
             },
         },
@@ -60,6 +60,12 @@ pub fn create(alloc: Allocator, side: Side, initial_size: u16) !*Dock {
         .drawFn = draw,
     });
 
+    if (visible) {
+        element.show();
+    } else {
+        element.hide();
+    }
+
     try element.addEventListener(.drag, onDrag);
     try element.addEventListener(.drag_end, onBarDragEnd);
     try element.addEventListener(.mouse_over, mouseOver);
@@ -68,7 +74,7 @@ pub fn create(alloc: Allocator, side: Side, initial_size: u16) !*Dock {
     dock.* = .{
         .element = element,
         .side = side,
-        .size = initial_size,
+        .size = size,
         .settings = global.settings,
     };
 
@@ -84,8 +90,12 @@ pub fn destroy(self: *Dock, alloc: Allocator) void {
     alloc.destroy(self);
 }
 
-pub fn hide(self: *Dock) void {
-    self.element.remove();
+pub fn toggleHidden(self: *Dock) void {
+    if (self.element.visible) {
+        self.element.hide();
+    } else {
+        self.element.show();
+    }
 }
 
 fn hit(element: *Element, hit_grid: *HitGrid) void {

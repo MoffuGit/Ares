@@ -28,10 +28,10 @@ center: *Element,
 top_bar: *TopBar,
 bottom_bar: *BottomBar,
 
-left_dock: ?*Dock,
-right_dock: ?*Dock,
-top_dock: ?*Dock,
-bottom_dock: ?*Dock,
+left_dock: *Dock,
+right_dock: *Dock,
+top_dock: *Dock,
+bottom_dock: *Dock,
 
 pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const workspace = try alloc.create(Workspace);
@@ -96,8 +96,25 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const bottom_bar = try BottomBar.create(alloc, workspace);
     errdefer bottom_bar.destroy(alloc);
 
+    const left_dock = try Dock.create(alloc, .left, 30, false);
+    errdefer left_dock.destroy(alloc);
+
+    const right_dock = try Dock.create(alloc, .right, 30, false);
+    errdefer right_dock.destroy(alloc);
+
+    const top_dock = try Dock.create(alloc, .top, 30, false);
+    errdefer top_dock.destroy(alloc);
+
+    const bottom_dock = try Dock.create(alloc, .bottom, 30, false);
+    errdefer bottom_dock.destroy(alloc);
+
+    try center_column.insertChild(top_dock.element, 0);
     try center_column.addChild(center);
+    try center_column.addChild(bottom_dock.element);
+
+    try center_wrapper.insertChild(left_dock.element, 0);
     try center_wrapper.addChild(center_column);
+    try center_wrapper.addChild(right_dock.element);
 
     try element.addChild(top_bar.element);
     try element.addChild(center_wrapper);
@@ -117,10 +134,10 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         .element = element,
         .top_bar = top_bar,
         .bottom_bar = bottom_bar,
-        .left_dock = null,
-        .right_dock = null,
-        .top_dock = null,
-        .bottom_dock = null,
+        .left_dock = left_dock,
+        .right_dock = right_dock,
+        .top_dock = top_dock,
+        .bottom_dock = bottom_dock,
         .file_tree = null,
     };
 
@@ -128,10 +145,10 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
 }
 
 pub fn destroy(self: *Workspace) void {
-    if (self.left_dock) |dock| dock.destroy(self.alloc);
-    if (self.right_dock) |dock| dock.destroy(self.alloc);
-    if (self.top_dock) |dock| dock.destroy(self.alloc);
-    if (self.bottom_dock) |dock| dock.destroy(self.alloc);
+    self.left_dock.destroy(self.alloc);
+    self.right_dock.destroy(self.alloc);
+    self.top_dock.destroy(self.alloc);
+    self.bottom_dock.destroy(self.alloc);
     if (self.file_tree) |ft| ft.destroy(self.alloc);
     if (self.project) |project| {
         project.destroy(self.alloc);
@@ -149,79 +166,27 @@ pub fn destroy(self: *Workspace) void {
     self.alloc.destroy(self);
 }
 
-pub fn toggleDock(self: *Workspace, side: Dock.Side) !void {
-    const dock_ptr = switch (side) {
-        .left => &self.left_dock,
-        .right => &self.right_dock,
-        .top => &self.top_dock,
-        .bottom => &self.bottom_dock,
-    };
-
-    if (dock_ptr.*) |dock| {
-        if (dock.element.removed) {
-            try self.addDockToTree(side, dock);
-        } else {
-            dock.hide();
-        }
-    } else {
-        const dock = try Dock.create(self.alloc, side, 30);
-        dock_ptr.* = dock;
-        try self.addDockToTree(side, dock);
-    }
+pub fn toggleDock(self: *Workspace, side: Dock.Side) void {
+    self.getDock(side).toggleHidden();
 }
 
-fn addDockToTree(self: *Workspace, side: Dock.Side, dock: *Dock) !void {
-    switch (side) {
-        .left => {
-            if (self.file_tree) |ft| {
-                const ft_elem = ft.getElement();
-                if (ft_elem.parent != dock.element) {
-                    try dock.element.addChild(ft_elem);
-                }
-            }
-            try self.center_wrapper.insertChild(dock.element, 0);
-        },
-        .right => try self.center_wrapper.addChild(dock.element),
-        .top => try self.center_column.insertChild(dock.element, 0),
-        .bottom => try self.center_column.addChild(dock.element),
-    }
+pub fn getDock(self: *Workspace, side: Dock.Side) *Dock {
+    return switch (side) {
+        .left => self.left_dock,
+        .right => self.right_dock,
+        .top => self.top_dock,
+        .bottom => self.bottom_dock,
+    };
 }
 
-pub fn showDock(self: *Workspace, side: Dock.Side) !*Dock {
-    const dock_ptr = switch (side) {
-        .left => &self.left_dock,
-        .right => &self.right_dock,
-        .top => &self.top_dock,
-        .bottom => &self.bottom_dock,
-    };
-
-    if (dock_ptr.*) |dock| return dock;
-
-    const dock = try Dock.create(self.alloc, side, 30);
-    dock_ptr.* = dock;
-
-    switch (side) {
-        .left => try self.center_wrapper.insertChild(dock.element, 0),
-        .right => try self.center_wrapper.addChild(dock.element),
-        .top => try self.center_column.insertChild(dock.element, 0),
-        .bottom => try self.center_column.addChild(dock.element),
-    }
-
+pub fn showDock(self: *Workspace, side: Dock.Side) *Dock {
+    const dock = self.getDock(side);
+    dock.element.show();
     return dock;
 }
 
 pub fn hideDock(self: *Workspace, side: Dock.Side) void {
-    const dock_ptr = switch (side) {
-        .left => &self.left_dock,
-        .right => &self.right_dock,
-        .top => &self.top_dock,
-        .bottom => &self.bottom_dock,
-    };
-
-    if (dock_ptr.*) |dock| {
-        dock.destroy(self.alloc);
-        dock_ptr.* = null;
-    }
+    self.getDock(side).element.hide();
 }
 
 pub fn openProject(self: *Workspace, abs_path: []const u8) !void {
@@ -233,7 +198,9 @@ pub fn openProject(self: *Workspace, abs_path: []const u8) !void {
         project.destroy(self.alloc);
     }
     self.project = try Project.create(self.alloc, abs_path, self.ctx);
-    self.file_tree = try FileTree.create(self.alloc, self.project.?, self.ctx);
+    const ft = try FileTree.create(self.alloc, self.project.?, self.ctx);
+    self.file_tree = ft;
+    try self.left_dock.element.addChild(ft.getElement());
 }
 
 pub fn closeProject(self: *Workspace) void {
@@ -252,7 +219,7 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
     const key_data = data.key_press;
 
     if (key_data.key.matches('l', .{ .super = true })) {
-        self.toggleDock(.left) catch {};
+        self.toggleDock(.left);
         key_data.ctx.stopPropagation();
         element.context.?.requestDraw();
     }
