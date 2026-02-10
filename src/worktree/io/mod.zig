@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Worktree = @import("../mod.zig").Worktree;
+const worktreepkg = @import("../mod.zig");
+const Worktree = worktreepkg.Worktree;
 const Snapshot = @import("../Snapshot.zig");
 const xev = @import("../../global.zig").xev;
 const Thread = @import("Thread.zig");
@@ -11,6 +12,7 @@ pub const Io = @This();
 
 pub const File = struct {
     bytes: []const u8,
+    stat: worktreepkg.Stat,
     alloc: Allocator,
 
     pub fn deinit(self: File) void {
@@ -20,11 +22,13 @@ pub const File = struct {
 
 pub const ReadRequest = struct {
     path: []const u8,
+    entry_id: u64,
     completion: xev.Completion = .{},
 
     xev_file: xev.File,
     fd: std.fs.File,
     buffer: []u8,
+    file_stat: worktreepkg.Stat = .{},
 
     alloc: Allocator,
 
@@ -38,6 +42,17 @@ pub const ReadRequest = struct {
         errdefer file.close();
 
         const stat = try file.stat();
+
+        const wt_stat = worktreepkg.Stat{
+            .size = stat.size,
+            .mtime = stat.mtime,
+            .atime = stat.atime,
+            .ctime = stat.ctime,
+            .mode = @intCast(stat.mode),
+        };
+
+        self.io.worktree.scanner.updateEntryStat(self.entry_id, wt_stat);
+        self.file_stat = wt_stat;
 
         const buffer = try self.alloc.alloc(u8, stat.size);
         errdefer self.alloc.free(buffer);
@@ -93,6 +108,7 @@ pub fn readFile(
         .fd = undefined,
         .xev_file = undefined,
         .path = abs_path,
+        .entry_id = entry_id,
         .alloc = self.alloc,
         .io = self,
         .userdata = userdata,
@@ -114,6 +130,7 @@ pub fn onReadComplete(req: *ReadRequest, bytes_read: usize) void {
     const callback = req.callback;
     const userdata = req.userdata;
     const buf = req.buffer;
+    const file_stat = req.file_stat;
 
     const file_bytes = alloc.dupe(u8, buf[0..bytes_read]) catch {
         log.err("failed to allocate file bytes", .{});
@@ -128,6 +145,7 @@ pub fn onReadComplete(req: *ReadRequest, bytes_read: usize) void {
 
     callback(userdata, File{
         .bytes = file_bytes,
+        .stat = file_stat,
         .alloc = alloc,
     });
 }

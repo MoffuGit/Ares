@@ -113,6 +113,36 @@ pub fn process_scan_by_id(self: *Scanner, dir_id: u64) !void {
     }
 }
 
+pub fn updateEntryStat(self: *Scanner, entry_id: u64, new_stat: Stat) void {
+    const kind = blk: {
+        self.snapshot.mutex.lock();
+        defer self.snapshot.mutex.unlock();
+
+        const path = self.snapshot.getPathById(entry_id) orelse return;
+        const entry_ref = self.snapshot.entries.get_ref(path) catch return;
+
+        if (entry_ref.stat.size == new_stat.size and
+            entry_ref.stat.mtime == new_stat.mtime and
+            entry_ref.stat.mode == new_stat.mode)
+        {
+            return;
+        }
+
+        entry_ref.stat = new_stat;
+        break :blk entry_ref.kind;
+    };
+
+    const result = self.alloc.create(UpdatedEntriesSet) catch return;
+    result.* = UpdatedEntriesSet.init(self.alloc);
+    result.updateEntry(entry_id, kind) catch {
+        result.destroy();
+        return;
+    };
+    if (!self.worktree.notifyUpdatedEntries(result)) {
+        result.destroy();
+    }
+}
+
 /// Get file stats for an entry
 fn getEntryStat(self: *Scanner, dir: std.fs.Dir, name: []const u8) !Stat {
     _ = self;
