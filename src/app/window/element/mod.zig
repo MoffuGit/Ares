@@ -998,6 +998,20 @@ pub fn isAncestorOf(self: *Element, other: *Element) bool {
     return false;
 }
 
+pub fn hide(self: *Element) void {
+    self.style.display = .none;
+    self.node.setDisplay(.none);
+
+    self.visible = false;
+}
+
+pub fn show(self: *Element) void {
+    self.style.display = .flex;
+    self.node.setDisplay(.flex);
+
+    self.visible = true;
+}
+
 test "add child to element" {
     const testing = std.testing;
     const alloc = testing.allocator;
