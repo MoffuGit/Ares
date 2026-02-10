@@ -123,7 +123,7 @@ pub fn draw(self: *Window) !void {
     self.root.hit(&self.hit_grid);
 
     const buffer = try screen.nextBuffer();
-    errdefer screen.releaseBuffer();
+    defer screen.releaseBuffer();
 
     if (buffer.width != size.cols or buffer.height != size.rows) {
         try screen.resizeBuffer(self.alloc, buffer, size);
