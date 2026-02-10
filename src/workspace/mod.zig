@@ -156,6 +156,7 @@ pub fn destroy(self: *Workspace) void {
     self.right_dock.destroy(self.alloc);
     self.top_dock.destroy(self.alloc);
     self.bottom_dock.destroy(self.alloc);
+    self.tabs.deinit();
     if (self.file_tree) |ft| ft.destroy(self.alloc);
     if (self.project) |project| {
         project.destroy(self.alloc);

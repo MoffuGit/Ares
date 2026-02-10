@@ -45,8 +45,8 @@ pub fn deinit(self: *Tabs) void {
         item.trigger.deinit();
     }
     self.container.deinit();
+    self.alloc.destroy(self.container);
     self.items.deinit(self.alloc);
-    self.alloc.destroy(self);
 }
 
 pub fn open(self: *Tabs, id: Id, opts: Element.Options, trigger_opts: Element.Options, userdata: ?*anyopaque) !void {
