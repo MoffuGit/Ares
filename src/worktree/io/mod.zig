@@ -13,13 +13,13 @@ pub const File = struct {
     bytes: []const u8,
     alloc: Allocator,
 
-    pub fn deinit(self: *File) void {
+    pub fn deinit(self: File) void {
         self.alloc.free(self.bytes);
     }
 };
 
 pub const ReadRequest = struct {
-    path: []u8,
+    path: []const u8,
     completion: xev.Completion = .{},
 
     xev_file: xev.File,
@@ -89,6 +89,9 @@ pub fn readFile(
 
     const req = try self.alloc.create(ReadRequest);
     req.* = .{
+        .buffer = undefined,
+        .fd = undefined,
+        .xev_file = undefined,
         .path = abs_path,
         .alloc = self.alloc,
         .io = self,

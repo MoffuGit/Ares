@@ -9,10 +9,10 @@ const HitGrid = lib.HitGrid;
 const Project = @import("../workspace/Project.zig");
 const Scrollable = @import("primitives/Scrollable.zig");
 const Style = Element.Style;
-const worktree_mod = @import("../worktree/mod.zig");
-const Worktree = worktree_mod.Worktree;
-const Entry = worktree_mod.Entry;
-const Kind = worktree_mod.Kind;
+const worktreepkg = @import("../worktree/mod.zig");
+const Worktree = worktreepkg.Worktree;
+const Entry = worktreepkg.Entry;
+const Kind = worktreepkg.Kind;
 const Context = @import("../app/mod.zig").Context;
 const subspkg = @import("../app/subscriptions.zig");
 
