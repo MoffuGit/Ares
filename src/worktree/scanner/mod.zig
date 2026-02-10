@@ -104,55 +104,12 @@ fn buildAbsPath(self: *Scanner, rel_path: []const u8, buf: []u8) ![]const u8 {
 
 /// Scan a directory by entry id (looks up path from Snapshot)
 pub fn process_scan_by_id(self: *Scanner, dir_id: u64) !void {
-    // Get the relative path from snapshot
-    const rel_path = blk: {
-        self.snapshot.mutex.lock();
-        defer self.snapshot.mutex.unlock();
-        break :blk self.snapshot.getPathById(dir_id) orelse return;
-    };
+    try self.scanRecursive(dir_id);
 
-    // Build abs path on stack
-    var abs_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const abs_path = try self.buildAbsPath(rel_path, &abs_buf);
-
-    var dir = try std.fs.openDirAbsolute(abs_path, .{ .iterate = true });
-    defer dir.close();
-
-    var iter = dir.iterate();
-    while (try iter.next()) |entry| {
-        const kind: Kind = switch (entry.kind) {
-            .directory => .dir,
-            .file => .file,
-            else => continue,
-        };
-
-        // Get file stat
-        const stat = self.getEntryStat(dir, entry.name) catch Stat{};
-        const file_type: FileType = if (kind == .file) FileType.fromName(entry.name) else .unknown;
-
-        const id = self.snapshot.newId();
-
-        // Intern path into snapshot arena
-        {
-            self.snapshot.mutex.lock();
-            defer self.snapshot.mutex.unlock();
-
-            const interned = try self.snapshot.internPath(rel_path, entry.name);
-            const interned_abs = try self.snapshot.internPath(abs_path, entry.name);
-            try self.snapshot.insertInterned(id, interned, interned_abs, kind, file_type, stat);
-        }
-
-        if (kind == .dir) {
-            // Queue scan for child directory (by id)
-            if (self.worktree.scanner_thread.mailbox.push(.{ .scan_dir = id }, .instant) != 0) {
-                self.worktree.scanner_thread.wakeup.notify() catch {};
-            }
-
-            // Queue monitor watcher (by id)
-            if (self.worktree.monitor_thread.mailbox.push(.{ .add = id }, .instant) != 0) {
-                self.worktree.monitor_thread.wakeup.notify() catch {};
-            }
-        }
+    const result = try self.alloc.create(UpdatedEntriesSet);
+    result.* = UpdatedEntriesSet.init(self.alloc);
+    if (!self.worktree.notifyUpdatedEntries(result)) {
+        result.destroy();
     }
 }
 
@@ -198,38 +155,31 @@ pub fn process_events(self: *Scanner, fs_events: *std.AutoHashMap(u64, u32)) !*U
             break :blk self.snapshot.getAbsPathById(id) orelse continue;
         };
 
-        try self.diffDirectory(dir_path, abs_dir_path, result);
+        try self.update_entries(dir_path, abs_dir_path, result);
     }
 
     return result;
 }
 
-fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8, result: *UpdatedEntriesSet) !void {
-    // Use ChildInfo to store path reference + entry
+fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8, result: *UpdatedEntriesSet) !void {
     var current_children = std.AutoHashMap(u64, ChildInfo).init(self.alloc);
     defer current_children.deinit();
 
-    // Collect current children from snapshot using range iterator
-    // Range starts at "dir_path/" (first possible child) and we stop when prefix no longer matches
     {
         self.snapshot.mutex.lock();
         defer self.snapshot.mutex.unlock();
 
-        // Build the prefix for children: "dir_path/"
         var prefix_buf: [std.fs.max_path_bytes]u8 = undefined;
         const prefix = std.fmt.bufPrint(&prefix_buf, "{s}/", .{dir_path}) catch return;
 
-        // Use rangeFrom to start at first entry >= prefix
         var entries_it = self.snapshot.entries.rangeFrom(prefix);
         while (entries_it.next()) |entry| {
             const entry_path = entry.key;
 
-            // Stop if we've moved past entries that start with our prefix
             if (!std.mem.startsWith(u8, entry_path, prefix)) {
                 break;
             }
 
-            // Check if this is a direct child (no more slashes after prefix)
             const rest = entry_path[prefix.len..];
             if (std.mem.indexOf(u8, rest, "/") == null) {
                 try current_children.put(entry.value.id, .{
@@ -240,11 +190,8 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
         }
     }
 
-    // Scan the actual directory
     var dir = std.fs.openDirAbsolute(abs_dir_path, .{ .iterate = true }) catch |err| {
-        // Directory might have been deleted
         if (err == error.FileNotFound) {
-            // Mark all current children as deleted - need to copy paths for cross-thread
             var children_it = current_children.valueIterator();
             while (children_it.next()) |child| {
                 const deleted_path = try self.alloc.dupe(u8, child.path);
@@ -288,9 +235,22 @@ fn diffDirectory(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8,
         if (existing_id) |id| {
             try seen_ids.put(id, {});
             if (current_children.get(id)) |child_info| {
-                // Entry exists - check if kind changed
-                if (child_info.entry.kind != kind) {
+                const stat = self.getEntryStat(dir, entry.name) catch Stat{};
+                const kind_changed = child_info.entry.kind != kind;
+                const stat_changed = child_info.entry.stat.size != stat.size or
+                    child_info.entry.stat.mtime != stat.mtime or
+                    child_info.entry.stat.mode != stat.mode;
+
+                if (kind_changed or stat_changed) {
                     try result.updateEntry(id, kind);
+
+                    self.snapshot.mutex.lock();
+                    defer self.snapshot.mutex.unlock();
+                    const child_path = self.snapshot.getPathById(id) orelse continue;
+                    if (self.snapshot.entries.get_ref(child_path) catch null) |entry_ref| {
+                        entry_ref.kind = kind;
+                        entry_ref.stat = stat;
+                    }
                 }
             }
         } else {
