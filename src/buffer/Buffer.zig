@@ -3,8 +3,6 @@ const Allocator = std.mem.Allocator;
 const Io = @import("../worktree/io/mod.zig");
 const Stat = @import("../worktree/mod.zig").Stat;
 
-const log = std.log.scoped(.buffer);
-
 pub const Buffer = @This();
 
 pub const State = enum {
@@ -14,52 +12,46 @@ pub const State = enum {
     err,
 };
 
-alloc: Allocator,
 entry_id: u64,
-io: *Io,
 state: State = .empty,
 file: ?Io.File = null,
 
-pub fn create(alloc: Allocator, entry_id: u64, io: *Io) !*Buffer {
-    const self = try alloc.create(Buffer);
-    self.* = .{
-        .alloc = alloc,
+pub fn initFromFile(entry_id: u64, file: Io.File) Buffer {
+    return .{
         .entry_id = entry_id,
-        .io = io,
+        .state = .ready,
+        .file = file,
     };
-    return self;
 }
 
-pub fn destroy(self: *Buffer) void {
+pub fn initLoading(entry_id: u64) Buffer {
+    return .{
+        .entry_id = entry_id,
+        .state = .loading,
+    };
+}
+
+pub fn deinit(self: *Buffer) void {
     if (self.file) |file| {
         file.deinit();
+        self.file = null;
     }
-    self.alloc.destroy(self);
 }
 
-pub fn load(self: *Buffer) void {
-    self.state = .loading;
-    self.io.readFile(self.entry_id, @ptrCast(self), onReadComplete) catch |e| {
-        log.err("failed to request read for entry_id={}: {}", .{ self.entry_id, e });
-        self.state = .err;
-    };
-}
-
-fn onReadComplete(userdata: ?*anyopaque, file: ?Io.File) void {
-    const self: *Buffer = @ptrCast(@alignCast(userdata));
-
+pub fn applyFile(self: *Buffer, file: Io.File) void {
     if (self.file) |old| {
         old.deinit();
     }
+    self.file = file;
+    self.state = .ready;
+}
 
-    if (file) |f| {
-        self.file = f;
-        self.state = .ready;
-    } else {
+pub fn applyError(self: *Buffer) void {
+    if (self.file) |old| {
+        old.deinit();
         self.file = null;
-        self.state = .err;
-        log.err("read failed for entry_id={}", .{self.entry_id});
     }
+    self.state = .err;
 }
 
 pub fn bytes(self: *const Buffer) ?[]const u8 {

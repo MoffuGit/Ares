@@ -7,11 +7,13 @@ pub const Callback = *const fn (userdata: ?*anyopaque, EventData) void;
 pub const EventType = enum {
     scheme,
     worktreeUpdatedEntries,
+    bufferUpdated,
 };
 
 pub const EventData = union(EventType) {
     scheme: vaxis.Color.Scheme,
     worktreeUpdatedEntries: *UpdatedEntriesSet,
+    bufferUpdated: u64,
 };
 
 fn noop(_: ?*anyopaque, _: EventData) void {}

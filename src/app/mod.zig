@@ -200,6 +200,9 @@ pub fn handleMessage(self: *App, msg: Message) !void {
             self.notifySubs(.{ .worktreeUpdatedEntries = entries });
             entries.destroy();
         },
+        .bufferUpdated => |entry_id| {
+            self.notifySubs(.{ .bufferUpdated = entry_id });
+        },
     }
 }
 

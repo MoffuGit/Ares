@@ -4,4 +4,5 @@ const UpdatedEntriesSet = @import("../worktree/scanner/mod.zig").UpdatedEntriesS
 pub const Message = union(enum) {
     scheme: vaxis.Color.Scheme,
     worktreeUpdatedEntries: *UpdatedEntriesSet,
+    bufferUpdated: u64,
 };
