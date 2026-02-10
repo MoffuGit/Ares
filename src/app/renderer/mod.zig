@@ -52,6 +52,8 @@ pub fn resize(self: *Renderer, size: vaxis.Winsize) !void {
 }
 
 pub fn threadExit(self: *Renderer) void {
+    self.screen.releaseBuffer();
+
     const writer = self.shared_context.tty.writer();
     writer.writeAll(vaxis.ctlseqs.color_scheme_reset) catch {};
     writer.writeAll(vaxis.ctlseqs.in_band_resize_reset) catch {};
@@ -64,8 +66,7 @@ pub fn renderFrame(self: *Renderer) !void {
     const shared = self.shared_context;
 
     const buffer = screen.currentBuffer() orelse return;
-
-    defer screen.releaseBuffer();
+    screen.releaseBuffer();
 
     const size_change = self.size.cols != buffer.width or self.size.rows != buffer.height;
 

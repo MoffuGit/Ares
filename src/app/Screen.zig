@@ -10,7 +10,7 @@ pub const Screen = @This();
 const Method = vaxis.gwidth.Method;
 
 const SwapChain = struct {
-    const buf_count = 3;
+    const buf_count = 2;
 
     buffers: [buf_count]Buffer,
     buffer_index: std.math.IntFittingRange(0, buf_count) = 0,
