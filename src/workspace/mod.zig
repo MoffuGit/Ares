@@ -8,7 +8,6 @@ const Dock = @import("../components/Dock.zig");
 const FileTree = @import("../components/FileTree.zig");
 const Element = lib.Element;
 const Buffer = lib.Buffer;
-const Tabs = @import("../components/primitives/Tabs.zig");
 const global = @import("../global.zig");
 
 pub const Project = @import("Project.zig");
@@ -33,8 +32,6 @@ left_dock: *Dock,
 right_dock: *Dock,
 top_dock: *Dock,
 bottom_dock: *Dock,
-
-tabs: Tabs,
 
 pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const workspace = try alloc.create(Workspace);
@@ -93,9 +90,6 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         },
     });
 
-    var tabs = try Tabs.init(alloc, .{});
-    errdefer tabs.deinit();
-
     const top_bar = try TopBar.create(alloc, workspace);
     errdefer top_bar.destroy(alloc);
 
@@ -131,7 +125,6 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     ctx.app.window.setFocus(element);
 
     workspace.* = .{
-        .tabs = tabs,
         .alloc = alloc,
         .ctx = ctx,
         .project = null,
@@ -156,7 +149,6 @@ pub fn destroy(self: *Workspace) void {
     self.right_dock.destroy(self.alloc);
     self.top_dock.destroy(self.alloc);
     self.bottom_dock.destroy(self.alloc);
-    self.tabs.deinit();
     if (self.file_tree) |ft| ft.destroy(self.alloc);
     if (self.project) |project| {
         project.destroy(self.alloc);

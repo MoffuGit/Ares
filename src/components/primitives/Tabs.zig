@@ -43,6 +43,8 @@ pub fn deinit(self: *Tabs) void {
     for (self.items.items) |item| {
         item.content.deinit();
         item.trigger.deinit();
+        self.alloc.destroy(item.content);
+        self.alloc.destroy(item.trigger);
     }
     self.container.deinit();
     self.alloc.destroy(self.container);
