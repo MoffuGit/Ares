@@ -1,4 +1,7 @@
 const std = @import("std");
+const lib = @import("../lib.zig");
+
+const Element = lib.Element;
 
 const Tabs = @This();
 
@@ -7,6 +10,7 @@ pub const Id = u64;
 pub const Tab = struct {
     id: Id,
     selected_entry: ?u64 = null,
+    element: *Element,
 };
 
 items: std.ArrayListUnmanaged(Tab) = .{},
@@ -41,13 +45,23 @@ pub fn open(self: *Tabs, id: Id) !void {
             return;
         }
     }
-    try self.items.append(self.alloc, .{ .id = id });
+    const element = Element.init(self.alloc, .{ .style = .{
+        .width = .{ .percent = 100 },
+        .height = .{ .percent = 100 },
+    } });
+    errdefer element.deinit();
+
+    try self.items.append(self.alloc, .{
+        .id = id,
+        .element = element,
+    });
     self.selected = self.items.items.len - 1;
 }
 
 pub fn close(self: *Tabs, id: Id) void {
     const index = self.indexOf(id) orelse return;
-    _ = self.items.orderedRemove(index);
+    const tab = self.items.orderedRemove(index);
+    tab.element.deinit();
 
     if (self.items.items.len == 0) {
         self.selected = null;
