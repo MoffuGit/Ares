@@ -150,7 +150,7 @@ pub const Worktree = struct {
 
     abs_path: []u8,
 
-    app_loop: ?*Loop,
+    loop: ?*Loop,
 
     monitor: Monitor,
     monitor_thread: MonitorThread,
@@ -164,9 +164,9 @@ pub const Worktree = struct {
     io_thread: IoThread,
     io_thr: std.Thread,
 
-    pub fn create(abs_path: []const u8, alloc: Allocator, app_loop: ?*Loop) !*Worktree {
+    pub fn create(abs_path: []const u8, alloc: Allocator, loop: ?*Loop) !*Worktree {
         const worktree = try alloc.create(Worktree);
-        try worktree.init(abs_path, alloc, app_loop);
+        try worktree.init(abs_path, alloc, loop);
 
         return worktree;
     }
@@ -176,7 +176,7 @@ pub const Worktree = struct {
         self.alloc.destroy(self);
     }
 
-    pub fn init(self: *Worktree, abs_path: []const u8, alloc: Allocator, app_loop: ?*Loop) !void {
+    pub fn init(self: *Worktree, abs_path: []const u8, alloc: Allocator, loop: ?*Loop) !void {
         const _abs_path = try alloc.dupe(u8, abs_path);
         errdefer alloc.free(_abs_path);
 
@@ -205,7 +205,7 @@ pub const Worktree = struct {
             .alloc = alloc,
             .snapshot = snapshot,
             .abs_path = _abs_path,
-            .app_loop = app_loop,
+            .loop = loop,
             .scanner = scanner,
             .scanner_thread = scanner_thread,
             .scanner_thr = undefined,
@@ -267,7 +267,7 @@ pub const Worktree = struct {
 
     /// Send updated entries to the app loop. Returns true if successfully sent.
     pub fn notifyUpdatedEntries(self: *Worktree, entries: *UpdatedEntriesSet) bool {
-        if (self.app_loop) |loop| {
+        if (self.loop) |loop| {
             if (loop.mailbox.push(.{ .app = .{ .worktreeUpdatedEntries = entries } }, .instant) != 0) {
                 loop.wakeup.notify() catch |err| {
                     log.err("error notifying app loop: {}", .{err});
