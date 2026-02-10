@@ -9,7 +9,7 @@ const log = std.log.scoped(.worktree_scanner);
 
 pub const Thread = @This();
 
-pub const Mailbox = BlockingQueue(messagepkg.Message, 1024);
+pub const Mailbox = BlockingQueue(messagepkg.Message, 100);
 
 alloc: Allocator,
 loop: xev.Loop,

@@ -8,6 +8,9 @@ const Scanner = @import("scanner/mod.zig");
 const ScannerThread = @import("scanner/Thread.zig");
 pub const UpdatedEntriesSet = Scanner.UpdatedEntriesSet;
 
+const Io = @import("io/mod.zig");
+const IoThread = @import("io/Thread.zig");
+
 const Snapshot = @import("Snapshot.zig");
 
 const BPlusTree = @import("../datastruct/b_plus_tree.zig").BPlusTree;
@@ -157,6 +160,10 @@ pub const Worktree = struct {
     scanner_thread: ScannerThread,
     scanner_thr: std.Thread,
 
+    io: Io,
+    io_thread: IoThread,
+    io_thr: std.Thread,
+
     pub fn create(abs_path: []const u8, alloc: Allocator, app_loop: ?*Loop) !*Worktree {
         const worktree = try alloc.create(Worktree);
         try worktree.init(abs_path, alloc, app_loop);
@@ -188,6 +195,12 @@ pub const Worktree = struct {
         var scanner = try Scanner.init(alloc, self, &self.snapshot, _abs_path);
         errdefer scanner.deinit();
 
+        var io_thread = try IoThread.init(alloc, &self.io);
+        errdefer io_thread.deinit();
+
+        var io = Io.init(alloc, self, io_thread.mailbox);
+        _ = &io;
+
         self.* = .{
             .alloc = alloc,
             .snapshot = snapshot,
@@ -199,10 +212,14 @@ pub const Worktree = struct {
             .monitor = monitor,
             .monitor_thread = monitor_thread,
             .monitor_thr = undefined,
+            .io = io,
+            .io_thread = io_thread,
+            .io_thr = undefined,
         };
 
         self.monitor_thr = try std.Thread.spawn(.{}, MonitorThread.threadMain, .{&self.monitor_thread});
         self.scanner_thr = try std.Thread.spawn(.{}, ScannerThread.threadMain, .{&self.scanner_thread});
+        self.io_thr = try std.Thread.spawn(.{}, IoThread.threadMain, .{&self.io_thread});
 
         _ = self.scanner_thread.mailbox.push(.initialScan, .instant);
         self.scanner_thread.wakeup.notify() catch |err| {
@@ -224,6 +241,16 @@ pub const Worktree = struct {
             };
             self.scanner_thr.join();
         }
+
+        {
+            self.io_thread.stop.notify() catch |err| {
+                log.err("error notifying io thread to stop, may stall err={}", .{err});
+            };
+            self.io_thr.join();
+        }
+
+        self.io_thread.deinit();
+        self.io.deinit();
 
         self.scanner_thread.deinit();
         self.scanner.deinit();
