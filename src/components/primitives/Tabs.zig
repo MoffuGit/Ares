@@ -2,189 +2,138 @@ const std = @import("std");
 const lib = @import("../../lib.zig");
 
 const Element = lib.Element;
+const Allocator = std.mem.Allocator;
 
 const Tabs = @This();
 
-pub const Id = u64;
-
-pub const Tab = struct {
-    id: Id,
+const Tab = struct {
+    id: usize,
     content: *Element,
     trigger: *Element,
     tabs: *Tabs,
     userdata: ?*anyopaque,
+
+    pub fn deinit(self: *Tab, alloc: Allocator) void {
+        self.content.deinit();
+        self.trigger.deinit();
+
+        alloc.destroy(self.content);
+        alloc.destroy(self.trigger);
+    }
+
+    pub const Options = struct {
+        content: Element.Options,
+        trigger: Element.Options,
+        userdata: ?*anyopaque,
+    };
 };
 
-items: std.ArrayListUnmanaged(Tab) = .{},
+values: std.ArrayListUnmanaged(Tab) = .{},
 selected: ?usize = null,
 alloc: std.mem.Allocator,
-next_id: Id = 1,
+next_id: usize = 1,
 container: *Element,
+list: *Element,
 
-pub fn init(alloc: std.mem.Allocator, opts: Element.Options) !Tabs {
+const Options = struct {
+    container: Element.Options = .{},
+    list: Element.Options = .{},
+};
+
+pub fn init(alloc: std.mem.Allocator, opts: Options) !Tabs {
     const container = try alloc.create(Element);
-    container.* = Element.init(alloc, opts);
-    return .{ .alloc = alloc, .container = container };
-}
+    container.* = Element.init(alloc, opts.container);
+    const list = try alloc.create(Element);
+    list.* = Element.init(alloc, opts.list);
 
-pub fn createTab(self: *Tabs, opts: Element.Options, trigger_opts: Element.Options, userdata: ?*anyopaque) !*Tab {
-    const id = self.next_id;
-    self.next_id += 1;
-    try self.open(id, opts, trigger_opts, userdata);
-    return &self.items.items[self.items.items.len - 1];
-}
-
-pub fn closeSelected(self: *Tabs) void {
-    const id = self.getSelected() orelse return;
-    self.close(id);
+    return .{ .alloc = alloc, .container = container, .list = list };
 }
 
 pub fn deinit(self: *Tabs) void {
-    for (self.items.items) |item| {
-        item.content.deinit();
-        item.trigger.deinit();
-        self.alloc.destroy(item.content);
-        self.alloc.destroy(item.trigger);
+    for (self.values.items) |*tab| {
+        tab.deinit(self.alloc);
     }
+    self.values.deinit(self.alloc);
+
     self.container.deinit();
     self.alloc.destroy(self.container);
-    self.items.deinit(self.alloc);
+    self.list.deinit();
+    self.alloc.destroy(self.list);
 }
 
-pub fn open(self: *Tabs, id: Id, opts: Element.Options, trigger_opts: Element.Options, userdata: ?*anyopaque) !void {
-    for (self.items.items) |item| {
-        if (item.id == id) {
-            self.setSelected(self.indexOf(id));
-            return;
-        }
-    }
-
+pub fn newTab(self: *Tabs, opts: Tab.Options) !*Tab {
+    const id = self.next_id;
+    self.next_id += 1;
     const content = try self.alloc.create(Element);
-    content.* = Element.init(self.alloc, opts);
+    content.* = Element.init(self.alloc, opts.content);
     errdefer content.deinit();
 
-    var overridden_opts = trigger_opts;
-    overridden_opts.userdata = self;
+    var trigger_opts = opts.trigger;
+    trigger_opts.userdata = self;
 
     const trigger = try self.alloc.create(Element);
-    trigger.* = Element.init(self.alloc, overridden_opts);
+    trigger.* = Element.init(self.alloc, trigger_opts);
     errdefer trigger.deinit();
+
     try trigger.addEventListener(.click, onTriggerClick);
 
-    try self.items.append(self.alloc, .{
+    try self.list.addChild(trigger);
+
+    try self.values.append(self.alloc, .{
         .id = id,
         .content = content,
         .trigger = trigger,
         .tabs = self,
-        .userdata = userdata,
+        .userdata = opts.userdata,
     });
-    self.setSelected(self.items.items.len - 1);
+
+    return &self.values.items[self.values.items.len - 1];
 }
 
-pub fn close(self: *Tabs, id: Id) void {
+pub fn closeTab(self: *Tabs, id: usize) void {
     const index = self.indexOf(id) orelse return;
-    const tab = self.items.orderedRemove(index);
-    tab.content.deinit();
-    tab.trigger.deinit();
 
-    if (self.items.items.len == 0) {
-        self.setSelected(null);
+    var tab = self.values.orderedRemove(index);
+    tab.trigger.remove();
+    tab.deinit(self.alloc);
+
+    if (self.values.items.len == 0) {
+        self.select(null);
     } else if (self.selected) |sel| {
-        if (sel == index) {
-            const new = if (index >= self.items.items.len) self.items.items.len - 1 else index;
-            self.setSelected(new);
-        } else if (sel > index) {
-            self.setSelected(sel - 1);
+        if (sel == id) {
+            const new_idx = if (index >= self.values.items.len) self.values.items.len - 1 else index;
+            const new_tab = self.values.items[new_idx];
+            self.select(new_tab.id);
         }
     }
 }
 
-pub fn select(self: *Tabs, index: usize) void {
-    if (index < self.items.items.len) {
-        self.setSelected(index);
-    }
-}
-
-pub fn selectById(self: *Tabs, id: Id) void {
-    if (self.indexOf(id)) |index| {
-        self.setSelected(index);
-    }
-}
-
-pub fn selectNext(self: *Tabs) void {
-    if (self.items.items.len == 0) return;
-    const sel = self.selected orelse return;
-    self.setSelected((sel + 1) % self.items.items.len);
-}
-
-pub fn selectPrev(self: *Tabs) void {
-    if (self.items.items.len == 0) return;
-    const sel = self.selected orelse return;
-    self.setSelected(if (sel == 0) self.items.items.len - 1 else sel - 1);
-}
-
-pub fn move(self: *Tabs, from: usize, to: usize) void {
-    if (from >= self.items.items.len or to >= self.items.items.len) return;
-    const item = self.items.orderedRemove(from);
-    self.items.insert(self.alloc, to, item) catch return;
+pub fn select(self: *Tabs, id: ?usize) void {
+    if (self.selected == id) return;
+    self.selected = id;
 
     if (self.selected) |sel| {
-        if (sel == from) {
-            self.selected = to;
-        } else if (from < sel and to >= sel) {
-            self.selected = sel - 1;
-        } else if (from > sel and to <= sel) {
-            self.selected = sel + 1;
-        }
+        const index = self.indexOf(sel) orelse return;
+        const tab = self.values.items[index];
+
+        self.container.removeChildrens();
+
+        self.container.addChild(tab.content) catch {};
     }
-    self.syncChild();
 }
 
-pub fn getSelected(self: *const Tabs) ?Id {
-    const sel = self.selected orelse return null;
-    return self.items.items[sel].id;
-}
-
-pub fn getSelectedTab(self: *Tabs) ?*Tab {
-    const sel = self.selected orelse return null;
-    return &self.items.items[sel];
-}
-
-pub fn getTabById(self: *Tabs, id: Id) ?*Tab {
-    for (self.items.items) |*item| {
-        if (item.id == id) return item;
-    }
-    return null;
-}
-
-pub fn count(self: *const Tabs) usize {
-    return self.items.items.len;
-}
-
-pub fn indexOf(self: *const Tabs, id: Id) ?usize {
-    for (self.items.items, 0..) |item, i| {
+pub fn indexOf(self: *Tabs, id: usize) ?usize {
+    for (self.values.items, 0..) |item, i| {
         if (item.id == id) return i;
     }
     return null;
 }
 
-fn setSelected(self: *Tabs, index: ?usize) void {
-    self.selected = index;
-    self.syncChild();
-}
-
-fn syncChild(self: *Tabs) void {
-    self.container.removeChildrens();
-    if (self.selected) |sel| {
-        self.container.addChild(self.items.items[sel].content) catch return;
-    }
-}
-
 fn onTriggerClick(element: *Element, _: Element.EventData) void {
     const self: *Tabs = @ptrCast(@alignCast(element.userdata orelse return));
-    for (self.items.items, 0..) |item, i| {
-        if (item.trigger == element) {
-            self.setSelected(i);
+    for (self.values.items) |tab| {
+        if (tab.trigger == element) {
+            self.select(tab.id);
             return;
         }
     }

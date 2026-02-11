@@ -7,7 +7,7 @@ const Element = lib.Element;
 const Buffer = lib.Buffer;
 const HitGrid = lib.HitGrid;
 const Project = @import("../workspace/Project.zig");
-const Scrollable = @import("primitives/Scrollable.zig");
+const Scrollable = Element.Scrollable;
 const Style = Element.Style;
 const worktreepkg = @import("../worktree/mod.zig");
 const Worktree = worktreepkg.Worktree;
@@ -31,9 +31,12 @@ visible_entries: std.ArrayList(u64) = .{},
 
 pub fn create(alloc: Allocator, project: *Project, ctx: *Context) !*FileTree {
     const self = try alloc.create(FileTree);
+    const theme = global.settings.theme;
 
     const scrollable = try Scrollable.init(alloc, .{
         .outer = .{ .width = .{ .percent = 100 }, .height = .{ .percent = 100 } },
+        .thumb = theme.scrollThumb,
+        .track = theme.scrollTrack,
     });
 
     const content = try alloc.create(Element);

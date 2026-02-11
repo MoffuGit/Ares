@@ -57,28 +57,6 @@ fn draw(element: *Element, buffer: *Buffer) void {
         .bg = self.settings.theme.bg,
     } });
 
-    // const tab_count = self.workspace.tabs.count();
-    // if (tab_count > 1) {
-    //     const layout = element.layout;
-    //     const content_width = layout.width;
-    //     const tabs_width: u16 = @intCast(tab_count);
-    //     const right_offset: u16 = content_width -| tabs_width;
-    //     const tabs = &self.workspace.tabs;
-    //     for (tabs.items.items, 0..) |_, i| {
-    //         const is_selected = if (tabs.selected) |sel| sel == i else false;
-    //         const col = right_offset + @as(u16, @intCast(i));
-    //         var fg = if (is_selected) self.settings.theme.fg else self.settings.theme.fg;
-    //         if (!is_selected) {
-    //             var rgba = fg.rgba;
-    //             rgba[3] = 80;
-    //             fg = .{ .rgba = rgba };
-    //         }
-    //         _ = element.print(buffer, &.{.{ .text = "🮇", .style = .{ .fg = fg } }}, .{
-    //             .col_offset = col,
-    //         });
-    //     }
-    // }
-
     if (self.workspace.project) |project| {
         if (project.selected_entry) |id| {
             const snapshot = &project.worktree.snapshot;

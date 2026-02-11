@@ -11,6 +11,7 @@ pub const Animation = @import("Animation.zig");
 pub const Timer = @import("Timer.zig");
 pub const Style = @import("Style.zig");
 pub const Node = @import("Node.zig");
+pub const Scrollable = @import("Scrollable.zig");
 
 const Buffer = @import("../../Buffer.zig");
 const HitGrid = @import("../HitGrid.zig");

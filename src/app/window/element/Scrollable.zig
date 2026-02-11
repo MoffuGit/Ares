@@ -1,10 +1,9 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
-const Element = @import("../../app/window/element/mod.zig").Element;
-const Buffer = @import("../../app/Buffer.zig");
-const HitGrid = @import("../../app/window/HitGrid.zig");
+const Element = @import("mod.zig");
+const Buffer = @import("../../Buffer.zig");
+const HitGrid = @import("../HitGrid.zig");
 const Allocator = std.mem.Allocator;
-const global = @import("../../global.zig");
 
 pub const Scrollable = @This();
 
@@ -17,6 +16,8 @@ pub const ScrollMode = enum {
 outer: *Element,
 inner: *Element,
 bar: ?*Element = null,
+track: vaxis.Color,
+thumb: vaxis.Color,
 
 scroll_x: i32 = 0,
 scroll_y: i32 = 0,
@@ -29,6 +30,8 @@ mode: ScrollMode = .vertical,
 const Options = struct {
     mode: ScrollMode = .vertical,
     bar: bool = true,
+    track: vaxis.Color = .default,
+    thumb: vaxis.Color = .default,
     outer: Element.Style,
 };
 
@@ -69,6 +72,8 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
         .outer = outer,
         .inner = inner,
         .mode = opts.mode,
+        .thumb = opts.thumb,
+        .track = opts.track,
     };
 
     if (opts.bar) {
@@ -318,8 +323,8 @@ fn drawBar(element: *Element, buffer: *Buffer) void {
     const thumb_pos_eighths: u32 = if (max_scroll > 0) (curr * scroll_range_eighths) / @as(u32, @intCast(max_scroll)) else 0;
 
     const alpha: f32 = if (element.hovered or element.dragging) 1.0 else 0.5;
-    const track_color = withAlpha(global.settings.theme.scrollTrack, alpha);
-    const thumb_color = withAlpha(global.settings.theme.scrollThumb, alpha);
+    const track_color = withAlpha(self.track, alpha);
+    const thumb_color = withAlpha(self.thumb, alpha);
 
     element.fill(buffer, .{ .style = .{ .bg = track_color } });
 
