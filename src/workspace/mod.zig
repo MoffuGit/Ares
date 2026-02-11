@@ -6,6 +6,8 @@ const TopBar = @import("../components/TopBar.zig");
 const BottomBar = @import("../components/BottomBar.zig");
 const Dock = @import("../components/Dock.zig");
 const FileTree = @import("../components/FileTree.zig");
+const StyledTabs = @import("../components/styled/Tabs.zig");
+const Tabs = StyledTabs.Tabs(.block);
 const Element = lib.Element;
 const Buffer = lib.Buffer;
 const global = @import("../global.zig");
@@ -32,6 +34,8 @@ left_dock: *Dock,
 right_dock: *Dock,
 top_dock: *Dock,
 bottom_dock: *Dock,
+
+tabs: Tabs,
 
 pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const workspace = try alloc.create(Workspace);
@@ -108,6 +112,9 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const bottom_dock = try Dock.create(alloc, .bottom, 30, false);
     errdefer bottom_dock.destroy(alloc);
 
+    var tabs = try Tabs.init(alloc);
+    errdefer tabs.deinit();
+
     try center_column.insertChild(top_dock.element, 0);
     try center_column.addChild(center);
     try center_column.addChild(bottom_dock.element);
@@ -138,8 +145,12 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         .right_dock = right_dock,
         .top_dock = top_dock,
         .bottom_dock = bottom_dock,
+        .tabs = tabs,
         .file_tree = null,
     };
+
+    try top_bar.element.addChild(workspace.tabs.inner.list);
+    try center.addChild(workspace.tabs.inner.container);
 
     return workspace;
 }
@@ -149,6 +160,7 @@ pub fn destroy(self: *Workspace) void {
     self.right_dock.destroy(self.alloc);
     self.top_dock.destroy(self.alloc);
     self.bottom_dock.destroy(self.alloc);
+    self.tabs.deinit();
     if (self.file_tree) |ft| ft.destroy(self.alloc);
     if (self.project) |project| {
         project.destroy(self.alloc);
@@ -226,6 +238,7 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
 
     if (key_data.key.matches('t', .{ .ctrl = true })) {
         key_data.ctx.stopPropagation();
+        _ = self.tabs.newTab(.{}) catch {};
         element.context.?.requestDraw();
     }
 

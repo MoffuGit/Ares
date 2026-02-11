@@ -6,32 +6,73 @@ const Allocator = std.mem.Allocator;
 
 const Tabs = @This();
 
-const Tab = struct {
+pub const Tab = struct {
     id: usize,
     content: *Element,
     trigger: *Element,
     tabs: *Tabs,
     userdata: ?*anyopaque,
 
-    pub fn deinit(self: *Tab, alloc: Allocator) void {
+    pub const Options = struct {
+        content: Element.Options = .{},
+        trigger: Element.Options = .{},
+        userdata: ?*anyopaque = null,
+    };
+
+    pub fn create(alloc: Allocator, id: usize, tabs: *Tabs, opts: Tab.Options) !*Tab {
+        const tab = try alloc.create(Tab);
+
+        var content_opts = opts.content;
+        content_opts.userdata = tab;
+
+        const content = try alloc.create(Element);
+        content.* = Element.init(alloc, opts.content);
+        errdefer content.deinit();
+
+        var trigger_opts = opts.trigger;
+        trigger_opts.userdata = tab;
+
+        const trigger = try alloc.create(Element);
+        trigger.* = Element.init(alloc, trigger_opts);
+        errdefer trigger.deinit();
+
+        try trigger.addEventListener(.click, onTriggerClick);
+
+        tab.* = .{
+            .id = id,
+            .content = content,
+            .trigger = trigger,
+            .tabs = tabs,
+            .userdata = opts.userdata,
+        };
+
+        return tab;
+    }
+
+    pub fn destroy(self: *Tab) void {
+        const alloc = self.tabs.alloc;
         self.content.deinit();
         self.trigger.deinit();
 
         alloc.destroy(self.content);
         alloc.destroy(self.trigger);
+
+        alloc.destroy(self);
     }
 
-    pub const Options = struct {
-        content: Element.Options,
-        trigger: Element.Options,
-        userdata: ?*anyopaque,
-    };
+    fn onTriggerClick(element: *Element, _: Element.EventData) void {
+        const self: *Tab = @ptrCast(@alignCast(element.userdata orelse return));
+        self.tabs.select(self.id);
+    }
 };
 
-values: std.ArrayListUnmanaged(Tab) = .{},
-selected: ?usize = null,
 alloc: std.mem.Allocator,
+
+values: std.ArrayList(*Tab) = .{},
+selected: ?usize = null,
+
 next_id: usize = 1,
+
 container: *Element,
 list: *Element,
 
@@ -40,54 +81,50 @@ const Options = struct {
     list: Element.Options = .{},
 };
 
-pub fn init(alloc: std.mem.Allocator, opts: Options) !Tabs {
+pub fn create(alloc: std.mem.Allocator, opts: Options) !*Tabs {
+    const tabs = try alloc.create(Tabs);
+    errdefer alloc.destroy(tabs);
+
     const container = try alloc.create(Element);
     container.* = Element.init(alloc, opts.container);
+
     const list = try alloc.create(Element);
     list.* = Element.init(alloc, opts.list);
 
-    return .{ .alloc = alloc, .container = container, .list = list };
+    tabs.* = .{
+        .alloc = alloc,
+        .container = container,
+        .list = list,
+    };
+
+    return tabs;
 }
 
-pub fn deinit(self: *Tabs) void {
-    for (self.values.items) |*tab| {
-        tab.deinit(self.alloc);
+pub fn destroy(self: *Tabs) void {
+    for (self.values.items) |tab| {
+        tab.destroy();
     }
     self.values.deinit(self.alloc);
 
     self.container.deinit();
     self.alloc.destroy(self.container);
+
     self.list.deinit();
     self.alloc.destroy(self.list);
+
+    self.alloc.destroy(self);
 }
 
 pub fn newTab(self: *Tabs, opts: Tab.Options) !*Tab {
     const id = self.next_id;
     self.next_id += 1;
-    const content = try self.alloc.create(Element);
-    content.* = Element.init(self.alloc, opts.content);
-    errdefer content.deinit();
 
-    var trigger_opts = opts.trigger;
-    trigger_opts.userdata = self;
+    const tab = try Tab.create(self.alloc, id, self, opts);
 
-    const trigger = try self.alloc.create(Element);
-    trigger.* = Element.init(self.alloc, trigger_opts);
-    errdefer trigger.deinit();
+    try self.values.append(self.alloc, tab);
+    try self.list.addChild(tab.trigger);
 
-    try trigger.addEventListener(.click, onTriggerClick);
-
-    try self.list.addChild(trigger);
-
-    try self.values.append(self.alloc, .{
-        .id = id,
-        .content = content,
-        .trigger = trigger,
-        .tabs = self,
-        .userdata = opts.userdata,
-    });
-
-    return &self.values.items[self.values.items.len - 1];
+    return tab;
 }
 
 pub fn closeTab(self: *Tabs, id: usize) void {
@@ -95,7 +132,7 @@ pub fn closeTab(self: *Tabs, id: usize) void {
 
     var tab = self.values.orderedRemove(index);
     tab.trigger.remove();
-    tab.deinit(self.alloc);
+    tab.destroy();
 
     if (self.values.items.len == 0) {
         self.select(null);
@@ -112,11 +149,11 @@ pub fn select(self: *Tabs, id: ?usize) void {
     if (self.selected == id) return;
     self.selected = id;
 
+    self.container.removeChildrens();
+
     if (self.selected) |sel| {
         const index = self.indexOf(sel) orelse return;
         const tab = self.values.items[index];
-
-        self.container.removeChildrens();
 
         self.container.addChild(tab.content) catch {};
     }
@@ -127,14 +164,4 @@ pub fn indexOf(self: *Tabs, id: usize) ?usize {
         if (item.id == id) return i;
     }
     return null;
-}
-
-fn onTriggerClick(element: *Element, _: Element.EventData) void {
-    const self: *Tabs = @ptrCast(@alignCast(element.userdata orelse return));
-    for (self.values.items) |tab| {
-        if (tab.trigger == element) {
-            self.select(tab.id);
-            return;
-        }
-    }
 }
