@@ -29,7 +29,6 @@ pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
             .height = .{ .point = 2 },
             .margin = .{ .horizontal = .{ .point = 1 } },
             .flex_shrink = 0,
-            .direction = .rtl,
         },
     });
 

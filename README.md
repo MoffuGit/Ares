@@ -101,3 +101,6 @@ right seven eighths 🮋
 
 part that can have more style could be the lsp status view
 or the undo tree,
+
+vertyical bars
+❘❙❚

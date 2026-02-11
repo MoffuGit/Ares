@@ -238,7 +238,8 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
 
     if (key_data.key.matches('t', .{ .ctrl = true })) {
         key_data.ctx.stopPropagation();
-        _ = self.tabs.newTab(.{}) catch {};
+        const tab = self.tabs.newTab(.{}) catch return;
+        self.tabs.select(tab.id);
         element.context.?.requestDraw();
     }
 

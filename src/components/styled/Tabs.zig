@@ -35,13 +35,15 @@ pub fn Tabs(comptime style: Style) type {
                         .id = "tabs-list",
                         .drawFn = drawList,
                         .style = .{
+                            .align_self = .flex_end,
                             .width = .auto,
                             .height = .auto,
-                            .gap = .{
-                                .column = .{
-                                    .point = 1,
-                                },
-                            },
+                            .direction = .ltr,
+                            // .gap = .{
+                            //     .column = .{
+                            //         .point = 1,
+                            //     },
+                            // },
                             .flex_direction = .row,
                             .flex_shrink = 0,
                         },
@@ -67,6 +69,7 @@ pub fn Tabs(comptime style: Style) type {
                         .width = .{ .point = 1 },
                         .flex_shrink = 0,
                     },
+                    .hitFn = Element.hitSelf,
                 },
                 .userdata = opts.userdata,
             });
@@ -90,7 +93,16 @@ pub fn Tabs(comptime style: Style) type {
 
         fn drawTrigger(element: *Element, buffer: *Buffer) void {
             const theme = global.settings.theme;
-            element.fill(buffer, .{ .style = .{ .bg = theme.mutedBg } });
+            const self: *PrimitiveTabs.Tab = @ptrCast(@alignCast(element.userdata orelse return));
+            if (self.id == self.tabs.selected) {
+                _ = element.print(buffer, &.{
+                    .{ .text = "┃", .style = .{ .fg = theme.mutedBg } },
+                }, .{});
+            } else {
+                _ = element.print(buffer, &.{
+                    .{ .text = "❙", .style = .{ .fg = theme.mutedBg } },
+                }, .{});
+            }
         }
     };
 }

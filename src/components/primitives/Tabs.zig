@@ -63,6 +63,7 @@ pub const Tab = struct {
     fn onTriggerClick(element: *Element, _: Element.EventData) void {
         const self: *Tab = @ptrCast(@alignCast(element.userdata orelse return));
         self.tabs.select(self.id);
+        element.context.?.requestDraw();
     }
 };
 
