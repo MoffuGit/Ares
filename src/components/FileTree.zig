@@ -15,6 +15,7 @@ const Entry = worktreepkg.Entry;
 const Kind = worktreepkg.Kind;
 const Context = @import("../app/mod.zig").Context;
 const subspkg = @import("../app/subscriptions.zig");
+const Workspace = @import("../workspace/mod.zig").Workspace;
 
 const Allocator = std.mem.Allocator;
 const gwidth = vaxis.gwidth.gwidth;
@@ -25,11 +26,12 @@ alloc: Allocator,
 scrollable: *Scrollable,
 content: *Element,
 project: *Project,
+workspace: *Workspace,
 
 expanded_entries: std.AutoHashMap(u64, void),
 visible_entries: std.ArrayList(u64) = .{},
 
-pub fn create(alloc: Allocator, project: *Project, ctx: *Context) !*FileTree {
+pub fn create(alloc: Allocator, project: *Project, workspace: *Workspace, ctx: *Context) !*FileTree {
     const self = try alloc.create(FileTree);
     const theme = global.settings.theme;
 
@@ -66,6 +68,7 @@ pub fn create(alloc: Allocator, project: *Project, ctx: *Context) !*FileTree {
         .scrollable = scrollable,
         .content = content,
         .project = project,
+        .workspace = workspace,
     };
 
     try ctx.subscribe(.worktreeUpdatedEntries, .{
@@ -121,6 +124,7 @@ fn onClick(element: *Element, data: Element.EventData) void {
             self.rebuildVisibleEntries();
         } else {
             self.project.selected_entry = id;
+            self.workspace.setActiveEntry(id);
         }
     }
     element.context.?.requestDraw();

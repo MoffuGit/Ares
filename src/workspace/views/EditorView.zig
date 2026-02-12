@@ -1,0 +1,46 @@
+const std = @import("std");
+const lib = @import("../../lib.zig");
+const Buffer = lib.Buffer;
+const Element = lib.Element;
+const Project = @import("../Project.zig");
+
+const Allocator = std.mem.Allocator;
+
+const EditorView = @This();
+
+project: *Project,
+entry: ?u64 = null,
+
+pub fn create(alloc: Allocator, project: *Project) !*EditorView {
+    const self = try alloc.create(EditorView);
+    self.* = .{
+        .project = project,
+    };
+    return self;
+}
+
+pub fn onEntry(self: *EditorView, id: u64) void {
+    self.entry = id;
+}
+
+pub fn draw(self: *EditorView, element: *Element, buffer: *Buffer) void {
+    if (self.entry) |id| {
+        if (self.project.buffer_store.open(id)) |entry_buffer| {
+            switch (entry_buffer.state) {
+                .loading => {
+                    _ = element.print(buffer, &.{.{ .text = "loading" }}, .{ .wrap = .none, .text_align = .center });
+                },
+                .ready => {
+                    if (entry_buffer.bytes()) |bytes| {
+                        _ = element.print(buffer, &.{.{ .text = bytes }}, .{});
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+}
+
+pub fn destroy(self: *EditorView, alloc: Allocator) void {
+    alloc.destroy(self);
+}

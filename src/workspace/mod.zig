@@ -12,6 +12,7 @@ const Element = lib.Element;
 const Buffer = lib.Buffer;
 const global = @import("../global.zig");
 const Pane = @import("Pane.zig");
+const EditorView = @import("views/EditorView.zig");
 
 pub const Project = @import("Project.zig");
 
@@ -38,6 +39,7 @@ bottom_dock: *Dock,
 
 tabs: *Tabs,
 panes: std.ArrayList(*Pane) = .{},
+active_pane: ?*Pane = null,
 
 pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const workspace = try alloc.create(Workspace);
@@ -215,7 +217,7 @@ pub fn openProject(self: *Workspace, abs_path: []const u8) !void {
         project.destroy(self.alloc);
     }
     self.project = try Project.create(self.alloc, abs_path, self.ctx);
-    const ft = try FileTree.create(self.alloc, self.project.?, self.ctx);
+    const ft = try FileTree.create(self.alloc, self.project.?, self, self.ctx);
     self.file_tree = ft;
     try self.left_dock.element.addChild(ft.getElement());
 }
@@ -228,6 +230,28 @@ pub fn closeProject(self: *Workspace) void {
         }
         project.destroy(self.alloc);
         self.project = null;
+    }
+}
+
+fn syncActivePaneFromTab(self: *Workspace) void {
+    const selected_id = self.tabs.inner.selected orelse {
+        self.active_pane = null;
+        return;
+    };
+    const index = self.tabs.inner.indexOf(selected_id) orelse return;
+    const tab = self.tabs.inner.values.items[index];
+    if (tab.userdata) |ud| {
+        const pane: *Pane = @ptrCast(@alignCast(ud));
+        self.active_pane = pane;
+        pane.select();
+    }
+}
+
+/// Called by external components (e.g., FileTree) to notify the active pane
+/// that an entry was selected.
+pub fn setActiveEntry(self: *Workspace, entry_id: u64) void {
+    if (self.active_pane) |pane| {
+        pane.setEntry(entry_id);
     }
 }
 
@@ -245,12 +269,12 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
         key_data.ctx.stopPropagation();
 
         if (self.project) |project| {
-            const pane = Pane.create(self.alloc, project) catch return;
-            errdefer self.alloc.destroy(pane);
+            const editor = EditorView.create(self.alloc, project) catch return;
+            const pane = Pane.create(self.alloc, project, .{ .editor = editor }) catch return;
 
             self.panes.append(self.alloc, pane) catch return;
 
-            const tab = self.tabs.newTab(.{}) catch return;
+            const tab = self.tabs.newTab(.{ .userdata = pane }) catch return;
             self.tabs.select(tab.id);
 
             tab.content.addChild(pane.element) catch return;
@@ -258,6 +282,9 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
             if (project.selected_entry) |id| {
                 pane.setEntry(id);
             }
+
+            self.active_pane = pane;
+            pane.select();
         }
 
         element.context.?.requestDraw();
@@ -265,10 +292,12 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
 
     if (key_data.key.matches('\t', .{ .shift = true })) {
         self.tabs.prev();
+        self.syncActivePaneFromTab();
         key_data.ctx.stopPropagation();
         element.context.?.requestDraw();
     } else if (key_data.key.matches('\t', .{})) {
         self.tabs.next();
+        self.syncActivePaneFromTab();
         key_data.ctx.stopPropagation();
         element.context.?.requestDraw();
     }
