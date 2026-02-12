@@ -35,13 +35,13 @@ pub fn Tabs(comptime style: Style) type {
 
         inner: *PrimitiveTabs,
         anim: IndicatorAnim,
+        selected: ?usize = null,
 
         const speed_us_per_cell: i64 = 20_000;
         const min_duration_us: i64 = 60_000;
         const max_duration_us: i64 = 200_000;
 
-        fn onSelectChanged(tabs: *PrimitiveTabs, id: ?usize, userdata: ?*anyopaque) void {
-            const self: *Self = @ptrCast(@alignCast(userdata orelse return));
+        fn onSelectChanged(self: *Self, tabs: *PrimitiveTabs, id: ?usize) void {
             if (id) |new_id| {
                 const target_index = tabs.indexOf(new_id) orelse return;
                 const trigger = tabs.values.items[target_index].trigger;
@@ -71,6 +71,23 @@ pub fn Tabs(comptime style: Style) type {
                     tabs.indicator.node.setPosition(.left, .{ .point = target });
                 }
             }
+        }
+
+        pub fn create(alloc: Allocator) !*Self {
+            const tabs = try alloc.create(Self);
+            errdefer alloc.destroy(tabs);
+
+            tabs.* = try Self.init(alloc);
+
+            tabs.inner.userdata = tabs;
+
+            return tabs;
+        }
+
+        pub fn destroy(self: *Self) void {
+            const alloc = self.inner.alloc;
+            self.deinit();
+            alloc.destroy(self);
         }
 
         pub fn init(alloc: Allocator) !Self {
@@ -103,7 +120,6 @@ pub fn Tabs(comptime style: Style) type {
                         .width = .{ .point = 1 },
                     },
                 },
-                .on_select = onSelectChanged,
             });
 
             return .{
@@ -118,10 +134,6 @@ pub fn Tabs(comptime style: Style) type {
                     .easing = .ease_out_cubic,
                 }),
             };
-        }
-
-        pub fn setSelf(self: *Self) void {
-            self.inner.on_select_userdata = self;
         }
 
         pub fn deinit(self: *Self) void {
@@ -181,7 +193,14 @@ pub fn Tabs(comptime style: Style) type {
         fn drawIndicator(element: *Element, buffer: *Buffer) void {
             const theme = global.settings.theme;
             const tabs: *PrimitiveTabs = @ptrCast(@alignCast(element.userdata orelse return));
+            const self: *Self = @ptrCast(@alignCast(tabs.userdata orelse return));
+
             if (tabs.selected == null) return;
+
+            if (self.selected != tabs.selected) {
+                self.onSelectChanged(tabs, tabs.selected);
+                self.selected = tabs.selected;
+            }
 
             buffer.writeCell(element.layout.left, element.layout.top, .{
                 .char = .{ .grapheme = "┃" },

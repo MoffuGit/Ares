@@ -76,8 +76,7 @@ selected: ?usize = null,
 
 next_id: usize = 1,
 
-on_select: ?OnSelectCallback = null,
-on_select_userdata: ?*anyopaque = null,
+userdata: ?*anyopaque = null,
 
 container: *Element,
 list: *Element,
@@ -87,8 +86,7 @@ const Options = struct {
     container: Element.Options = .{},
     list: Element.Options = .{},
     indicator: Element.Options = .{},
-    on_select: ?OnSelectCallback = null,
-    on_select_userdata: ?*anyopaque = null,
+    userdata: ?*anyopaque = null,
 };
 
 pub fn create(alloc: std.mem.Allocator, opts: Options) !*Tabs {
@@ -114,8 +112,7 @@ pub fn create(alloc: std.mem.Allocator, opts: Options) !*Tabs {
         .container = container,
         .list = list,
         .indicator = indicator,
-        .on_select = opts.on_select,
-        .on_select_userdata = opts.on_select_userdata,
+        .userdata = opts.userdata,
     };
 
     return tabs;
@@ -180,10 +177,6 @@ pub fn select(self: *Tabs, id: ?usize) void {
         const tab = self.values.items[index];
 
         self.container.addChild(tab.content) catch {};
-    }
-
-    if (self.on_select) |cb| {
-        cb(self, id, self.on_select_userdata);
     }
 }
 

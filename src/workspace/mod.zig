@@ -35,7 +35,7 @@ right_dock: *Dock,
 top_dock: *Dock,
 bottom_dock: *Dock,
 
-tabs: Tabs,
+tabs: *Tabs,
 
 pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const workspace = try alloc.create(Workspace);
@@ -112,8 +112,7 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const bottom_dock = try Dock.create(alloc, .bottom, 30, false);
     errdefer bottom_dock.destroy(alloc);
 
-    var tabs = try Tabs.init(alloc);
-    errdefer tabs.deinit();
+    const tabs = try Tabs.create(alloc);
 
     try top_bar.element.addChild(tabs.inner.list);
     try center.addChild(tabs.inner.container);
@@ -152,8 +151,6 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         .file_tree = null,
     };
 
-    workspace.tabs.setSelf();
-
     return workspace;
 }
 
@@ -162,7 +159,7 @@ pub fn destroy(self: *Workspace) void {
     self.right_dock.destroy(self.alloc);
     self.top_dock.destroy(self.alloc);
     self.bottom_dock.destroy(self.alloc);
-    self.tabs.deinit();
+    self.tabs.destroy();
     if (self.file_tree) |ft| ft.destroy(self.alloc);
     if (self.project) |project| {
         project.destroy(self.alloc);
@@ -245,6 +242,11 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
         //layout of the trigger list and the childrens become
         //old and incorrect, one option could be to sycn the
         //tree or await to trigger the select callback
+        //i think it would better in this case to trigger the animation
+        //on the draw function and not as a callback, this way we can wait
+        //to the layout to sync before doing the animation calculations
+        //the on select can keep existing only that in other ways and
+        //for other things
         const tab = self.tabs.newTab(.{}) catch return;
         self.tabs.select(tab.id);
         element.context.?.requestDraw();
