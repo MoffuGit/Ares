@@ -152,6 +152,8 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         .file_tree = null,
     };
 
+    workspace.tabs.setSelf();
+
     return workspace;
 }
 
@@ -238,15 +240,22 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
 
     if (key_data.key.matches('t', .{ .ctrl = true })) {
         key_data.ctx.stopPropagation();
+        //BUG:
+        //when a tab is created and then selected, the
+        //layout of the trigger list and the childrens become
+        //old and incorrect, one option could be to sycn the
+        //tree or await to trigger the select callback
         const tab = self.tabs.newTab(.{}) catch return;
         self.tabs.select(tab.id);
         element.context.?.requestDraw();
     }
 
     if (key_data.key.matches('\t', .{ .shift = true })) {
+        self.tabs.prev();
         key_data.ctx.stopPropagation();
         element.context.?.requestDraw();
     } else if (key_data.key.matches('\t', .{})) {
+        self.tabs.next();
         key_data.ctx.stopPropagation();
         element.context.?.requestDraw();
     }

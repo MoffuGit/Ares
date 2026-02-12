@@ -32,6 +32,27 @@ pub const Context = struct {
         self.app.requestDraw();
     }
 
+    pub fn startAnimation(self: *Context, animation: *Element.Animation.BaseAnimation) void {
+        animation.context = self;
+        _ = self.app.loop.mailbox.push(.{ .window = .{ .animation = .{ .start = animation } } }, .instant);
+        self.app.loop.wakeup.notify() catch {};
+    }
+
+    pub fn pauseAnimation(self: *Context, id: u64) void {
+        _ = self.app.loop.mailbox.push(.{ .window = .{ .animation = .{ .pause = id } } }, .instant);
+        self.app.loop.wakeup.notify() catch {};
+    }
+
+    pub fn resumeAnimation(self: *Context, id: u64) void {
+        _ = self.app.loop.mailbox.push(.{ .window = .{ .animation = .{ ._resume = id } } }, .instant);
+        self.app.loop.wakeup.notify() catch {};
+    }
+
+    pub fn cancelAnimation(self: *Context, id: u64) void {
+        _ = self.app.loop.mailbox.push(.{ .window = .{ .animation = .{ .cancel = id } } }, .instant);
+        self.app.loop.wakeup.notify() catch {};
+    }
+
     pub fn stop(self: *Context) !void {
         try self.app.loop.stop.notify();
     }

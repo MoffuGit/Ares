@@ -123,7 +123,7 @@ pub fn onMouseEnter(element: *Element, _: Element.EventData) void {
     const ctx = element.context orelse return;
     box_data.unhover_anim.cancel();
     box_data.hover_anim.start = box_data.state;
-    ctx.startAnimation(box_data.hover_anim.toBase());
+    box_data.hover_anim.play(ctx);
 }
 
 pub fn onMouseLeave(element: *Element, _: Element.EventData) void {
@@ -131,7 +131,7 @@ pub fn onMouseLeave(element: *Element, _: Element.EventData) void {
     const ctx = element.context orelse return;
     box_data.hover_anim.cancel();
     box_data.unhover_anim.start = box_data.state;
-    ctx.startAnimation(box_data.unhover_anim.toBase());
+    box_data.unhover_anim.play(ctx);
 }
 
 pub fn main() !void {

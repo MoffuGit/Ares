@@ -120,6 +120,7 @@ pub fn scheduleNextTick(self: *Loop) void {
         return;
     }
 
+    if (self.tick_active) return;
     self.tick_active = true;
 
     self.tick_h.run(
@@ -150,6 +151,9 @@ fn tickCallback(
     l.app.window.time.processDue(now) catch |err| {
         log.err("tick error: {}", .{err});
     };
+
+    l.app.drawWindow() catch |err|
+        log.err("draw error: {}", .{err});
 
     l.scheduleNextTick();
 

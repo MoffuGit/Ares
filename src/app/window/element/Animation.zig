@@ -88,31 +88,25 @@ pub fn Animation(comptime State: type) type {
             return &self.base;
         }
 
-        pub fn startAnim(self: *Self) void {
-            if (self.base.context) |ctx| {
-                _ = ctx.mailbox.push(.{ .animation = .{ .start = &self.base } }, .instant);
-                ctx.wakeup.notify() catch {};
-            }
+        pub fn play(self: *Self, ctx: *Context) void {
+            ctx.startAnimation(&self.base);
         }
 
         pub fn pause(self: *Self) void {
             if (self.base.context) |ctx| {
-                _ = ctx.mailbox.push(.{ .animation = .{ .pause = self.base.id } }, .instant);
-                ctx.wakeup.notify() catch {};
+                ctx.pauseAnimation(self.base.id);
             }
         }
 
-        pub fn resume_(self: *Self) void {
+        pub fn @"resume"(self: *Self) void {
             if (self.base.context) |ctx| {
-                _ = ctx.mailbox.push(.{ .animation = .{ ._resume = self.base.id } }, .instant);
-                ctx.wakeup.notify() catch {};
+                ctx.resumeAnimation(self.base.id);
             }
         }
 
         pub fn cancel(self: *Self) void {
             if (self.base.context) |ctx| {
-                _ = ctx.mailbox.push(.{ .animation = .{ .cancel = self.base.id } }, .instant);
-                ctx.wakeup.notify() catch {};
+                ctx.cancelAnimation(self.base.id);
             }
         }
 

@@ -67,6 +67,8 @@ pub const Tab = struct {
     }
 };
 
+pub const OnSelectCallback = *const fn (tabs: *Tabs, id: ?usize, userdata: ?*anyopaque) void;
+
 alloc: std.mem.Allocator,
 
 values: std.ArrayList(*Tab) = .{},
@@ -74,12 +76,19 @@ selected: ?usize = null,
 
 next_id: usize = 1,
 
+on_select: ?OnSelectCallback = null,
+on_select_userdata: ?*anyopaque = null,
+
 container: *Element,
 list: *Element,
+indicator: *Element,
 
 const Options = struct {
     container: Element.Options = .{},
     list: Element.Options = .{},
+    indicator: Element.Options = .{},
+    on_select: ?OnSelectCallback = null,
+    on_select_userdata: ?*anyopaque = null,
 };
 
 pub fn create(alloc: std.mem.Allocator, opts: Options) !*Tabs {
@@ -92,10 +101,21 @@ pub fn create(alloc: std.mem.Allocator, opts: Options) !*Tabs {
     const list = try alloc.create(Element);
     list.* = Element.init(alloc, opts.list);
 
+    var indicator_opts = opts.indicator;
+    indicator_opts.userdata = tabs;
+
+    const indicator = try alloc.create(Element);
+    indicator.* = Element.init(alloc, indicator_opts);
+
+    try list.addChild(indicator);
+
     tabs.* = .{
         .alloc = alloc,
         .container = container,
         .list = list,
+        .indicator = indicator,
+        .on_select = opts.on_select,
+        .on_select_userdata = opts.on_select_userdata,
     };
 
     return tabs;
@@ -109,6 +129,9 @@ pub fn destroy(self: *Tabs) void {
 
     self.container.deinit();
     self.alloc.destroy(self.container);
+
+    self.indicator.deinit();
+    self.alloc.destroy(self.indicator);
 
     self.list.deinit();
     self.alloc.destroy(self.list);
@@ -158,6 +181,30 @@ pub fn select(self: *Tabs, id: ?usize) void {
 
         self.container.addChild(tab.content) catch {};
     }
+
+    if (self.on_select) |cb| {
+        cb(self, id, self.on_select_userdata);
+    }
+}
+
+pub fn selectNext(self: *Tabs) void {
+    if (self.values.items.len == 0) return;
+    const index = if (self.selected) |sel| self.indexOf(sel) orelse 0 else 0;
+    const next = (index + 1) % self.values.items.len;
+    self.select(self.values.items[next].id);
+}
+
+pub fn selectPrev(self: *Tabs) void {
+    if (self.values.items.len == 0) return;
+    const index = if (self.selected) |sel| self.indexOf(sel) orelse 0 else 0;
+    const prev = if (index == 0) self.values.items.len - 1 else index - 1;
+    self.select(self.values.items[prev].id);
+}
+
+pub fn selectedTrigger(self: *Tabs) ?*Element {
+    const sel = self.selected orelse return null;
+    const index = self.indexOf(sel) orelse return null;
+    return self.values.items[index].trigger;
 }
 
 pub fn indexOf(self: *Tabs, id: usize) ?usize {

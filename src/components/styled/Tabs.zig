@@ -4,7 +4,9 @@ const global = @import("../../global.zig");
 
 const PrimitiveTabs = @import("../primitives/Tabs.zig");
 const Element = lib.Element;
+const Animation = Element.Animation;
 const Buffer = lib.Buffer;
+const Context = lib.App.Context;
 const Allocator = std.mem.Allocator;
 const Settings = @import("../../settings/mod.zig");
 
@@ -14,42 +16,112 @@ pub const Style = enum {
     minimal,
 };
 
+const IndicatorAnim = Animation.Animation(f32);
+
+fn lerpF32(a: f32, b: f32, t: f32) f32 {
+    return a + (b - a) * t;
+}
+
+fn onAnimUpdate(userdata: ?*anyopaque, value: f32, ctx: *Context) void {
+    const inner: *PrimitiveTabs = @ptrCast(@alignCast(userdata orelse return));
+    inner.indicator.node.setPosition(.left, .{ .point = value });
+    ctx.requestDraw();
+}
+
 pub fn Tabs(comptime style: Style) type {
     _ = style;
     return struct {
         const Self = @This();
 
         inner: *PrimitiveTabs,
+        anim: IndicatorAnim,
+
+        const speed_us_per_cell: i64 = 80_000;
+        const min_duration_us: i64 = 60_000;
+        const max_duration_us: i64 = 300_000;
+
+        fn onSelectChanged(tabs: *PrimitiveTabs, id: ?usize, userdata: ?*anyopaque) void {
+            const self: *Self = @ptrCast(@alignCast(userdata orelse return));
+            if (id) |new_id| {
+                const target_index = tabs.indexOf(new_id) orelse return;
+                const trigger = tabs.values.items[target_index].trigger;
+                const list_left: f32 = @floatFromInt(tabs.list.layout.left);
+                const target: f32 = @as(f32, @floatFromInt(trigger.layout.left)) - list_left;
+                const current: f32 = @as(f32, @floatFromInt(tabs.indicator.layout.left)) - list_left;
+
+                self.anim.cancel();
+                self.anim.start = current;
+
+                const pixel_distance = @abs(current - target);
+                const duration = std.math.clamp(
+                    @as(i64, @intFromFloat(pixel_distance)) * speed_us_per_cell,
+                    min_duration_us,
+                    max_duration_us,
+                );
+
+                const list_top: f32 = @floatFromInt(tabs.list.layout.top);
+                const top: f32 = @as(f32, @floatFromInt(trigger.layout.top)) - list_top;
+                tabs.indicator.node.setPosition(.top, .{ .point = top });
+
+                self.anim.end = target;
+                self.anim.base.duration_us = duration;
+                if (tabs.indicator.context) |ctx| {
+                    self.anim.play(ctx);
+                } else {
+                    tabs.indicator.node.setPosition(.left, .{ .point = target });
+                }
+            }
+        }
 
         pub fn init(alloc: Allocator) !Self {
+            const inner = try PrimitiveTabs.create(alloc, .{
+                .container = .{
+                    .id = "tabs-container",
+                    .style = .{
+                        .width = .{ .percent = 100 },
+                        .height = .{ .percent = 100 },
+                    },
+                },
+                .list = .{
+                    .id = "tabs-list",
+                    .drawFn = drawList,
+                    .style = .{
+                        .align_self = .flex_end,
+                        .width = .auto,
+                        .height = .auto,
+                        .flex_direction = .row,
+                        .flex_shrink = 0,
+                    },
+                },
+                .indicator = .{
+                    .id = "tabs-indicator",
+                    .drawFn = drawIndicator,
+                    .zIndex = 1,
+                    .style = .{
+                        .position_type = .absolute,
+                        .height = .{ .point = 1 },
+                        .width = .{ .point = 1 },
+                    },
+                },
+                .on_select = onSelectChanged,
+            });
+
             return .{
-                .inner = try PrimitiveTabs.create(alloc, .{
-                    .container = .{
-                        .id = "tabs-container",
-                        .style = .{
-                            .width = .{ .percent = 100 },
-                            .height = .{ .percent = 100 },
-                        },
-                    },
-                    .list = .{
-                        .id = "tabs-list",
-                        .drawFn = drawList,
-                        .style = .{
-                            .align_self = .flex_end,
-                            .width = .auto,
-                            .height = .auto,
-                            .direction = .ltr,
-                            // .gap = .{
-                            //     .column = .{
-                            //         .point = 1,
-                            //     },
-                            // },
-                            .flex_direction = .row,
-                            .flex_shrink = 0,
-                        },
-                    },
+                .inner = inner,
+                .anim = IndicatorAnim.init(.{
+                    .start = 0,
+                    .end = 0,
+                    .duration_us = 150_000,
+                    .updateFn = lerpF32,
+                    .callback = onAnimUpdate,
+                    .userdata = inner,
+                    .easing = .ease_out_cubic,
                 }),
             };
+        }
+
+        pub fn setSelf(self: *Self) void {
+            self.inner.on_select_userdata = self;
         }
 
         pub fn deinit(self: *Self) void {
@@ -83,6 +155,14 @@ pub fn Tabs(comptime style: Style) type {
             self.inner.closeTab(id);
         }
 
+        pub fn next(self: *Self) void {
+            self.inner.selectNext();
+        }
+
+        pub fn prev(self: *Self) void {
+            self.inner.selectPrev();
+        }
+
         pub fn getElement(self: *Self) *Element {
             return self.inner.container;
         }
@@ -93,16 +173,20 @@ pub fn Tabs(comptime style: Style) type {
 
         fn drawTrigger(element: *Element, buffer: *Buffer) void {
             const theme = global.settings.theme;
-            const self: *PrimitiveTabs.Tab = @ptrCast(@alignCast(element.userdata orelse return));
-            if (self.id == self.tabs.selected) {
-                _ = element.print(buffer, &.{
-                    .{ .text = "┃", .style = .{ .fg = theme.mutedBg } },
-                }, .{});
-            } else {
-                _ = element.print(buffer, &.{
-                    .{ .text = "❙", .style = .{ .fg = theme.mutedBg } },
-                }, .{});
-            }
+            _ = element.print(buffer, &.{
+                .{ .text = "❙", .style = .{ .fg = theme.fg.setAlpha(0.5) } },
+            }, .{});
+        }
+
+        fn drawIndicator(element: *Element, buffer: *Buffer) void {
+            const theme = global.settings.theme;
+            const tabs: *PrimitiveTabs = @ptrCast(@alignCast(element.userdata orelse return));
+            if (tabs.selected == null) return;
+
+            buffer.writeCell(element.layout.left, element.layout.top, .{
+                .char = .{ .grapheme = "┃" },
+                .style = .{ .fg = theme.fg },
+            });
         }
     };
 }
