@@ -282,6 +282,32 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
     const self: *Workspace = @ptrCast(@alignCast(element.userdata));
     const key_data = data.key_press;
 
+    // Mode transitions
+    switch (global.mode) {
+        .normal => {
+            if (key_data.key.matches('i', .{})) {
+                global.mode = .insert;
+                key_data.ctx.stopPropagation();
+                element.context.?.requestDraw();
+                return;
+            }
+            if (key_data.key.matches('v', .{})) {
+                global.mode = .visual;
+                key_data.ctx.stopPropagation();
+                element.context.?.requestDraw();
+                return;
+            }
+        },
+        .insert, .visual => {
+            if (key_data.key.matches(0x1b, .{})) {
+                global.mode = .normal;
+                key_data.ctx.stopPropagation();
+                element.context.?.requestDraw();
+                return;
+            }
+        },
+    }
+
     if (key_data.key.matches('l', .{ .super = true })) {
         self.toggleDock(.left);
         key_data.ctx.stopPropagation();

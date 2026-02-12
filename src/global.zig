@@ -6,6 +6,13 @@ const Context = @import("app/mod.zig").Context;
 
 pub const xev = @import("xev").Dynamic;
 
+pub const Mode = enum {
+    normal,
+    insert,
+    visual,
+};
+
+pub var mode: Mode = .normal;
 pub var settings: *Settings = undefined;
 
 pub fn init(alloc: Allocator, context: *Context) !void {

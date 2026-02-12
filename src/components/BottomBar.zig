@@ -1,4 +1,5 @@
 const std = @import("std");
+const vaxis = @import("vaxis");
 const lib = @import("../lib.zig");
 const global = @import("../global.zig");
 
@@ -52,5 +53,18 @@ pub fn getElement(self: *BottomBar) *Element {
 
 fn draw(element: *Element, buffer: *Buffer) void {
     const self: *BottomBar = @ptrCast(@alignCast(element.userdata));
-    element.fill(buffer, .{ .style = .{ .bg = self.settings.theme.bg } });
+    const theme = self.settings.theme;
+    element.fill(buffer, .{ .style = .{ .bg = theme.bg } });
+
+    const mode_text, const mode_color: vaxis.Color = switch (global.mode) {
+        .normal => .{ " NORMAL ", .{ .rgba = .{ 100, 149, 237, 255 } } },
+        .insert => .{ " INSERT ", .{ .rgba = .{ 80, 200, 120, 255 } } },
+        .visual => .{ " VISUAL ", .{ .rgba = .{ 180, 120, 220, 255 } } },
+    };
+
+    _ = mode_color;
+
+    _ = element.print(buffer, &.{
+        .{ .text = mode_text, .style = .{ .bg = theme.mutedBg, .fg = theme.mutedFg, .bold = true } },
+    }, .{});
 }
