@@ -69,7 +69,7 @@ pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
                 .userdata = self,
                 .start = .default,
                 .end = .default,
-                .duration_us = 150_000,
+                .duration_us = 100_000,
                 .updateFn = lerpColor,
                 .callback = colorCallback,
                 .easing = .linear,

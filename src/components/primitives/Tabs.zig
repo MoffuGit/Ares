@@ -153,6 +153,7 @@ pub fn closeTab(self: *Tabs, id: usize) void {
 
     var tab = self.values.orderedRemove(index);
     tab.trigger.remove();
+    tab.content.remove();
     tab.destroy();
 
     if (self.values.items.len == 0) {

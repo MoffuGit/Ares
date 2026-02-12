@@ -233,6 +233,29 @@ pub fn closeProject(self: *Workspace) void {
     }
 }
 
+pub fn closeActiveTab(self: *Workspace) void {
+    const selected_id = self.tabs.inner.selected orelse return;
+    const index = self.tabs.inner.indexOf(selected_id) orelse return;
+    const tab = self.tabs.inner.values.items[index];
+
+    const pane: ?*Pane = if (tab.userdata) |ud| @ptrCast(@alignCast(ud)) else null;
+    if (pane) |p| p.element.remove();
+
+    self.tabs.closeTab(selected_id);
+
+    if (pane) |p| {
+        for (self.panes.items, 0..) |item, i| {
+            if (item == p) {
+                _ = self.panes.orderedRemove(i);
+                break;
+            }
+        }
+        p.destroy();
+    }
+
+    self.syncActivePaneFromTab();
+}
+
 fn syncActivePaneFromTab(self: *Workspace) void {
     const selected_id = self.tabs.inner.selected orelse {
         self.active_pane = null;
@@ -303,6 +326,7 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
     }
 
     if (key_data.key.matches('q', .{ .ctrl = true })) {
+        self.closeActiveTab();
         key_data.ctx.stopPropagation();
         element.context.?.requestDraw();
     }
