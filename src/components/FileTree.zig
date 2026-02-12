@@ -224,7 +224,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
 
         const icon: []const u8 = switch (entry.kind) {
             .dir => if (self.expanded_entries.contains(entry.id)) " " else "󰉋 ",
-            .file => " ",
+            .file => global.file_icons.get(entry.file_type),
         };
 
         if (is_selected) {
