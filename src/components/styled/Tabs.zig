@@ -36,9 +36,9 @@ pub fn Tabs(comptime style: Style) type {
         inner: *PrimitiveTabs,
         anim: IndicatorAnim,
 
-        const speed_us_per_cell: i64 = 80_000;
+        const speed_us_per_cell: i64 = 20_000;
         const min_duration_us: i64 = 60_000;
-        const max_duration_us: i64 = 300_000;
+        const max_duration_us: i64 = 200_000;
 
         fn onSelectChanged(tabs: *PrimitiveTabs, id: ?usize, userdata: ?*anyopaque) void {
             const self: *Self = @ptrCast(@alignCast(userdata orelse return));
