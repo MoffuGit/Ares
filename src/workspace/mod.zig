@@ -11,6 +11,7 @@ const Tabs = StyledTabs.Tabs(.block);
 const Element = lib.Element;
 const Buffer = lib.Buffer;
 const global = @import("../global.zig");
+const Pane = @import("Pane.zig");
 
 pub const Project = @import("Project.zig");
 
@@ -36,6 +37,7 @@ top_dock: *Dock,
 bottom_dock: *Dock,
 
 tabs: *Tabs,
+panes: std.ArrayList(*Pane) = .{},
 
 pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const workspace = try alloc.create(Workspace);
@@ -164,6 +166,10 @@ pub fn destroy(self: *Workspace) void {
     if (self.project) |project| {
         project.destroy(self.alloc);
     }
+    for (self.panes.items) |pane| {
+        pane.destroy();
+    }
+    self.panes.deinit(self.alloc);
     self.center.deinit();
     self.center_column.deinit();
     self.center_wrapper.deinit();
@@ -237,18 +243,23 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
 
     if (key_data.key.matches('t', .{ .ctrl = true })) {
         key_data.ctx.stopPropagation();
-        //BUG:
-        //when a tab is created and then selected, the
-        //layout of the trigger list and the childrens become
-        //old and incorrect, one option could be to sycn the
-        //tree or await to trigger the select callback
-        //i think it would better in this case to trigger the animation
-        //on the draw function and not as a callback, this way we can wait
-        //to the layout to sync before doing the animation calculations
-        //the on select can keep existing only that in other ways and
-        //for other things
-        const tab = self.tabs.newTab(.{}) catch return;
-        self.tabs.select(tab.id);
+
+        if (self.project) |project| {
+            const pane = Pane.create(self.alloc, project) catch return;
+            errdefer self.alloc.destroy(pane);
+
+            self.panes.append(self.alloc, pane) catch return;
+
+            const tab = self.tabs.newTab(.{}) catch return;
+            self.tabs.select(tab.id);
+
+            tab.content.addChild(pane.element) catch return;
+
+            if (project.selected_entry) |id| {
+                pane.setEntry(id);
+            }
+        }
+
         element.context.?.requestDraw();
     }
 
