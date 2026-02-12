@@ -1,17 +1,45 @@
 const std = @import("std");
+const vaxis = @import("vaxis");
 const lib = @import("../lib.zig");
 const global = @import("../global.zig");
 
 const Element = lib.Element;
 const Buffer = lib.Buffer;
 const Workspace = lib.Workspace;
+const Context = lib.App.Context;
 const Settings = @import("../settings/mod.zig");
+const Animation = Element.Animation;
 
 const TopBar = @This();
+
+const ColorAnimation = Animation.Animation(vaxis.Color);
 
 element: *Element,
 settings: *Settings,
 workspace: *Workspace,
+entry_color: ?vaxis.Color = null,
+entry_id: ?u64 = null,
+color_anim: ColorAnimation,
+
+fn lerpColor(a: vaxis.Color, b: vaxis.Color, t: f32) vaxis.Color {
+    const a_rgba = a.rgba;
+    const b_rgba = b.rgba;
+    var new: [4]u8 = undefined;
+    inline for (0..3) |i| {
+        const a_f: f32 = @as(f32, @floatFromInt(a_rgba[i])) / 255.0;
+        const b_f: f32 = @as(f32, @floatFromInt(b_rgba[i])) / 255.0;
+        new[i] = @intFromFloat((a_f + (b_f - a_f) * t) * 255.0);
+    }
+    new[3] = a_rgba[3];
+
+    return .{ .rgba = new };
+}
+
+fn colorCallback(userdata: ?*anyopaque, state: vaxis.Color, ctx: *Context) void {
+    const self: *TopBar = @ptrCast(@alignCast(userdata orelse return));
+    self.entry_color = state;
+    ctx.requestDraw();
+}
 
 pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
     const self = try alloc.create(TopBar);
@@ -36,6 +64,17 @@ pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
         .workspace = workspace,
         .element = element,
         .settings = global.settings,
+        .color_anim = ColorAnimation.init(
+            .{
+                .userdata = self,
+                .start = .default,
+                .end = .default,
+                .duration_us = 150_000,
+                .updateFn = lerpColor,
+                .callback = colorCallback,
+                .easing = .linear,
+            },
+        ),
     };
 
     return self;
@@ -65,12 +104,26 @@ fn draw(element: *Element, buffer: *Buffer) void {
                 if (snapshot.getPathById(id)) |path| {
                     const file_color = self.settings.theme.getFileTypeColor(entry.file_type.toString());
 
+                    if (self.entry_id != entry.id) {
+                        if (self.entry_color) |old| {
+                            if (!old.eql(file_color)) {
+                                self.color_anim.cancel();
+                                self.color_anim.start = old;
+                                self.color_anim.end = file_color;
+                                self.color_anim.play(element.context.?);
+                            }
+                        } else {
+                            self.entry_color = file_color;
+                        }
+                        self.entry_id = entry.id;
+                    }
+
                     const fg = self.settings.theme.fg.setAlpha(0.78);
 
                     _ = element.print(
                         buffer,
                         &.{
-                            .{ .text = "▎", .style = .{ .fg = file_color } },
+                            .{ .text = "▎", .style = .{ .fg = self.entry_color.? } },
                             .{ .text = path, .style = .{ .fg = fg } },
                         },
                         .{},
