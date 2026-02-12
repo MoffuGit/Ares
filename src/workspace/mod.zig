@@ -118,7 +118,7 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
 
     const tabs = try Tabs.create(alloc);
 
-    try top_bar.element.addChild(tabs.inner.list);
+    try top_bar.element.elem().addChild(tabs.inner.list);
     try center.addChild(tabs.inner.container);
 
     try center_column.insertChild(top_dock.element, 0);
@@ -129,7 +129,7 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     try center_wrapper.addChild(center_column);
     try center_wrapper.addChild(right_dock.element);
 
-    try element.addChild(top_bar.element);
+    try element.addChild(top_bar.element.elem());
     try element.addChild(center_wrapper);
     try element.addChild(bottom_bar.element);
 

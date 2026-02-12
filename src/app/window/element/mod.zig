@@ -12,6 +12,9 @@ pub const Timer = @import("Timer.zig");
 pub const Style = @import("Style.zig");
 pub const Node = @import("Node.zig");
 pub const Scrollable = @import("Scrollable.zig");
+pub const TypedElement = @import("TypedElement.zig").TypedElement;
+pub const TypedAnimation = @import("TypedElement.zig").TypedAnimation;
+pub const Box = @import("Box.zig");
 
 const Buffer = @import("../../Buffer.zig");
 const HitGrid = @import("../HitGrid.zig");
@@ -300,13 +303,37 @@ pub fn fillRounded(element: *Element, buffer: *Buffer, color: vaxis.Color, radiu
 
 pub fn print(element: *Element, buffer: *Buffer, segments: []const Segment, opts: PrintOptions) PrintResult {
     const layout = element.layout;
-    var base_x = layout.left;
-    if (opts.text_align == .center) {
-        base_x += layout.width / 2;
-    }
+    const base_x = layout.left;
     const base_y = layout.top;
     const content_width = layout.width;
     const content_height = layout.height;
+
+    if (opts.text_align == .left) {
+        return printAligned(element, buffer, segments, opts, base_x, base_y, content_width, content_height);
+    }
+
+    // For center/right/justify: measure first, then draw with offset
+    var measure_opts = opts;
+    measure_opts.commit = false;
+    const measured = printAligned(element, buffer, segments, measure_opts, base_x, base_y, content_width, content_height);
+    const text_width = measured.col;
+
+    var aligned_opts = opts;
+    switch (opts.text_align) {
+        .center => {
+            aligned_opts.col_offset = opts.col_offset +| (content_width -| text_width) / 2;
+        },
+        .right => {
+            aligned_opts.col_offset = opts.col_offset +| (content_width -| text_width);
+        },
+        .justify, .left => {},
+    }
+
+    return printAligned(element, buffer, segments, aligned_opts, base_x, base_y, content_width, content_height);
+}
+
+fn printAligned(element: *Element, buffer: *Buffer, segments: []const Segment, opts: PrintOptions, base_x: u16, base_y: u16, content_width: u16, content_height: u16) PrintResult {
+    _ = element;
 
     var row = opts.row_offset;
     switch (opts.wrap) {

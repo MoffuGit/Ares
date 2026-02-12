@@ -75,7 +75,8 @@ upper half ▀
 upper five eight 🮄
 upper three quarter 🮅
 upper sevne eight block 🮆
-
+▄▖
+ ▌
 left one eight ▏
 left one quarter ▎
 left three eighths ▍
