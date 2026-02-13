@@ -13,6 +13,7 @@ const Buffer = lib.Buffer;
 const global = @import("../global.zig");
 const Pane = @import("Pane.zig");
 const EditorView = @import("views/EditorView.zig");
+const Dialog = @import("../components/primitives/Dialog.zig");
 
 pub const Project = @import("Project.zig");
 
@@ -41,6 +42,8 @@ tabs: *Tabs,
 panes: std.ArrayList(*Pane) = .{},
 active_pane: ?*Pane = null,
 
+dialog: *Dialog,
+
 pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const workspace = try alloc.create(Workspace);
     errdefer alloc.destroy(workspace);
@@ -56,6 +59,9 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
 
     const center = try alloc.create(Element);
     errdefer alloc.destroy(center);
+
+    const dialog = try Dialog.create(alloc, ctx, .{});
+    errdefer dialog.destroy();
 
     element.* = Element.init(alloc, .{
         .id = "workspace",
@@ -153,12 +159,14 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         .bottom_dock = bottom_dock,
         .tabs = tabs,
         .file_tree = null,
+        .dialog = dialog,
     };
 
     return workspace;
 }
 
 pub fn destroy(self: *Workspace) void {
+    self.dialog.destroy();
     self.left_dock.destroy(self.alloc);
     self.right_dock.destroy(self.alloc);
     self.top_dock.destroy(self.alloc);
