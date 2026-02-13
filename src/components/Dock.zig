@@ -139,10 +139,10 @@ fn draw(element: *Element, buffer: *Buffer) void {
             var row: u16 = 0;
             while (row <= layout.height) : (row += 1) {
                 if (row == 0) {
-                    const alpha: u8 = if (element.hovered or element.dragging) 160 else 80;
+                    const alpha: f32 = if (element.hovered or element.dragging) 0.6 else 0.4;
                     buffer.writeCell(col, layout.top -| 1 + row, .{
                         .char = .{ .grapheme = "▄" },
-                        .style = .{ .fg = .{ .rgba = .{ 40, 113, 180, alpha } }, .bg = theme.bg },
+                        .style = .{ .fg = theme.primaryBg.setAlpha(alpha), .bg = theme.bg },
                     });
 
                     continue;
