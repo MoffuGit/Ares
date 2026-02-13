@@ -55,6 +55,7 @@ pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
                 .margin = .{ .horizontal = .{ .point = 1 } },
                 .flex_shrink = 0,
             },
+            .drawFn = draw,
         }),
         .color_anim = ColorAnim.init(self, colorCallback, .{
             .start = .default,
@@ -65,18 +66,12 @@ pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
         }),
     };
 
-    self.element.setDrawFn(draw);
-
     return self;
 }
 
 pub fn destroy(self: *TopBar, alloc: std.mem.Allocator) void {
     self.element.deinit();
     alloc.destroy(self);
-}
-
-pub fn getElement(self: *TopBar) *Element {
-    return self.element.elem();
 }
 
 fn draw(self: *TopBar, element: *Element, buffer: *Buffer) void {

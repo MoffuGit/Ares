@@ -4,39 +4,86 @@ const AnimationPkg = @import("Animation.zig");
 const BaseAnimation = AnimationPkg.BaseAnimation;
 const Buffer = @import("../../Buffer.zig");
 const HitGrid = @import("../HitGrid.zig");
+const Style = @import("Style.zig");
 const Easing = @import("Easing.zig").Type;
 const apppkg = @import("../../mod.zig");
 const Context = apppkg.Context;
 const Allocator = std.mem.Allocator;
 
-//NOTE:
-//i hate calling setSomething after creating an element,
-//and there is no need to store the owner in here, we should
-//be capable of storing the owner pointer as the userdata
-//for that we should create a comptime Options struct,
-//it would provide the same options that Element Options, only that
-//they would be aware of the Owner Type, then we should make them type erased,
 pub fn TypedElement(comptime Owner: type) type {
     return struct {
         const Self = @This();
 
         base: Element,
-        owner: *Owner,
 
-        pub fn init(alloc: Allocator, owner: *Owner, opts: Element.Options) Self {
-            var o = opts;
-            o.userdata = null;
-            o.drawFn = null;
-            o.hitFn = null;
-            o.updateFn = null;
-            o.beforeDrawFn = null;
-            o.afterDrawFn = null;
-            o.beforeHitFn = null;
-            o.afterHitFn = null;
+        pub const Options = struct {
+            id: ?[]const u8 = null,
+            visible: bool = true,
+            zIndex: usize = 0,
+            style: Style = .{},
+            drawFn: ?*const fn (*Owner, *Element, *Buffer) void = null,
+            beforeDrawFn: ?*const fn (*Owner, *Element, *Buffer) void = null,
+            afterDrawFn: ?*const fn (*Owner, *Element, *Buffer) void = null,
+            hitFn: ?*const fn (*Owner, *Element, *HitGrid) void = null,
+            beforeHitFn: ?*const fn (*Owner, *Element, *HitGrid) void = null,
+            afterHitFn: ?*const fn (*Owner, *Element, *HitGrid) void = null,
+            updateFn: ?*const fn (*Owner, *Element) void = null,
+        };
 
+        pub fn init(alloc: Allocator, owner: *Owner, comptime opts: Options) Self {
             return .{
-                .base = Element.init(alloc, o),
-                .owner = owner,
+                .base = Element.init(alloc, .{
+                    .id = opts.id,
+                    .visible = opts.visible,
+                    .zIndex = opts.zIndex,
+                    .style = opts.style,
+                    .userdata = owner,
+                    .drawFn = if (opts.drawFn) |draw| struct {
+                        fn wrapper(element: *Element, buffer: *Buffer) void {
+                            @call(
+                                .always_inline,
+                                draw,
+                                .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element, buffer },
+                            );
+                        }
+                    }.wrapper else null,
+                    .beforeDrawFn = if (opts.beforeDrawFn) |_| struct {
+                        fn wrapper(element: *Element, buffer: *Buffer) void {
+                            const self: *Owner = @ptrCast(@alignCast(element.userdata));
+                            opts.beforeDrawFn.?(self, element, buffer);
+                        }
+                    }.wrapper else null,
+                    .afterDrawFn = if (opts.afterDrawFn) |_| struct {
+                        fn wrapper(element: *Element, buffer: *Buffer) void {
+                            const self: *Owner = @ptrCast(@alignCast(element.userdata));
+                            opts.afterDrawFn.?(self, element, buffer);
+                        }
+                    }.wrapper else null,
+                    .hitFn = if (opts.hitFn) |_| struct {
+                        fn wrapper(element: *Element, hit_grid: *HitGrid) void {
+                            const self: *Owner = @ptrCast(@alignCast(element.userdata));
+                            opts.hitFn.?(self, element, hit_grid);
+                        }
+                    }.wrapper else null,
+                    .beforeHitFn = if (opts.beforeHitFn) |_| struct {
+                        fn wrapper(element: *Element, hit_grid: *HitGrid) void {
+                            const self: *Owner = @ptrCast(@alignCast(element.userdata));
+                            opts.beforeHitFn.?(self, element, hit_grid);
+                        }
+                    }.wrapper else null,
+                    .afterHitFn = if (opts.afterHitFn) |_| struct {
+                        fn wrapper(element: *Element, hit_grid: *HitGrid) void {
+                            const self: *Owner = @ptrCast(@alignCast(element.userdata));
+                            opts.afterHitFn.?(self, element, hit_grid);
+                        }
+                    }.wrapper else null,
+                    .updateFn = if (opts.updateFn) |_| struct {
+                        fn wrapper(element: *Element) void {
+                            const self: *Owner = @ptrCast(@alignCast(element.userdata));
+                            opts.updateFn.?(self, element);
+                        }
+                    }.wrapper else null,
+                }),
             };
         }
 
@@ -48,78 +95,13 @@ pub fn TypedElement(comptime Owner: type) type {
             return &self.base;
         }
 
-        // ---- Typed callback setters ----
-
-        pub fn setDrawFn(self: *Self, comptime cb: *const fn (*Owner, *Element, *Buffer) void) void {
-            self.base.drawFn = struct {
-                fn wrapper(element: *Element, buffer: *Buffer) void {
-                    const te: *Self = @fieldParentPtr("base", element);
-                    cb(te.owner, element, buffer);
-                }
-            }.wrapper;
-        }
-
-        pub fn setBeforeDrawFn(self: *Self, comptime cb: *const fn (*Owner, *Element, *Buffer) void) void {
-            self.base.beforeDrawFn = struct {
-                fn wrapper(element: *Element, buffer: *Buffer) void {
-                    const te: *Self = @fieldParentPtr("base", element);
-                    cb(te.owner, element, buffer);
-                }
-            }.wrapper;
-        }
-
-        pub fn setAfterDrawFn(self: *Self, comptime cb: *const fn (*Owner, *Element, *Buffer) void) void {
-            self.base.afterDrawFn = struct {
-                fn wrapper(element: *Element, buffer: *Buffer) void {
-                    const te: *Self = @fieldParentPtr("base", element);
-                    cb(te.owner, element, buffer);
-                }
-            }.wrapper;
-        }
-
-        pub fn setHitFn(self: *Self, comptime cb: *const fn (*Owner, *Element, *HitGrid) void) void {
-            self.base.hitFn = struct {
-                fn wrapper(element: *Element, hit_grid: *HitGrid) void {
-                    const te: *Self = @fieldParentPtr("base", element);
-                    cb(te.owner, element, hit_grid);
-                }
-            }.wrapper;
-        }
-
-        pub fn setBeforeHitFn(self: *Self, comptime cb: *const fn (*Owner, *Element, *HitGrid) void) void {
-            self.base.beforeHitFn = struct {
-                fn wrapper(element: *Element, hit_grid: *HitGrid) void {
-                    const te: *Self = @fieldParentPtr("base", element);
-                    cb(te.owner, element, hit_grid);
-                }
-            }.wrapper;
-        }
-
-        pub fn setAfterHitFn(self: *Self, comptime cb: *const fn (*Owner, *Element, *HitGrid) void) void {
-            self.base.afterHitFn = struct {
-                fn wrapper(element: *Element, hit_grid: *HitGrid) void {
-                    const te: *Self = @fieldParentPtr("base", element);
-                    cb(te.owner, element, hit_grid);
-                }
-            }.wrapper;
-        }
-
-        pub fn setUpdateFn(self: *Self, comptime cb: *const fn (*Owner, *Element) void) void {
-            self.base.updateFn = struct {
-                fn wrapper(element: *Element) void {
-                    const te: *Self = @fieldParentPtr("base", element);
-                    cb(te.owner, element);
-                }
-            }.wrapper;
-        }
-
         // ---- Event listeners ----
 
         pub fn on(self: *Self, event_type: Element.EventType, comptime cb: *const fn (*Owner, *Element, Element.EventData) void) !void {
             try self.base.addEventListener(event_type, struct {
                 fn wrapper(element: *Element, data: Element.EventData) void {
-                    const te: *Self = @fieldParentPtr("base", element);
-                    cb(te.owner, element, data);
+                    const o: *Owner = @ptrCast(@alignCast(element.userdata));
+                    cb(o, element, data);
                 }
             }.wrapper);
         }
