@@ -38,49 +38,67 @@ pub fn TypedElement(comptime Owner: type) type {
                     .zIndex = opts.zIndex,
                     .style = opts.style,
                     .userdata = owner,
-                    .drawFn = if (opts.drawFn) |draw| struct {
+                    .drawFn = if (opts.drawFn) |cb| struct {
                         fn wrapper(element: *Element, buffer: *Buffer) void {
                             @call(
                                 .always_inline,
-                                draw,
+                                cb,
                                 .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element, buffer },
                             );
                         }
                     }.wrapper else null,
-                    .beforeDrawFn = if (opts.beforeDrawFn) |_| struct {
+                    .beforeDrawFn = if (opts.beforeDrawFn) |cb| struct {
                         fn wrapper(element: *Element, buffer: *Buffer) void {
-                            const self: *Owner = @ptrCast(@alignCast(element.userdata));
-                            opts.beforeDrawFn.?(self, element, buffer);
+                            @call(
+                                .always_inline,
+                                cb,
+                                .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element, buffer },
+                            );
                         }
                     }.wrapper else null,
-                    .afterDrawFn = if (opts.afterDrawFn) |_| struct {
+                    .afterDrawFn = if (opts.afterDrawFn) |cb| struct {
                         fn wrapper(element: *Element, buffer: *Buffer) void {
-                            const self: *Owner = @ptrCast(@alignCast(element.userdata));
-                            opts.afterDrawFn.?(self, element, buffer);
+                            @call(
+                                .always_inline,
+                                cb,
+                                .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element, buffer },
+                            );
                         }
                     }.wrapper else null,
-                    .hitFn = if (opts.hitFn) |_| struct {
+                    .hitFn = if (opts.hitFn) |cb| struct {
                         fn wrapper(element: *Element, hit_grid: *HitGrid) void {
-                            const self: *Owner = @ptrCast(@alignCast(element.userdata));
-                            opts.hitFn.?(self, element, hit_grid);
+                            @call(
+                                .always_inline,
+                                cb,
+                                .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element, hit_grid },
+                            );
                         }
                     }.wrapper else null,
-                    .beforeHitFn = if (opts.beforeHitFn) |_| struct {
+                    .beforeHitFn = if (opts.beforeHitFn) |cb| struct {
                         fn wrapper(element: *Element, hit_grid: *HitGrid) void {
-                            const self: *Owner = @ptrCast(@alignCast(element.userdata));
-                            opts.beforeHitFn.?(self, element, hit_grid);
+                            @call(
+                                .always_inline,
+                                cb,
+                                .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element, hit_grid },
+                            );
                         }
                     }.wrapper else null,
-                    .afterHitFn = if (opts.afterHitFn) |_| struct {
+                    .afterHitFn = if (opts.afterHitFn) |cb| struct {
                         fn wrapper(element: *Element, hit_grid: *HitGrid) void {
-                            const self: *Owner = @ptrCast(@alignCast(element.userdata));
-                            opts.afterHitFn.?(self, element, hit_grid);
+                            @call(
+                                .always_inline,
+                                cb,
+                                .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element, hit_grid },
+                            );
                         }
                     }.wrapper else null,
-                    .updateFn = if (opts.updateFn) |_| struct {
+                    .updateFn = if (opts.updateFn) |cb| struct {
                         fn wrapper(element: *Element) void {
-                            const self: *Owner = @ptrCast(@alignCast(element.userdata));
-                            opts.updateFn.?(self, element);
+                            @call(
+                                .always_inline,
+                                cb,
+                                .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element },
+                            );
                         }
                     }.wrapper else null,
                 }),
