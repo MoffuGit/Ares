@@ -62,9 +62,14 @@ fn draw(element: *Element, buffer: *Buffer) void {
         .visual => .{ " VISUAL ", .{ .rgba = .{ 180, 120, 220, 255 } } },
     };
 
-    _ = mode_color;
+    _ = mode_text;
 
     _ = element.print(buffer, &.{
-        .{ .text = mode_text, .style = .{ .bg = theme.mutedBg, .fg = theme.mutedFg, .bold = true } },
-    }, .{});
+        .{ .text = "▁▁▁▁▁▁", .style = .{
+            .bg = self.settings.theme.bg,
+            .fg = mode_color,
+        } },
+    }, .{
+        .col_offset = 1,
+    });
 }
