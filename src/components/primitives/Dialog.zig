@@ -51,6 +51,8 @@ pub fn create(alloc: Allocator, ctx: *Context, opts: Options) !*Dialog {
         .portal = portal,
     };
 
+    portal.element.elem().hide();
+
     return dialog;
 }
 
