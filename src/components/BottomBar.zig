@@ -65,7 +65,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
     _ = mode_text;
 
     _ = element.print(buffer, &.{
-        .{ .text = "▁▁▁▁▁▁", .style = .{
+        .{ .text = "──────", .style = .{
             .bg = self.settings.theme.bg,
             .fg = mode_color,
         } },
