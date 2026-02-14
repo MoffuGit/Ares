@@ -60,7 +60,17 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const center = try alloc.create(Element);
     errdefer alloc.destroy(center);
 
-    const dialog = try Dialog.create(alloc, ctx, .{});
+    const dialog = try Dialog.create(
+        alloc,
+        ctx,
+        .{
+            .box = .{
+                .style = .{ .width = .{ .percent = 33 }, .height = .{ .percent = 33 }, .align_self = .center },
+                .bg = .{ .rgba = .{ 255, 0, 0, 255 } },
+                .fg = .{ .rgba = .{ 255, 0, 0, 255 } },
+            },
+        },
+    );
     errdefer dialog.destroy();
 
     element.* = Element.init(alloc, .{
@@ -365,7 +375,8 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
         element.context.?.requestDraw();
     }
 
-    // if (key_data.key.matches('k', .{ .super = true })) {
-    //     self.dialog.portal.element.elem().show();
-    // }
+    if (key_data.key.matches('k', .{ .super = true })) {
+        self.dialog.toggleShow();
+        element.context.?.requestDraw();
+    }
 }

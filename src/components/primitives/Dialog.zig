@@ -19,6 +19,7 @@ portal: *Portal,
 
 const Options = struct {
     portal: Portal.Options = .{},
+    box: Box.Options = .{},
     style: Element.Style = .{},
 };
 
@@ -26,15 +27,7 @@ pub fn create(alloc: Allocator, ctx: *Context, opts: Options) !*Dialog {
     const portal = try Portal.create(alloc, opts.portal);
     errdefer portal.destroy();
 
-    const box = try Box.init(alloc, .{
-        .style = .{
-            .width = .{ .percent = 33 },
-            .height = .{ .percent = 33 },
-            .align_self = .center,
-        },
-        .bg = .{ .rgba = .{ 255, 0, 0, 255 } },
-        .fg = .{ .rgba = .{ 255, 0, 0, 255 } },
-    });
+    const box = try Box.init(alloc, opts.box);
     errdefer box.deinit(alloc);
 
     try portal.element.childs(.{&box.element});
@@ -54,9 +47,17 @@ pub fn create(alloc: Allocator, ctx: *Context, opts: Options) !*Dialog {
         .portal = portal,
     };
 
-    // portal.element.elem().hide();
+    dialog.toggleShow();
 
     return dialog;
+}
+
+pub fn toggleShow(self: *Dialog) void {
+    if (self.portal.element.elem().visible) {
+        self.portal.element.elem().hide();
+    } else {
+        self.portal.element.elem().show();
+    }
 }
 
 pub fn destroy(self: *Dialog) void {
