@@ -108,6 +108,8 @@ pub fn init(alloc: Allocator, opts: Options) !*Box {
 
     self.* = .{
         .element = TE.init(alloc, self, .{
+            .drawFn = draw,
+        }, .{
             .id = opts.id,
             .visible = opts.visible,
             .zIndex = opts.zIndex,
@@ -120,8 +122,6 @@ pub fn init(alloc: Allocator, opts: Options) !*Box {
         .rounded = opts.rounded,
         .border = opts.border,
     };
-
-    self.element.setDrawFn(draw);
 
     return self;
 }

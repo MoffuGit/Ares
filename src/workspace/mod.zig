@@ -364,4 +364,8 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
         key_data.ctx.stopPropagation();
         element.context.?.requestDraw();
     }
+
+    // if (key_data.key.matches('k', .{ .super = true })) {
+    //     self.dialog.portal.element.elem().show();
+    // }
 }

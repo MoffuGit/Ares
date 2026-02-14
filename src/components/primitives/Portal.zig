@@ -35,14 +35,16 @@ pub fn create(alloc: Allocator, opts: Options) !*Portal {
     portal.* = .{
         .alloc = alloc,
         .element = PortalElement.init(alloc, portal, .{
+            .drawFn = draw,
+            .hitFn = hit,
+        }, .{
             .style = .{
                 .width = .{ .percent = 100 },
                 .height = .{ .percent = 100 },
                 .position_type = .absolute,
-                .position = .{ .left = .{ .point = 0 }, .top = .{ .point = 0 } },
+                .align_self = .center,
             },
-            .drawFn = draw,
-            .hitFn = hit,
+            .zIndex = 10,
         }),
         .backdrop = opts.backdrop,
     };

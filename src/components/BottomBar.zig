@@ -70,6 +70,6 @@ fn draw(element: *Element, buffer: *Buffer) void {
             .fg = mode_color,
         } },
     }, .{
-        .col_offset = 1,
+        .col_offset = 2,
     });
 }

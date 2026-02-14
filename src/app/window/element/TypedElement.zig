@@ -16,11 +16,7 @@ pub fn TypedElement(comptime Owner: type) type {
 
         base: Element,
 
-        pub const Options = struct {
-            id: ?[]const u8 = null,
-            visible: bool = true,
-            zIndex: usize = 0,
-            style: Style = .{},
+        pub const Callbacks = struct {
             drawFn: ?*const fn (*Owner, *Element, *Buffer) void = null,
             beforeDrawFn: ?*const fn (*Owner, *Element, *Buffer) void = null,
             afterDrawFn: ?*const fn (*Owner, *Element, *Buffer) void = null,
@@ -30,7 +26,14 @@ pub fn TypedElement(comptime Owner: type) type {
             updateFn: ?*const fn (*Owner, *Element) void = null,
         };
 
-        pub fn init(alloc: Allocator, owner: *Owner, comptime opts: Options) Self {
+        pub const Options = struct {
+            id: ?[]const u8 = null,
+            visible: bool = true,
+            zIndex: usize = 0,
+            style: Style = .{},
+        };
+
+        pub fn init(alloc: Allocator, owner: *Owner, comptime cbs: Callbacks, opts: Options) Self {
             return .{
                 .base = Element.init(alloc, .{
                     .id = opts.id,
@@ -38,7 +41,7 @@ pub fn TypedElement(comptime Owner: type) type {
                     .zIndex = opts.zIndex,
                     .style = opts.style,
                     .userdata = owner,
-                    .drawFn = if (opts.drawFn) |cb| struct {
+                    .drawFn = if (cbs.drawFn) |cb| (struct {
                         fn wrapper(element: *Element, buffer: *Buffer) void {
                             @call(
                                 .always_inline,
@@ -46,8 +49,8 @@ pub fn TypedElement(comptime Owner: type) type {
                                 .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element, buffer },
                             );
                         }
-                    }.wrapper else null,
-                    .beforeDrawFn = if (opts.beforeDrawFn) |cb| struct {
+                    }.wrapper) else null,
+                    .beforeDrawFn = if (cbs.beforeDrawFn) |cb| (struct {
                         fn wrapper(element: *Element, buffer: *Buffer) void {
                             @call(
                                 .always_inline,
@@ -55,8 +58,8 @@ pub fn TypedElement(comptime Owner: type) type {
                                 .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element, buffer },
                             );
                         }
-                    }.wrapper else null,
-                    .afterDrawFn = if (opts.afterDrawFn) |cb| struct {
+                    }.wrapper) else null,
+                    .afterDrawFn = if (cbs.afterDrawFn) |cb| (struct {
                         fn wrapper(element: *Element, buffer: *Buffer) void {
                             @call(
                                 .always_inline,
@@ -64,8 +67,8 @@ pub fn TypedElement(comptime Owner: type) type {
                                 .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element, buffer },
                             );
                         }
-                    }.wrapper else null,
-                    .hitFn = if (opts.hitFn) |cb| struct {
+                    }.wrapper) else null,
+                    .hitFn = if (cbs.hitFn) |cb| (struct {
                         fn wrapper(element: *Element, hit_grid: *HitGrid) void {
                             @call(
                                 .always_inline,
@@ -73,8 +76,8 @@ pub fn TypedElement(comptime Owner: type) type {
                                 .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element, hit_grid },
                             );
                         }
-                    }.wrapper else null,
-                    .beforeHitFn = if (opts.beforeHitFn) |cb| struct {
+                    }.wrapper) else null,
+                    .beforeHitFn = if (cbs.beforeHitFn) |cb| (struct {
                         fn wrapper(element: *Element, hit_grid: *HitGrid) void {
                             @call(
                                 .always_inline,
@@ -82,8 +85,8 @@ pub fn TypedElement(comptime Owner: type) type {
                                 .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element, hit_grid },
                             );
                         }
-                    }.wrapper else null,
-                    .afterHitFn = if (opts.afterHitFn) |cb| struct {
+                    }.wrapper) else null,
+                    .afterHitFn = if (cbs.afterHitFn) |cb| (struct {
                         fn wrapper(element: *Element, hit_grid: *HitGrid) void {
                             @call(
                                 .always_inline,
@@ -91,8 +94,8 @@ pub fn TypedElement(comptime Owner: type) type {
                                 .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element, hit_grid },
                             );
                         }
-                    }.wrapper else null,
-                    .updateFn = if (opts.updateFn) |cb| struct {
+                    }.wrapper) else null,
+                    .updateFn = if (cbs.updateFn) |cb| (struct {
                         fn wrapper(element: *Element) void {
                             @call(
                                 .always_inline,
@@ -100,7 +103,7 @@ pub fn TypedElement(comptime Owner: type) type {
                                 .{ @as(*Owner, @ptrCast(@alignCast(element.userdata orelse return))), element },
                             );
                         }
-                    }.wrapper else null,
+                    }.wrapper) else null,
                 }),
             };
         }

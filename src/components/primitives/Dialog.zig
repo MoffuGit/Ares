@@ -32,10 +32,12 @@ pub fn create(alloc: Allocator, ctx: *Context, opts: Options) !*Dialog {
             .height = .{ .percent = 33 },
             .align_self = .center,
         },
+        .bg = .{ .rgba = .{ 255, 0, 0, 255 } },
+        .fg = .{ .rgba = .{ 255, 0, 0, 255 } },
     });
     errdefer box.deinit(alloc);
 
-    portal.element.childs(.{box.element});
+    try portal.element.childs(.{&box.element});
 
     const dialog = try alloc.create(Dialog);
     errdefer alloc.destroy(dialog);
@@ -47,11 +49,12 @@ pub fn create(alloc: Allocator, ctx: *Context, opts: Options) !*Dialog {
     errdefer root.removeChild(element);
 
     dialog.* = .{
+        .alloc = alloc,
         .box = box,
         .portal = portal,
     };
 
-    portal.element.elem().hide();
+    // portal.element.elem().hide();
 
     return dialog;
 }
@@ -59,4 +62,5 @@ pub fn create(alloc: Allocator, ctx: *Context, opts: Options) !*Dialog {
 pub fn destroy(self: *Dialog) void {
     self.portal.destroy();
     self.box.deinit(self.alloc);
+    self.alloc.destroy(self);
 }

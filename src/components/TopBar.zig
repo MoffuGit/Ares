@@ -48,6 +48,8 @@ pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
         .workspace = workspace,
         .settings = global.settings,
         .element = TE.init(alloc, self, .{
+            .drawFn = draw,
+        }, .{
             .id = "top-bar",
             .style = .{
                 .width = .stretch,
@@ -55,7 +57,6 @@ pub fn create(alloc: std.mem.Allocator, workspace: *Workspace) !*TopBar {
                 .margin = .{ .horizontal = .{ .point = 1 } },
                 .flex_shrink = 0,
             },
-            .drawFn = draw,
         }),
         .color_anim = ColorAnim.init(self, colorCallback, .{
             .start = .default,
