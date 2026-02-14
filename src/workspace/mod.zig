@@ -241,6 +241,19 @@ pub fn openProject(self: *Workspace, abs_path: []const u8) !void {
         project.destroy(self.alloc);
     }
     self.project = try Project.create(self.alloc, abs_path, self.ctx);
+
+    const editor = EditorView.create(self.alloc, self.project.?) catch return;
+    const pane = Pane.create(self.alloc, self.project.?, .{ .editor = editor }) catch return;
+
+    self.panes.append(self.alloc, pane) catch return;
+
+    const tab = self.tabs.newTab(.{ .userdata = pane }) catch return;
+    self.tabs.select(tab.id);
+
+    tab.content.addChild(pane.element) catch return;
+
+    self.active_pane = pane;
+
     const ft = try FileTree.create(self.alloc, self.project.?, self, self.ctx);
     self.file_tree = ft;
     try self.left_dock.element.addChild(ft.getElement());
@@ -258,6 +271,7 @@ pub fn closeProject(self: *Workspace) void {
 }
 
 pub fn closeActiveTab(self: *Workspace) void {
+    if (self.tabs.inner.values.items.len == 1) return;
     const selected_id = self.tabs.inner.selected orelse return;
     const index = self.tabs.inner.indexOf(selected_id) orelse return;
     const tab = self.tabs.inner.values.items[index];
