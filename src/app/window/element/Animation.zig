@@ -7,6 +7,8 @@ const Easing = @import("Easing.zig").Type;
 
 const apppkg = @import("../../mod.zig");
 const Context = apppkg.Context;
+//NOTE:
+//thre are problem with some math
 
 pub const BaseAnimation = struct {
     id: u64 = 0,

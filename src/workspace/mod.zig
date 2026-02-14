@@ -72,8 +72,9 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
                         .top = .{ .percent = -20 },
                     },
                 },
+                .rounded = 8,
                 .bg = .{ .rgba = .{ 255, 0, 0, 255 } },
-                .fg = .{ .rgba = .{ 255, 0, 0, 255 } },
+                .fg = .{ .rgba = .{ 0, 255, 0, 255 } },
             },
         },
     );

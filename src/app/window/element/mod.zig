@@ -295,7 +295,7 @@ pub fn fillRounded(element: *Element, buffer: *Buffer, color: vaxis.Color, radiu
                     }
                 }
 
-                buffer.writeCell(curr_x_cell, curr_y_cell, .{ .char = .{ .grapheme = new_char }, .style = .{ .fg = color } });
+                buffer.writeCell(curr_x_cell, curr_y_cell, .{ .char = .{ .grapheme = new_char }, .style = .{ .fg = color, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } } });
             }
         }
     }
