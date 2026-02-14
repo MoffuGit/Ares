@@ -37,7 +37,6 @@ fn onOpacityUpdate(userdata: ?*anyopaque, state: f32, ctx: *Context) void {
     const self: *Dialog = @ptrCast(@alignCast(userdata orelse return));
     self.opacity = state;
     self.box.bg = self.box.bg.setAlpha(state);
-    self.box.fg = self.box.fg.setAlpha(state);
     ctx.requestDraw();
 }
 
@@ -69,7 +68,7 @@ pub fn create(alloc: Allocator, ctx: *Context, opts: Options) !*Dialog {
         .opacity_anim = OpacityAnim.init(.{
             .start = 0.0,
             .end = 1.0,
-            .duration_us = 120_000,
+            .duration_us = 100_000,
             .updateFn = lerpF32,
             .callback = onOpacityUpdate,
             .userdata = dialog,
