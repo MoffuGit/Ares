@@ -19,6 +19,7 @@ text_align: Element.TextAlign = .left,
 rounded: ?f32 = null,
 border: ?Border = null,
 shadow: ?Shadow = null,
+opacity: f32 = 1.0,
 
 pub const Shadow = struct {
     color: vaxis.Color = .{ .rgba = .{ 0, 0, 0, 64 } },
@@ -148,9 +149,10 @@ pub fn elem(self: *Box) *Element {
 
 fn draw(self: *Box, element: *Element, buffer: *Buffer) void {
     const layout = element.layout;
+    const opacity = self.opacity;
 
     if (self.shadow) |shadow| {
-        const initial_alpha = shadow.color.alpha();
+        const initial_alpha = shadow.color.alpha() * opacity;
         if (initial_alpha > 0.0) {
             const sx: i32 = @as(i32, layout.left) + shadow.offset_x - @as(i32, shadow.spread);
             const sy: i32 = @as(i32, layout.top) + shadow.offset_y - @as(i32, shadow.spread);
@@ -197,10 +199,13 @@ fn draw(self: *Box, element: *Element, buffer: *Buffer) void {
         }
     }
 
+    const bg = self.bg.setAlpha(self.bg.alpha() * opacity);
+    const fg = self.fg.setAlpha(self.fg.alpha() * opacity);
+
     if (self.rounded) |radius| {
-        element.fillRounded(buffer, self.bg, radius);
+        element.fillRounded(buffer, bg, radius);
     } else {
-        element.fill(buffer, .{ .style = .{ .bg = self.bg, .fg = self.fg } });
+        element.fill(buffer, .{ .style = .{ .bg = bg, .fg = fg } });
     }
 
     if (self.border) |border| {
@@ -214,7 +219,10 @@ fn draw(self: *Box, element: *Element, buffer: *Buffer) void {
         const w = layout.width;
         const h = layout.height;
 
-        const border_style: vaxis.Style = .{ .fg = border.fg, .bg = border.bg };
+        const border_style: vaxis.Style = .{
+            .fg = border.fg.setAlpha(border.fg.alpha() * opacity),
+            .bg = border.bg.setAlpha(border.bg.alpha() * opacity),
+        };
 
         // top edge
         if (bt > 0) {

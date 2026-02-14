@@ -22,6 +22,7 @@ const Backdrop = struct {
 alloc: Allocator,
 element: PortalElement,
 backdrop: Backdrop,
+opacity: f32 = 1.0,
 
 pub const Options = struct {
     backdrop: Backdrop = .{},
@@ -76,7 +77,10 @@ pub fn draw(portal: *Portal, element: *Element, buffer: *Buffer) void {
         element.fill(
             buffer,
             .{
-                .style = .{ .bg = portal.backdrop.bg, .fg = portal.backdrop.fg },
+                .style = .{
+                    .bg = portal.backdrop.bg.setAlpha(portal.backdrop.bg.alpha() * portal.opacity),
+                    .fg = portal.backdrop.fg.setAlpha(portal.backdrop.fg.alpha() * portal.opacity),
+                },
             },
         );
     }
