@@ -35,6 +35,14 @@ fn lerpF32(start: f32, end: f32, progress: f32) f32 {
 
 fn onOpacityUpdate(userdata: ?*anyopaque, state: f32, ctx: *Context) void {
     const self: *Dialog = @ptrCast(@alignCast(userdata orelse return));
+    if (self.box.border) |*border| {
+        border.color = border.color.setAlpha(state);
+    }
+    if (self.opacity_anim.end == 0.0) {
+        if (self.box.border) |*border| {
+            border.color = border.color.setAlpha(0);
+        }
+    }
     self.opacity = state;
     self.box.bg = self.box.bg.setAlpha(state);
     ctx.requestDraw();

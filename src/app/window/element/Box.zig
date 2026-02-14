@@ -28,7 +28,7 @@ pub const Shadow = struct {
     opacity: f32 = 0.1,
 };
 
-pub const Border = struct {
+pub const BorderKind = struct {
     top: []const u8 = "─",
     bottom: []const u8 = "─",
     left: []const u8 = "│",
@@ -37,19 +37,17 @@ pub const Border = struct {
     top_right: []const u8 = "┐",
     bottom_left: []const u8 = "└",
     bottom_right: []const u8 = "┘",
-    fg: vaxis.Color = .default,
-    bg: vaxis.Color = .default,
 
-    pub const single = Border{};
+    pub const single = BorderKind{};
 
-    pub const rounded = Border{
+    pub const rounded = BorderKind{
         .top_left = "╭",
         .top_right = "╮",
         .bottom_left = "╰",
         .bottom_right = "╯",
     };
 
-    pub const double = Border{
+    pub const double = BorderKind{
         .top = "═",
         .bottom = "═",
         .left = "║",
@@ -60,7 +58,7 @@ pub const Border = struct {
         .bottom_right = "╝",
     };
 
-    pub const heavy = Border{
+    pub const heavy = BorderKind{
         .top = "━",
         .bottom = "━",
         .left = "┃",
@@ -71,7 +69,18 @@ pub const Border = struct {
         .bottom_right = "┛",
     };
 
-    pub const block = Border{
+    pub const thin_block = BorderKind{
+        .top = "▔",
+        .bottom = "▁",
+        .left = "🮇",
+        .right = "▎",
+        .top_left = "🮇",
+        .top_right = "▎",
+        .bottom_left = "🮇",
+        .bottom_right = "▎",
+    };
+
+    pub const block = BorderKind{
         .top = "▄",
         .bottom = "▀",
         .left = "▐",
@@ -81,6 +90,69 @@ pub const Border = struct {
         .bottom_left = "▝",
         .bottom_right = "▘",
     };
+};
+
+pub const BorderColor = union(enum) {
+    all: Color,
+    sides: Sides,
+    axes: Axes,
+
+    pub const Color = struct {
+        fg: vaxis.Color = .default,
+        bg: vaxis.Color = .default,
+    };
+
+    pub const Sides = struct {
+        top: Color = .{},
+        bottom: Color = .{},
+        left: Color = .{},
+        right: Color = .{},
+    };
+
+    pub const Axes = struct {
+        vertical: Color = .{},
+        horizontal: Color = .{},
+    };
+
+    pub fn setAlpha(self: BorderColor, a: f32) BorderColor {
+        return switch (self) {
+            .all => |c| .{ .all = .{
+                .fg = c.fg.setAlpha(a),
+                .bg = c.bg.setAlpha(a),
+            } },
+            .sides => |s| .{ .sides = .{
+                .top = .{ .fg = s.top.fg.setAlpha(a), .bg = s.top.bg.setAlpha(a) },
+                .bottom = .{ .fg = s.bottom.fg.setAlpha(a), .bg = s.bottom.bg.setAlpha(a) },
+                .left = .{ .fg = s.left.fg.setAlpha(a), .bg = s.left.bg.setAlpha(a) },
+                .right = .{ .fg = s.right.fg.setAlpha(a), .bg = s.right.bg.setAlpha(a) },
+            } },
+            .axes => |ax| .{ .axes = .{
+                .vertical = .{ .fg = ax.vertical.fg.setAlpha(a), .bg = ax.vertical.bg.setAlpha(a) },
+                .horizontal = .{ .fg = ax.horizontal.fg.setAlpha(a), .bg = ax.horizontal.bg.setAlpha(a) },
+            } },
+        };
+    }
+
+    pub fn styleFor(self: BorderColor, edge: enum { top, bottom, left, right }) vaxis.Style {
+        return switch (self) {
+            .all => |c| .{ .fg = c.fg, .bg = c.bg },
+            .sides => |s| switch (edge) {
+                .top => .{ .fg = s.top.fg, .bg = s.top.bg },
+                .bottom => .{ .fg = s.bottom.fg, .bg = s.bottom.bg },
+                .left => .{ .fg = s.left.fg, .bg = s.left.bg },
+                .right => .{ .fg = s.right.fg, .bg = s.right.bg },
+            },
+            .axes => |a| switch (edge) {
+                .top, .bottom => .{ .fg = a.horizontal.fg, .bg = a.horizontal.bg },
+                .left, .right => .{ .fg = a.vertical.fg, .bg = a.vertical.bg },
+            },
+        };
+    }
+};
+
+pub const Border = struct {
+    kind: BorderKind = .{},
+    color: BorderColor = .{ .all = .{} },
 };
 
 pub const Options = struct {
@@ -197,11 +269,17 @@ fn draw(self: *Box, element: *Element, buffer: *Buffer) void {
         }
     }
 
-    const bg = self.bg.setAlpha(self.bg.alpha());
-    const fg = self.fg.setAlpha(self.fg.alpha());
+    const bg = self.bg;
+    const fg = self.fg;
 
     if (self.rounded) |radius| {
         element.fillRounded(buffer, bg, radius);
+    } else if (self.border != null) {
+        const bl = layout.border.left;
+        const bt = layout.border.top;
+        const br = layout.border.right;
+        const bb = layout.border.bottom;
+        buffer.fillRect(layout.left + bl, layout.top + bt, layout.width -| bl -| br, layout.height -| bt -| bb, .{ .style = .{ .bg = bg, .fg = fg } });
     } else {
         element.fill(buffer, .{ .style = .{ .bg = bg, .fg = fg } });
     }
@@ -217,55 +295,57 @@ fn draw(self: *Box, element: *Element, buffer: *Buffer) void {
         const w = layout.width;
         const h = layout.height;
 
-        const border_style: vaxis.Style = .{
-            .fg = border.fg.setAlpha(border.fg.alpha()),
-            .bg = border.bg.setAlpha(border.bg.alpha()),
-        };
+        const kind = border.kind;
+        const color = border.color;
 
         // top edge
         if (bt > 0) {
+            const style = color.styleFor(.top);
             var col: u16 = bl;
             while (col < w -| br) : (col += 1) {
-                buffer.writeCell(l + col, t, .{ .char = .{ .grapheme = border.top }, .style = border_style });
+                buffer.writeCell(l + col, t, .{ .char = .{ .grapheme = kind.top }, .style = style });
             }
         }
 
         // bottom edge
         if (bb > 0 and h > bt) {
+            const style = color.styleFor(.bottom);
             var col: u16 = bl;
             while (col < w -| br) : (col += 1) {
-                buffer.writeCell(l + col, t + h -| 1, .{ .char = .{ .grapheme = border.bottom }, .style = border_style });
+                buffer.writeCell(l + col, t + h -| 1, .{ .char = .{ .grapheme = kind.bottom }, .style = style });
             }
         }
 
         // left edge
         if (bl > 0) {
+            const style = color.styleFor(.left);
             var row: u16 = bt;
             while (row < h -| bb) : (row += 1) {
-                buffer.writeCell(l, t + row, .{ .char = .{ .grapheme = border.left }, .style = border_style });
+                buffer.writeCell(l, t + row, .{ .char = .{ .grapheme = kind.left }, .style = style });
             }
         }
 
         // right edge
         if (br > 0 and w > bl) {
+            const style = color.styleFor(.right);
             var row: u16 = bt;
             while (row < h -| bb) : (row += 1) {
-                buffer.writeCell(l + w -| 1, t + row, .{ .char = .{ .grapheme = border.right }, .style = border_style });
+                buffer.writeCell(l + w -| 1, t + row, .{ .char = .{ .grapheme = kind.right }, .style = style });
             }
         }
 
         // corners
         if (bt > 0 and bl > 0) {
-            buffer.writeCell(l, t, .{ .char = .{ .grapheme = border.top_left }, .style = border_style });
+            buffer.writeCell(l, t, .{ .char = .{ .grapheme = kind.top_left }, .style = color.styleFor(.left) });
         }
         if (bt > 0 and br > 0 and w > 1) {
-            buffer.writeCell(l + w -| 1, t, .{ .char = .{ .grapheme = border.top_right }, .style = border_style });
+            buffer.writeCell(l + w -| 1, t, .{ .char = .{ .grapheme = kind.top_right }, .style = color.styleFor(.right) });
         }
         if (bb > 0 and bl > 0 and h > 1) {
-            buffer.writeCell(l, t + h -| 1, .{ .char = .{ .grapheme = border.bottom_left }, .style = border_style });
+            buffer.writeCell(l, t + h -| 1, .{ .char = .{ .grapheme = kind.bottom_left }, .style = color.styleFor(.left) });
         }
         if (bb > 0 and br > 0 and w > 1 and h > 1) {
-            buffer.writeCell(l + w -| 1, t + h -| 1, .{ .char = .{ .grapheme = border.bottom_right }, .style = border_style });
+            buffer.writeCell(l + w -| 1, t + h -| 1, .{ .char = .{ .grapheme = kind.bottom_right }, .style = color.styleFor(.right) });
         }
     }
 

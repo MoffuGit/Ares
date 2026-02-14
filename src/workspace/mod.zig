@@ -13,7 +13,7 @@ const Buffer = lib.Buffer;
 const global = @import("../global.zig");
 const Pane = @import("Pane.zig");
 const EditorView = @import("views/EditorView.zig");
-const Dialog = @import("../components/styled/Dialog.zig");
+const Command = @import("../components/Command.zig");
 
 pub const Project = @import("Project.zig");
 
@@ -42,7 +42,7 @@ tabs: *Tabs,
 panes: std.ArrayList(*Pane) = .{},
 active_pane: ?*Pane = null,
 
-dialog: *Dialog,
+command: *Command,
 
 pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const workspace = try alloc.create(Workspace);
@@ -60,24 +60,8 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
     const center = try alloc.create(Element);
     errdefer alloc.destroy(center);
 
-    const dialog = try Dialog.create(
-        alloc,
-        ctx,
-        .{
-            .box = .{
-                .style = .{
-                    .width = .{ .point = 75 },
-                    .height = .{ .point = 25 },
-                    .position = .{
-                        .top = .{ .point = -18 },
-                    },
-                },
-                .bg = .{ .rgba = .{ 0, 0, 0, 255 } },
-                .fg = .{ .rgba = .{ 0, 0, 0, 0 } },
-            },
-        },
-    );
-    errdefer dialog.destroy();
+    const command = try Command.create(alloc, ctx);
+    errdefer command.destroy();
 
     element.* = Element.init(alloc, .{
         .id = "workspace",
@@ -175,14 +159,14 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         .bottom_dock = bottom_dock,
         .tabs = tabs,
         .file_tree = null,
-        .dialog = dialog,
+        .command = command,
     };
 
     return workspace;
 }
 
 pub fn destroy(self: *Workspace) void {
-    self.dialog.destroy();
+    self.command.destroy();
     self.left_dock.destroy(self.alloc);
     self.right_dock.destroy(self.alloc);
     self.top_dock.destroy(self.alloc);
@@ -396,7 +380,7 @@ fn onKeyPress(element: *Element, data: Element.EventData) void {
     }
 
     if (key_data.key.matches('k', .{ .super = true })) {
-        self.dialog.toggleShow();
+        self.command.toggleShow();
         element.context.?.requestDraw();
     }
 }

@@ -117,6 +117,6 @@ fn draw(self: *TopBar, element: *Element, buffer: *Buffer) void {
         }
     }
     buffer.fillRect(element.layout.left -| 1, element.layout.top + 1, element.layout.width + 2, 1, .{ .char = .{
-        .grapheme = "▀",
-    }, .style = .{ .bg = self.settings.theme.mutedBg, .fg = self.settings.theme.bg } });
+        .grapheme = "▄",
+    }, .style = .{ .fg = self.settings.theme.mutedBg, .bg = self.settings.theme.bg } });
 }
