@@ -26,6 +26,7 @@ backdrop: Backdrop,
 pub const Options = struct {
     backdrop: Backdrop = .{},
     zIndex: usize = 0,
+    parent: *Element = undefined,
 };
 
 pub fn create(alloc: Allocator, opts: Options) !*Portal {
@@ -49,7 +50,20 @@ pub fn create(alloc: Allocator, opts: Options) !*Portal {
         .backdrop = opts.backdrop,
     };
 
+    const elem = portal.element.elem();
+    try opts.parent.addChild(elem);
+    errdefer opts.parent.removeChild(elem.num);
+
     return portal;
+}
+
+pub fn toggleShow(self: *Portal) void {
+    const elem = self.element.elem();
+    if (elem.visible) {
+        elem.hide();
+    } else {
+        elem.show();
+    }
 }
 
 pub fn destroy(self: *Portal) void {

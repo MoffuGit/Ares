@@ -7,7 +7,7 @@ const Element = lib.Element;
 const Buffer = lib.Buffer;
 const Workspace = lib.Workspace;
 const Context = lib.App.Context;
-const Portal = @import("Portal.zig");
+const Portal = @import("../primitives/Portal.zig");
 const Box = Element.Box;
 const Allocator = std.mem.Allocator;
 
@@ -24,7 +24,10 @@ const Options = struct {
 };
 
 pub fn create(alloc: Allocator, ctx: *Context, opts: Options) !*Dialog {
-    const portal = try Portal.create(alloc, opts.portal);
+    var portal_opts = opts.portal;
+    portal_opts.parent = ctx.app.root();
+
+    const portal = try Portal.create(alloc, portal_opts);
     errdefer portal.destroy();
 
     const box = try Box.init(alloc, opts.box);
@@ -34,12 +37,6 @@ pub fn create(alloc: Allocator, ctx: *Context, opts: Options) !*Dialog {
 
     const dialog = try alloc.create(Dialog);
     errdefer alloc.destroy(dialog);
-
-    const root = ctx.app.root();
-
-    const element = portal.element.elem();
-    try root.addChild(element);
-    errdefer root.removeChild(element);
 
     dialog.* = .{
         .alloc = alloc,
@@ -53,11 +50,7 @@ pub fn create(alloc: Allocator, ctx: *Context, opts: Options) !*Dialog {
 }
 
 pub fn toggleShow(self: *Dialog) void {
-    if (self.portal.element.elem().visible) {
-        self.portal.element.elem().hide();
-    } else {
-        self.portal.element.elem().show();
-    }
+    self.portal.toggleShow();
 }
 
 pub fn destroy(self: *Dialog) void {

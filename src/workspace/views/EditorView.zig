@@ -32,7 +32,7 @@ pub fn draw(self: *EditorView, element: *Element, buffer: *Buffer) void {
                 },
                 .ready => {
                     if (entry_buffer.bytes()) |bytes| {
-                        _ = element.print(buffer, &.{.{ .text = bytes }}, .{});
+                        _ = element.print(buffer, &.{.{ .text = bytes, .style = .{ .bg = .{ .rgba = .{ 0, 0, 0, 0 } } } }}, .{});
                     }
                 },
                 else => {},

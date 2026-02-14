@@ -13,7 +13,7 @@ const Buffer = lib.Buffer;
 const global = @import("../global.zig");
 const Pane = @import("Pane.zig");
 const EditorView = @import("views/EditorView.zig");
-const Dialog = @import("../components/primitives/Dialog.zig");
+const Dialog = @import("../components/styled/Dialog.zig");
 
 pub const Project = @import("Project.zig");
 

@@ -18,6 +18,15 @@ segments: ?[]const Element.Segment = null,
 text_align: Element.TextAlign = .left,
 rounded: ?f32 = null,
 border: ?Border = null,
+shadow: ?Shadow = null,
+
+pub const Shadow = struct {
+    color: vaxis.Color = .{ .rgba = .{ 0, 0, 0, 64 } },
+    offset_x: i16 = 1,
+    offset_y: i16 = 1,
+    spread: u16 = 0,
+    opacity: f32 = 0.1,
+};
 
 pub const Border = struct {
     top: []const u8 = "─",
@@ -85,6 +94,7 @@ pub const Options = struct {
     text_align: Element.TextAlign = .left,
     rounded: ?f32 = null,
     border: ?Border = null,
+    shadow: ?Shadow = null,
 };
 
 pub fn init(alloc: Allocator, opts: Options) !*Box {
@@ -121,6 +131,7 @@ pub fn init(alloc: Allocator, opts: Options) !*Box {
         .text_align = opts.text_align,
         .rounded = opts.rounded,
         .border = opts.border,
+        .shadow = opts.shadow,
     };
 
     return self;
@@ -137,6 +148,54 @@ pub fn elem(self: *Box) *Element {
 
 fn draw(self: *Box, element: *Element, buffer: *Buffer) void {
     const layout = element.layout;
+
+    if (self.shadow) |shadow| {
+        const initial_alpha = shadow.color.alpha();
+        if (initial_alpha > 0.0) {
+            const sx: i32 = @as(i32, layout.left) + shadow.offset_x - @as(i32, shadow.spread);
+            const sy: i32 = @as(i32, layout.top) + shadow.offset_y - @as(i32, shadow.spread);
+            const sw: u16 = layout.width +| shadow.spread *| 2;
+            const sh: u16 = layout.height +| shadow.spread *| 2;
+
+            const inner_left: i32 = @as(i32, layout.left) + shadow.offset_x;
+            const inner_top: i32 = @as(i32, layout.top) + shadow.offset_y;
+            const inner_right: i32 = inner_left + @as(i32, layout.width);
+            const inner_bottom: i32 = inner_top + @as(i32, layout.height);
+
+            var py: u16 = 0;
+            while (py < sh) : (py += 1) {
+                const row: i32 = sy + py;
+                if (row < 0 or row >= buffer.height) continue;
+                var px: u16 = 0;
+                while (px < sw) : (px += 1) {
+                    const col: i32 = sx + px;
+                    if (col < 0 or col >= buffer.width) continue;
+
+                    const dx: u16 = if (col < inner_left)
+                        @intCast(inner_left - col)
+                    else if (col >= inner_right)
+                        @intCast(col - inner_right + 1)
+                    else
+                        0;
+
+                    const dy: u16 = if (row < inner_top)
+                        @intCast(inner_top - row)
+                    else if (row >= inner_bottom)
+                        @intCast(row - inner_bottom + 1)
+                    else
+                        0;
+
+                    const dist = @max(dx, dy);
+                    const alpha = initial_alpha - @as(f32, @floatFromInt(dist)) * shadow.opacity;
+                    if (alpha <= 0.0) continue;
+
+                    buffer.writeCell(@intCast(col), @intCast(row), .{
+                        .style = .{ .bg = shadow.color.setAlpha(alpha) },
+                    });
+                }
+            }
+        }
+    }
 
     if (self.rounded) |radius| {
         element.fillRounded(buffer, self.bg, radius);
