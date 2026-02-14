@@ -1,5 +1,7 @@
 const std = @import("std");
 const lib = @import("../../lib.zig");
+const global = @import("../../global.zig");
+
 const Buffer = lib.Buffer;
 const Element = lib.Element;
 const Project = @import("../Project.zig");
@@ -24,6 +26,7 @@ pub fn onEntry(self: *EditorView, id: u64) void {
 }
 
 pub fn draw(self: *EditorView, element: *Element, buffer: *Buffer) void {
+    const theme = global.settings.theme;
     if (self.entry) |id| {
         if (self.project.buffer_store.open(id)) |entry_buffer| {
             switch (entry_buffer.state) {
@@ -32,7 +35,7 @@ pub fn draw(self: *EditorView, element: *Element, buffer: *Buffer) void {
                 },
                 .ready => {
                     if (entry_buffer.bytes()) |bytes| {
-                        _ = element.print(buffer, &.{.{ .text = bytes, .style = .{ .bg = .{ .rgba = .{ 0, 0, 0, 0 } } } }}, .{});
+                        _ = element.print(buffer, &.{.{ .text = bytes, .style = .{ .bg = theme.mutedBg, .fg = theme.mutedFg } }}, .{});
                     }
                 },
                 else => {},

@@ -65,7 +65,13 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         ctx,
         .{
             .box = .{
-                .style = .{ .width = .{ .percent = 33 }, .height = .{ .percent = 33 }, .align_self = .center },
+                .style = .{
+                    .width = .{ .percent = 33 },
+                    .height = .{ .percent = 33 },
+                    .position = .{
+                        .top = .{ .percent = -20 },
+                    },
+                },
                 .bg = .{ .rgba = .{ 255, 0, 0, 255 } },
                 .fg = .{ .rgba = .{ 255, 0, 0, 255 } },
             },

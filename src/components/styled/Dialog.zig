@@ -36,8 +36,7 @@ fn lerpF32(start: f32, end: f32, progress: f32) f32 {
 fn onOpacityUpdate(userdata: ?*anyopaque, state: f32, ctx: *Context) void {
     const self: *Dialog = @ptrCast(@alignCast(userdata orelse return));
     self.opacity = state;
-    self.portal.opacity = state;
-    self.box.opacity = state;
+    self.box.bg = self.box.bg.setAlpha(state);
     ctx.requestDraw();
 }
 
@@ -69,11 +68,11 @@ pub fn create(alloc: Allocator, ctx: *Context, opts: Options) !*Dialog {
         .opacity_anim = OpacityAnim.init(.{
             .start = 0.0,
             .end = 1.0,
-            .duration_us = 150_000,
+            .duration_us = 100_000,
             .updateFn = lerpF32,
             .callback = onOpacityUpdate,
             .userdata = dialog,
-            .easing = .ease_out_cubic,
+            .easing = .ease_out_expo,
         }),
     };
 

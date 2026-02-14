@@ -22,7 +22,6 @@ const Backdrop = struct {
 alloc: Allocator,
 element: PortalElement,
 backdrop: Backdrop,
-opacity: f32 = 1.0,
 
 pub const Options = struct {
     backdrop: Backdrop = .{},
@@ -44,7 +43,8 @@ pub fn create(alloc: Allocator, opts: Options) !*Portal {
                 .width = .{ .percent = 100 },
                 .height = .{ .percent = 100 },
                 .position_type = .absolute,
-                .align_self = .center,
+                .justify_content = .center,
+                .align_items = .center,
             },
             .zIndex = 10,
         }),
@@ -78,8 +78,8 @@ pub fn draw(portal: *Portal, element: *Element, buffer: *Buffer) void {
             buffer,
             .{
                 .style = .{
-                    .bg = portal.backdrop.bg.setAlpha(portal.backdrop.bg.alpha() * portal.opacity),
-                    .fg = portal.backdrop.fg.setAlpha(portal.backdrop.fg.alpha() * portal.opacity),
+                    .bg = portal.backdrop.bg.setAlpha(portal.backdrop.bg.alpha()),
+                    .fg = portal.backdrop.fg.setAlpha(portal.backdrop.fg.alpha()),
                 },
             },
         );
