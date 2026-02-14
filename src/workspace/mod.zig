@@ -66,10 +66,10 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         .{
             .box = .{
                 .style = .{
-                    .width = .{ .percent = 33 },
-                    .height = .{ .percent = 33 },
+                    .width = .{ .point = 75 },
+                    .height = .{ .point = 25 },
                     .position = .{
-                        .top = .{ .percent = -20 },
+                        .top = .{ .point = -18 },
                     },
                 },
                 .bg = .{ .rgba = .{ 0, 0, 0, 255 } },
