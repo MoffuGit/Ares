@@ -47,9 +47,9 @@ pub fn GapBuffer(comptime T: type) type {
 ///
 /// This struct internally stores a `std.mem.Allocator` for memory management.
 /// To manually specify an allocator with each function call see `GapBufferUnmanaged`.
-pub fn GapBufferAligned(comptime T: type, comptime alignment: ?u29) type {
+pub fn GapBufferAligned(comptime T: type, comptime alignment: ?mem.Alignment) type {
     if (alignment) |a| {
-        if (a == @alignOf(T)) {
+        if (a.toByteUnits() == @alignOf(T)) {
             return GapBufferAligned(T, null);
         }
     }
@@ -71,10 +71,10 @@ pub fn GapBufferAligned(comptime T: type, comptime alignment: ?u29) type {
         capacity: usize,
         allocator: Allocator,
 
-        pub const Slice = if (alignment) |a| ([]align(a) T) else []T;
+        pub const Slice = if (alignment) |a| ([]align(a.toByteUnits()) T) else []T;
 
         pub fn SentinelSlice(comptime s: T) type {
-            return if (alignment) |a| ([:s]align(a) T) else [:s]T;
+            return if (alignment) |a| ([:s]align(a.toByteUnits()) T) else [:s]T;
         }
 
         /// Deinitialize with `deinit` or use `toOwnedSlice`.
@@ -137,7 +137,7 @@ pub fn GapBufferAligned(comptime T: type, comptime alignment: ?u29) type {
         /// of this GapBuffer. Empties this GapBuffer.
         pub fn moveToUnmanaged(self: *Self) GapBufferAlignedUnmanaged(T, alignment) {
             const allocator = self.allocator;
-            const result = .{
+            const result: GapBufferAlignedUnmanaged(T, alignment) = .{
                 .items = self.items,
                 .second_start = self.second_start,
                 .capacity = self.capacity,
@@ -1008,9 +1008,9 @@ pub fn GapBufferUnmanaged(comptime T: type) type {
 /// Functions that potentially allocate (or free) memory accept an `Allocator` parameter.
 /// Initialize directly or with `initCapacity`, and deinitialize with `deinit`
 /// or use `toOwnedSlice`.
-pub fn GapBufferAlignedUnmanaged(comptime T: type, comptime alignment: ?u29) type {
+pub fn GapBufferAlignedUnmanaged(comptime T: type, comptime alignment: ?mem.Alignment) type {
     if (alignment) |a| {
-        if (a == @alignOf(T)) {
+        if (a.toByteUnits() == @alignOf(T)) {
             return GapBufferAlignedUnmanaged(T, null);
         }
     }
@@ -1032,10 +1032,10 @@ pub fn GapBufferAlignedUnmanaged(comptime T: type, comptime alignment: ?u29) typ
         /// the end of the second chunk in the gap buffer
         capacity: usize = 0,
 
-        pub const Slice = if (alignment) |a| ([]align(a) T) else []T;
+        pub const Slice = if (alignment) |a| ([]align(a.toByteUnits()) T) else []T;
 
         pub fn SentinelSlice(comptime s: T) type {
-            return if (alignment) |a| ([:s]align(a) T) else [:s]T;
+            return if (alignment) |a| ([:s]align(a.toByteUnits()) T) else [:s]T;
         }
 
         /// Convenience function to access the second half of the GapBuffer as a Slice.
@@ -2734,7 +2734,7 @@ test "GapBuffer(u8) implements writer" {
         try testing.expectEqualSlices(u8, "x: 42\ny: 1234\n", buffer.items);
     }
     {
-        var buffer = GapBufferAligned(u8, 2).init(a);
+        var buffer = GapBufferAligned(u8, .@"2").init(a);
         defer buffer.deinit();
 
         const writer = buffer.afterWriter();
@@ -2762,10 +2762,10 @@ test "GapBufferUnmanaged(u8) implements writer" {
         try testing.expectEqualSlices(u8, "x: 42\ny: 1234\n", buffer.items);
     }
     {
-        var buffer: GapBufferAlignedUnmanaged(u8, 2) = .{};
-        defer buffer.deinit(a);
+        var buffer = GapBufferAligned(u8, .@"2").init(a);
+        defer buffer.deinit();
 
-        const writer = buffer.beforeWriter(a);
+        const writer = buffer.beforeWriter();
         try writer.writeAll("a");
         try writer.writeAll("bc");
         try writer.writeAll("d");
@@ -2953,7 +2953,7 @@ test "toOwnedSliceSentinel" {
 test "accepts unaligned slices" {
     const a = testing.allocator;
     {
-        var buffer = GapBufferAligned(u8, 8).init(a);
+        var buffer = GapBufferAligned(u8, .@"8").init(a);
 
         try buffer.appendSliceBefore(&.{ 0, 1, 2, 3 });
         try buffer.insertSliceBefore(2, &.{ 4, 5, 6, 7 });
@@ -2964,7 +2964,7 @@ test "accepts unaligned slices" {
         try testing.expectEqualSlices(u8, &.{ 0, 8, 9, 6, 7, 2, 3 }, got);
     }
     {
-        var buffer = GapBufferAlignedUnmanaged(u8, 8){};
+        var buffer = GapBufferAlignedUnmanaged(u8, .@"8"){};
 
         try buffer.appendSliceAfter(a, &.{ 0, 1, 2, 3 });
         try buffer.insertSliceAfter(a, 2, &.{ 4, 5, 6, 7 });
