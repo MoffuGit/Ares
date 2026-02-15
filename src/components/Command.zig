@@ -33,10 +33,10 @@ pub fn create(alloc: Allocator, ctx: *Context) !*Command {
                 },
                 .border = .{
                     .kind = .thin_block,
-                    .color = .{ .axes = .{ .horizontal = .{
+                    .color = .{ .axes = .{ .vertical = .{
                         .bg = theme.mutedBg.setAlpha(0),
                         .fg = theme.border,
-                    }, .vertical = .{
+                    }, .horizontal = .{
                         .bg = theme.bg,
                         .fg = theme.border,
                     } } },
