@@ -6,7 +6,6 @@ const Node = @This();
 var config: yoga.YGConfigRef = null;
 
 yg_node: yoga.YGNodeRef,
-index: usize,
 
 fn getConfig() yoga.YGConfigRef {
     if (config == null) {
@@ -17,10 +16,9 @@ fn getConfig() yoga.YGConfigRef {
     return config;
 }
 
-pub fn init(index: usize) Node {
+pub fn init() Node {
     return .{
         .yg_node = yoga.YGNodeNewWithConfig(getConfig()),
-        .index = index,
     };
 }
 

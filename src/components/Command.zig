@@ -66,7 +66,7 @@ pub fn create(alloc: Allocator, ctx: *Context) !*Command {
     });
     errdefer input.destroy();
 
-    try dialog.box.element.childs(.{input.elem()});
+    try dialog.box.element.childs(.{input});
 
     self.* = .{
         .alloc = alloc,
@@ -108,7 +108,11 @@ pub fn toggleShow(self: *Command) void {
     self.dialog.toggleShow();
 }
 
-fn drawInput(input: *Input, element: *Element.Element, buffer: *Buffer) void {
+//BUG:
+//i don't know why i need to call syncLayout in here but if i don't do it
+//the input don't update his position
+fn drawInput(input: *Input, element: *Element, buffer: *Buffer) void {
+    element.syncLayout();
     const layout = element.layout;
     const theme = global.settings.theme;
 

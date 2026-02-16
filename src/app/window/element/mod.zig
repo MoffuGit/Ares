@@ -190,7 +190,7 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
     var id_buf: [32]u8 = undefined;
     const generated_id = std.fmt.bufPrint(&id_buf, "element-{}", .{num}) catch "element-?";
 
-    const node = Node.init(num);
+    const node = Node.init();
 
     opts.style.apply(node);
 
