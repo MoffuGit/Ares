@@ -109,21 +109,7 @@ pub fn toggleShow(self: *Command) void {
     self.dialog.toggleShow();
 }
 
-//BUG:
-//i don't know why i need to call syncLayout in here but if i don't do it
-//the input don't update his position
-//maybe it has something to do with the hidden show mechanism?
-//no, it's not, even if you start from visible the input keeps
-//being incorrect, lets try using a normal element and not a box,
-//what i know is that if you open, then, resize the window,
-//the box element update his position but the input not,
-//if you then close and open again, the input update his position correctly,
-//what happening when the command is open that is not letting the input to
-//udpate his position on resize
-//from there i really don't now why this is happening
-//the issue is not the input itself, because i try with other elements and this error didn't happen
 fn drawInput(input: *Input, element: *Element, buffer: *Buffer) void {
-    element.syncLayout();
     const layout = element.layout;
     const theme = global.settings.theme;
 

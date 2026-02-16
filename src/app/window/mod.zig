@@ -144,19 +144,28 @@ pub fn calculateLayout(self: *Window) void {
 }
 
 fn applyLayout(element: *Element, depth: u32) void {
+    applyLayoutInner(element, depth, false);
+}
+
+fn applyLayoutInner(element: *Element, depth: u32, parent_changed: bool) void {
     const node = element.node.yg_node;
 
-    if (!yoga.YGNodeGetHasNewLayout(node)) {
+    const new_layout = yoga.YGNodeGetHasNewLayout(node);
+    log.debug("element id={s} new_layout={}", .{ element.id, new_layout });
+
+    if (!new_layout and !parent_changed) {
         return;
     }
 
-    yoga.YGNodeSetHasNewLayout(node, false);
+    if (new_layout) {
+        yoga.YGNodeSetHasNewLayout(node, false);
+    }
 
     element.syncLayout();
 
     if (element.childrens) |*childrens| {
         for (childrens.by_order.items) |child| {
-            applyLayout(child, depth + 1);
+            applyLayoutInner(child, depth + 1, new_layout);
         }
     }
 }
