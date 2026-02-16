@@ -10,6 +10,7 @@ const Buffer = lib.Buffer;
 const Context = lib.App.Context;
 const Dialog = @import("styled/Dialog.zig");
 const Input = @import("../app/window/element/Input.zig");
+const CommandList = @import("CommandList.zig");
 const Allocator = std.mem.Allocator;
 
 const Command = @This();
@@ -18,6 +19,7 @@ alloc: Allocator,
 ctx: *Context,
 dialog: *Dialog,
 input: *Input,
+list: *CommandList,
 prev_focused: ?*Element.Element = null,
 
 pub fn create(alloc: Allocator, ctx: *Context) !*Command {
@@ -38,6 +40,7 @@ pub fn create(alloc: Allocator, ctx: *Context) !*Command {
                         .top = .{ .point = -18 },
                     },
                     .align_items = .center,
+                    .padding = .{ .horizontal = .{ .point = 1 } },
                 },
                 .border = .{
                     .kind = .thin_block,
@@ -67,13 +70,17 @@ pub fn create(alloc: Allocator, ctx: *Context) !*Command {
     });
     errdefer input.destroy();
 
-    try dialog.box.element.childs(.{input});
+    const list = try CommandList.create(alloc);
+    errdefer list.destroy();
+
+    try dialog.box.element.childs(.{ input, list.container });
 
     self.* = .{
         .alloc = alloc,
         .ctx = ctx,
         .dialog = dialog,
         .input = input,
+        .list = list,
     };
 
     return self;
