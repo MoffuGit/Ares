@@ -25,3 +25,20 @@ pub const Subscription = struct {
 
 pub const EventSubscriptions = std.ArrayList(Subscription);
 pub const Subscriptions = std.EnumArray(EventType, EventSubscriptions);
+
+pub fn EventListeners(EventType: type, EventData: type) type {
+    return struct {
+        pub const Callback = *const fn (userdata: ?*anyopaque, EventData) void;
+
+        fn noop(_: ?*anyopaque, _: EventData) void {}
+
+        pub const Listener = struct {
+            userdata: ?*anyopaque = null,
+            callback: Callback = noop,
+        };
+        pub const EventListeners = std.ArrayList(Listener);
+        pub const Listeners = std.EnumArray(EventType, EventListeners);
+
+        listeners: Listeners,
+    };
+}
