@@ -77,7 +77,6 @@ pub fn addWatcher(
     };
 
     try self.watchers.put(id, entry);
-    log.debug("monitor added watcher: '{s}' id={}", .{ path, id });
 }
 
 pub fn removeWatcher(self: *Monitor, fs: *xev.FileSystem, id: u64) void {

@@ -817,7 +817,6 @@ pub fn syncLayout(self: *Element) void {
             .bottom = self.node.getLayoutPadding(.bottom),
         },
     };
-    log.debug("id={s} layout: {}", .{ self.id, self.layout });
 
     if (old_width != new_width or old_height != new_height) {
         self.dispatchEvent(.{ .resize = .{ .element = self, .width = new_width, .height = new_height } });
