@@ -7,6 +7,7 @@ pub fn build(b: *std.Build) void {
 
     const vaxis_dep = b.dependency("vaxis", .{ .target = target, .optimize = optimize });
     const xev_dep = b.dependency("libxev", .{ .target = target, .optimize = optimize });
+    const ltf_dep = b.dependency("log_to_file", .{ .target = target, .optimize = optimize });
 
     const yoga_lib = buildYogaLib(b, target, optimize);
     const yoga_mod = buildYogaModule(b, target, optimize);
@@ -30,6 +31,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("yoga", yoga_mod);
     exe_mod.addImport("vaxis", vaxis_dep.module("vaxis"));
     exe_mod.addImport("xev", xev_dep.module("xev"));
+    exe_mod.addImport("log_to_file", ltf_dep.module("log_to_file"));
 
     const exe = b.addExecutable(.{ .name = "ares", .root_module = exe_mod });
     exe.linkLibrary(yoga_lib);

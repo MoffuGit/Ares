@@ -40,6 +40,10 @@
             .url = "git+https://github.com/MoffuGit/libvaxis.git#520bb32aa265fe86ee62e87d6695ef6756b5674e",
             .hash = "vaxis-0.5.1-BWNV_J9bCQDzk6nO8XfCHic-Xq8tFXYOxHjsxLZbdXWy",
         },
+        .log_to_file = .{
+            .url = "https://github.com/reykjalin/log_to_file/archive/refs/tags/3.0.0.zip",
+            .hash = "log_to_file-3.0.0-vcE8A7FAAACoRP9IxaWcrHhv-uK2Uoqu_Uw8gdVH71Cq",
+        },
     },
     .paths = .{""},
 }

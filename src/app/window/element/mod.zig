@@ -4,6 +4,7 @@ const unicode = vaxis.unicode;
 const gwidth = vaxis.gwidth.gwidth;
 const messagepkg = @import("../message.zig");
 const eventpkg = @import("../event.zig");
+const log = std.log.scoped(.element);
 
 pub var element_counter: std.atomic.Value(u64) = .init(0);
 
@@ -816,6 +817,7 @@ pub fn syncLayout(self: *Element) void {
             .bottom = self.node.getLayoutPadding(.bottom),
         },
     };
+    log.debug("id={s} layout: {}", .{ self.id, self.layout });
 
     if (old_width != new_width or old_height != new_height) {
         self.dispatchEvent(.{ .resize = .{ .element = self, .width = new_width, .height = new_height } });

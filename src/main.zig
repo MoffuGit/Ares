@@ -1,8 +1,13 @@
 const std = @import("std");
+const ltf = @import("log_to_file");
 const datastruct = @import("datastruct/mod.zig");
 const log = std.log.scoped(.main);
 const global = @import("global.zig");
 const lib = @import("lib.zig");
+
+pub const std_options: std.Options = .{
+    .logFn = ltf.log_to_file,
+};
 
 const App = lib.App;
 const Element = lib.Element;
@@ -79,6 +84,11 @@ pub fn main() !void {
     };
 
     const alloc = gpa.allocator();
+
+    // Clear log file from previous run.
+    if (std.fs.cwd().openDir("logs", .{})) |dir| {
+        dir.deleteFile("ares.log") catch {};
+    } else |_| {}
 
     var app = try App.create(alloc, .{});
     defer app.destroy();

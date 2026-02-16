@@ -2,6 +2,7 @@ const std = @import("std");
 const vaxis = @import("vaxis");
 const yoga = @import("element/Node.zig").yoga;
 const global = @import("../../global.zig");
+const log = std.log.scoped(.window);
 
 pub const Element = @import("element/mod.zig");
 const Buffer = @import("../Buffer.zig");
@@ -135,12 +136,14 @@ pub fn draw(self: *Window) !void {
 }
 
 pub fn calculateLayout(self: *Window) void {
+    log.debug("calculateLayout: cols={} rows={}", .{ self.size.cols, self.size.rows });
     const root_node = self.root.node.yg_node;
     yoga.YGNodeCalculateLayout(root_node, @floatFromInt(self.size.cols), @floatFromInt(self.size.rows), yoga.YGDirectionLTR);
-    applyLayout(self.root);
+    applyLayout(self.root, 0);
+    log.debug("calculateLayout: done", .{});
 }
 
-fn applyLayout(element: *Element) void {
+fn applyLayout(element: *Element, depth: u32) void {
     const node = element.node.yg_node;
 
     if (!yoga.YGNodeGetHasNewLayout(node)) {
@@ -153,7 +156,7 @@ fn applyLayout(element: *Element) void {
 
     if (element.childrens) |*childrens| {
         for (childrens.by_order.items) |child| {
-            applyLayout(child);
+            applyLayout(child, depth + 1);
         }
     }
 }
