@@ -96,7 +96,6 @@ pub fn toggleShow(self: *Command) void {
                 .fg = theme.border,
             } } },
         };
-    self.dialog.toggleShow();
 
     if (!is_visible) {
         self.prev_focused = self.ctx.app.window.getFocus();
@@ -105,6 +104,8 @@ pub fn toggleShow(self: *Command) void {
         self.ctx.app.window.setFocus(self.prev_focused);
         self.prev_focused = null;
     }
+
+    self.dialog.toggleShow();
 }
 
 fn drawInput(input: *Input, element: *Element.Element, buffer: *Buffer) void {
