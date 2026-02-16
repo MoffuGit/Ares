@@ -2,10 +2,22 @@ const std = @import("std");
 const vaxis = @import("vaxis");
 const log = std.log.scoped(.app);
 const messagepkg = @import("message.zig");
-const subspkg = @import("subscriptions.zig");
-const Subscriptions = subspkg.Subscriptions;
-pub const EventData = subspkg.EventData;
-const EventType = subspkg.EventType;
+const EventListeners = @import("subscriptions.zig").EventListeners;
+const UpdatedEntriesSet = @import("../worktree/scanner/mod.zig").UpdatedEntriesSet;
+
+pub const EventType = enum {
+    scheme,
+    worktreeUpdatedEntries,
+    bufferUpdated,
+};
+
+pub const EventData = union(EventType) {
+    scheme: vaxis.Color.Scheme,
+    worktreeUpdatedEntries: *UpdatedEntriesSet,
+    bufferUpdated: u64,
+};
+
+pub const AppEventListeners = EventListeners(EventType, EventData);
 
 const Allocator = std.mem.Allocator;
 
@@ -57,8 +69,14 @@ pub const Context = struct {
         try self.app.loop.stop.notify();
     }
 
-    pub fn subscribe(self: *Context, event: subspkg.EventType, sub: subspkg.Subscription) !void {
-        try self.app.subscribe(event, sub);
+    pub fn subscribe(
+        self: *Context,
+        event: EventType,
+        comptime Userdata: type,
+        userdata: *Userdata,
+        cb: *const fn (userdata: *Userdata, data: EventData) void,
+    ) !void {
+        try self.app.subscribe(event, Userdata, userdata, cb);
     }
 };
 
@@ -88,7 +106,7 @@ context: Context,
 
 scheme: vaxis.Color.Scheme = .dark,
 
-subs: Subscriptions,
+subs: AppEventListeners = .{},
 
 pub fn create(alloc: Allocator, opts: Options) !*App {
     const app = try alloc.create(App);
@@ -136,7 +154,6 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
         .tty_thread = tty_thread,
         .renderer = renderer,
         .renderer_thread = renderer_thread,
-        .subs = .initFill(.{}),
         .renderer_thr = undefined,
         .tty_thr = undefined,
     };
@@ -170,9 +187,7 @@ pub fn destroy(self: *App) void {
     self.window.deinit();
     self.renderer.deinit();
 
-    for (&self.subs.values) |*subs| {
-        subs.deinit(self.alloc);
-    }
+    self.subs.deinit(self.alloc);
 
     self.screen.deinit();
     self.shared_context.deinit(self.alloc);
@@ -228,12 +243,15 @@ pub fn handleMessage(self: *App, msg: Message) !void {
 }
 
 pub fn notifySubs(self: *App, data: EventData) void {
-    const subs = self.subs.get(@as(EventType, data));
-    for (subs.items) |sub| {
-        sub.callback(sub.userdata, data);
-    }
+    self.subs.notify(data);
 }
 
-pub fn subscribe(self: *App, event: subspkg.EventType, sub: subspkg.Subscription) !void {
-    try self.subs.getPtr(event).append(self.alloc, sub);
+pub fn subscribe(
+    self: *App,
+    event: EventType,
+    comptime Userdata: type,
+    userdata: *Userdata,
+    cb: *const fn (userdata: *Userdata, data: EventData) void,
+) !void {
+    try self.subs.addSubscription(self.alloc, event, Userdata, userdata, cb);
 }

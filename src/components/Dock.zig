@@ -66,10 +66,10 @@ pub fn create(alloc: Allocator, side: Side, size: u16, visible: bool) !*Dock {
         element.hide();
     }
 
-    try element.addEventListener(.drag, onDrag);
-    try element.addEventListener(.drag_end, onBarDragEnd);
-    try element.addEventListener(.mouse_over, mouseOver);
-    try element.addEventListener(.mouse_out, mouseOut);
+    try element.addEventListener(.drag, Dock, dock, onDrag);
+    try element.addEventListener(.drag_end, Dock, dock, onBarDragEnd);
+    try element.addEventListener(.mouse_over, Dock, dock, mouseOver);
+    try element.addEventListener(.mouse_out, Dock, dock, mouseOut);
 
     dock.* = .{
         .element = element,
@@ -186,27 +186,27 @@ fn draw(element: *Element, buffer: *Buffer) void {
     }
 }
 
-fn mouseOver(element: *Element, data: Element.EventData) void {
+fn mouseOver(_: *Dock, data: Element.EventData) void {
     const ctx = data.mouse_over.ctx;
     if (ctx.phase == .at_target) {
-        element.context.?.app.screen.mouse_shape = .pointer;
-        element.context.?.requestDraw();
+        data.mouse_over.element.context.?.app.screen.mouse_shape = .pointer;
+        data.mouse_over.element.context.?.requestDraw();
     }
 }
 
-fn mouseOut(element: *Element, _: Element.EventData) void {
-    element.context.?.app.screen.mouse_shape = .default;
-    element.context.?.requestDraw();
+fn mouseOut(self: *Dock, _: Element.EventData) void {
+    self.element.context.?.app.screen.mouse_shape = .default;
+    self.element.context.?.requestDraw();
 }
 
-fn onDrag(element: *Element, data: Element.EventData) void {
+fn onDrag(self: *Dock, data: Element.EventData) void {
     const evt_data = data.drag;
     if (evt_data.ctx.phase != .at_target) return;
 
+    const element = evt_data.element;
     element.context.?.app.screen.mouse_shape = .pointer;
 
     const mouse = evt_data.mouse;
-    const self: *Dock = @ptrCast(@alignCast(element.userdata));
 
     const parent = element.parent orelse return;
     const parent_layout = parent.layout;
@@ -265,10 +265,10 @@ fn applySize(self: *Dock) void {
     }
 }
 
-fn onBarDragEnd(element: *Element, _: Element.EventData) void {
-    element.context.?.app.screen.mouse_shape = .default;
+fn onBarDragEnd(self: *Dock, _: Element.EventData) void {
+    self.element.context.?.app.screen.mouse_shape = .default;
 
-    if (element.context) |ctx| {
+    if (self.element.context) |ctx| {
         ctx.requestDraw();
     }
 }

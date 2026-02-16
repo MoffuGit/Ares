@@ -11,10 +11,10 @@ const Workspace = @import("workspace/mod.zig").Workspace;
 
 const GPA = std.heap.GeneralPurposeAllocator(.{});
 
-pub fn keyPressFn(element: *Element, data: Element.EventData) void {
+pub fn keyPressFn(_: *Element, data: Element.EventData) void {
     const key_data = data.key_press;
     if (key_data.key.matches('c', .{ .ctrl = true })) {
-        if (element.context) |ctx| {
+        if (key_data.element.context) |ctx| {
             ctx.stop() catch {};
         }
         key_data.ctx.stopPropagation();
@@ -83,7 +83,7 @@ pub fn main() !void {
     var app = try App.create(alloc, .{});
     defer app.destroy();
 
-    try app.root().addEventListener(.key_press, keyPressFn);
+    try app.root().addEventListener(.key_press, Element, app.root(), keyPressFn);
 
     try global.init(alloc, &app.context);
     defer global.deinit();

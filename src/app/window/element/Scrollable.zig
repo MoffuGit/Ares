@@ -53,10 +53,10 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
         .userdata = self,
     });
 
-    try outer.addEventListener(.wheel, onWheel);
-    try outer.addEventListener(.mouse_over, mouseOver);
-    try outer.addEventListener(.mouse_out, mouseOut);
-    try outer.addEventListener(.drag, onDraw);
+    try outer.addEventListener(.wheel, Scrollable, self, onWheel);
+    try outer.addEventListener(.mouse_over, Scrollable, self, mouseOver);
+    try outer.addEventListener(.mouse_out, Scrollable, self, mouseOut);
+    try outer.addEventListener(.drag, Scrollable, self, onDraw);
 
     const inner = try alloc.create(Element);
     inner.* = Element.init(alloc, .{
@@ -96,9 +96,9 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
 
         self.bar = bar;
 
-        try bar.addEventListener(.click, onBarClick);
-        try bar.addEventListener(.drag, onBarDrag);
-        try bar.addEventListener(.drag_end, onBarDragEnd);
+        try bar.addEventListener(.click, Scrollable, self, onBarClick);
+        try bar.addEventListener(.drag, Scrollable, self, onBarDrag);
+        try bar.addEventListener(.drag_end, Scrollable, self, onBarDragEnd);
 
         try outer.addChild(bar);
     }
@@ -118,22 +118,20 @@ pub fn deinit(self: *Scrollable, alloc: Allocator) void {
     alloc.destroy(self);
 }
 
-pub fn mouseOver(element: *Element, _: Element.EventData) void {
-    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+pub fn mouseOver(self: *Scrollable, _: Element.EventData) void {
     if (self.bar) |bar| {
         if (!bar.visible) {
             bar.visible = true;
-            element.context.?.requestDraw();
+            self.outer.context.?.requestDraw();
         }
     }
 }
 
-pub fn mouseOut(element: *Element, _: Element.EventData) void {
-    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+pub fn mouseOut(self: *Scrollable, _: Element.EventData) void {
     if (self.bar) |bar| {
         if (bar.visible and !bar.dragging) {
             bar.visible = false;
-            element.context.?.requestDraw();
+            self.outer.context.?.requestDraw();
         }
     }
 }
@@ -276,8 +274,7 @@ fn afterHitFn(_: *Element, hit_grid: *HitGrid) void {
 
 const SCROLL_STEP: i32 = 1;
 
-fn onWheel(element: *Element, data: Element.EventData) void {
-    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+fn onWheel(self: *Scrollable, data: Element.EventData) void {
     const mouse = data.wheel.mouse;
 
     const dx: i32 = switch (mouse.button) {
@@ -294,7 +291,7 @@ fn onWheel(element: *Element, data: Element.EventData) void {
 
     self.scrollBy(dx, dy);
 
-    if (element.context) |ctx| {
+    if (data.wheel.element.context) |ctx| {
         ctx.requestDraw();
     }
 }
@@ -385,8 +382,8 @@ fn getThumbPos(self: *const Scrollable) u16 {
     return @intCast((curr * height) / max);
 }
 
-fn onBarClick(element: *Element, data: Element.EventData) void {
-    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+fn onBarClick(self: *Scrollable, data: Element.EventData) void {
+    const element = data.click.element;
     const mouse = data.click.mouse;
 
     const thumb_pos = self.getThumbPos();
@@ -408,13 +405,13 @@ fn onBarClick(element: *Element, data: Element.EventData) void {
     }
 }
 
-fn onDraw(_: *Element, data: Element.EventData) void {
+fn onDraw(_: *Scrollable, data: Element.EventData) void {
     const ctx = data.drag.ctx;
     if (ctx.phase == .at_target) ctx.stopPropagation();
 }
 
-fn onBarDrag(element: *Element, data: Element.EventData) void {
-    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+fn onBarDrag(self: *Scrollable, data: Element.EventData) void {
+    const element = data.drag.element;
     const mouse = data.drag.mouse;
     const ctx = element.context orelse return;
     const size = ctx.app.window.size;
@@ -453,15 +450,14 @@ fn onBarDrag(element: *Element, data: Element.EventData) void {
     ctx.requestDraw();
 }
 
-fn onBarDragEnd(element: *Element, _: Element.EventData) void {
-    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+fn onBarDragEnd(self: *Scrollable, data: Element.EventData) void {
     self.drag_start_y_pixel = null;
 
     if (!self.outer.hovered and !self.bar.?.hovered) {
         self.bar.?.visible = false;
     }
 
-    if (element.context) |ctx| {
+    if (data.drag_end.element.context) |ctx| {
         ctx.requestDraw();
     }
 }

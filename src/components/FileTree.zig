@@ -13,8 +13,8 @@ const worktreepkg = @import("../worktree/mod.zig");
 const Worktree = worktreepkg.Worktree;
 const Entry = worktreepkg.Entry;
 const Kind = worktreepkg.Kind;
-const Context = @import("../app/mod.zig").Context;
-const subspkg = @import("../app/subscriptions.zig");
+const apppkg = @import("../app/mod.zig");
+const Context = apppkg.Context;
 const Workspace = @import("../workspace/mod.zig").Workspace;
 
 const Allocator = std.mem.Allocator;
@@ -71,12 +71,9 @@ pub fn create(alloc: Allocator, project: *Project, workspace: *Workspace, ctx: *
         .workspace = workspace,
     };
 
-    try ctx.subscribe(.worktreeUpdatedEntries, .{
-        .userdata = self,
-        .callback = onWorktreeUpdated,
-    });
+    try ctx.subscribe(.worktreeUpdatedEntries, FileTree, self, onWorktreeUpdated);
 
-    try content.addEventListener(.click, onClick);
+    try content.addEventListener(.click, FileTree, self, onClick);
 
     return self;
 }
@@ -100,8 +97,8 @@ pub fn destroy(self: *FileTree, alloc: Allocator) void {
     alloc.destroy(self);
 }
 
-fn onClick(element: *Element, data: Element.EventData) void {
-    const self: *FileTree = @ptrCast(@alignCast(element.userdata));
+fn onClick(self: *FileTree, data: Element.EventData) void {
+    const element = data.click.element;
     const mouse = data.click.mouse;
     const index = self.scrollable.childRowFromScreenY(element, mouse.row) orelse return;
     if (index < self.visible_entries.items.len) {
@@ -130,8 +127,7 @@ fn onClick(element: *Element, data: Element.EventData) void {
     element.context.?.requestDraw();
 }
 
-fn onWorktreeUpdated(userdata: ?*anyopaque, _: subspkg.EventData) void {
-    const self: *FileTree = @ptrCast(@alignCast(userdata));
+fn onWorktreeUpdated(self: *FileTree, _: apppkg.EventData) void {
 
     var it = self.project.worktree.snapshot.entries.iter();
 

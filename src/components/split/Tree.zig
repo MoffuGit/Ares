@@ -35,7 +35,7 @@ pub fn create(alloc: Allocator) !*Tree {
             .userdata = tree,
         },
     );
-    try element.addEventListener(.key_press, keyPressFn);
+    try element.addEventListener(.key_press, Tree, tree, keyPressFn);
 
     const initial_id: u64 = 1;
     const root = try Node.createView(alloc, initial_id);
@@ -52,11 +52,10 @@ pub fn create(alloc: Allocator) !*Tree {
     return tree;
 }
 
-fn keyPressFn(element: *Element, data: Element.EventData) void {
+fn keyPressFn(self: *Tree, data: Element.EventData) void {
     const key_data = data.key_press;
     const ctx = key_data.ctx;
     const key = key_data.key;
-    const self: *Tree = @ptrCast(@alignCast(element.userdata));
 
     if (key.mods.ctrl) {
         const handled = switch (key.codepoint) {

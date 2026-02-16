@@ -3,9 +3,9 @@ const xev = @import("../global.zig").xev;
 const vaxis = @import("vaxis");
 const Allocator = std.mem.Allocator;
 const Theme = @import("theme/mod.zig");
-const App = @import("../lib.zig").App;
-const Context = App.Context;
-const EventData = App.EventData;
+const apppkg = @import("../app/mod.zig");
+const Context = apppkg.Context;
+const EventData = apppkg.EventData;
 
 pub const Settings = @This();
 
@@ -233,17 +233,13 @@ pub fn create(alloc: Allocator, context: *Context) !*Settings {
         .fs = fs,
     };
 
-    try context.subscribe(.scheme, .{
-        .userdata = self,
-        .callback = schemeFn,
-    });
+    try context.subscribe(.scheme, Settings, self, schemeFn);
 
     return self;
 }
 
-pub fn schemeFn(userdata: ?*anyopaque, data: EventData) void {
+pub fn schemeFn(self: *Settings, data: EventData) void {
     const scheme = data.scheme;
-    const self: *Settings = @ptrCast(@alignCast(userdata.?));
 
     self.updateSystemScheme(scheme);
 

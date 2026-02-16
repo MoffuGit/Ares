@@ -155,7 +155,7 @@ pub fn deleteForward(self: *Input) void {
 
 // ---- Event handlers ----
 
-fn onKeyPress(self: *Input, _: *Element.Element, data: EventData) void {
+fn onKeyPress(self: *Input, data: EventData) void {
     const key_data = data.key_press;
     const key = key_data.key;
 
@@ -205,9 +205,9 @@ fn onKeyPress(self: *Input, _: *Element.Element, data: EventData) void {
     }
 }
 
-fn onClick(self: *Input, element: *Element.Element, data: EventData) void {
+fn onClick(self: *Input, data: EventData) void {
     const mouse = data.click.mouse;
-    const layout = element.layout;
+    const layout = data.click.element.layout;
 
     const click_col = mouse.col -| layout.left;
     const click_row = mouse.row -| layout.top;

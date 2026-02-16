@@ -73,7 +73,7 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         },
     });
 
-    try element.addEventListener(.key_press, onKeyPress);
+    try ctx.app.root().addEventListener(.key_press, Workspace, workspace, onKeyPress);
 
     center_wrapper.* = Element.init(alloc, .{ .id = "center-wrapper", .zIndex = 10, .style = .{
         .flex_grow = 1,
@@ -300,9 +300,11 @@ pub fn setActiveEntry(self: *Workspace, entry_id: u64) void {
     }
 }
 
-fn onKeyPress(element: *Element, data: Element.EventData) void {
-    const self: *Workspace = @ptrCast(@alignCast(element.userdata));
+fn onKeyPress(self: *Workspace, data: Element.EventData) void {
     const key_data = data.key_press;
+    const element = key_data.element;
+
+    if (key_data.ctx.phase != .bubbling) return;
 
     // Mode transitions
     switch (global.mode) {

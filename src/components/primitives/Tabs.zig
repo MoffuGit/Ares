@@ -36,7 +36,7 @@ pub const Tab = struct {
         trigger.* = Element.init(alloc, trigger_opts);
         errdefer trigger.deinit();
 
-        try trigger.addEventListener(.click, onTriggerClick);
+        try trigger.addEventListener(.click, Tab, tab, onTriggerClick);
 
         tab.* = .{
             .id = id,
@@ -60,10 +60,9 @@ pub const Tab = struct {
         alloc.destroy(self);
     }
 
-    fn onTriggerClick(element: *Element, _: Element.EventData) void {
-        const self: *Tab = @ptrCast(@alignCast(element.userdata orelse return));
+    fn onTriggerClick(self: *Tab, data: Element.EventData) void {
         self.tabs.select(self.id);
-        element.context.?.requestDraw();
+        data.click.element.context.?.requestDraw();
     }
 };
 

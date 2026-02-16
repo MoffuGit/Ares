@@ -42,9 +42,9 @@ pub fn create(alloc: Allocator, direction: Direction, left: *Node, right: *Node)
         .hitFn = Element.hitSelf,
         .drawFn = draw,
     });
-    try element.addEventListener(.drag, onDrag);
-    try element.addEventListener(.mouse_enter, mouseEnter);
-    try element.addEventListener(.mouse_leave, mouseLeave);
+    try element.addEventListener(.drag, Divider, divider, onDrag);
+    try element.addEventListener(.mouse_enter, Divider, divider, mouseEnter);
+    try element.addEventListener(.mouse_leave, Divider, divider, mouseLeave);
 
     divider.* = .{
         .direction = direction,
@@ -174,19 +174,21 @@ pub fn destroy(self: *Divider, alloc: Allocator) void {
     alloc.destroy(self);
 }
 
-pub fn mouseEnter(element: *Element, _: Element.EventData) void {
+pub fn mouseEnter(_: *Divider, data: Element.EventData) void {
+    const element = data.mouse_enter.element;
     element.context.?.window.screen.mouse_shape = .pointer;
     element.context.?.requestDraw();
 }
 
-pub fn mouseLeave(element: *Element, _: Element.EventData) void {
+pub fn mouseLeave(_: *Divider, data: Element.EventData) void {
+    const element = data.mouse_leave.element;
     element.context.?.window.screen.mouse_shape = .default;
     element.context.?.requestDraw();
 }
 
-pub fn onDrag(element: *Element, data: Element.EventData) void {
+pub fn onDrag(self: *Divider, data: Element.EventData) void {
+    const element = data.drag.element;
     const mouse = data.drag.mouse;
-    const self: *Divider = @ptrCast(@alignCast(element.userdata));
 
     const parent = element.parent orelse return;
     const parent_layout = parent.layout;

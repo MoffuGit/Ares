@@ -167,7 +167,7 @@ pub fn createView(alloc: Allocator, id: u64) !*Node {
         .beforeDrawFn = drawView,
         .beforeHitFn = Element.hitSelf,
     });
-    try element.addEventListener(.click, clickView);
+    try element.addEventListener(.click, Node, node, clickView);
 
     node.* = .{
         .parent = null,
@@ -186,8 +186,8 @@ fn drawView(element: *Element, buffer: *Buffer) void {
     }
 }
 
-fn clickView(element: *Element, _: Element.EventData) void {
-    const node: *Node = @ptrCast(@alignCast(element.userdata));
+fn clickView(node: *Node, data: Element.EventData) void {
+    const element = data.click.element;
 
     if (element.context) |ctx| {
         ctx.window.setFocus(element);

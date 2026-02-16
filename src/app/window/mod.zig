@@ -276,19 +276,19 @@ fn processHoverChange(self: *Window, prev_target: ?*Element, curr_target: ?*Elem
         const is_leaving = curr_target == null or !prev.isAncestorOf(curr_target.?);
         prev.hovered = false;
         if (is_leaving) {
-            dispatchEvent(prev, &ctx, .{ .mouse_leave = mouse });
+            dispatchEvent(prev, &ctx, .{ .mouse_leave = .{ .element = prev, .mouse = mouse } });
         }
 
-        dispatchEvent(prev, &ctx, .{ .mouse_out = .{ .ctx = &ctx, .mouse = mouse } });
+        dispatchEvent(prev, &ctx, .{ .mouse_out = .{ .element = prev, .ctx = &ctx, .mouse = mouse } });
     }
 
     if (curr_target) |curr| {
         const is_entering = prev_target == null or !curr.isAncestorOf(prev_target.?);
         curr.hovered = true;
         if (is_entering) {
-            dispatchEvent(curr, &ctx, .{ .mouse_enter = mouse });
+            dispatchEvent(curr, &ctx, .{ .mouse_enter = .{ .element = curr, .mouse = mouse } });
         }
-        dispatchEvent(curr, &ctx, .{ .mouse_over = .{ .ctx = &ctx, .mouse = mouse } });
+        dispatchEvent(curr, &ctx, .{ .mouse_over = .{ .element = curr, .ctx = &ctx, .mouse = mouse } });
     }
 
     self.hovered = curr_target;
@@ -297,22 +297,22 @@ fn processHoverChange(self: *Window, prev_target: ?*Element, curr_target: ?*Elem
 fn processMouseDown(self: *Window, target: *Element, mouse: Mouse) void {
     self.pressed_on = target;
     var ctx: EventContext = .{};
-    dispatchEvent(target, &ctx, .{ .mouse_down = .{ .ctx = &ctx, .mouse = mouse } });
+    dispatchEvent(target, &ctx, .{ .mouse_down = .{ .element = target, .ctx = &ctx, .mouse = mouse } });
 }
 
 fn processMouseUp(self: *Window, target: *Element, mouse: Mouse) void {
     var ctx: EventContext = .{};
-    dispatchEvent(target, &ctx, .{ .mouse_up = .{ .ctx = &ctx, .mouse = mouse } });
+    dispatchEvent(target, &ctx, .{ .mouse_up = .{ .element = target, .ctx = &ctx, .mouse = mouse } });
 
     if (self.pressed_on) |pressed| {
         if (pressed.dragging) {
             pressed.dragging = false;
-            dispatchEvent(pressed, &ctx, .{ .drag_end = .{ .ctx = &ctx, .mouse = mouse } });
+            dispatchEvent(pressed, &ctx, .{ .drag_end = .{ .element = pressed, .ctx = &ctx, .mouse = mouse } });
         }
     }
 
     if (!ctx.stopped and self.pressed_on == target) {
-        dispatchEvent(target, &ctx, .{ .click = .{ .ctx = &ctx, .mouse = mouse } });
+        dispatchEvent(target, &ctx, .{ .click = .{ .element = target, .ctx = &ctx, .mouse = mouse } });
     }
     self.pressed_on = null;
 }
@@ -320,18 +320,18 @@ fn processMouseUp(self: *Window, target: *Element, mouse: Mouse) void {
 fn processMouseMove(self: *Window, target: *Element, mouse: Mouse) void {
     var ctx: EventContext = .{};
 
-    dispatchEvent(target, &ctx, .{ .mouse_move = .{ .ctx = &ctx, .mouse = mouse } });
+    dispatchEvent(target, &ctx, .{ .mouse_move = .{ .element = target, .ctx = &ctx, .mouse = mouse } });
     if (mouse.type == .drag) {
         if (self.pressed_on) |pressed| {
             pressed.dragging = true;
-            dispatchEvent(pressed, &ctx, .{ .drag = .{ .ctx = &ctx, .mouse = mouse } });
+            dispatchEvent(pressed, &ctx, .{ .drag = .{ .element = pressed, .ctx = &ctx, .mouse = mouse } });
         }
     }
 }
 
 fn processWheel(_: *Window, target: *Element, mouse: Mouse) void {
     var ctx: EventContext = .{};
-    dispatchEvent(target, &ctx, .{ .wheel = .{ .ctx = &ctx, .mouse = mouse } });
+    dispatchEvent(target, &ctx, .{ .wheel = .{ .element = target, .ctx = &ctx, .mouse = mouse } });
 }
 
 pub fn handleKeyPress(self: *Window, ctx: *EventContext, key: vaxis.Key) void {
