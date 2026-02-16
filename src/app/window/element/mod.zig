@@ -150,6 +150,7 @@ pub const Element = @This();
 
 alloc: Allocator,
 id: []const u8,
+id_allocated: bool = false,
 num: u64,
 
 node: Node,
@@ -187,8 +188,15 @@ listeners: Listeners = .{},
 
 pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
     const num = element_counter.fetchAdd(1, .monotonic);
-    var id_buf: [32]u8 = undefined;
-    const generated_id = std.fmt.bufPrint(&id_buf, "element-{}", .{num}) catch "element-?";
+
+    var id_allocated = false;
+    const id = opts.id orelse blk: {
+        var id_buf: [32]u8 = undefined;
+        const generated = std.fmt.bufPrint(&id_buf, "element-{}", .{num}) catch "element-?";
+        const duped = alloc.dupe(u8, generated) catch break :blk "element-?";
+        id_allocated = true;
+        break :blk duped;
+    };
 
     const node = Node.init();
 
@@ -196,7 +204,8 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
 
     return .{
         .alloc = alloc,
-        .id = opts.id orelse generated_id,
+        .id = id,
+        .id_allocated = id_allocated,
         .num = num,
         .visible = opts.visible,
         .zIndex = opts.zIndex,
@@ -822,6 +831,10 @@ pub fn deinit(self: *Element) void {
     self.listeners.deinit(self.alloc);
 
     self.node.deinit();
+
+    if (self.id_allocated) {
+        self.alloc.free(@constCast(self.id));
+    }
 }
 
 pub fn update(self: *Element) void {
