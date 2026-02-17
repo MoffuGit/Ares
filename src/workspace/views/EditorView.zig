@@ -18,7 +18,13 @@ pub fn create(alloc: Allocator, project: *Project) !*EditorView {
     self.* = .{
         .project = project,
     };
+
+    try project.ctx.app.subscribe(.bufferUpdated, EditorView, self, bufferUpdated);
     return self;
+}
+
+pub fn bufferUpdated(self: *EditorView, _: lib.App.EventData) void {
+    self.project.ctx.requestDraw();
 }
 
 pub fn onEntry(self: *EditorView, id: u64) void {
