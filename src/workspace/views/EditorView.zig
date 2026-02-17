@@ -97,24 +97,10 @@ fn hitInput(_: *Input, element: *Element, grid: *HitGrid) void {
 }
 
 fn updateInput(input: *Input, element: *Element) void {
-    const scroll: *Scrollable = @ptrCast(@alignCast(element.parent.?.parent.?.userdata));
     const line_count = countLines(input);
     const height: f32 = @floatFromInt(line_count);
     element.style.height = .{ .point = height };
     element.node.setHeight(.{ .point = height });
-
-    // Move cursor into visible range when viewport scrolls away
-    const cursor_row: i32 = @intCast(input.cursor_row);
-    const vp_height: i32 = @intCast(scroll.outer.layout.height);
-    if (vp_height > 0) {
-        if (cursor_row < scroll.scroll_y) {
-            const target_row: u16 = @intCast(scroll.scroll_y);
-            input.moveCursorToPosition(input.cursor_col, target_row);
-        } else if (cursor_row >= scroll.scroll_y + vp_height) {
-            const target_row: u16 = @intCast(scroll.scroll_y + vp_height - 1);
-            input.moveCursorToPosition(input.cursor_col, target_row);
-        }
-    }
 }
 
 fn countLines(input: *Input) u16 {
@@ -156,7 +142,7 @@ fn drawInput(input: *Input, element: *Element, buffer: *Buffer) void {
         const w: u16 = @intCast(gwidth(s, .unicode));
         if (row >= span.start and row < span.end and col + w <= width) {
             const vp_row = print_base + @as(u16, @intCast(row - span.start));
-            buffer.writeCell(layout.left + col, layout.top + vp_row, .{
+            buffer.setCell(layout.left + col, layout.top + vp_row, .{
                 .char = .{ .grapheme = s, .width = @intCast(w) },
                 .style = .{ .fg = theme.fg, .bg = theme.bg },
             });
@@ -176,7 +162,7 @@ fn drawInput(input: *Input, element: *Element, buffer: *Buffer) void {
     const cursor_w: u16 = @intCast(@max(1, gwidth(cursor_char, .unicode)));
     if (row >= span.start and row < span.end and col + cursor_w <= width) {
         const vp_row = print_base + @as(u16, @intCast(row - span.start));
-        buffer.writeCell(layout.left + col, layout.top + vp_row, .{
+        buffer.setCell(layout.left + col, layout.top + vp_row, .{
             .char = .{ .grapheme = cursor_char, .width = @intCast(cursor_w) },
             .style = .{ .fg = theme.bg, .bg = theme.fg },
         });
@@ -208,7 +194,7 @@ fn drawInput(input: *Input, element: *Element, buffer: *Buffer) void {
         const w: u16 = @intCast(gwidth(s, .unicode));
         if (row >= span.start and row < span.end and col + w <= width) {
             const vp_row = print_base + @as(u16, @intCast(row - span.start));
-            buffer.writeCell(layout.left + col, layout.top + vp_row, .{
+            buffer.setCell(layout.left + col, layout.top + vp_row, .{
                 .char = .{ .grapheme = s, .width = @intCast(w) },
                 .style = .{ .fg = theme.fg, .bg = theme.bg },
             });
