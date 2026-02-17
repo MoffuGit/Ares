@@ -14,6 +14,7 @@ element: TE,
 
 bg: vaxis.Color = .default,
 fg: vaxis.Color = .default,
+opacity: f32 = 1,
 segments: ?[]const Element.Segment = null,
 text_align: Element.TextAlign = .left,
 rounded: ?f32 = null,
@@ -162,6 +163,7 @@ pub const Options = struct {
     style: Style = .{},
     bg: vaxis.Color = .default,
     fg: vaxis.Color = .default,
+    opacity: f32 = 1,
     segments: ?[]const Element.Segment = null,
     text_align: Element.TextAlign = .left,
     rounded: ?f32 = null,
@@ -191,6 +193,8 @@ pub fn init(alloc: Allocator, opts: Options) !*Box {
     self.* = .{
         .element = TE.init(alloc, self, .{
             .drawFn = draw,
+            .beforeDrawFn = beforeDraw,
+            .afterDrawFn = afterDraw,
         }, .{
             .id = opts.id,
             .visible = opts.visible,
@@ -204,6 +208,7 @@ pub fn init(alloc: Allocator, opts: Options) !*Box {
         .rounded = opts.rounded,
         .border = opts.border,
         .shadow = opts.shadow,
+        .opacity = opts.opacity,
     };
 
     return self;
@@ -216,6 +221,14 @@ pub fn deinit(self: *Box, alloc: Allocator) void {
 
 pub fn elem(self: *Box) *Element {
     return self.element.elem();
+}
+
+fn beforeDraw(self: *Box, _: *Element, buffer: *Buffer) void {
+    buffer.pushOpacity(self.opacity);
+}
+
+fn afterDraw(_: *Box, _: *Element, buffer: *Buffer) void {
+    buffer.popOpacity();
 }
 
 fn draw(self: *Box, element: *Element, buffer: *Buffer) void {

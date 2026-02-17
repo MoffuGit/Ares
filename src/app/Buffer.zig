@@ -20,6 +20,9 @@ height: u16 = 0,
 clip_stack: std.ArrayList(ClipRect) = .{},
 current_clip: ?ClipRect = null,
 
+opacity_stack: std.ArrayList(f32) = .{},
+current_opacity: f32 = 1.0,
+
 pub fn init(alloc: std.mem.Allocator, width: u16, height: u16) !Buffer {
     return .{
         .alloc = alloc,
@@ -31,7 +34,25 @@ pub fn init(alloc: std.mem.Allocator, width: u16, height: u16) !Buffer {
 
 pub fn deinit(self: *Buffer) void {
     self.clip_stack.deinit(self.alloc);
+    self.opacity_stack.deinit(self.alloc);
     self.alloc.free(self.buf);
+}
+
+pub fn pushOpacity(self: *Buffer, opacity: f32) void {
+    self.opacity_stack.append(self.alloc, opacity) catch {};
+    self.current_opacity = @min(self.current_opacity, opacity);
+}
+
+pub fn popOpacity(self: *Buffer) void {
+    _ = self.opacity_stack.pop();
+    self.recalculateOpacity();
+}
+
+fn recalculateOpacity(self: *Buffer) void {
+    self.current_opacity = 1.0;
+    for (self.opacity_stack.items) |opacity| {
+        self.current_opacity = @min(self.current_opacity, opacity);
+    }
 }
 
 pub fn pushClip(self: *Buffer, x: u16, y: u16, w: u16, h: u16) void {
@@ -81,7 +102,16 @@ pub fn setCell(self: *Buffer, col: u16, row: u16, cell: Cell) void {
 
     const i = (@as(usize, @intCast(row)) * self.width) + col;
     assert(i < self.buf.len);
-    self.buf[i] = cell;
+    self.buf[i] = if (self.current_opacity < 1.0) self.applyOpacity(cell) else cell;
+}
+
+fn applyOpacity(self: *const Buffer, cell: Cell) Cell {
+    var c = cell;
+    const o = self.current_opacity;
+    c.style.fg = c.style.fg.setAlpha(o);
+    c.style.bg = c.style.bg.setAlpha(o);
+    c.style.ul = c.style.ul.setAlpha(o);
+    return c;
 }
 
 pub fn writeCell(self: *Buffer, col: u16, row: u16, cell: Cell) void {
