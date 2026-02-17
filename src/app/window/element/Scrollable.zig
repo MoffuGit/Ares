@@ -32,7 +32,7 @@ const Options = struct {
     bar: bool = true,
     track: vaxis.Color = .default,
     thumb: vaxis.Color = .default,
-    outer: Element.Style,
+    outer: Element.Style = .{},
 };
 
 pub fn init(alloc: Allocator, opts: Options) !*Scrollable {

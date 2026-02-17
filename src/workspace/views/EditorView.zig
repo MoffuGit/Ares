@@ -5,6 +5,8 @@ const global = @import("../../global.zig");
 const Buffer = lib.Buffer;
 const Element = lib.Element;
 const Project = @import("../Project.zig");
+const Scrollable = Element.Scrollable;
+const Input = Element.Input;
 
 const Allocator = std.mem.Allocator;
 
@@ -12,11 +14,23 @@ const EditorView = @This();
 
 project: *Project,
 entry: ?u64 = null,
+scroll: *Scrollable,
+input: *Input,
 
 pub fn create(alloc: Allocator, project: *Project) !*EditorView {
     const self = try alloc.create(EditorView);
+    errdefer alloc.destroy(self);
+
+    const scroll = try Scrollable.init(alloc, .{});
+    errdefer scroll.deinit(alloc);
+
+    const input = try Input.create(alloc, .{}, .{});
+    errdefer input.destroy();
+
     self.* = .{
         .project = project,
+        .scroll = scroll,
+        .input = input,
     };
 
     try project.ctx.app.subscribe(.bufferUpdated, EditorView, self, bufferUpdated);
@@ -51,5 +65,7 @@ pub fn draw(self: *EditorView, element: *Element, buffer: *Buffer) void {
 }
 
 pub fn destroy(self: *EditorView, alloc: Allocator) void {
+    self.scroll.deinit(alloc);
+    self.input.destroy();
     alloc.destroy(self);
 }
