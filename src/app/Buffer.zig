@@ -108,9 +108,15 @@ pub fn setCell(self: *Buffer, col: u16, row: u16, cell: Cell) void {
 fn applyOpacity(self: *const Buffer, cell: Cell) Cell {
     var c = cell;
     const o = self.current_opacity;
-    c.style.fg = c.style.fg.setAlpha(o);
-    c.style.bg = c.style.bg.setAlpha(o);
-    c.style.ul = c.style.ul.setAlpha(o);
+    if (c.style.fg.alpha() > 0) {
+        c.style.fg = c.style.fg.setAlpha(o);
+    }
+    if (c.style.bg.alpha() > 0) {
+        c.style.bg = c.style.bg.setAlpha(o);
+    }
+    if (c.style.ul.alpha() > 0) {
+        c.style.ul = c.style.ul.setAlpha(o);
+    }
     return c;
 }
 

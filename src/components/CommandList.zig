@@ -27,9 +27,10 @@ pub fn create(alloc: Allocator) !*CommandList {
     const item = try Box.init(alloc, .{
         .style = .{
             .width = .{ .percent = 100 },
-            .height = .{ .point = 1 },
+            .height = .{ .percent = 100 },
+            .border = .{ .top = 1 },
         },
-        .bg = .{ .rgba = .{ 0, 255, 0, 255 } },
+        .border = .{ .kind = .single },
     });
     errdefer item.deinit(alloc);
 
