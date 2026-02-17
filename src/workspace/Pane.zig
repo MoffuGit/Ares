@@ -1,9 +1,7 @@
 const std = @import("std");
 const lib = @import("../lib.zig");
-const vaxis = @import("vaxis");
 
 const Allocator = std.mem.Allocator;
-const Buffer = lib.Buffer;
 const Element = lib.Element;
 const Project = @import("Project.zig");
 const EditorView = @import("views/EditorView.zig");
@@ -19,9 +17,9 @@ pub const View = union(enum) {
         }
     }
 
-    pub fn draw(self: View, element: *Element, buffer: *Buffer) void {
+    pub fn element(self: View) *Element {
         switch (self) {
-            .editor => |v| v.draw(element, buffer),
+            .editor => |v| return v.getElement(),
         }
     }
 
@@ -33,29 +31,14 @@ pub const View = union(enum) {
 };
 
 alloc: Allocator,
-element: *Element,
 entry: ?u64 = null,
 project: *Project,
 view: View,
 
 pub fn create(alloc: Allocator, project: *Project, view: View) !*Pane {
     const pane = try alloc.create(Pane);
-    errdefer alloc.destroy(pane);
-
-    const element = try alloc.create(Element);
-    errdefer alloc.destroy(element);
-
-    element.* = Element.init(alloc, .{
-        .userdata = pane,
-        .drawFn = drawFn,
-        .style = .{
-            .width = .{ .percent = 100 },
-            .height = .{ .percent = 100 },
-        },
-    });
 
     pane.* = .{
-        .element = element,
         .alloc = alloc,
         .project = project,
         .view = view,
@@ -64,9 +47,8 @@ pub fn create(alloc: Allocator, project: *Project, view: View) !*Pane {
     return pane;
 }
 
-fn drawFn(element: *Element, buffer: *Buffer) void {
-    const self: *Pane = @ptrCast(@alignCast(element.userdata));
-    self.view.draw(element, buffer);
+pub fn element(self: *Pane) *Element {
+    return self.view.element();
 }
 
 pub fn setEntry(self: *Pane, entry: u64) void {
@@ -82,7 +64,5 @@ pub fn select(self: *Pane) void {
 
 pub fn destroy(self: *Pane) void {
     self.view.destroy(self.alloc);
-    self.element.deinit();
-    self.alloc.destroy(self.element);
     self.alloc.destroy(self);
 }

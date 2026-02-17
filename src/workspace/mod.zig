@@ -234,7 +234,7 @@ pub fn openProject(self: *Workspace, abs_path: []const u8) !void {
     const tab = self.tabs.newTab(.{ .userdata = pane }) catch return;
     self.tabs.select(tab.id);
 
-    tab.content.addChild(pane.element) catch return;
+    tab.content.addChild(pane.element()) catch return;
 
     self.active_pane = pane;
 
@@ -261,7 +261,7 @@ pub fn closeActiveTab(self: *Workspace) void {
     const tab = self.tabs.inner.values.items[index];
 
     const pane: ?*Pane = if (tab.userdata) |ud| @ptrCast(@alignCast(ud)) else null;
-    if (pane) |p| p.element.remove();
+    if (pane) |p| p.element().remove();
 
     self.tabs.closeTab(selected_id);
 
@@ -350,7 +350,7 @@ fn onKeyPress(self: *Workspace, data: Element.EventData) void {
             const tab = self.tabs.newTab(.{ .userdata = pane }) catch return;
             self.tabs.select(tab.id);
 
-            tab.content.addChild(pane.element) catch return;
+            tab.content.addChild(pane.element()) catch return;
 
             if (project.selected_entry) |id| {
                 pane.setEntry(id);

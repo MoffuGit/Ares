@@ -236,7 +236,7 @@ fn lastGraphemeLen(str: []const u8) usize {
     return last_len;
 }
 
-fn moveCursorToPosition(self: *Input, target_col: u16, target_row: u16) void {
+pub fn moveCursorToPosition(self: *Input, target_col: u16, target_row: u16) void {
     self.buf.moveGap(0);
     const content = self.buf.secondHalf();
 
