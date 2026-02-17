@@ -40,29 +40,6 @@ pub fn schemeFn(app: *App) void {
 //  Input,
 //  Resolver,
 //
-//EditorView
-//  rowLines,
-//  Input
-//
-//TextInput
-//  GapBuffer,
-//
-//because of that the first thing i should do is impl the
-//text input, once this part is done i can choose if i do the EditorView
-//first or the Command Palette, i think i will go with the Command Palette
-//because is more fresh on my head, after the input i would to the trie,
-//the keymaps settings and the resolver,
-//the resolver wuld connect to the workspace and this let me handle the keympas,
-//and because i havbe connected the command palette to the workspace, i can access al the
-//Actions that my app have and show them as part of the Command palette,
-//the trie would help for searching as well,
-//
-//then i could work with the Editor View, i would work more on the view more than other thing
-//because is not there that much to do
-//
-//and then i can work on my floatinf file tree, because by now i would have my
-//text input and my trie, i can add search into the entries
-
 pub fn main() !void {
     var gpa: GPA = .{};
     defer if (gpa.deinit() == .leak) {
