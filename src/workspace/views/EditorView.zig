@@ -66,9 +66,7 @@ pub fn getElement(self: *Editor) *Element {
 }
 
 pub fn bufferUpdated(self: *Editor, _: lib.App.EventData) void {
-    if (self.input.buf.realLength() == 0) {
-        self.loadBuffer();
-    }
+    self.loadBuffer();
     self.project.ctx.requestDraw();
 }
 
