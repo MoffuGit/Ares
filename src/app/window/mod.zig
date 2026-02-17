@@ -137,19 +137,10 @@ pub fn draw(self: *Window) !void {
 pub fn calculateLayout(self: *Window) void {
     const root_node = self.root.node.yg_node;
     yoga.YGNodeCalculateLayout(root_node, @floatFromInt(self.size.cols), @floatFromInt(self.size.rows), yoga.YGDirectionLTR);
-    applyLayout(self.root, 0);
+    applyLayout(self.root, false);
 }
 
-fn applyLayout(element: *Element, depth: u32) void {
-    applyLayoutInner(element, depth, false);
-}
-
-//NOTE:
-//if any element has their left or top value changed,
-//we need to update their childrens top and left values as well,
-//yoga put the responsability of calculating the top and left values
-//to us, why?, i don't know
-fn applyLayoutInner(element: *Element, depth: u32, parent_changed: bool) void {
+fn applyLayout(element: *Element, parent_changed: bool) void {
     const node = element.node.yg_node;
 
     const new_layout = yoga.YGNodeGetHasNewLayout(node);
@@ -162,11 +153,11 @@ fn applyLayoutInner(element: *Element, depth: u32, parent_changed: bool) void {
         yoga.YGNodeSetHasNewLayout(node, false);
     }
 
-    element.syncLayout();
+    const position = element.syncLayout();
 
     if (element.childrens) |*childrens| {
         for (childrens.by_order.items) |child| {
-            applyLayoutInner(child, depth + 1, new_layout);
+            applyLayout(child, new_layout or position);
         }
     }
 }

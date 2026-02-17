@@ -34,20 +34,6 @@ pub fn schemeFn(app: *App) void {
 }
 
 //NOTE:
-//it looks like i will need to update
-//the listeners system, because of that i think it's
-//going to be a good idea to update the subscription system,
-//what i was thinking on doing is having a comptime subscription system,
-//where any structure can say, i can trigger the following events: a,b,c
-//why the structure trigger that events dont matter for the sub system,
-//then, another structure can go and say, subscribe to event a,
-//the callback paramethers would get define by the structure that you sbuscrbsibe into
-//then, we would use this subs system for the Elements and for the App,
-//we should define this ssytem liek the others,
-//we define a base(without types) and then we add another layour that handle the types
-//like with the TypedElements
-
-//NOTE:
 //Command palette:
 //  Keymaps settings,
 //  Trie,

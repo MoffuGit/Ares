@@ -779,7 +779,7 @@ pub fn hitRounded(element: *Element, hit_grid: *HitGrid, radius: f32) void {
     }
 }
 
-pub fn syncLayout(self: *Element) void {
+pub fn syncLayout(self: *Element) bool {
     const old_width = self.layout.width;
     const old_height = self.layout.height;
 
@@ -789,9 +789,15 @@ pub fn syncLayout(self: *Element) void {
     const parent_left: u16 = if (self.parent) |p| p.layout.left else 0;
     const parent_top: u16 = if (self.parent) |p| p.layout.top else 0;
 
+    const curr_left = self.layout.left;
+    const curr_top = self.layout.top;
+
+    const new_left = parent_left + self.node.getLayoutLeft();
+    const new_top = parent_top + self.node.getLayoutTop();
+
     self.layout = .{
-        .left = parent_left + self.node.getLayoutLeft(),
-        .top = parent_top + self.node.getLayoutTop(),
+        .left = new_left,
+        .top = new_top,
         .right = self.node.getLayoutRight(),
         .bottom = self.node.getLayoutBottom(),
         .width = new_width,
@@ -821,6 +827,7 @@ pub fn syncLayout(self: *Element) void {
     if (old_width != new_width or old_height != new_height) {
         self.dispatchEvent(.{ .resize = .{ .element = self, .width = new_width, .height = new_height } });
     }
+    return (curr_left != new_left) or (curr_top != curr_top);
 }
 
 pub fn deinit(self: *Element) void {
