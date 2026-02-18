@@ -54,7 +54,10 @@ pub fn getElement(self: *BottomBar) *Element {
 fn draw(element: *Element, buffer: *Buffer) void {
     const self: *BottomBar = @ptrCast(@alignCast(element.userdata));
     const theme = self.settings.theme;
-    element.fill(buffer, .{ .style = .{ .bg = theme.bg } });
+    element.fill(buffer, .{ .style = .{
+        .bg = theme.bg,
+        .fg = self.settings.theme.mutedFg,
+    }, .char = .{ .grapheme = "/" } });
 
     const mode_text, const mode_color: vaxis.Color = switch (global.mode) {
         .normal => .{ " NORMAL ", .{ .rgba = .{ 100, 149, 237, 255 } } },
@@ -62,13 +65,15 @@ fn draw(element: *Element, buffer: *Buffer) void {
         .visual => .{ " VISUAL ", .{ .rgba = .{ 180, 120, 220, 255 } } },
     };
 
-    _ = mode_text;
-
+    _ = mode_color;
     _ = element.print(buffer, &.{
-        .{ .text = "──────", .style = .{
-            .bg = self.settings.theme.bg,
-            .fg = mode_color,
-        } },
+        .{
+            .text = mode_text,
+            .style = .{
+                .bg = self.settings.theme.bg,
+                .fg = self.settings.theme.mutedFg,
+            },
+        },
     }, .{
         .col_offset = 2,
     });
