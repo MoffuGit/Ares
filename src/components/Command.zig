@@ -40,7 +40,6 @@ pub fn create(alloc: Allocator, ctx: *Context) !*Command {
                         .top = .{ .point = -18 },
                     },
                     .align_items = .center,
-                    .padding = .{ .horizontal = .{ .point = 1 } },
                 },
                 .border = .{
                     .kind = .thin_block,

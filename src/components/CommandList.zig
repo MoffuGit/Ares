@@ -1,5 +1,6 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
+const global = @import("../global.zig");
 const lib = @import("../lib.zig");
 
 const Element = lib.Element;
@@ -24,13 +25,21 @@ pub fn create(alloc: Allocator) !*CommandList {
     });
     errdefer container.deinit(alloc);
 
+    const theme = global.settings.theme;
+
     const item = try Box.init(alloc, .{
         .style = .{
             .width = .{ .percent = 100 },
             .height = .{ .percent = 100 },
             .border = .{ .top = 1 },
         },
-        .border = .{ .kind = .single },
+        .border = .{
+            .kind = .{ .top = "▁" },
+            .color = .{ .all = .{
+                .bg = theme.bg,
+                .fg = theme.border,
+            } },
+        },
     });
     errdefer item.deinit(alloc);
 

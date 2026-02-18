@@ -142,7 +142,7 @@ fn drawInput(input: *Input, element: *Element, buffer: *Buffer) void {
             const vp_row = print_base + @as(u16, @intCast(row - span.start));
             buffer.setCell(layout.left + col, layout.top + vp_row, .{
                 .char = .{ .grapheme = s, .width = @intCast(w) },
-                .style = .{ .fg = theme.fg, .bg = theme.bg },
+                .style = .{ .fg = theme.mutedFg, .bg = theme.mutedBg },
             });
         }
         col += w;
@@ -162,7 +162,7 @@ fn drawInput(input: *Input, element: *Element, buffer: *Buffer) void {
         const vp_row = print_base + @as(u16, @intCast(row - span.start));
         buffer.setCell(layout.left + col, layout.top + vp_row, .{
             .char = .{ .grapheme = cursor_char, .width = @intCast(cursor_w) },
-            .style = .{ .fg = theme.bg, .bg = theme.fg },
+            .style = .{ .fg = theme.mutedFg, .bg = theme.mutedBg },
         });
     }
 
@@ -194,7 +194,7 @@ fn drawInput(input: *Input, element: *Element, buffer: *Buffer) void {
             const vp_row = print_base + @as(u16, @intCast(row - span.start));
             buffer.setCell(layout.left + col, layout.top + vp_row, .{
                 .char = .{ .grapheme = s, .width = @intCast(w) },
-                .style = .{ .fg = theme.fg, .bg = theme.bg },
+                .style = .{ .fg = theme.mutedFg, .bg = theme.mutedBg },
             });
         }
         col += w;
