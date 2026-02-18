@@ -4,17 +4,29 @@ const log = std.log.scoped(.app);
 const messagepkg = @import("message.zig");
 const EventListeners = @import("events.zig").EventListeners;
 const UpdatedEntriesSet = @import("../worktree/scanner/mod.zig").UpdatedEntriesSet;
+const keymapspkg = @import("../keymaps/mod.zig");
 
 pub const EventType = enum {
     scheme,
     worktreeUpdatedEntries,
     bufferUpdated,
+    keymap_action,
+};
+
+pub const KeymapActionEvent = struct {
+    action: keymapspkg.Action,
+    consumed: bool = false,
+
+    pub fn consume(self: *KeymapActionEvent) void {
+        self.consumed = true;
+    }
 };
 
 pub const EventData = union(EventType) {
     scheme: vaxis.Color.Scheme,
     worktreeUpdatedEntries: *UpdatedEntriesSet,
     bufferUpdated: u64,
+    keymap_action: *KeymapActionEvent,
 };
 
 pub const AppEventListeners = EventListeners(EventType, EventData);
@@ -254,4 +266,10 @@ pub fn subscribe(
     cb: *const fn (userdata: *Userdata, data: EventData) void,
 ) !void {
     try self.subs.addSubscription(self.alloc, event, Userdata, userdata, cb);
+}
+
+pub fn dispatchKeymapAction(self: *App, action: keymapspkg.Action) bool {
+    var ev = KeymapActionEvent{ .action = action };
+    self.subs.notifyConsumable(.{ .keymap_action = &ev }, &ev.consumed);
+    return ev.consumed;
 }

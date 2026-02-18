@@ -14,6 +14,7 @@ const global = @import("../global.zig");
 const Pane = @import("Pane.zig");
 const EditorView = @import("views/EditorView.zig");
 const Command = @import("../components/Command.zig");
+const App = @import("../app/mod.zig");
 
 pub const Project = @import("Project.zig");
 
@@ -73,7 +74,7 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         },
     });
 
-    try ctx.app.root().addEventListener(.key_press, Workspace, workspace, onKeyPress);
+    try ctx.app.subscribe(.keymap_action, Workspace, workspace, onKeyAction);
 
     center_wrapper.* = Element.init(alloc, .{ .id = "center-wrapper", .zIndex = 10, .style = .{
         .flex_grow = 1,
@@ -300,89 +301,58 @@ pub fn setActiveEntry(self: *Workspace, entry_id: u64) void {
     }
 }
 
-fn onKeyPress(self: *Workspace, data: Element.EventData) void {
-    const key_data = data.key_press;
-    const element = key_data.element;
+fn onKeyAction(self: *Workspace, data: App.EventData) void {
+    const key_data = data.keymap_action;
 
-    if (key_data.ctx.phase != .bubbling) return;
+    switch (key_data.action) {
+        .close_active_tab => {
+            self.closeActiveTab();
+        },
+        .new_tab => {
+            if (self.project) |project| {
+                const editor = EditorView.create(self.alloc, project) catch return;
+                const pane = Pane.create(self.alloc, project, .{ .editor = editor }) catch return;
 
-    // Mode transitions
-    switch (global.mode) {
-        .normal => {
-            if (key_data.key.matches('i', .{})) {
-                global.mode = .insert;
-                key_data.ctx.stopPropagation();
-                element.context.?.requestDraw();
-                return;
-            }
-            if (key_data.key.matches('v', .{})) {
-                global.mode = .visual;
-                key_data.ctx.stopPropagation();
-                element.context.?.requestDraw();
-                return;
+                self.panes.append(self.alloc, pane) catch return;
+
+                const tab = self.tabs.newTab(.{ .userdata = pane }) catch return;
+                self.tabs.select(tab.id);
+
+                tab.content.addChild(pane.element()) catch return;
+
+                if (project.selected_entry) |id| {
+                    pane.setEntry(id);
+                }
+
+                self.active_pane = pane;
+                pane.select();
             }
         },
-        .insert, .visual => {
-            if (key_data.key.matches(0x1b, .{})) {
-                global.mode = .normal;
-                key_data.ctx.stopPropagation();
-                element.context.?.requestDraw();
-                return;
-            }
+        .next_tab => {
+            self.tabs.next();
+            self.syncActivePaneFromTab();
         },
+        .prev_tab => {
+            self.tabs.prev();
+            self.syncActivePaneFromTab();
+        },
+        .toggle_left_dock => {
+            self.toggleDock(.left);
+        },
+        .toggle_command_palette => {
+            self.command.toggleShow();
+        },
+        .enter_insert => {
+            global.mode = .insert;
+        },
+        .enter_normal => {
+            global.mode = .normal;
+        },
+        .enter_visual => {
+            global.mode = .visual;
+        },
+        else => {},
     }
 
-    if (key_data.key.matches('l', .{ .super = true })) {
-        self.toggleDock(.left);
-        key_data.ctx.stopPropagation();
-        element.context.?.requestDraw();
-    }
-
-    if (key_data.key.matches('t', .{ .ctrl = true })) {
-        key_data.ctx.stopPropagation();
-
-        if (self.project) |project| {
-            const editor = EditorView.create(self.alloc, project) catch return;
-            const pane = Pane.create(self.alloc, project, .{ .editor = editor }) catch return;
-
-            self.panes.append(self.alloc, pane) catch return;
-
-            const tab = self.tabs.newTab(.{ .userdata = pane }) catch return;
-            self.tabs.select(tab.id);
-
-            tab.content.addChild(pane.element()) catch return;
-
-            if (project.selected_entry) |id| {
-                pane.setEntry(id);
-            }
-
-            self.active_pane = pane;
-            pane.select();
-        }
-
-        element.context.?.requestDraw();
-    }
-
-    if (key_data.key.matches('\t', .{ .shift = true })) {
-        self.tabs.prev();
-        self.syncActivePaneFromTab();
-        key_data.ctx.stopPropagation();
-        element.context.?.requestDraw();
-    } else if (key_data.key.matches('\t', .{})) {
-        self.tabs.next();
-        self.syncActivePaneFromTab();
-        key_data.ctx.stopPropagation();
-        element.context.?.requestDraw();
-    }
-
-    if (key_data.key.matches('q', .{ .ctrl = true })) {
-        self.closeActiveTab();
-        key_data.ctx.stopPropagation();
-        element.context.?.requestDraw();
-    }
-
-    if (key_data.key.matches('k', .{ .super = true })) {
-        self.command.toggleShow();
-        element.context.?.requestDraw();
-    }
+    self.ctx.requestDraw();
 }

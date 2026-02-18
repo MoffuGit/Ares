@@ -12,6 +12,7 @@ pub const std_options: std.Options = .{
 const App = lib.App;
 const Element = lib.Element;
 const Buffer = lib.Buffer;
+const Resolver = @import("keymaps/Resolver.zig");
 const Workspace = @import("workspace/mod.zig").Workspace;
 
 const GPA = std.heap.GeneralPurposeAllocator(.{});
@@ -33,13 +34,6 @@ pub fn schemeFn(app: *App) void {
     }
 }
 
-//NOTE:
-//Command palette:
-//  Keymaps settings,
-//  Trie,
-//  Input,
-//  Resolver,
-//
 pub fn main() !void {
     var gpa: GPA = .{};
     defer if (gpa.deinit() == .leak) {
@@ -66,6 +60,9 @@ pub fn main() !void {
     settings.load("./settings/") catch {
         log.warn("Using default settings", .{});
     };
+
+    const resolver = try Resolver.create(alloc, app);
+    defer resolver.destroy();
 
     const cwd = std.fs.cwd();
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;

@@ -74,11 +74,11 @@ pub fn create(alloc: Allocator, ctx: *Context, opts: Options) !*Dialog {
         .opacity_anim = OpacityAnim.init(.{
             .start = 0.0,
             .end = 1.0,
-            .duration_us = 100_000,
+            .duration_us = 50_000,
             .updateFn = lerpF32,
             .callback = onOpacityUpdate,
             .userdata = dialog,
-            .easing = .ease_out_quad,
+            .easing = .ease_out_expo,
         }),
     };
 

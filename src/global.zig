@@ -7,11 +7,7 @@ const FileType = @import("worktree/mod.zig").FileType;
 
 pub const xev = @import("xev").Dynamic;
 
-pub const Mode = enum {
-    normal,
-    insert,
-    visual,
-};
+pub const Mode = @import("keymaps/mod.zig").Mode;
 
 pub const file_icons = std.EnumArray(FileType, []const u8).init(.{
     .zig = " ",

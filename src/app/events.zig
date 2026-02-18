@@ -41,6 +41,14 @@ pub fn EventListeners(comptime EType: type, comptime EData: type) type {
             }
         }
 
+        pub fn notifyConsumable(self: *Self, data: EData, consumed: *bool) void {
+            const list = self.values.get(@as(EType, data));
+            for (list.items) |sub| {
+                sub.callback(sub.userdata, data);
+                if (consumed.*) break;
+            }
+        }
+
         pub fn deinit(self: *Self, alloc: std.mem.Allocator) void {
             for (&self.values.values) |*list| {
                 list.deinit(alloc);

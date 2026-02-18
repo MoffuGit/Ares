@@ -8,13 +8,6 @@ pub const KeyStroke = struct {
     codepoint: u21,
     mods: Modifiers,
 
-    pub fn fromVaxisKey(key: vaxis.Key) KeyStroke {
-        return .{
-            .codepoint = @intCast(key.codepoint),
-            .mods = key.mods,
-        };
-    }
-
     pub fn eql(a: KeyStroke, b: KeyStroke) bool {
         return a.codepoint == b.codepoint and @as(u8, @bitCast(a.mods)) == @as(u8, @bitCast(b.mods));
     }
