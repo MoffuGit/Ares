@@ -115,12 +115,13 @@ fn wakeupCallback(
 }
 
 pub fn scheduleNextTick(self: *Loop) void {
+    if (self.tick_active) return;
+
     if (self.app.window.time.peekNext() == null) {
         self.tick_active = false;
         return;
     }
 
-    if (self.tick_active) return;
     self.tick_active = true;
 
     self.tick_h.run(
