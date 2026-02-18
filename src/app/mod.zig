@@ -2,7 +2,7 @@ const std = @import("std");
 const vaxis = @import("vaxis");
 const log = std.log.scoped(.app);
 const messagepkg = @import("message.zig");
-const EventListeners = @import("subscriptions.zig").EventListeners;
+const EventListeners = @import("events.zig").EventListeners;
 const UpdatedEntriesSet = @import("../worktree/scanner/mod.zig").UpdatedEntriesSet;
 
 pub const EventType = enum {

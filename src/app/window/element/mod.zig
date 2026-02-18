@@ -28,7 +28,7 @@ const Mouse = eventpkg.Mouse;
 const Allocator = std.mem.Allocator;
 const Childrens = @import("Childrens.zig");
 
-const subspkg = @import("../../subscriptions.zig");
+const subspkg = @import("../../events.zig");
 pub const Listeners = subspkg.EventListeners(EventType, EventData);
 pub const DrawFn = *const fn (element: *Element, buffer: *Buffer) void;
 pub const HitFn = *const fn (element: *Element, hit_grid: *HitGrid) void;
