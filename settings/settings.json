@@ -1,5 +1,23 @@
 {
   "appearance": "system",
   "light_theme": "light",
-  "dark_theme": "zenbones"
+  "dark_theme": "zenbones",
+  "keymaps": {
+    "normal": {
+      "i": "enter_insert",
+      "v": "enter_visual",
+      "super+l": "toggle_left_dock",
+      "ctrl+t": "new_tab",
+      "tab": "next_tab",
+      "shift+tab": "prev_tab",
+      "ctrl+q": "close_active_tab",
+      "super+k": "toggle_command_palette"
+    },
+    "insert": {
+      "escape": "enter_normal"
+    },
+    "visual": {
+      "escape": "enter_normal"
+    }
+  }
 }

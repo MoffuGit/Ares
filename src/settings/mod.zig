@@ -6,6 +6,11 @@ const Theme = @import("theme/mod.zig");
 const apppkg = @import("../app/mod.zig");
 const Context = apppkg.Context;
 const EventData = apppkg.EventData;
+const keymapspkg = @import("../keymaps/mod.zig");
+const Keymaps = keymapspkg.Keymaps;
+const Action = keymapspkg.Action;
+const KeyStroke = @import("../keymaps/KeyStroke.zig").KeyStroke;
+const parseSequence = @import("../keymaps/KeyStroke.zig").parseSequence;
 
 pub const Settings = @This();
 
@@ -28,6 +33,7 @@ const JsonSettings = struct {
     appearance: []const u8,
     light_theme: []const u8,
     dark_theme: []const u8,
+    keymaps: ?std.json.Value = null,
 };
 
 alloc: Allocator,
@@ -42,6 +48,10 @@ light_theme: []const u8 = DEFAULT_LIGHT,
 dark_theme: []const u8 = DEFAULT_DARK,
 
 theme: *const Theme = &Theme.fallback,
+
+keymaps: Keymaps = .{ .normal = undefined, .insert = undefined, .visual = undefined },
+keymaps_initialized: bool = false,
+keymap_generation: u64 = 0,
 
 settings_w: xev.FileSystem.Watcher = .{},
 themes_w: xev.FileSystem.Watcher = .{},
@@ -67,7 +77,7 @@ pub fn load(self: *Settings, path: []const u8) LoadError!void {
     defer if (json_str) |str| self.alloc.free(str);
 
     if (json_str) |str| parse_settings: {
-        const parsed = std.json.parseFromSlice(JsonSettings, self.alloc, str, .{}) catch {
+        const parsed = std.json.parseFromSlice(JsonSettings, self.alloc, str, .{ .allocate = .alloc_always }) catch {
             settings_error = LoadError.InvalidSettings;
             break :parse_settings;
         };
@@ -77,6 +87,14 @@ pub fn load(self: *Settings, path: []const u8) LoadError!void {
         self.dark_theme = self.alloc.dupe(u8, json_settings.dark_theme) catch DEFAULT_DARK;
         self.light_theme = self.alloc.dupe(u8, json_settings.light_theme) catch DEFAULT_LIGHT;
         self.scheme = std.meta.stringToEnum(Scheme, json_settings.appearance) orelse .system;
+
+        if (json_settings.keymaps) |km_json| {
+            self.loadKeymaps(km_json);
+        }
+    }
+
+    if (!self.keymaps_initialized) {
+        self.loadDefaultKeymaps();
     }
 
     {
@@ -125,6 +143,83 @@ pub fn updateSystemScheme(self: *Settings, scheme: vaxis.Color.Scheme) void {
     self.theme = self.getTheme();
 }
 
+fn loadKeymaps(self: *Settings, km_json: std.json.Value) void {
+    const obj = switch (km_json) {
+        .object => |o| o,
+        else => return,
+    };
+
+    if (self.keymaps_initialized) {
+        self.keymaps.deinit();
+    }
+    self.keymaps = Keymaps.init(self.alloc) catch return;
+    self.keymaps_initialized = true;
+
+    const mode_names = [_]struct { key: []const u8, mode: keymapspkg.Mode }{
+        .{ .key = "normal", .mode = .normal },
+        .{ .key = "insert", .mode = .insert },
+        .{ .key = "visual", .mode = .visual },
+    };
+
+    for (mode_names) |entry| {
+        if (obj.get(entry.key)) |mode_json| {
+            self.loadKeymapMode(entry.mode, mode_json);
+        }
+    }
+
+    self.keymap_generation +%= 1;
+}
+
+fn loadKeymapMode(self: *Settings, mode: keymapspkg.Mode, mode_json: std.json.Value) void {
+    const bindings = switch (mode_json) {
+        .object => |o| o,
+        else => return,
+    };
+    const trie = self.keymaps.actions(mode);
+
+    var it = bindings.iterator();
+    while (it.next()) |entry| {
+        const seq_str = entry.key_ptr.*;
+        const action_str = switch (entry.value_ptr.*) {
+            .string => |s| s,
+            else => continue,
+        };
+
+        const action = std.meta.stringToEnum(Action, action_str) orelse continue;
+        const seq = parseSequence(self.alloc, seq_str) catch continue;
+        defer self.alloc.free(seq);
+
+        trie.insert(seq, action) catch continue;
+    }
+}
+
+fn loadDefaultKeymaps(self: *Settings) void {
+    if (self.keymaps_initialized) {
+        self.keymaps.deinit();
+    }
+    self.keymaps = Keymaps.init(self.alloc) catch return;
+    self.keymaps_initialized = true;
+
+    const defaults = [_]struct { mode: keymapspkg.Mode, seq: []const KeyStroke, action: Action }{
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'i', .mods = .{} }}, .action = .enter_insert },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'v', .mods = .{} }}, .action = .enter_visual },
+        .{ .mode = .insert, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .enter_normal },
+        .{ .mode = .visual, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .enter_normal },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'l', .mods = .{ .super = true } }}, .action = .toggle_left_dock },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 't', .mods = .{ .ctrl = true } }}, .action = .new_tab },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{} }}, .action = .next_tab },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{ .shift = true } }}, .action = .prev_tab },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'q', .mods = .{ .ctrl = true } }}, .action = .close_active_tab },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{ .super = true } }}, .action = .toggle_command_palette },
+    };
+
+    for (defaults) |d| {
+        self.keymaps.actions(d.mode).insert(d.seq, d.action) catch continue;
+    }
+
+    self.keymap_generation +%= 1;
+}
+
 pub fn watch(self: *Settings, loop: *xev.Loop) void {
     if (self.settings_path.len == 0) return;
 
@@ -152,7 +247,7 @@ fn settingsCallback(
     const json_str = std.fs.cwd().readFileAlloc(s.alloc, file, 1024 * 1024) catch return .rearm;
     defer s.alloc.free(json_str);
 
-    const parsed = std.json.parseFromSlice(JsonSettings, s.alloc, json_str, .{}) catch return .rearm;
+    const parsed = std.json.parseFromSlice(JsonSettings, s.alloc, json_str, .{ .allocate = .alloc_always }) catch return .rearm;
     defer parsed.deinit();
 
     const json_settings = parsed.value;
@@ -163,6 +258,10 @@ fn settingsCallback(
     s.dark_theme = s.alloc.dupe(u8, json_settings.dark_theme) catch "";
     s.light_theme = s.alloc.dupe(u8, json_settings.light_theme) catch "";
     s.scheme = std.meta.stringToEnum(Scheme, json_settings.appearance) orelse .system;
+
+    if (json_settings.keymaps) |km_json| {
+        s.loadKeymaps(km_json);
+    }
 
     s.theme = s.getTheme();
     s.context.requestDraw();
@@ -255,6 +354,9 @@ pub fn destroy(self: *Settings) void {
         entry.value_ptr.deinit(self.alloc);
     }
     self.themes.deinit(self.alloc);
+    if (self.keymaps_initialized) {
+        self.keymaps.deinit();
+    }
     self.fs.deinit();
     self.alloc.destroy(self);
 }
@@ -287,6 +389,9 @@ test "load settings from settings folder" {
             entry.value_ptr.deinit(alloc);
         }
         settings.themes.deinit(alloc);
+        if (settings.keymaps_initialized) {
+            settings.keymaps.deinit();
+        }
     }
 
     settings.load("settings") catch |err| {

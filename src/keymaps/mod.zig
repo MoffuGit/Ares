@@ -52,3 +52,7 @@ pub const Keymaps = struct {
         };
     }
 };
+
+test {
+    _ = keystrokepkg;
+}

@@ -78,7 +78,7 @@ pub fn create(alloc: Allocator, ctx: *Context, opts: Options) !*Dialog {
             .updateFn = lerpF32,
             .callback = onOpacityUpdate,
             .userdata = dialog,
-            .easing = .ease_out_expo,
+            .easing = .ease_out_quad,
         }),
     };
 
