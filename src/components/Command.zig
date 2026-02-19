@@ -47,15 +47,15 @@ pub fn create(alloc: Allocator, ctx: *Context) !*Command {
                 .border = .{
                     .kind = .thin_block,
                     .color = .{ .axes = .{ .vertical = .{
-                        .bg = theme.mutedBg.setAlpha(0),
-                        .fg = theme.border,
+                        .bg = &theme.mutedBg,
+                        .fg = &theme.border,
                     }, .horizontal = .{
-                        .bg = theme.bg,
-                        .fg = theme.border,
+                        .bg = &theme.bg,
+                        .fg = &theme.border,
                     } } },
                 },
-                .bg = theme.bg,
-                .fg = theme.fg,
+                .bg = &theme.bg,
+                .fg = &theme.fg,
             },
         },
     );
@@ -89,23 +89,7 @@ pub fn create(alloc: Allocator, ctx: *Context) !*Command {
 }
 
 pub fn toggleShow(self: *Command) void {
-    const theme = global.settings.theme;
     const is_visible = self.dialog.portal.element.elem().visible;
-
-    self.dialog.box.bg = theme.bg;
-    self.dialog.box.fg = theme.fg;
-
-    self.dialog.box.border =
-        .{
-            .kind = .thin_block,
-            .color = .{ .axes = .{ .vertical = .{
-                .bg = theme.mutedBg.setAlpha(0),
-                .fg = theme.border,
-            }, .horizontal = .{
-                .bg = theme.bg,
-                .fg = theme.border,
-            } } },
-        };
 
     if (!is_visible) {
         self.prev_focused = self.ctx.app.window.getFocus();

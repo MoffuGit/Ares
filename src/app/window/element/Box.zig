@@ -10,10 +10,12 @@ const Box = @This();
 
 const TE = TypedElement(Box);
 
+const default_color: vaxis.Color = .default;
+
 element: TE,
 
-bg: vaxis.Color = .default,
-fg: vaxis.Color = .default,
+bg: *const vaxis.Color = &default_color,
+fg: *const vaxis.Color = &default_color,
 opacity: f32 = 1,
 segments: ?[]const Element.Segment = null,
 text_align: Element.TextAlign = .left,
@@ -99,8 +101,8 @@ pub const BorderColor = union(enum) {
     axes: Axes,
 
     pub const Color = struct {
-        fg: vaxis.Color = .default,
-        bg: vaxis.Color = .default,
+        fg: *const vaxis.Color = &default_color,
+        bg: *const vaxis.Color = &default_color,
     };
 
     pub const Sides = struct {
@@ -136,16 +138,16 @@ pub const BorderColor = union(enum) {
 
     pub fn styleFor(self: BorderColor, edge: enum { top, bottom, left, right }) vaxis.Style {
         return switch (self) {
-            .all => |c| .{ .fg = c.fg, .bg = c.bg },
+            .all => |c| .{ .fg = c.fg.*, .bg = c.bg.* },
             .sides => |s| switch (edge) {
-                .top => .{ .fg = s.top.fg, .bg = s.top.bg },
-                .bottom => .{ .fg = s.bottom.fg, .bg = s.bottom.bg },
-                .left => .{ .fg = s.left.fg, .bg = s.left.bg },
-                .right => .{ .fg = s.right.fg, .bg = s.right.bg },
+                .top => .{ .fg = s.top.fg.*, .bg = s.top.bg.* },
+                .bottom => .{ .fg = s.bottom.fg.*, .bg = s.bottom.bg.* },
+                .left => .{ .fg = s.left.fg.*, .bg = s.left.bg.* },
+                .right => .{ .fg = s.right.fg.*, .bg = s.right.bg.* },
             },
             .axes => |a| switch (edge) {
-                .top, .bottom => .{ .fg = a.horizontal.fg, .bg = a.horizontal.bg },
-                .left, .right => .{ .fg = a.vertical.fg, .bg = a.vertical.bg },
+                .top, .bottom => .{ .fg = a.horizontal.fg.*, .bg = a.horizontal.bg.* },
+                .left, .right => .{ .fg = a.vertical.fg.*, .bg = a.vertical.bg.* },
             },
         };
     }
@@ -161,8 +163,8 @@ pub const Options = struct {
     visible: bool = true,
     zIndex: usize = 0,
     style: Style = .{},
-    bg: vaxis.Color = .default,
-    fg: vaxis.Color = .default,
+    bg: *const vaxis.Color = &default_color,
+    fg: *const vaxis.Color = &default_color,
     opacity: f32 = 1,
     segments: ?[]const Element.Segment = null,
     text_align: Element.TextAlign = .left,
@@ -282,8 +284,8 @@ fn draw(self: *Box, element: *Element, buffer: *Buffer) void {
         }
     }
 
-    const bg = self.bg;
-    const fg = self.fg;
+    const bg = self.bg.*;
+    const fg = self.fg.*;
 
     if (self.rounded) |radius| {
         element.fillRounded(buffer, bg, radius);

@@ -47,6 +47,7 @@ themes: Themes = .{},
 light_theme: []const u8 = DEFAULT_LIGHT,
 dark_theme: []const u8 = DEFAULT_DARK,
 
+active_theme: Theme = Theme.fallback,
 theme: *const Theme = &Theme.fallback,
 
 keymaps: Keymaps = .{ .normal = undefined, .insert = undefined, .visual = undefined },
@@ -121,7 +122,7 @@ pub fn load(self: *Settings, path: []const u8) LoadError!void {
             self.themes.put(self.alloc, theme.name, theme) catch continue;
         }
 
-        self.theme = self.getTheme();
+        self.applyTheme();
     }
 
     self.watch(&self.context.app.loop.loop);
@@ -137,10 +138,16 @@ pub fn getTheme(self: *Settings) *const Theme {
     return self.themes.getPtr(name) orelse &Theme.fallback;
 }
 
+pub fn applyTheme(self: *Settings) void {
+    const source = self.getTheme();
+    self.active_theme = source.*;
+    self.theme = &self.active_theme;
+}
+
 pub fn updateSystemScheme(self: *Settings, scheme: vaxis.Color.Scheme) void {
     self.system_scheme = scheme;
 
-    self.theme = self.getTheme();
+    self.applyTheme();
 }
 
 fn loadKeymaps(self: *Settings, km_json: std.json.Value) void {
@@ -270,7 +277,7 @@ fn settingsCallback(
         s.loadKeymaps(km_json);
     }
 
-    s.theme = s.getTheme();
+    s.applyTheme();
     s.context.requestDraw();
 
     return .rearm;
@@ -318,7 +325,7 @@ fn themesCallback(
         }
     }
 
-    s.theme = s.getTheme();
+    s.applyTheme();
     s.context.requestDraw();
 
     s.context.app.loop.wakeup.notify() catch {};
@@ -338,6 +345,7 @@ pub fn create(alloc: Allocator, context: *Context) !*Settings {
         .alloc = alloc,
         .fs = fs,
     };
+    self.theme = &self.active_theme;
 
     _ = try context.subscribe(.scheme, Settings, self, schemeFn);
 
@@ -382,11 +390,11 @@ test "load settings from settings folder" {
         .light_theme = "",
         .dark_theme = "",
         .scheme = .system,
-        .theme = &Theme.fallback,
         .settings_w = .{},
         .themes_w = .{},
         .settings_path = "",
     };
+    settings.theme = &settings.active_theme;
     defer {
         if (settings.settings_path.len > 0) alloc.free(settings.settings_path);
         if (settings.dark_theme.len > 0) alloc.free(settings.dark_theme);
@@ -418,5 +426,6 @@ test "load settings from settings folder" {
     try std.testing.expect(light_theme != null);
     try std.testing.expectEqualStrings("light", light_theme.?.name);
 
-    try std.testing.expect(settings.theme != &Theme.fallback);
+    try std.testing.expect(settings.theme == &settings.active_theme);
+    try std.testing.expect(!std.meta.eql(settings.active_theme.bg, Theme.fallback.bg));
 }

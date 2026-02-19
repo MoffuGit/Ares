@@ -36,8 +36,8 @@ pub fn create(alloc: Allocator) !*CommandList {
         .border = .{
             .kind = .{ .top = "▁" },
             .color = .{ .all = .{
-                .bg = theme.bg,
-                .fg = theme.border,
+                .bg = &theme.bg,
+                .fg = &theme.border,
             } },
         },
     });
