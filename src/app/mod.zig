@@ -87,8 +87,12 @@ pub const Context = struct {
         comptime Userdata: type,
         userdata: *Userdata,
         cb: *const fn (userdata: *Userdata, data: EventData) void,
-    ) !void {
-        try self.app.subscribe(event, Userdata, userdata, cb);
+    ) !u64 {
+        return self.app.subscribe(event, Userdata, userdata, cb);
+    }
+
+    pub fn unsubscribe(self: *Context, event: EventType, id: u64) void {
+        self.app.unsubscribe(event, id);
     }
 };
 
@@ -264,12 +268,18 @@ pub fn subscribe(
     comptime Userdata: type,
     userdata: *Userdata,
     cb: *const fn (userdata: *Userdata, data: EventData) void,
-) !void {
-    try self.subs.addSubscription(self.alloc, event, Userdata, userdata, cb);
+) !u64 {
+    return self.subs.addSubscription(self.alloc, event, Userdata, userdata, cb);
 }
 
-pub fn dispatchKeymapAction(self: *App, action: keymapspkg.Action) bool {
-    var ev = KeymapActionEvent{ .action = action };
-    self.subs.notifyConsumable(.{ .keymap_action = &ev }, &ev.consumed);
-    return ev.consumed;
+pub fn unsubscribe(self: *App, event: EventType, id: u64) void {
+    self.subs.removeSubscription(event, id);
+}
+
+pub fn dispatchKeymapActions(self: *App, actions: []const keymapspkg.Action) void {
+    var ev = KeymapActionEvent{ .action = undefined };
+    for (actions) |action| {
+        ev.action = action;
+        self.subs.notifyConsumableReverse(.{ .keymap_action = &ev }, &ev.consumed);
+    }
 }

@@ -74,7 +74,7 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         },
     });
 
-    try ctx.app.subscribe(.keymap_action, Workspace, workspace, onKeyAction);
+    _ = try ctx.app.subscribe(.keymap_action, Workspace, workspace, onKeyAction);
 
     center_wrapper.* = Element.init(alloc, .{ .id = "center-wrapper", .zIndex = 10, .style = .{
         .flex_grow = 1,

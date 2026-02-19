@@ -11,7 +11,14 @@
       "tab": "workspace:next_tab",
       "shift+tab": "workspace:prev_tab",
       "ctrl+q": "workspace:close_active_tab",
-      "super+k": "workspace:toggle_command_palette"
+      "super+k": "workspace:toggle_command_palette",
+      "k": "command:up",
+      "j": "command:down",
+      "enter": "command:select",
+      "ctrl+u": "command:scroll_up",
+      "ctrl+d": "command:scroll_down",
+      "g g": "command:top",
+      "shift+g": "command:bottom"
     },
     "insert": {
       "escape": "workspace:enter_normal"

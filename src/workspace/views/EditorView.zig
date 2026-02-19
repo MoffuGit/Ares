@@ -57,7 +57,7 @@ pub fn create(alloc: Allocator, project: *Project) !*Editor {
 
     try scroll.inner.addChild(input.element.elem());
 
-    try project.ctx.app.subscribe(.bufferUpdated, Editor, self, bufferUpdated);
+    _ = try project.ctx.app.subscribe(.bufferUpdated, Editor, self, bufferUpdated);
     return self;
 }
 

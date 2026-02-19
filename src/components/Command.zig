@@ -13,6 +13,8 @@ const Input = @import("../app/window/element/Input.zig");
 const CommandList = @import("CommandList.zig");
 const Allocator = std.mem.Allocator;
 
+const App = lib.App;
+
 const Command = @This();
 
 alloc: Allocator,
@@ -21,6 +23,7 @@ dialog: *Dialog,
 input: *Input,
 list: *CommandList,
 prev_focused: ?*Element.Element = null,
+keymap_sub_id: ?u64 = null,
 
 pub fn create(alloc: Allocator, ctx: *Context) !*Command {
     const self = try alloc.create(Command);
@@ -107,12 +110,39 @@ pub fn toggleShow(self: *Command) void {
     if (!is_visible) {
         self.prev_focused = self.ctx.app.window.getFocus();
         self.ctx.app.window.setFocus(self.input.elem());
+        self.keymap_sub_id = self.ctx.app.subscribe(.keymap_action, Command, self, onKeyAction) catch null;
     } else {
+        if (self.keymap_sub_id) |id| {
+            self.ctx.app.unsubscribe(.keymap_action, id);
+            self.keymap_sub_id = null;
+        }
         self.ctx.app.window.setFocus(self.prev_focused);
         self.prev_focused = null;
     }
 
     self.dialog.toggleShow();
+}
+
+fn onKeyAction(self: *Command, data: App.EventData) void {
+    const key_data = data.keymap_action;
+
+    switch (key_data.action) {
+        .command => |cmd| {
+            switch (cmd) {
+                .up => {},
+                .down => {},
+                .select => {},
+                .scroll_up => {},
+                .scroll_down => {},
+                .top => {},
+                .bottom => {},
+            }
+            key_data.consume();
+        },
+        else => {},
+    }
+
+    self.ctx.requestDraw();
 }
 
 fn drawInput(input: *Input, element: *Element, buffer: *Buffer) void {

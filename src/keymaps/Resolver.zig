@@ -82,8 +82,8 @@ pub fn resolve(
     }
 
     if (cur != trie.root) {
-        if (cur.value) |pending_action| {
-            _ = self.app.dispatchKeymapAction(pending_action);
+        if (cur.values.items.len > 0) {
+            self.app.dispatchKeymapActions(cur.values.items);
         }
         self.reset();
         cur = trie.root;
@@ -99,8 +99,8 @@ pub fn resolve(
 
 pub fn flush(self: *Resolver) void {
     if (self.node) |n| {
-        if (n.value) |action| {
-            _ = self.app.dispatchKeymapAction(action);
+        if (n.values.items.len > 0) {
+            self.app.dispatchKeymapActions(n.values.items);
         }
     }
     self.reset();
@@ -120,9 +120,9 @@ fn consumeChild(
         return;
     }
 
-    if (child.value) |action| {
+    if (child.values.items.len > 0) {
         self.reset();
-        _ = self.app.dispatchKeymapAction(action);
+        self.app.dispatchKeymapActions(child.values.items);
     }
 }
 

@@ -231,7 +231,7 @@ pub fn addEventListener(
     userdata: *Userdata,
     cb: *const fn (userdata: *Userdata, data: EventData) void,
 ) !void {
-    try self.listeners.addSubscription(self.alloc, event_type, Userdata, userdata, cb);
+    _ = try self.listeners.addSubscription(self.alloc, event_type, Userdata, userdata, cb);
 }
 
 pub fn dispatchEvent(self: *Element, data: EventData) void {

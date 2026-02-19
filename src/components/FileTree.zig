@@ -71,7 +71,7 @@ pub fn create(alloc: Allocator, project: *Project, workspace: *Workspace, ctx: *
         .workspace = workspace,
     };
 
-    try ctx.subscribe(.worktreeUpdatedEntries, FileTree, self, onWorktreeUpdated);
+    _ = try ctx.subscribe(.worktreeUpdatedEntries, FileTree, self, onWorktreeUpdated);
 
     try content.addEventListener(.click, FileTree, self, onClick);
 

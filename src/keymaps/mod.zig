@@ -11,6 +11,7 @@ const KeyStrokeActions = triepkg.Trie(KeyStroke, Action, KeyStrokeContext);
 pub const Action = union(enum) {
     workspace: Workspace,
     editor: Editor,
+    command: Command,
 
     pub const Workspace = enum {
         enter_insert,
@@ -31,6 +32,16 @@ pub const Action = union(enum) {
         placeholder,
     };
 
+    pub const Command = enum {
+        up,
+        down,
+        select,
+        scroll_up,
+        scroll_down,
+        top,
+        bottom,
+    };
+
     /// Parses a "structure:action" string like "workspace:new_tab".
     pub fn parse(s: []const u8) ?Action {
         const sep = std.mem.indexOfScalar(u8, s, ':') orelse return null;
@@ -44,6 +55,9 @@ pub const Action = union(enum) {
         } else if (asciiEqlIgnoreCase(structure, "editor")) {
             const a = std.meta.stringToEnum(Editor, action_name) orelse return null;
             return .{ .editor = a };
+        } else if (asciiEqlIgnoreCase(structure, "command")) {
+            const a = std.meta.stringToEnum(Command, action_name) orelse return null;
+            return .{ .command = a };
         }
         return null;
     }
@@ -55,6 +69,7 @@ pub const Action = union(enum) {
         return switch (a) {
             .workspace => |wa| wa == b.workspace,
             .editor => |ea| ea == b.editor,
+            .command => |ca| ca == b.command,
         };
     }
 

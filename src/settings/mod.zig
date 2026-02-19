@@ -211,6 +211,13 @@ fn loadDefaultKeymaps(self: *Settings) void {
         .{ .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{ .shift = true } }}, .action = .{ .workspace = .prev_tab } },
         .{ .mode = .normal, .seq = &.{.{ .codepoint = 'q', .mods = .{ .ctrl = true } }}, .action = .{ .workspace = .close_active_tab } },
         .{ .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{ .super = true } }}, .action = .{ .workspace = .toggle_command_palette } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{} }}, .action = .{ .command = .up } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'j', .mods = .{} }}, .action = .{ .command = .down } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\r', .mods = .{} }}, .action = .{ .command = .select } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'u', .mods = .{ .ctrl = true } }}, .action = .{ .command = .scroll_up } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'd', .mods = .{ .ctrl = true } }}, .action = .{ .command = .scroll_down } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'g', .mods = .{} }, .{ .codepoint = 'g', .mods = .{} }}, .action = .{ .command = .top } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'G', .mods = .{ .shift = true } }}, .action = .{ .command = .bottom } },
     };
 
     for (defaults) |d| {
@@ -332,7 +339,7 @@ pub fn create(alloc: Allocator, context: *Context) !*Settings {
         .fs = fs,
     };
 
-    try context.subscribe(.scheme, Settings, self, schemeFn);
+    _ = try context.subscribe(.scheme, Settings, self, schemeFn);
 
     return self;
 }
