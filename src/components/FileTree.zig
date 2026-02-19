@@ -234,7 +234,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
         const guide_style: vaxis.Cell.Style = .{ .fg = guide_fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } };
         var d: u16 = 0;
         while (d < depth) : (d += 1) {
-            const guide = "│";
+            const guide = "⡇";
             _ = element.print(
                 buffer,
                 &.{.{ .text = guide, .style = guide_style }},

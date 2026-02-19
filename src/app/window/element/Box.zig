@@ -93,6 +93,17 @@ pub const BorderKind = struct {
         .bottom_left = "▝",
         .bottom_right = "▘",
     };
+
+    pub const points = BorderKind{
+        .top = "⠤",
+        .bottom = "⠒",
+        .left = "⢸",
+        .right = "⡇",
+        .top_left = "⢶",
+        .top_right = "⡶",
+        .bottom_left = "⠾",
+        .bottom_right = "⠷",
+    };
 };
 
 pub const BorderColor = union(enum) {
