@@ -43,7 +43,6 @@ pub fn create(alloc: Allocator, opts: Options) !*Portal {
                 .width = .{ .percent = 100 },
                 .height = .{ .percent = 100 },
                 .position_type = .absolute,
-                .justify_content = .center,
                 .align_items = .center,
             },
             .zIndex = 10,

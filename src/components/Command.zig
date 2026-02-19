@@ -40,7 +40,7 @@ pub fn create(alloc: Allocator, ctx: *Context) !*Command {
                     .width = .{ .point = 75 },
                     .height = .{ .point = 25 },
                     .position = .{
-                        .top = .{ .point = -18 },
+                        .top = .{ .point = 2 },
                     },
                     .align_items = .center,
                 },
