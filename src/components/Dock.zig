@@ -140,9 +140,10 @@ fn draw(element: *Element, buffer: *Buffer) void {
             while (row <= layout.height) : (row += 1) {
                 if (row == 0) {
                     const alpha: f32 = if (element.hovered or element.dragging) 0.6 else 0.4;
+                    const color = vaxis.Color{ .rgba = .{ 244, 128, 52, 255 } };
                     buffer.writeCell(col, layout.top -| 1 + row, .{
                         .char = .{ .grapheme = "▄" },
-                        .style = .{ .fg = theme.primaryBg.setAlpha(alpha), .bg = theme.bg },
+                        .style = .{ .fg = color.setAlpha(alpha), .bg = theme.bg },
                     });
 
                     continue;
