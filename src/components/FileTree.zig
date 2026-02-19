@@ -97,9 +97,9 @@ pub fn destroy(self: *FileTree, alloc: Allocator) void {
     alloc.destroy(self);
 }
 
-fn onClick(self: *FileTree, data: Element.EventData) void {
-    const element = data.click.element;
-    const mouse = data.click.mouse;
+fn onClick(self: *FileTree, data: Element.ElementEvent) void {
+    const element = data.element;
+    const mouse = data.event.click;
     const index = self.scrollable.childRowFromScreenY(element, mouse.row) orelse return;
     if (index < self.visible_entries.items.len) {
         const id = self.visible_entries.items[index];
@@ -128,7 +128,6 @@ fn onClick(self: *FileTree, data: Element.EventData) void {
 }
 
 fn onWorktreeUpdated(self: *FileTree, _: apppkg.EventData) void {
-
     var it = self.project.worktree.snapshot.entries.iter();
 
     if (it.next()) |root| {

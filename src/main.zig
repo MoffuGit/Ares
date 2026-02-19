@@ -17,13 +17,13 @@ const Workspace = @import("workspace/mod.zig").Workspace;
 
 const GPA = std.heap.GeneralPurposeAllocator(.{});
 
-pub fn keyPressFn(_: *Element, data: Element.EventData) void {
-    const key_data = data.key_press;
-    if (key_data.key.matches('c', .{ .ctrl = true })) {
-        if (key_data.element.context) |ctx| {
+pub fn keyPressFn(_: *Element, data: Element.ElementEvent) void {
+    const key = data.event.key_press;
+    if (key.matches('c', .{ .ctrl = true })) {
+        if (data.element.context) |ctx| {
             ctx.stop() catch {};
         }
-        key_data.ctx.stopPropagation();
+        data.ctx.stopPropagation();
     }
 }
 

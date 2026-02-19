@@ -48,12 +48,10 @@ pub fn destroy(self: *Resolver) void {
     self.alloc.destroy(self);
 }
 
-fn onKeyPress(self: *Resolver, evt_data: Element.EventData) void {
-    const data = evt_data.key_press;
-    if (data.ctx.phase != .bubbling) {
-        return;
-    }
-    const key = data.key;
+fn onKeyPress(self: *Resolver, evt: Element.ElementEvent) void {
+    if (evt.ctx.phase != .bubbling) return;
+
+    const key = evt.event.key_press;
     const ks = KeyStroke{
         .codepoint = key.codepoint,
         .mods = key.mods,

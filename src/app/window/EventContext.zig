@@ -10,7 +10,7 @@ pub const Phase = enum {
 
 pub const EventContext = @This();
 
-phase: Phase = undefined,
+phase: Phase = .capturing,
 target: *Element = undefined,
 stopped: bool = false,
 

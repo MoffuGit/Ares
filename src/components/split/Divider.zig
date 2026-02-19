@@ -174,19 +174,19 @@ pub fn destroy(self: *Divider, alloc: Allocator) void {
     alloc.destroy(self);
 }
 
-pub fn mouseEnter(_: *Divider, data: Element.EventData) void {
+pub fn mouseEnter(_: *Divider, data: Element.ElementEvent) void {
     const element = data.mouse_enter.element;
     element.context.?.window.screen.mouse_shape = .pointer;
     element.context.?.requestDraw();
 }
 
-pub fn mouseLeave(_: *Divider, data: Element.EventData) void {
+pub fn mouseLeave(_: *Divider, data: Element.ElementEvent) void {
     const element = data.mouse_leave.element;
     element.context.?.window.screen.mouse_shape = .default;
     element.context.?.requestDraw();
 }
 
-pub fn onDrag(self: *Divider, data: Element.EventData) void {
+pub fn onDrag(self: *Divider, data: Element.ElementEvent) void {
     const element = data.drag.element;
     const mouse = data.drag.mouse;
 

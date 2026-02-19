@@ -29,7 +29,7 @@ const Allocator = std.mem.Allocator;
 const Childrens = @import("Childrens.zig");
 
 const subspkg = @import("../../events.zig");
-pub const Listeners = subspkg.EventListeners(EventType, EventData);
+pub const Listeners = subspkg.EventListeners(EventType, ElementEvent);
 pub const DrawFn = *const fn (element: *Element, buffer: *Buffer) void;
 pub const HitFn = *const fn (element: *Element, hit_grid: *HitGrid) void;
 pub const UpdateFn = *const fn (element: *Element) void;
@@ -75,30 +75,30 @@ pub const EventType = enum {
     resize,
 };
 
-pub const EventData = union(EventType) {
-    remove: struct { element: *Element },
-    key_press: struct { element: *Element, ctx: *EventContext, key: vaxis.Key },
-    key_release: struct { element: *Element, ctx: *EventContext, key: vaxis.Key },
-    focus: struct { element: *Element },
-    blur: struct { element: *Element },
-    mouse_down: struct { element: *Element, ctx: *EventContext, mouse: Mouse },
-    mouse_up: struct { element: *Element, ctx: *EventContext, mouse: Mouse },
-    click: struct { element: *Element, ctx: *EventContext, mouse: Mouse },
-    mouse_move: struct { element: *Element, ctx: *EventContext, mouse: Mouse },
-    mouse_enter: struct { element: *Element, mouse: Mouse },
-    mouse_leave: struct { element: *Element, mouse: Mouse },
-    mouse_over: struct { element: *Element, ctx: *EventContext, mouse: Mouse },
-    mouse_out: struct { element: *Element, ctx: *EventContext, mouse: Mouse },
-    wheel: struct { element: *Element, ctx: *EventContext, mouse: Mouse },
-    drag: struct { element: *Element, ctx: *EventContext, mouse: Mouse },
-    drag_end: struct { element: *Element, ctx: *EventContext, mouse: Mouse },
-    resize: struct { element: *Element, width: u16, height: u16 },
+pub const ElementData = union(EventType) {
+    remove: void,
+    key_press: vaxis.Key,
+    key_release: vaxis.Key,
+    focus: void,
+    blur: void,
+    mouse_down: Mouse,
+    mouse_up: Mouse,
+    click: Mouse,
+    mouse_move: Mouse,
+    mouse_enter: Mouse,
+    mouse_leave: Mouse,
+    mouse_over: Mouse,
+    mouse_out: Mouse,
+    wheel: Mouse,
+    drag: Mouse,
+    drag_end: Mouse,
+    resize: struct { width: u16, height: u16 },
+};
 
-    pub fn getElement(self: EventData) *Element {
-        return switch (self) {
-            inline else => |v| v.element,
-        };
-    }
+pub const ElementEvent = struct {
+    ctx: *EventContext,
+    element: *Element,
+    event: ElementData,
 };
 
 pub const Options = struct {
@@ -229,13 +229,13 @@ pub fn addEventListener(
     event_type: EventType,
     comptime Userdata: type,
     userdata: *Userdata,
-    cb: *const fn (userdata: *Userdata, data: EventData) void,
+    cb: *const fn (userdata: *Userdata, data: ElementEvent) void,
 ) !void {
     _ = try self.listeners.addSubscription(self.alloc, event_type, Userdata, userdata, cb);
 }
 
-pub fn dispatchEvent(self: *Element, data: EventData) void {
-    self.listeners.notify(data);
+pub fn dispatchEvent(self: *Element, data: ElementEvent) void {
+    self.listeners.notifyConsumable(@as(EventType, data.event), data, &data.ctx.stopped);
 }
 
 pub fn fill(element: *Element, buffer: *Buffer, cell: vaxis.Cell) void {
@@ -826,7 +826,12 @@ pub fn syncLayout(self: *Element) bool {
     };
 
     if (old_width != new_width or old_height != new_height) {
-        self.dispatchEvent(.{ .resize = .{ .element = self, .width = new_width, .height = new_height } });
+        var ctx = EventContext{ .phase = .at_target, .target = self };
+        self.dispatchEvent(
+            .{ .ctx = &ctx, .element = self, .event = .{
+                .resize = .{ .width = new_width, .height = new_height },
+            } },
+        );
     }
     return (curr_left != new_left) or (curr_top != curr_top);
 }
@@ -1001,7 +1006,8 @@ pub fn removeChild(self: *Element, num: u64) void {
 
         child.parent = null;
 
-        child.dispatchEvent(.{ .remove = .{ .element = child } });
+        var ctx = EventContext{ .phase = .at_target, .target = self };
+        child.dispatchEvent(.{ .ctx = &ctx, .element = self, .event = .remove });
     }
 }
 
@@ -1027,23 +1033,26 @@ pub fn handleEvent(self: *Element, ctx: *EventContext, event: Event) void {
 }
 
 pub fn handleKeyPress(self: *Element, ctx: *EventContext, key: vaxis.Key) void {
-    self.dispatchEvent(.{ .key_press = .{ .element = self, .ctx = ctx, .key = key } });
+    self.dispatchEvent(.{ .element = self, .ctx = ctx, .event = .{ .key_press = key } });
 }
 
 pub fn handleKeyRelease(self: *Element, ctx: *EventContext, key: vaxis.Key) void {
-    self.dispatchEvent(.{ .key_release = .{ .element = self, .ctx = ctx, .key = key } });
+    self.dispatchEvent(.{ .element = self, .ctx = ctx, .event = .{ .key_release = key } });
 }
 
 pub fn handleFocus(self: *Element) void {
-    self.dispatchEvent(.{ .focus = .{ .element = self } });
+    var ctx = EventContext{ .phase = .at_target, .target = self };
+    self.dispatchEvent(.{ .element = self, .ctx = &ctx, .event = .focus });
 }
 
 pub fn handleBlur(self: *Element) void {
-    self.dispatchEvent(.{ .blur = .{ .element = self } });
+    var ctx = EventContext{ .phase = .at_target, .target = self };
+    self.dispatchEvent(.{ .ctx = &ctx, .element = self, .event = .blur });
 }
 
 pub fn handleResize(self: *Element, width: u16, height: u16) void {
-    self.dispatchEvent(.{ .resize = .{ .element = self, .width = width, .height = height } });
+    var ctx = EventContext{ .phase = .at_target, .target = self };
+    self.dispatchEvent(.{ .ctx = &ctx, .element = self, .resize = .{ .width = width, .height = height } });
 }
 
 pub fn isAncestorOf(self: *Element, other: *Element) bool {

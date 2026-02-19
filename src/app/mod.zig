@@ -259,7 +259,7 @@ pub fn handleMessage(self: *App, msg: Message) !void {
 }
 
 pub fn notifySubs(self: *App, data: EventData) void {
-    self.subs.notify(data);
+    self.subs.notify(@as(EventType, data), data);
 }
 
 pub fn subscribe(
@@ -280,6 +280,6 @@ pub fn dispatchKeymapActions(self: *App, actions: []const keymapspkg.Action) voi
     var ev = KeymapActionEvent{ .action = undefined };
     for (actions) |action| {
         ev.action = action;
-        self.subs.notifyConsumableReverse(.{ .keymap_action = &ev }, &ev.consumed);
+        self.subs.notifyConsumableReverse(.keymap_action, .{ .keymap_action = &ev }, &ev.consumed);
     }
 }

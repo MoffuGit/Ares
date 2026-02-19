@@ -52,7 +52,7 @@ pub fn create(alloc: Allocator) !*Tree {
     return tree;
 }
 
-fn keyPressFn(self: *Tree, data: Element.EventData) void {
+fn keyPressFn(self: *Tree, data: Element.ElementEvent) void {
     const key_data = data.key_press;
     const ctx = key_data.ctx;
     const key = key_data.key;

@@ -8,7 +8,7 @@ const assert = std.debug.assert;
 const Key = vaxis.Key;
 const Cell = vaxis.Cell;
 const Element = @import("mod.zig");
-const EventData = Element.EventData;
+const ElementEvent = Element.ElementEvent;
 
 const HitGrid = @import("../HitGrid.zig");
 
@@ -155,9 +155,8 @@ pub fn deleteForward(self: *Input) void {
 
 // ---- Event handlers ----
 
-fn onKeyPress(self: *Input, data: EventData) void {
-    const key_data = data.key_press;
-    const key = key_data.key;
+fn onKeyPress(self: *Input, data: ElementEvent) void {
+    const key = data.event.key_press;
 
     if (key.codepoint == Key.backspace) {
         self.deleteBack();
@@ -205,9 +204,9 @@ fn onKeyPress(self: *Input, data: EventData) void {
     }
 }
 
-fn onClick(self: *Input, data: EventData) void {
-    const mouse = data.click.mouse;
-    const layout = data.click.element.layout;
+fn onClick(self: *Input, evt: ElementEvent) void {
+    const mouse = evt.event.click;
+    const layout = evt.element.layout;
 
     const click_col = mouse.col -| layout.left;
     const click_row = mouse.row -| layout.top;

@@ -1,14 +1,12 @@
 const std = @import("std");
 
-pub fn EventListeners(comptime EType: type, comptime EData: type) type {
+pub fn EventListeners(comptime EventType: type, comptime EventData: type) type {
     return struct {
         const Self = @This();
 
-        pub const EventType = EType;
-        pub const EventData = EData;
-        pub const Callback = *const fn (userdata: ?*anyopaque, EData) void;
+        pub const Callback = *const fn (userdata: ?*anyopaque, EventData) void;
 
-        fn noop(_: ?*anyopaque, _: EData) void {}
+        fn noop(_: ?*anyopaque, _: EventData) void {}
 
         pub const Listener = struct {
             id: u64 = 0,
@@ -17,7 +15,7 @@ pub fn EventListeners(comptime EType: type, comptime EData: type) type {
         };
 
         const ListenerList = std.ArrayList(Listener);
-        const Listeners = std.EnumArray(EType, ListenerList);
+        const Listeners = std.EnumArray(EventType, ListenerList);
 
         values: Listeners = .initFill(.{}),
         next_id: u64 = 1,
@@ -25,10 +23,10 @@ pub fn EventListeners(comptime EType: type, comptime EData: type) type {
         pub fn addSubscription(
             self: *Self,
             alloc: std.mem.Allocator,
-            event: EType,
+            event: EventType,
             comptime Userdata: type,
             userdata: *Userdata,
-            cb: *const fn (userdata: *Userdata, data: EData) void,
+            cb: *const fn (userdata: *Userdata, data: EventData) void,
         ) !u64 {
             const id = self.next_id;
             self.next_id +%= 1;
@@ -40,7 +38,7 @@ pub fn EventListeners(comptime EType: type, comptime EData: type) type {
             return id;
         }
 
-        pub fn removeSubscription(self: *Self, event: EType, id: u64) void {
+        pub fn removeSubscription(self: *Self, event: EventType, id: u64) void {
             const list = self.values.getPtr(event);
             for (list.items, 0..) |sub, i| {
                 if (sub.id == id) {
@@ -50,23 +48,23 @@ pub fn EventListeners(comptime EType: type, comptime EData: type) type {
             }
         }
 
-        pub fn notify(self: *Self, data: EData) void {
-            const list = self.values.get(@as(EType, data));
+        pub fn notify(self: *Self, evt: EventType, data: EventData) void {
+            const list = self.values.get(evt);
             for (list.items) |sub| {
                 sub.callback(sub.userdata, data);
             }
         }
 
-        pub fn notifyConsumable(self: *Self, data: EData, consumed: *bool) void {
-            const list = self.values.get(@as(EType, data));
+        pub fn notifyConsumable(self: *Self, evt: EventType, data: EventData, consumed: *bool) void {
+            const list = self.values.get(evt);
             for (list.items) |sub| {
                 sub.callback(sub.userdata, data);
                 if (consumed.*) break;
             }
         }
 
-        pub fn notifyConsumableReverse(self: *Self, data: EData, consumed: *bool) void {
-            const items = self.values.get(@as(EType, data)).items;
+        pub fn notifyConsumableReverse(self: *Self, evt: EventType, data: EventData, consumed: *bool) void {
+            const items = self.values.get(evt).items;
             var i = items.len;
             while (i > 0) {
                 i -= 1;

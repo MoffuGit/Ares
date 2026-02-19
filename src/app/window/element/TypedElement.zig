@@ -118,14 +118,14 @@ pub fn TypedElement(comptime Owner: type) type {
 
         // ---- Event listeners ----
 
-        pub fn on(self: *Self, event_type: Element.EventType, comptime cb: *const fn (*Owner, Element.EventData) void) !void {
+        pub fn on(self: *Self, event_type: Element.EventType, comptime cb: *const fn (*Owner, Element.ElementEvent) void) !void {
             const owner: *Owner = @ptrCast(@alignCast(self.base.userdata));
             try self.base.addEventListener(event_type, Owner, owner, cb);
         }
 
-        pub fn addEventListener(self: *Self, event_type: Element.EventType, comptime UserData: type, userdata: *UserData, comptime cb: *const fn (*UserData, *Owner, Element.EventData) void) !void {
+        pub fn addEventListener(self: *Self, event_type: Element.EventType, comptime UserData: type, userdata: *UserData, comptime cb: *const fn (*UserData, *Owner, Element.ElementEvent) void) !void {
             try self.base.addEventListener(event_type, UserData, userdata, struct {
-                fn wrapper(inner_userdata: *UserData, data: Element.EventData) void {
+                fn wrapper(inner_userdata: *UserData, data: Element.ElementEvent) void {
                     const element = data.getElement();
                     const owner: *Owner = @ptrCast(@alignCast(element.userdata));
                     cb(inner_userdata, owner, data);

@@ -186,7 +186,7 @@ fn drawView(element: *Element, buffer: *Buffer) void {
     }
 }
 
-fn clickView(node: *Node, data: Element.EventData) void {
+fn clickView(node: *Node, data: Element.ElementEvent) void {
     const element = data.click.element;
 
     if (element.context) |ctx| {

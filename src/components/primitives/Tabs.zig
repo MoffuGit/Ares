@@ -60,9 +60,9 @@ pub const Tab = struct {
         alloc.destroy(self);
     }
 
-    fn onTriggerClick(self: *Tab, data: Element.EventData) void {
+    fn onTriggerClick(self: *Tab, data: Element.ElementEvent) void {
         self.tabs.select(self.id);
-        data.click.element.context.?.requestDraw();
+        data.element.context.?.requestDraw();
     }
 };
 
