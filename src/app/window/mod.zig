@@ -168,21 +168,23 @@ pub fn tryHit(self: *Window, col: u16, row: u16) ?*Element {
 }
 
 pub fn dispatchEvent(target: *Element, ctx: *EventContext, data: Element.ElementEvent) void {
-    ctx.* = .{ .phase = .capturing, .target = target };
+    var event = data;
 
-    capture(target, ctx, data);
+    ctx.* = .{ .phase = .capturing, .target = target };
+    capture(target, ctx, &event);
 
     if (ctx.stopped) return;
 
     ctx.phase = .at_target;
-    target.dispatchEvent(data);
+    event.element = target;
+    target.dispatchEvent(event);
 
     if (ctx.stopped) return;
 
     ctx.phase = .bubbling;
-    bubble(target, ctx, data);
+    bubble(target, ctx, &event);
 }
-fn capture(target: *Element, ctx: *EventContext, data: Element.ElementEvent) void {
+fn capture(target: *Element, ctx: *EventContext, data: *Element.ElementEvent) void {
     var path: [64]*Element = undefined;
     var depth: usize = 0;
 
@@ -196,15 +198,17 @@ fn capture(target: *Element, ctx: *EventContext, data: Element.ElementEvent) voi
     var i: usize = depth;
     while (i > 0) {
         i -= 1;
-        path[i].dispatchEvent(data);
+        data.element = path[i];
+        path[i].dispatchEvent(data.*);
         if (ctx.stopped) return;
     }
 }
 
-fn bubble(target: *Element, ctx: *EventContext, data: Element.ElementEvent) void {
+fn bubble(target: *Element, ctx: *EventContext, data: *Element.ElementEvent) void {
     var current = target.parent;
     while (current) |elem| : (current = elem.parent) {
-        elem.dispatchEvent(data);
+        data.element = elem;
+        elem.dispatchEvent(data.*);
         if (ctx.stopped) return;
     }
 }
