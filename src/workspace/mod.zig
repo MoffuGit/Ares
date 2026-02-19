@@ -305,51 +305,54 @@ fn onKeyAction(self: *Workspace, data: App.EventData) void {
     const key_data = data.keymap_action;
 
     switch (key_data.action) {
-        .close_active_tab => {
-            self.closeActiveTab();
-        },
-        .new_tab => {
-            if (self.project) |project| {
-                const editor = EditorView.create(self.alloc, project) catch return;
-                const pane = Pane.create(self.alloc, project, .{ .editor = editor }) catch return;
+        .workspace => |ws| switch (ws) {
+            .close_active_tab => {
+                self.closeActiveTab();
+            },
+            .new_tab => {
+                if (self.project) |project| {
+                    const editor = EditorView.create(self.alloc, project) catch return;
+                    const pane = Pane.create(self.alloc, project, .{ .editor = editor }) catch return;
 
-                self.panes.append(self.alloc, pane) catch return;
+                    self.panes.append(self.alloc, pane) catch return;
 
-                const tab = self.tabs.newTab(.{ .userdata = pane }) catch return;
-                self.tabs.select(tab.id);
+                    const tab = self.tabs.newTab(.{ .userdata = pane }) catch return;
+                    self.tabs.select(tab.id);
 
-                tab.content.addChild(pane.element()) catch return;
+                    tab.content.addChild(pane.element()) catch return;
 
-                if (project.selected_entry) |id| {
-                    pane.setEntry(id);
+                    if (project.selected_entry) |id| {
+                        pane.setEntry(id);
+                    }
+
+                    self.active_pane = pane;
+                    pane.select();
                 }
-
-                self.active_pane = pane;
-                pane.select();
-            }
-        },
-        .next_tab => {
-            self.tabs.next();
-            self.syncActivePaneFromTab();
-        },
-        .prev_tab => {
-            self.tabs.prev();
-            self.syncActivePaneFromTab();
-        },
-        .toggle_left_dock => {
-            self.toggleDock(.left);
-        },
-        .toggle_command_palette => {
-            self.command.toggleShow();
-        },
-        .enter_insert => {
-            global.mode = .insert;
-        },
-        .enter_normal => {
-            global.mode = .normal;
-        },
-        .enter_visual => {
-            global.mode = .visual;
+            },
+            .next_tab => {
+                self.tabs.next();
+                self.syncActivePaneFromTab();
+            },
+            .prev_tab => {
+                self.tabs.prev();
+                self.syncActivePaneFromTab();
+            },
+            .toggle_left_dock => {
+                self.toggleDock(.left);
+            },
+            .toggle_command_palette => {
+                self.command.toggleShow();
+            },
+            .enter_insert => {
+                global.mode = .insert;
+            },
+            .enter_normal => {
+                global.mode = .normal;
+            },
+            .enter_visual => {
+                global.mode = .visual;
+            },
+            else => {},
         },
         else => {},
     }

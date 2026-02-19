@@ -185,7 +185,7 @@ fn loadKeymapMode(self: *Settings, mode: keymapspkg.Mode, mode_json: std.json.Va
             else => continue,
         };
 
-        const action = std.meta.stringToEnum(Action, action_str) orelse continue;
+        const action = Action.parse(action_str) orelse continue;
         const seq = parseSequence(self.alloc, seq_str) catch continue;
         defer self.alloc.free(seq);
 
@@ -201,16 +201,16 @@ fn loadDefaultKeymaps(self: *Settings) void {
     self.keymaps_initialized = true;
 
     const defaults = [_]struct { mode: keymapspkg.Mode, seq: []const KeyStroke, action: Action }{
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'i', .mods = .{} }}, .action = .enter_insert },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'v', .mods = .{} }}, .action = .enter_visual },
-        .{ .mode = .insert, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .enter_normal },
-        .{ .mode = .visual, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .enter_normal },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'l', .mods = .{ .super = true } }}, .action = .toggle_left_dock },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 't', .mods = .{ .ctrl = true } }}, .action = .new_tab },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{} }}, .action = .next_tab },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{ .shift = true } }}, .action = .prev_tab },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'q', .mods = .{ .ctrl = true } }}, .action = .close_active_tab },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{ .super = true } }}, .action = .toggle_command_palette },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'i', .mods = .{} }}, .action = .{ .workspace = .enter_insert } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'v', .mods = .{} }}, .action = .{ .workspace = .enter_visual } },
+        .{ .mode = .insert, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .{ .workspace = .enter_normal } },
+        .{ .mode = .visual, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .{ .workspace = .enter_normal } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'l', .mods = .{ .super = true } }}, .action = .{ .workspace = .toggle_left_dock } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 't', .mods = .{ .ctrl = true } }}, .action = .{ .workspace = .new_tab } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{} }}, .action = .{ .workspace = .next_tab } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{ .shift = true } }}, .action = .{ .workspace = .prev_tab } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'q', .mods = .{ .ctrl = true } }}, .action = .{ .workspace = .close_active_tab } },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{ .super = true } }}, .action = .{ .workspace = .toggle_command_palette } },
     };
 
     for (defaults) |d| {
