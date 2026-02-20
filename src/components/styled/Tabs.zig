@@ -203,7 +203,7 @@ pub fn Tabs(comptime style: Style) type {
             }
 
             buffer.writeCell(element.layout.left, element.layout.top, .{
-                .char = .{ .grapheme = "┃" },
+                .char = .{ .grapheme = "🮇" },
                 .style = .{ .fg = theme.fg },
             });
         }
