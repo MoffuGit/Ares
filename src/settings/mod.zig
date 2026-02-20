@@ -54,6 +54,8 @@ keymaps: Keymaps = .{ .normal = undefined, .insert = undefined, .visual = undefi
 keymaps_initialized: bool = false,
 keymap_generation: u64 = 0,
 
+binding_map: std.AutoHashMapUnmanaged(u32, []const u8) = .{},
+
 settings_w: xev.FileSystem.Watcher = .{},
 themes_w: xev.FileSystem.Watcher = .{},
 fs: xev.FileSystem,
@@ -162,6 +164,8 @@ fn loadKeymaps(self: *Settings, km_json: std.json.Value) void {
     self.keymaps = Keymaps.init(self.alloc) catch return;
     self.keymaps_initialized = true;
 
+    self.clearBindingMap();
+
     const mode_names = [_]struct { key: []const u8, mode: keymapspkg.Mode }{
         .{ .key = "normal", .mode = .normal },
         .{ .key = "insert", .mode = .insert },
@@ -197,6 +201,7 @@ fn loadKeymapMode(self: *Settings, mode: keymapspkg.Mode, mode_json: std.json.Va
         defer self.alloc.free(seq);
 
         trie.insert(seq, action) catch continue;
+        self.recordBinding(action, seq_str);
     }
 }
 
@@ -207,17 +212,20 @@ fn loadDefaultKeymaps(self: *Settings) void {
     self.keymaps = Keymaps.init(self.alloc) catch return;
     self.keymaps_initialized = true;
 
-    const defaults = [_]struct { mode: keymapspkg.Mode, seq: []const KeyStroke, action: Action }{
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'i', .mods = .{} }}, .action = .{ .workspace = .enter_insert } },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'v', .mods = .{} }}, .action = .{ .workspace = .enter_visual } },
-        .{ .mode = .insert, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .{ .workspace = .enter_normal } },
-        .{ .mode = .visual, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .{ .workspace = .enter_normal } },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'l', .mods = .{ .super = true } }}, .action = .{ .workspace = .toggle_left_dock } },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 't', .mods = .{ .ctrl = true } }}, .action = .{ .workspace = .new_tab } },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{} }}, .action = .{ .workspace = .next_tab } },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{ .shift = true } }}, .action = .{ .workspace = .prev_tab } },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'q', .mods = .{ .ctrl = true } }}, .action = .{ .workspace = .close_active_tab } },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{ .super = true } }}, .action = .{ .workspace = .toggle_command_palette } },
+    self.clearBindingMap();
+
+    const DefaultEntry = struct { mode: keymapspkg.Mode, seq: []const KeyStroke, action: Action, binding: ?[]const u8 = null };
+    const defaults = [_]DefaultEntry{
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'i', .mods = .{} }}, .action = .{ .workspace = .enter_insert }, .binding = "i" },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'v', .mods = .{} }}, .action = .{ .workspace = .enter_visual }, .binding = "v" },
+        .{ .mode = .insert, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .{ .workspace = .enter_normal }, .binding = "escape" },
+        .{ .mode = .visual, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .{ .workspace = .enter_normal }, .binding = "escape" },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'l', .mods = .{ .super = true } }}, .action = .{ .workspace = .toggle_left_dock }, .binding = "super+l" },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 't', .mods = .{ .ctrl = true } }}, .action = .{ .workspace = .new_tab }, .binding = "ctrl+t" },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{} }}, .action = .{ .workspace = .next_tab }, .binding = "tab" },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{ .shift = true } }}, .action = .{ .workspace = .prev_tab }, .binding = "shift+tab" },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'q', .mods = .{ .ctrl = true } }}, .action = .{ .workspace = .close_active_tab }, .binding = "ctrl+q" },
+        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{ .super = true } }}, .action = .{ .workspace = .toggle_command_palette }, .binding = "super+k" },
         .{ .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{} }}, .action = .{ .command = .up } },
         .{ .mode = .normal, .seq = &.{.{ .codepoint = 'j', .mods = .{} }}, .action = .{ .command = .down } },
         .{ .mode = .normal, .seq = &.{.{ .codepoint = '\r', .mods = .{} }}, .action = .{ .command = .select } },
@@ -229,9 +237,31 @@ fn loadDefaultKeymaps(self: *Settings) void {
 
     for (defaults) |d| {
         self.keymaps.actions(d.mode).insert(d.seq, d.action) catch continue;
+        if (d.binding) |b| self.recordBinding(d.action, b);
     }
 
     self.keymap_generation +%= 1;
+}
+
+fn recordBinding(self: *Settings, action: Action, seq_str: []const u8) void {
+    const k = action.key();
+    if (self.binding_map.contains(k)) return;
+    const owned = self.alloc.dupe(u8, seq_str) catch return;
+    self.binding_map.put(self.alloc, k, owned) catch {
+        self.alloc.free(owned);
+    };
+}
+
+fn clearBindingMap(self: *Settings) void {
+    var it = self.binding_map.valueIterator();
+    while (it.next()) |v| {
+        self.alloc.free(v.*);
+    }
+    self.binding_map.clearRetainingCapacity();
+}
+
+pub fn keymapBindingString(self: *Settings, action: Action) ?[]const u8 {
+    return self.binding_map.get(action.key());
 }
 
 pub fn watch(self: *Settings, loop: *xev.Loop) void {
@@ -372,6 +402,8 @@ pub fn destroy(self: *Settings) void {
     if (self.keymaps_initialized) {
         self.keymaps.deinit();
     }
+    self.clearBindingMap();
+    self.binding_map.deinit(self.alloc);
     self.fs.deinit();
     self.alloc.destroy(self);
 }
@@ -407,6 +439,8 @@ test "load settings from settings folder" {
         if (settings.keymaps_initialized) {
             settings.keymaps.deinit();
         }
+        settings.clearBindingMap();
+        settings.binding_map.deinit(alloc);
     }
 
     settings.load("settings") catch |err| {

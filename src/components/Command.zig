@@ -4,6 +4,7 @@ const unicode = vaxis.unicode;
 const gwidth = vaxis.gwidth.gwidth;
 const lib = @import("../lib.zig");
 const global = @import("../global.zig");
+const keymapspkg = @import("../keymaps/mod.zig");
 
 const Element = lib.Element;
 const Buffer = lib.Buffer;
@@ -12,10 +13,30 @@ const Dialog = @import("styled/Dialog.zig");
 const Input = @import("../app/window/element/Input.zig");
 const CommandList = @import("CommandList.zig");
 const Allocator = std.mem.Allocator;
+const Action = keymapspkg.Action;
 
 const App = lib.App;
 
 const Command = @This();
+
+pub const CommandId = u64;
+
+pub const Execute = union(enum) {
+    dispatch: Action,
+    callback: struct {
+        userdata: *anyopaque,
+        cb: *const fn (userdata: *anyopaque) void,
+    },
+};
+
+pub const CommandEntry = struct {
+    id: CommandId,
+    owner: *anyopaque,
+    owner_name: []const u8,
+    title: []const u8,
+    execute: Execute,
+    binding: ?[]const u8 = null,
+};
 
 alloc: Allocator,
 ctx: *Context,
@@ -24,6 +45,9 @@ input: *Input,
 list: *CommandList,
 prev_focused: ?*Element.Element = null,
 keymap_sub_id: ?u64 = null,
+
+entries: std.ArrayListUnmanaged(CommandEntry) = .{},
+next_id: CommandId = 1,
 
 pub fn create(alloc: Allocator, ctx: *Context) !*Command {
     const self = try alloc.create(Command);
@@ -88,6 +112,83 @@ pub fn create(alloc: Allocator, ctx: *Context) !*Command {
     return self;
 }
 
+pub fn register(
+    self: *Command,
+    owner: *anyopaque,
+    owner_name: []const u8,
+    title: []const u8,
+    execute: Execute,
+) !CommandId {
+    const id = self.next_id;
+    self.next_id += 1;
+
+    try self.entries.append(self.alloc, .{
+        .id = id,
+        .owner = owner,
+        .owner_name = owner_name,
+        .title = try self.alloc.dupe(u8, title),
+        .execute = execute,
+    });
+    return id;
+}
+
+pub fn unregister(self: *Command, id: CommandId) void {
+    for (self.entries.items, 0..) |e, i| {
+        if (e.id == id) {
+            self.alloc.free(e.title);
+            if (e.binding) |b| self.alloc.free(b);
+            _ = self.entries.orderedRemove(i);
+            return;
+        }
+    }
+}
+
+pub fn unregisterOwner(self: *Command, owner: *anyopaque) void {
+    var i: usize = 0;
+    while (i < self.entries.items.len) {
+        const e = self.entries.items[i];
+        if (e.owner == owner) {
+            self.alloc.free(e.title);
+            if (e.binding) |b| self.alloc.free(b);
+            _ = self.entries.orderedRemove(i);
+        } else {
+            i += 1;
+        }
+    }
+}
+
+fn refreshBindings(self: *Command) void {
+    const settings = global.settings;
+    for (self.entries.items) |*e| {
+        if (e.binding) |b| self.alloc.free(b);
+        e.binding = null;
+
+        switch (e.execute) {
+            .dispatch => |action| {
+                if (settings.keymapBindingString(action)) |s| {
+                    e.binding = self.alloc.dupe(u8, s) catch null;
+                }
+            },
+            .callback => {},
+        }
+    }
+}
+
+fn executeEntry(self: *Command, id: CommandId) void {
+    const entry = for (self.entries.items) |e| {
+        if (e.id == id) break e;
+    } else return;
+
+    self.toggleShow();
+
+    switch (entry.execute) {
+        .dispatch => |action| {
+            self.ctx.app.dispatchKeymapActions(&.{action});
+        },
+        .callback => |cb| cb.cb(cb.userdata),
+    }
+}
+
 pub fn toggleShow(self: *Command) void {
     const is_visible = self.dialog.portal.element.elem().visible;
 
@@ -95,6 +196,8 @@ pub fn toggleShow(self: *Command) void {
         self.prev_focused = self.ctx.app.window.getFocus();
         self.ctx.app.window.setFocus(self.input.elem());
         self.keymap_sub_id = self.ctx.app.subscribe(.keymap_action, Command, self, onKeyAction) catch null;
+        self.refreshBindings();
+        self.list.setEntries(self.entries.items);
     } else {
         if (self.keymap_sub_id) |id| {
             self.ctx.app.unsubscribe(.keymap_action, id);
@@ -113,13 +216,17 @@ fn onKeyAction(self: *Command, data: App.EventData) void {
     switch (key_data.action) {
         .command => |cmd| {
             switch (cmd) {
-                .up => {},
-                .down => {},
-                .select => {},
-                .scroll_up => {},
-                .scroll_down => {},
-                .top => {},
-                .bottom => {},
+                .up => self.list.moveSelection(-1),
+                .down => self.list.moveSelection(1),
+                .select => {
+                    if (self.list.selectedId()) |id| {
+                        self.executeEntry(id);
+                    }
+                },
+                .scroll_up => self.list.scrollPage(-1),
+                .scroll_down => self.list.scrollPage(1),
+                .top => self.list.moveToTop(),
+                .bottom => self.list.moveToBottom(),
             }
             key_data.consume();
         },
@@ -185,6 +292,11 @@ fn drawInput(input: *Input, element: *Element, buffer: *Buffer) void {
 }
 
 pub fn destroy(self: *Command) void {
+    for (self.entries.items) |e| {
+        self.alloc.free(e.title);
+        if (e.binding) |b| self.alloc.free(b);
+    }
+    self.entries.deinit(self.alloc);
     self.input.destroy();
     self.dialog.destroy();
     self.alloc.destroy(self);

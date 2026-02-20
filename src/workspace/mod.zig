@@ -163,7 +163,30 @@ pub fn create(alloc: std.mem.Allocator, ctx: *Context) !*Workspace {
         .command = command,
     };
 
+    try workspace.registerCommandActions();
+
     return workspace;
+}
+
+fn registerCommandActions(self: *Workspace) !void {
+    const owner: *anyopaque = @ptrCast(self);
+    const Action = @import("../keymaps/mod.zig").Action;
+    const entries = [_]struct { title: []const u8, action: Action }{
+        .{ .title = "New Tab", .action = .{ .workspace = .new_tab } },
+        .{ .title = "Close Tab", .action = .{ .workspace = .close_active_tab } },
+        .{ .title = "Next Tab", .action = .{ .workspace = .next_tab } },
+        .{ .title = "Previous Tab", .action = .{ .workspace = .prev_tab } },
+        .{ .title = "Toggle Left Dock", .action = .{ .workspace = .toggle_left_dock } },
+        .{ .title = "Toggle Right Dock", .action = .{ .workspace = .toggle_right_dock } },
+    };
+    for (entries) |entry| {
+        _ = try self.command.register(
+            owner,
+            "Workspace",
+            entry.title,
+            .{ .dispatch = entry.action },
+        );
+    }
 }
 
 pub fn destroy(self: *Workspace) void {
@@ -340,6 +363,9 @@ fn onKeyAction(self: *Workspace, data: App.EventData) void {
             .toggle_left_dock => {
                 self.toggleDock(.left);
             },
+            .toggle_right_dock => {
+                self.toggleDock(.right);
+            },
             .toggle_command_palette => {
                 self.command.toggleShow();
             },
@@ -352,7 +378,6 @@ fn onKeyAction(self: *Workspace, data: App.EventData) void {
             .enter_visual => {
                 global.mode = .visual;
             },
-            else => {},
         },
         else => {},
     }

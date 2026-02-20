@@ -73,6 +73,14 @@ pub const Action = union(enum) {
         };
     }
 
+    pub fn key(self: Action) u32 {
+        return switch (self) {
+            .workspace => |w| (@as(u32, 0) << 16) | @intFromEnum(w),
+            .editor => |e| (@as(u32, 1) << 16) | @intFromEnum(e),
+            .command => |c| (@as(u32, 2) << 16) | @intFromEnum(c),
+        };
+    }
+
     fn asciiEqlIgnoreCase(a_str: []const u8, comptime b_str: []const u8) bool {
         if (a_str.len != b_str.len) return false;
         for (a_str, b_str) |ac, bc| {

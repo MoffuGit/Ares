@@ -89,6 +89,12 @@ pub fn addElement(self: *Window, elem: *Element) !void {
 
 pub fn removeElement(self: *Window, num: u64) void {
     _ = self.elements.remove(num);
+    if (self.hovered) |h| {
+        if (h.num == num) self.hovered = null;
+    }
+    if (self.pressed_on) |p| {
+        if (p.num == num) self.pressed_on = null;
+    }
 }
 
 pub fn getElement(self: *Window, num: u64) ?*Element {
