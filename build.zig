@@ -40,6 +40,21 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
     b.installArtifact(yoga_lib);
 
+    // Shared library for desktop (Electrobun) FFI
+    const desktop_lib = b.addLibrary(.{
+        .linkage = .dynamic,
+        .name = "ares_desktop",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/desktop_lib.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    b.installArtifact(desktop_lib);
+
+    const desktop_lib_step = b.step("desktop-lib", "Build shared library for desktop FFI");
+    desktop_lib_step.dependOn(b.getInstallStep());
+
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
 

@@ -1,4 +1,19 @@
 import { BrowserWindow, Updater, Utils } from "electrobun/bun";
+import { dlopen, FFIType } from "bun:ffi";
+import { resolve } from "node:path";
+
+// Load the Zig shared library
+// Electrobun copies assets into Contents/Resources/app/
+// import.meta.dir resolves to Contents/Resources/app/bun/
+const libPath = resolve(import.meta.dir, "../lib/libares_desktop.dylib");
+const aresLib = dlopen(libPath, {
+	add: {
+		args: [FFIType.i32, FFIType.i32],
+		returns: FFIType.i32,
+	},
+});
+
+console.log("Zig FFI test: add(2, 3) =", aresLib.symbols.add(2, 3));
 
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;

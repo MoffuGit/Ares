@@ -11,6 +11,7 @@ export default {
 		copy: {
 			"dist/index.html": "views/mainview/index.html",
 			"dist/assets": "views/mainview/assets",
+			"../zig-out/lib/libares_desktop.dylib": "lib/libares_desktop.dylib",
 		},
 		mac: {
 			bundleCEF: false,
