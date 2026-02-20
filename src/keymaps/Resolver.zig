@@ -28,6 +28,7 @@ alloc: Allocator,
 node: ?*Node = null,
 app: *App,
 last_mode: global.Mode,
+generation: u64,
 
 pub fn create(alloc: Allocator, app: *App) !*Resolver {
     const resolver = try alloc.create(Resolver);
@@ -37,6 +38,7 @@ pub fn create(alloc: Allocator, app: *App) !*Resolver {
         .alloc = alloc,
         .app = app,
         .last_mode = global.mode,
+        .generation = global.settings.keymap_generation,
     };
 
     try app.root().addEventListener(.key_press, Resolver, resolver, onKeyPress);
@@ -49,7 +51,7 @@ pub fn destroy(self: *Resolver) void {
 }
 
 fn onKeyPress(self: *Resolver, evt: Element.ElementEvent) void {
-    if (evt.ctx.phase != .bubbling) return;
+    if (evt.ctx.phase == .bubbling) return;
 
     const key = evt.event.key_press;
     const ks = KeyStroke{
@@ -58,6 +60,7 @@ fn onKeyPress(self: *Resolver, evt: Element.ElementEvent) void {
     };
 
     self.resolve(ks);
+    evt.ctx.stopPropagation();
 }
 
 pub fn resolve(
@@ -81,7 +84,7 @@ pub fn resolve(
 
     if (cur != trie.root) {
         if (cur.values.items.len > 0) {
-            self.app.dispatchKeymapActions(cur.values.items);
+            self.dispatchKeyMapActions(cur.values.items);
         }
         self.reset();
         cur = trie.root;
@@ -92,13 +95,12 @@ pub fn resolve(
     }
 
     self.reset();
-    return;
 }
 
 pub fn flush(self: *Resolver) void {
     if (self.node) |n| {
         if (n.values.items.len > 0) {
-            self.app.dispatchKeymapActions(n.values.items);
+            self.dispatchKeyMapActions(n.values.items);
         }
     }
     self.reset();
@@ -120,7 +122,17 @@ fn consumeChild(
 
     if (child.values.items.len > 0) {
         self.reset();
-        self.app.dispatchKeymapActions(child.values.items);
+        self.dispatchKeyMapActions(child.values.items);
+    }
+}
+
+fn dispatchKeyMapActions(self: *Resolver, actions: []const Action) void {
+    const loop = self.app.loop;
+    if (loop.mailbox.push(.{ .app = .{ .keymapAction = actions } }, .instant) != 0) {
+        loop.wakeup.notify() catch |err| {
+            std.log.err("The key action didn't got send: {}", .{err});
+        };
+        std.log.debug("we send it📍", .{});
     }
 }
 
@@ -128,7 +140,7 @@ fn armTimer(self: *Resolver) void {
     const tick = Tick{
         .next = std.time.microTimestamp() + flush_timeout_us,
         .callback = tickCallback,
-        .userdata = @ptrCast(self),
+        .userdata = self,
     };
     _ = self.app.loop.mailbox.push(.{ .window = .{ .tick = tick } }, .instant);
     self.app.loop.wakeup.notify() catch {};

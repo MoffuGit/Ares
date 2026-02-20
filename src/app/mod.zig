@@ -86,7 +86,7 @@ pub const Context = struct {
         event: EventType,
         comptime Userdata: type,
         userdata: *Userdata,
-        cb: *const fn (userdata: *Userdata, data: EventData) void,
+        comptime cb: *const fn (userdata: *Userdata, data: EventData) void,
     ) !u64 {
         return self.app.subscribe(event, Userdata, userdata, cb);
     }
@@ -255,6 +255,9 @@ pub fn handleMessage(self: *App, msg: Message) !void {
         .bufferUpdated => |entry_id| {
             self.notifySubs(.{ .bufferUpdated = entry_id });
         },
+        .keymapAction => |actions| {
+            self.dispatchKeymapActions(actions);
+        },
     }
 }
 
@@ -267,7 +270,7 @@ pub fn subscribe(
     event: EventType,
     comptime Userdata: type,
     userdata: *Userdata,
-    cb: *const fn (userdata: *Userdata, data: EventData) void,
+    comptime cb: *const fn (userdata: *Userdata, data: EventData) void,
 ) !u64 {
     return self.subs.addSubscription(self.alloc, event, Userdata, userdata, cb);
 }

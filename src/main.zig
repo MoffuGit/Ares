@@ -21,9 +21,13 @@ pub fn keyPressFn(_: *Element, data: Element.ElementEvent) void {
     const key = data.event.key_press;
     if (key.matches('c', .{ .ctrl = true })) {
         if (data.element.context) |ctx| {
+            log.debug("kjhfasdfhjfadjksfadjskfadjkljl ks 📌{}", .{ctx.app.window.root.listeners.values.get(.key_press).items.len});
+            log.debug("a;lksjdfal;skjfdl {}", .{ctx.app.subs.values.get(.keymap_action).items.len});
+
             ctx.stop() catch {};
+
+            data.ctx.stopPropagation();
         }
-        data.ctx.stopPropagation();
     }
 }
 

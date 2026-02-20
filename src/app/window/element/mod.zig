@@ -229,7 +229,7 @@ pub fn addEventListener(
     event_type: EventType,
     comptime Userdata: type,
     userdata: *Userdata,
-    cb: *const fn (userdata: *Userdata, data: ElementEvent) void,
+    comptime cb: *const fn (userdata: *Userdata, data: ElementEvent) void,
 ) !void {
     _ = try self.listeners.addSubscription(self.alloc, event_type, Userdata, userdata, cb);
 }
@@ -1020,24 +1020,6 @@ pub fn getChildById(self: *Element, id: []const u8) ?*Element {
         }
     }
     return null;
-}
-
-pub fn handleEvent(self: *Element, ctx: *EventContext, event: Event) void {
-    switch (event) {
-        .key_press => |key| self.handleKeyPress(ctx, key),
-        .key_release => |key| self.handleKeyRelease(ctx, key),
-        .blur => self.handleBlur(),
-        .focus => self.handleFocus(),
-        .mouse => {},
-    }
-}
-
-pub fn handleKeyPress(self: *Element, ctx: *EventContext, key: vaxis.Key) void {
-    self.dispatchEvent(.{ .element = self, .ctx = ctx, .event = .{ .key_press = key } });
-}
-
-pub fn handleKeyRelease(self: *Element, ctx: *EventContext, key: vaxis.Key) void {
-    self.dispatchEvent(.{ .element = self, .ctx = ctx, .event = .{ .key_release = key } });
 }
 
 pub fn handleFocus(self: *Element) void {

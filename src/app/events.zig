@@ -26,14 +26,18 @@ pub fn EventListeners(comptime EventType: type, comptime EventData: type) type {
             event: EventType,
             comptime Userdata: type,
             userdata: *Userdata,
-            cb: *const fn (userdata: *Userdata, data: EventData) void,
+            comptime cb: *const fn (userdata: *Userdata, data: EventData) void,
         ) !u64 {
             const id = self.next_id;
             self.next_id +%= 1;
             try self.values.getPtr(event).append(alloc, .{
                 .id = id,
                 .userdata = userdata,
-                .callback = @ptrCast(cb),
+                .callback = (struct {
+                    pub fn callback(inner_userdata: ?*anyopaque, inner_data: EventData) void {
+                        cb(@as(*Userdata, @ptrCast(@alignCast(inner_userdata orelse return))), inner_data);
+                    }
+                }.callback),
             });
             return id;
         }
@@ -57,7 +61,9 @@ pub fn EventListeners(comptime EventType: type, comptime EventData: type) type {
 
         pub fn notifyConsumable(self: *Self, evt: EventType, data: EventData, consumed: *bool) void {
             const list = self.values.get(evt);
+            std.log.debug("len: {} type: {}", .{ list.items.len, evt });
             for (list.items) |sub| {
+                std.log.debug("listener: {}", .{sub.id});
                 sub.callback(sub.userdata, data);
                 if (consumed.*) break;
             }

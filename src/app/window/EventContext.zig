@@ -11,7 +11,7 @@ pub const Phase = enum {
 pub const EventContext = @This();
 
 phase: Phase = .capturing,
-target: *Element = undefined,
+target: *Element,
 stopped: bool = false,
 
 pub fn stopPropagation(self: *EventContext) void {

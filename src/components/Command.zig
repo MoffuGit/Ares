@@ -296,6 +296,7 @@ pub fn destroy(self: *Command) void {
         self.alloc.free(e.title);
         if (e.binding) |b| self.alloc.free(b);
     }
+    self.list.destroy();
     self.entries.deinit(self.alloc);
     self.input.destroy();
     self.dialog.destroy();
