@@ -61,6 +61,18 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the application");
     run_step.dependOn(&run_cmd.step);
 
+    // TUI: alias for `zig build run`
+    const run_tui_step = b.step("run-tui", "Run the TUI application");
+    run_tui_step.dependOn(&run_cmd.step);
+
+    // Desktop: build the shared lib, then launch bun run dev:hmr
+    const run_desktop_step = b.step("run-desktop", "Build desktop lib and run the desktop (Electrobun) application");
+    run_desktop_step.dependOn(&desktop_lib.step);
+    const bun_cmd = b.addSystemCommand(&.{ "bun", "run", "dev:hmr" });
+    bun_cmd.setCwd(b.path("desktop"));
+    bun_cmd.step.dependOn(&desktop_lib.step);
+    run_desktop_step.dependOn(&bun_cmd.step);
+
     // Examples
     const Example = enum {
         simple,
