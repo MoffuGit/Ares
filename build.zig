@@ -40,11 +40,38 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
     b.installArtifact(yoga_lib);
 
+    // Shared library for desktop (Electrobun) FFI
+    const desktop_lib = b.addLibrary(.{
+        .linkage = .dynamic,
+        .name = "ares_desktop",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/desktop_lib.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    b.installArtifact(desktop_lib);
+
+    const desktop_lib_step = b.step("desktop-lib", "Build shared library for desktop FFI");
+    desktop_lib_step.dependOn(b.getInstallStep());
+
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
 
     const run_step = b.step("run", "Run the application");
     run_step.dependOn(&run_cmd.step);
+
+    // TUI: alias for `zig build run`
+    const run_tui_step = b.step("run-tui", "Run the TUI application");
+    run_tui_step.dependOn(&run_cmd.step);
+
+    // Desktop: build the shared lib, then launch bun run dev:hmr
+    const run_desktop_step = b.step("run-desktop", "Build desktop lib and run the desktop (Electrobun) application");
+    run_desktop_step.dependOn(&desktop_lib.step);
+    const bun_cmd = b.addSystemCommand(&.{ "bun", "run", "dev:hmr" });
+    bun_cmd.setCwd(b.path("desktop"));
+    bun_cmd.step.dependOn(&desktop_lib.step);
+    run_desktop_step.dependOn(&bun_cmd.step);
 
     // Examples
     const Example = enum {
