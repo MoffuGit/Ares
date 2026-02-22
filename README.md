@@ -105,3 +105,68 @@ or the undo tree,
 
 vertyical bars
 ❘❙❚
+
+I need to test how to handle the memory between the typescript and zig side,
+I'm going to follow a similart approach to the one that used for xcode,
+one detail that I'm not sure how it work is the backend side of electrobun,
+i need to check where is the main loop of this side of the application
+and how to communicate between the zig side, the backend side and the front side,
+
+for example, for the filetree i need a way for creating the worktree and notify the events
+that get generated in this side to the backend part of electrobun and then passing this events to the
+front end and updating the view?, yeah, but I'm not sure how any of this would work on typescript and the
+electrobun architecture, once that is done, making the filetree is not really that hard
+
+i read the colab project and have a similar process to mine, they have their electrobun project and a small zig project,
+they compile the zig project and run it with a bun spawn(probably another thread?), and they communicate between the two,
+i need something similar to that, i should search for more examples of this
+
+i can follow how ghostty architects the C ABI lib for the macOS application,
+for that i would break apart my zig system, between the App things ans the TUI things,
+the TUI things would be all the Window, Renderer, TTY, Elements things
+and the App things would be the Worktree, Resolver, Buffers, Settings
+that way i can have the App system as a common point between the desktop app and the tui,
+
+Not all the events that happen on the two sided should get handled by the App, only the events
+that require this common point, for example, the mouse clicks and focus changes should not pass
+to the app, but key press events should, they would get handled by the resolver, if they dont get consumed they can propagate
+to the ui, but if they get consumed they create an event, this events can get send to the ui or not, that's going to depend on what they do,
+this it's going to be interesting at least, I'm not sure on how to pull it off but that ok,
+it's going to be fun
+
+mmmmmmmmmmmm
+i don't know what belong where, what should i share,
+i kinda know what should not share,
+Window, Renderer, TTY, Screen
+this are terminal specific,
+Workspace not really but Project yes,
+from project i need the Worktree and the BufferStore,
+well, i dont really need the Project but the structures inside it,
+it looks like with FFI you can pass function from ts to zig
+if this is true i can follow the same pattern that ghostty uses (pass a callback)
+
+Before writing more things i need to think about the Architecture
+of my application and what are the different pieces that an
+Editor needs, lets call it "business logic"
+lets write what parts i consider business logic
+
+First it would be the Project,
+the project has a BufferStore
+and a worktree
+then it would be the configuration
+
+that's what i consider to be the business logic (in the future it would grow[lsp, git, tressitter])
+
+Our App it should be an structure
+that hold the business logic:
+it should contain a set of Projects
+this project should contain a Worktree (or many)
+and a BufferStore (Current State of the Files)
+This should contain a configuration
+
+this are the parts that are share between the two Applications
+from there, the others parts are UI or Plataform specific
+(Screen, Window, TTY, Renderer, Elements, Workspace, Tabs...)
+
+There are other parts that could get shared between the
+two App, this could be the Resolver, but for now that all

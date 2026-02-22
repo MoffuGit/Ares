@@ -5,65 +5,54 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const vaxis_dep = b.dependency("vaxis", .{ .target = target, .optimize = optimize });
     const xev_dep = b.dependency("libxev", .{ .target = target, .optimize = optimize });
-    const ltf_dep = b.dependency("log_to_file", .{ .target = target, .optimize = optimize });
 
-    const yoga_lib = buildYogaLib(b, target, optimize);
-    const yoga_mod = buildYogaModule(b, target, optimize);
-
-    const exe_mod = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
+    // ── Core module (shared between TUI and Desktop) ──
+    const core_mod = b.createModule(.{
+        .root_source_file = b.path("src/core/mod.zig"),
         .target = target,
         .optimize = optimize,
     });
+    core_mod.addImport("xev", xev_dep.module("xev"));
 
-    exe_mod.addImport("yoga", yoga_mod);
-    exe_mod.addImport("vaxis", vaxis_dep.module("vaxis"));
-    exe_mod.addImport("xev", xev_dep.module("xev"));
-    exe_mod.addImport("log_to_file", ltf_dep.module("log_to_file"));
+    // ── TUI executable ──
+    const tui_mod = b.createModule(.{
+        .root_source_file = b.path("src/tui/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tui_mod.addImport("core", core_mod);
 
-    const exe = b.addExecutable(.{ .name = "ares", .root_module = exe_mod });
-    exe.linkLibrary(yoga_lib);
-    exe.linkLibCpp();
+    const tui_exe = b.addExecutable(.{ .name = "ares", .root_module = tui_mod });
+    b.installArtifact(tui_exe);
 
-    b.installArtifact(exe);
-    b.installArtifact(yoga_lib);
+    const tui_run = b.addRunArtifact(tui_exe);
+    tui_run.step.dependOn(b.getInstallStep());
+    const tui_step = b.step("tui", "Run the TUI application");
+    tui_step.dependOn(&tui_run.step);
 
-    // Shared library for desktop (Electrobun) FFI
+    // ── Desktop shared library ──
+    const desktop_mod = b.createModule(.{
+        .root_source_file = b.path("src/desktop_lib.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    desktop_mod.addImport("core", core_mod);
+
     const desktop_lib = b.addLibrary(.{
         .linkage = .dynamic,
         .name = "ares_desktop",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/desktop_lib.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = desktop_mod,
     });
     b.installArtifact(desktop_lib);
 
-    const desktop_lib_step = b.step("desktop-lib", "Build shared library for desktop FFI");
-    desktop_lib_step.dependOn(b.getInstallStep());
+    const desktop_bun = b.addSystemCommand(&.{ "bun", "run", "dev:hmr" });
+    desktop_bun.setCwd(b.path("desktop"));
+    desktop_bun.step.dependOn(&desktop_lib.step);
+    const desktop_step = b.step("desktop", "Build desktop lib and run the Electrobun application");
+    desktop_step.dependOn(&desktop_bun.step);
 
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-
-    const run_step = b.step("run", "Run the application");
-    run_step.dependOn(&run_cmd.step);
-
-    // TUI: alias for `zig build run`
-    const run_tui_step = b.step("run-tui", "Run the TUI application");
-    run_tui_step.dependOn(&run_cmd.step);
-
-    // Desktop: build the shared lib, then launch bun run dev:hmr
-    const run_desktop_step = b.step("run-desktop", "Build desktop lib and run the desktop (Electrobun) application");
-    run_desktop_step.dependOn(&desktop_lib.step);
-    const bun_cmd = b.addSystemCommand(&.{ "bun", "run", "dev:hmr" });
-    bun_cmd.setCwd(b.path("desktop"));
-    bun_cmd.step.dependOn(&desktop_lib.step);
-    run_desktop_step.dependOn(&bun_cmd.step);
-
-    // Tests
+    // ── Tests ──
     const test_filter = b.option([]const u8, "test-filter", "Filter for tests");
 
     const test_mod = b.createModule(.{
@@ -71,8 +60,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    test_mod.addImport("yoga", yoga_mod);
-    test_mod.addImport("vaxis", vaxis_dep.module("vaxis"));
     test_mod.addImport("xev", xev_dep.module("xev"));
 
     const test_exe = b.addTest(.{
@@ -80,13 +67,6 @@ pub fn build(b: *std.Build) void {
         .root_module = test_mod,
         .filters = if (test_filter) |f| &.{f} else &.{},
     });
-
-    test_exe.linkLibrary(yoga_lib);
-    test_exe.linkLibCpp();
-
-    if (target.result.os.tag == .linux or target.result.os.tag == .macos) {
-        test_exe.linkLibC();
-    }
 
     const test_run = b.addRunArtifact(test_exe);
     const test_step = b.step("test", "Run unit tests");
