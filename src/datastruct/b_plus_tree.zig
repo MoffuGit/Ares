@@ -904,7 +904,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             return self.root.find(key);
         }
 
-        pub fn clear(self: *Self) void {
+        pub fn clear(self: *Self) !void {
             self.root.destroy(self.alloc);
 
             const root = try self.alloc.create(Node);
