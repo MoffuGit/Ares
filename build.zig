@@ -47,7 +47,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(desktop_lib);
 
     const desktop_bun = b.addSystemCommand(&.{ "bun", "run", "dev:hmr" });
-    desktop_bun.setCwd(b.path("desktop"));
+    desktop_bun.setCwd(b.path("src/desktop"));
     desktop_bun.step.dependOn(&desktop_lib.step);
     const desktop_step = b.step("desktop", "Build desktop lib and run the Electrobun application");
     desktop_step.dependOn(&desktop_bun.step);
