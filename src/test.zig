@@ -8,8 +8,5 @@ comptime {
 
 // Datastruct
 comptime {
-    _ = @import("datastruct/b_plus_tree.zig");
-    _ = @import("datastruct/blocking_queue.zig");
-    _ = @import("datastruct/gap_buffer.zig");
-    _ = @import("datastruct/trie.zig");
+    _ = @import("datastruct/mod.zig");
 }
