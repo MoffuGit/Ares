@@ -6,6 +6,15 @@ const Allocator = std.mem.Allocator;
 const App = tui.App;
 const EventListeners = tui.EventListeners;
 
+pub const KeymapActionEvent = struct {
+    action: core.Action,
+    consumed: bool = false,
+
+    pub fn consume(self: *KeymapActionEvent) void {
+        self.consumed = true;
+    }
+};
+
 pub const EventType = enum {
     worktree_updated,
     buffer_updated,
@@ -17,7 +26,7 @@ pub const EventData = union(EventType) {
     worktree_updated: *core.worktree.UpdatedEntriesSet,
     buffer_updated: u64,
     settings_changed: void,
-    keymap_actions: []const core.Action,
+    keymap_actions: *KeymapActionEvent,
 };
 
 pub const Subscribers = EventListeners(EventType, EventData);
@@ -56,11 +65,20 @@ pub fn drainEngineEvents(self: *Bridge) void {
                 self.subs.notify(.settings_changed, .{ .settings_changed = {} });
             },
             .keymap_actions => |actions| {
-                self.subs.notify(.keymap_actions, .{ .keymap_actions = actions });
+                self.dispatchKeymapActions(actions);
             },
         }
     }
     if (had_event) self.app.requestDraw();
+}
+
+pub fn dispatchKeymapActions(self: *Bridge, actions: []const core.Action) void {
+    var ev = KeymapActionEvent{ .action = undefined };
+    for (actions) |action| {
+        ev.action = action;
+        ev.consumed = false;
+        self.subs.notifyConsumableReverse(.keymap_actions, .{ .keymap_actions = &ev }, &ev.consumed);
+    }
 }
 
 pub fn dispatch(self: *Bridge, cmd: core.Command) void {

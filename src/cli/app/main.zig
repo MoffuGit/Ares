@@ -8,6 +8,14 @@ const Bridge = @import("bridge.zig");
 const Element = tui.Element;
 const App = tui.App;
 
+const Workspace = @import("workspace/mod.zig");
+
+const ltf = @import("log_to_file");
+
+pub const std_options: std.Options = .{
+    .logFn = ltf.log_to_file,
+};
+
 const GPA = std.heap.GeneralPurposeAllocator(.{});
 
 pub fn main() !void {
@@ -34,6 +42,9 @@ pub fn main() !void {
 
     global.bridge = &bridge;
     global.engine = engine;
+
+    const workspace = try Workspace.create(alloc, app);
+    defer workspace.destroy();
 
     try app.root().addEventListener(.key_press, Element, app.root(), keyPressFn);
 

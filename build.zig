@@ -25,7 +25,6 @@ pub fn build(b: *std.Build) void {
 
     // ── TUI library ──
     const vaxis_dep = b.dependency("vaxis", .{ .target = target, .optimize = optimize });
-    const log_dep = b.dependency("log_to_file", .{ .target = target, .optimize = optimize });
     const yoga_lib = buildYogaLib(b, target, optimize);
     const yoga_mod = buildYogaModule(b, target, optimize);
 
@@ -37,15 +36,17 @@ pub fn build(b: *std.Build) void {
     tui_lib_mod.addImport("datastruct", datastruct_mod);
     tui_lib_mod.addImport("xev", xev_dep.module("xev"));
     tui_lib_mod.addImport("vaxis", vaxis_dep.module("vaxis"));
-    tui_lib_mod.addImport("log_to_file", log_dep.module("log_to_file"));
     tui_lib_mod.addImport("yoga", yoga_mod);
 
     // ── TUI executable ──
+    const log_dep = b.dependency("log_to_file", .{ .target = target, .optimize = optimize });
+
     const tui_mod = b.createModule(.{
         .root_source_file = b.path("src/cli/app/main.zig"),
         .target = target,
         .optimize = optimize,
     });
+    tui_mod.addImport("log_to_file", log_dep.module("log_to_file"));
     tui_mod.addImport("tui", tui_lib_mod);
     tui_mod.addImport("core", core_mod);
 
