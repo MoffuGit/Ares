@@ -61,8 +61,17 @@ pub fn keyMapAction(_: *Workspace, evt: Bridge.EventData) void {
     const key_action = evt.keymap_actions;
     switch (key_action.action) {
         .workspace => |w| {
-            if (w == .enter_insert) {
-                global.engine.dispatch(.{ .set_mode = .insert });
+            switch (w) {
+                .enter_insert => {
+                    global.engine.dispatch(.{ .set_mode = .insert });
+                },
+                .enter_visual => {
+                    global.engine.dispatch(.{ .set_mode = .visual });
+                },
+                .enter_normal => {
+                    global.engine.dispatch(.{ .set_mode = .normal });
+                },
+                else => {},
             }
         },
         else => {},
