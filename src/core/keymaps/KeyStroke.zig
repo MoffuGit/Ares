@@ -7,7 +7,8 @@ pub const Modifiers = packed struct(u8) {
     super: bool = false,
     hyper: bool = false,
     meta: bool = false,
-    _padding: u2 = 0,
+    caps_lock: bool = false,
+    num_lock: bool = false,
 };
 
 pub const named = struct {

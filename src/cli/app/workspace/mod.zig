@@ -4,7 +4,7 @@ const global = @import("../global.zig");
 
 // const Context = @import("../app/mod.zig").Context;
 // const TopBar = @import("../components/TopBar.zig");
-// const BottomBar = @import("../components/BottomBar.zig");
+const BottomBar = @import("../components/BottomBar.zig");
 // const Dock = @import("../components/Dock.zig");
 // const FileTree = @import("../components/FileTree.zig");
 // const StyledTabs = @import("../components/styled/Tabs.zig");
@@ -30,7 +30,7 @@ center_column: *Element,
 center: *Element,
 //
 // top_bar: *TopBar,
-// bottom_bar: *BottomBar,
+bottom_bar: *BottomBar,
 //
 // left_dock: *Dock,
 // right_dock: *Dock,
@@ -106,8 +106,8 @@ pub fn create(alloc: std.mem.Allocator, app: *App) !*Workspace {
     // const top_bar = try TopBar.create(alloc, workspace);
     // errdefer top_bar.destroy(alloc);
     //
-    // const bottom_bar = try BottomBar.create(alloc, workspace);
-    // errdefer bottom_bar.destroy(alloc);
+    const bottom_bar = try BottomBar.create(alloc, workspace);
+    errdefer bottom_bar.destroy(alloc);
     //
     // const left_dock = try Dock.create(alloc, .left, 30, false);
     // errdefer left_dock.destroy(alloc);
@@ -136,7 +136,7 @@ pub fn create(alloc: std.mem.Allocator, app: *App) !*Workspace {
 
     // try element.addChild(top_bar.element.elem());
     try element.addChild(center_wrapper);
-    // try element.addChild(bottom_bar.element);
+    try element.addChild(bottom_bar.element.elem());
 
     try app.root().addChild(element);
 
@@ -144,6 +144,7 @@ pub fn create(alloc: std.mem.Allocator, app: *App) !*Workspace {
 
     workspace.* = .{
         .alloc = alloc,
+        .bottom_bar = bottom_bar,
         .center_wrapper = center_wrapper,
         .center_column = center_column,
         .center = center,
@@ -179,6 +180,9 @@ pub fn destroy(self: *Workspace) void {
     self.center_column.deinit();
     self.center_wrapper.deinit();
     self.element.deinit();
+
+    self.bottom_bar.destroy(self.alloc);
+
     self.alloc.destroy(self.center);
     self.alloc.destroy(self.center_column);
     self.alloc.destroy(self.center_wrapper);

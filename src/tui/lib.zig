@@ -1,6 +1,8 @@
 pub const App = @import("mod.zig");
 pub const Window = @import("window/mod.zig");
 pub const Element = @import("window/element/mod.zig");
+pub const TypedElement = Element.TypedElement;
+pub const TypedAnimation = Element.TypedAnimation;
 pub const Buffer = @import("Buffer.zig");
 pub const HitGrid = @import("window/HitGrid.zig");
 pub const EventListeners = @import("events.zig").EventListeners;
