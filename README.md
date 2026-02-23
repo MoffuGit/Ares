@@ -99,13 +99,7 @@ right seven eighths 🮋
 ┃
 ▮
 ╹
-
-part that can have more style could be the lsp status view
-or the undo tree,
-
 vertyical bars
 ❘❙❚
 
-I want to separate the TUI Core and the TUI APP,
-The TUI Core would be the Window, Renderer, TTY loops
-and the TUI App it would be components (Workspace, Command, FileTree)
+
