@@ -15,15 +15,37 @@ pub fn build(b: *std.Build) void {
     });
     core_mod.addImport("xev", xev_dep.module("xev"));
 
+    // ── TUI library ──
+    const vaxis_dep = b.dependency("vaxis", .{ .target = target, .optimize = optimize });
+    const log_dep = b.dependency("log_to_file", .{ .target = target, .optimize = optimize });
+    const yoga_lib = buildYogaLib(b, target, optimize);
+    const yoga_mod = buildYogaModule(b, target, optimize);
+
+    const tui_lib_mod = b.createModule(.{
+        .root_source_file = b.path("src/tui/app/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tui_lib_mod.addImport("datastruct", b.createModule(.{
+        .root_source_file = b.path("src/datastruct/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    tui_lib_mod.addImport("xev", xev_dep.module("xev"));
+    tui_lib_mod.addImport("vaxis", vaxis_dep.module("vaxis"));
+    tui_lib_mod.addImport("log_to_file", log_dep.module("log_to_file"));
+    tui_lib_mod.addImport("yoga", yoga_mod);
+
     // ── TUI executable ──
     const tui_mod = b.createModule(.{
         .root_source_file = b.path("src/tui/main.zig"),
         .target = target,
         .optimize = optimize,
     });
-    tui_mod.addImport("core", core_mod);
+    tui_mod.addImport("tui", tui_lib_mod);
 
     const tui_exe = b.addExecutable(.{ .name = "ares", .root_module = tui_mod });
+    tui_exe.linkLibrary(yoga_lib);
     b.installArtifact(tui_exe);
 
     const tui_run = b.addRunArtifact(tui_exe);

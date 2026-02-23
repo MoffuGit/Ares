@@ -8,5 +8,5 @@ comptime {
 
 // Datastruct
 comptime {
-    _ = @import("datastruct/mod.zig");
+    _ = @import("datastruct/lib.zig");
 }
