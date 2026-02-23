@@ -82,6 +82,7 @@ pub const Context = struct {
 pub const Options = struct {
     root: Element.Options = .{},
     userdata: ?*anyopaque = null,
+    on_wakeup: ?*const fn (*App) void = null,
 };
 
 const App = @This();
@@ -104,6 +105,8 @@ draw: std.atomic.Value(bool) = .init(true),
 context: Context,
 
 scheme: vaxis.Color.Scheme = .dark,
+
+on_wakeup: ?*const fn (*App) void = null,
 
 subs: AppEventListeners = .{},
 
@@ -155,6 +158,7 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
         .renderer_thread = renderer_thread,
         .renderer_thr = undefined,
         .tty_thr = undefined,
+        .on_wakeup = opts.on_wakeup,
     };
 
     app.tty_thr = try std.Thread.spawn(.{}, TtyThread.threadMain, .{&app.tty_thread});

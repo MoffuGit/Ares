@@ -4,7 +4,7 @@ const xev_pkg = @import("xev");
 const log = std.log.scoped(.worktree_io);
 
 const Message = @import("message.zig").Message;
-const BlockingQueue = @import("../../../datastruct/blocking_queue.zig").BlockingQueue;
+const BlockingQueue = @import("datastruct").BlockingQueue;
 const Allocator = std.mem.Allocator;
 const Io = @import("mod.zig");
 

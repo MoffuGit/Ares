@@ -109,6 +109,8 @@ fn wakeupCallback(
     l.drainMailbox() catch |err|
         log.err("error draining mailbox err={}", .{err});
 
+    if (l.app.on_wakeup) |cb| cb(l.app);
+
     l.app.drawWindow() catch |err|
         log.err("draw error: {}", .{err});
 

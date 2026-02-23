@@ -1,5 +1,5 @@
 const std = @import("std");
-const triepkg = @import("../../datastruct/trie.zig");
+const triepkg = @import("datastruct");
 const keystrokepkg = @import("KeyStroke.zig");
 
 const KeyStroke = keystrokepkg.KeyStroke;

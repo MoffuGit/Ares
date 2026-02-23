@@ -13,7 +13,7 @@ const IoThread = @import("io/Thread.zig");
 
 const Snapshot = @import("Snapshot.zig");
 
-const BPlusTree = @import("../../datastruct/b_plus_tree.zig").BPlusTree;
+const BPlusTree = @import("datastruct").BPlusTree;
 
 const EventQueue = @import("../EventQueue.zig");
 

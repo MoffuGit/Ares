@@ -29,7 +29,7 @@ pub const Command = union(enum) {
     tick: i64,
 };
 
-const Engine = @This();
+pub const Engine = @This();
 
 alloc: Allocator,
 events: EventQueue,

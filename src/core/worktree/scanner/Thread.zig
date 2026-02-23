@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const xev = @import("xev").Dynamic;
-const BlockingQueue = @import("../../../datastruct/blocking_queue.zig").BlockingQueue;
+const BlockingQueue = @import("datastruct").BlockingQueue;
 const messagepkg = @import("./Message.zig");
 const Scanner = @import("mod.zig");
 

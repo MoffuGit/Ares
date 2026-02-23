@@ -7,6 +7,13 @@ pub fn build(b: *std.Build) void {
 
     const xev_dep = b.dependency("libxev", .{ .target = target, .optimize = optimize });
 
+    // ── Shared datastruct module ──
+    const datastruct_mod = b.createModule(.{
+        .root_source_file = b.path("src/datastruct/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // ── Core module (shared between TUI and Desktop) ──
     const core_mod = b.createModule(.{
         .root_source_file = b.path("src/core/mod.zig"),
@@ -14,6 +21,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     core_mod.addImport("xev", xev_dep.module("xev"));
+    core_mod.addImport("datastruct", datastruct_mod);
 
     // ── TUI library ──
     const vaxis_dep = b.dependency("vaxis", .{ .target = target, .optimize = optimize });
@@ -26,11 +34,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    tui_lib_mod.addImport("datastruct", b.createModule(.{
-        .root_source_file = b.path("src/datastruct/lib.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
+    tui_lib_mod.addImport("datastruct", datastruct_mod);
     tui_lib_mod.addImport("xev", xev_dep.module("xev"));
     tui_lib_mod.addImport("vaxis", vaxis_dep.module("vaxis"));
     tui_lib_mod.addImport("log_to_file", log_dep.module("log_to_file"));
@@ -43,6 +47,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     tui_mod.addImport("tui", tui_lib_mod);
+    tui_mod.addImport("core", core_mod);
 
     const tui_exe = b.addExecutable(.{ .name = "ares", .root_module = tui_mod });
     tui_exe.linkLibrary(yoga_lib);

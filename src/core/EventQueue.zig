@@ -1,5 +1,5 @@
 const std = @import("std");
-const BlockingQueue = @import("../datastruct/blocking_queue.zig").BlockingQueue;
+const BlockingQueue = @import("datastruct").BlockingQueue;
 const Waker = @import("Waker.zig");
 const keymapspkg = @import("keymaps/mod.zig");
 const UpdatedEntriesSet = @import("worktree/scanner/mod.zig").UpdatedEntriesSet;

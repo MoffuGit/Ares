@@ -102,4 +102,5 @@ right seven eighths 🮋
 vertyical bars
 ❘❙❚
 
-
+Now, we need to check how to handle the new tui and core for the tui app
+and how to handle the desktop app with the core as well
