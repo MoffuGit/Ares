@@ -1,23 +1,25 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const tui = @import("tui");
+const Element = tui.Element;
+const App = tui.App;
+const Buffer = tui.Buffer;
+
+const BottomBar = @import("../components/BottomBar.zig");
+const Dock = @import("../components/Dock.zig");
 const global = @import("../global.zig");
 
 // const Context = @import("../app/mod.zig").Context;
 // const TopBar = @import("../components/TopBar.zig");
-const BottomBar = @import("../components/BottomBar.zig");
 // const Dock = @import("../components/Dock.zig");
 // const FileTree = @import("../components/FileTree.zig");
 // const StyledTabs = @import("../components/styled/Tabs.zig");
 // const Tabs = StyledTabs.Tabs(.block);
-const Element = tui.Element;
-const App = tui.App;
-const Buffer = tui.Buffer;
 // const Pane = @import("Pane.zig");
 // const EditorView = @import("views/EditorView.zig");
 // const Command = @import("../components/Command.zig");
 // const App = @import("../app/mod.zig");
-const Allocator = std.mem.Allocator;
-
 pub const Workspace = @This();
 
 alloc: Allocator,
@@ -31,11 +33,11 @@ center: *Element,
 //
 // top_bar: *TopBar,
 bottom_bar: *BottomBar,
-//
-// left_dock: *Dock,
-// right_dock: *Dock,
-// top_dock: *Dock,
-// bottom_dock: *Dock,
+
+left_dock: *Dock,
+right_dock: *Dock,
+top_dock: *Dock,
+bottom_dock: *Dock,
 //
 // tabs: *Tabs,
 // panes: std.ArrayList(*Pane) = .{},
@@ -108,31 +110,31 @@ pub fn create(alloc: std.mem.Allocator, app: *App) !*Workspace {
     //
     const bottom_bar = try BottomBar.create(alloc, workspace);
     errdefer bottom_bar.destroy(alloc);
-    //
-    // const left_dock = try Dock.create(alloc, .left, 30, false);
-    // errdefer left_dock.destroy(alloc);
-    //
-    // const right_dock = try Dock.create(alloc, .right, 30, false);
-    // errdefer right_dock.destroy(alloc);
-    //
-    // const top_dock = try Dock.create(alloc, .top, 30, false);
-    // errdefer top_dock.destroy(alloc);
-    //
-    // const bottom_dock = try Dock.create(alloc, .bottom, 30, false);
-    // errdefer bottom_dock.destroy(alloc);
-    //
+
+    const left_dock = try Dock.create(alloc, .left, 30, false);
+    errdefer left_dock.destroy(alloc);
+
+    const right_dock = try Dock.create(alloc, .right, 30, false);
+    errdefer right_dock.destroy(alloc);
+
+    const top_dock = try Dock.create(alloc, .top, 30, false);
+    errdefer top_dock.destroy(alloc);
+
+    const bottom_dock = try Dock.create(alloc, .bottom, 30, false);
+    errdefer bottom_dock.destroy(alloc);
+
     // const tabs = try Tabs.create(alloc);
     //
     // try top_bar.element.elem().addChild(tabs.inner.list);
     // try center.addChild(tabs.inner.container);
 
-    // try center_column.insertChild(top_dock.element, 0);
+    try center_column.insertChild(top_dock.element.elem(), 0);
     try center_column.addChild(center);
-    // try center_column.addChild(bottom_dock.element);
+    try center_column.addChild(bottom_dock.element.elem());
 
-    // try center_wrapper.insertChild(left_dock.element, 0);
+    try center_wrapper.insertChild(left_dock.element.elem(), 0);
     try center_wrapper.addChild(center_column);
-    // try center_wrapper.addChild(right_dock.element);
+    try center_wrapper.addChild(right_dock.element.elem());
 
     // try element.addChild(top_bar.element.elem());
     try element.addChild(center_wrapper);
@@ -149,6 +151,10 @@ pub fn create(alloc: std.mem.Allocator, app: *App) !*Workspace {
         .center_column = center_column,
         .center = center,
         .element = element,
+        .left_dock = left_dock,
+        .bottom_dock = bottom_dock,
+        .right_dock = right_dock,
+        .top_dock = top_dock,
     };
 
     return workspace;
@@ -180,6 +186,11 @@ pub fn destroy(self: *Workspace) void {
     self.center_column.deinit();
     self.center_wrapper.deinit();
     self.element.deinit();
+
+    self.left_dock.destroy(self.alloc);
+    self.top_dock.destroy(self.alloc);
+    self.bottom_dock.destroy(self.alloc);
+    self.right_dock.destroy(self.alloc);
 
     self.bottom_bar.destroy(self.alloc);
 

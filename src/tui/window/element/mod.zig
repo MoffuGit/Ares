@@ -17,6 +17,7 @@ pub const TypedElement = @import("TypedElement.zig").TypedElement;
 pub const TypedAnimation = @import("TypedElement.zig").TypedAnimation;
 pub const Box = @import("Box.zig");
 pub const Input = @import("Input.zig");
+pub const Color = vaxis.Color;
 
 const Buffer = @import("../../Buffer.zig");
 const HitGrid = @import("../HitGrid.zig");

@@ -1,34 +1,29 @@
 const std = @import("std");
 const tui = @import("tui");
+const global = @import("../global.zig");
 
 const Allocator = std.mem.Allocator;
 
 const Element = tui.Element;
+const TypedElement = tui.TypedElement;
+const Style = tui.Style;
 const Buffer = tui.Buffer;
 const HitGrid = tui.HitGrid;
-const global = @import("../global.zig");
 
-const Dock = @This();
+const MIN_SIZE: u16 = 5;
+const BORDER_SIZE: u16 = 1;
 
 pub const Side = enum {
     left,
     right,
     top,
     bottom,
-
-    pub fn isHorizontal(self: Side) bool {
-        return self == .top or self == .bottom;
-    }
-
-    pub fn isVertical(self: Side) bool {
-        return self == .left or self == .right;
-    }
 };
 
-const MIN_SIZE: u16 = 5;
-const BORDER_SIZE: u16 = 1;
+const Dock = @This();
+const DockElement = TypedElement(Dock);
 
-element: *Element,
+element: DockElement,
 side: Side,
 size: u16,
 
@@ -36,68 +31,56 @@ pub fn create(alloc: Allocator, side: Side, size: u16, visible: bool) !*Dock {
     const dock = try alloc.create(Dock);
     errdefer alloc.destroy(dock);
 
-    const element = try alloc.create(Element);
-    errdefer alloc.destroy(element);
+    const display: Style.Display = if (visible) .flex else .none;
 
-    element.* = Element.init(alloc, .{
-        .style = switch (side) {
-            .left, .right => .{
-                .width = .{ .point = @floatFromInt(size) },
-                .height = .{ .percent = 100 },
-                .flex_shrink = 0,
-            },
-            .top, .bottom => .{
-                .width = .{ .percent = 100 },
-                .height = .{ .point = @floatFromInt(size) },
-                .flex_shrink = 0,
-            },
+    const style = switch (side) {
+        .bottom, .top => Style{
+            .width = .{ .point = @floatFromInt(size) },
+            .height = .{ .percent = 100 },
+            .flex_shrink = 0,
+            .display = display,
         },
-        .zIndex = 5,
-        .userdata = dock,
+        else => Style{
+            .width = .{ .percent = 100 },
+            .height = .{ .point = @floatFromInt(size) },
+            .flex_shrink = 0,
+            .display = display,
+        },
+    };
+
+    var element = DockElement.init(alloc, dock, .{
         .hitFn = hit,
         .drawFn = draw,
-    });
+    }, .{ .style = style, .visible = visible });
 
-    if (visible) {
-        element.show();
-    } else {
-        element.hide();
-    }
-
-    try element.addEventListener(.drag, Dock, dock, onDrag);
-    try element.addEventListener(.drag_end, Dock, dock, onBarDragEnd);
-    try element.addEventListener(.mouse_over, Dock, dock, mouseOver);
-    try element.addEventListener(.mouse_out, Dock, dock, mouseOut);
+    try element.on(.drag, onDrag);
+    try element.on(.drag_end, onBarDragEnd);
+    try element.on(.mouse_over, mouseOver);
+    try element.on(.mouse_out, mouseOut);
 
     dock.* = .{
         .element = element,
         .side = side,
         .size = size,
-        .settings = global.settings,
     };
 
     return dock;
 }
 
 pub fn destroy(self: *Dock, alloc: Allocator) void {
-    if (!self.element.removed) {
-        self.element.remove();
-    }
     self.element.deinit();
-    alloc.destroy(self.element);
     alloc.destroy(self);
 }
 
-pub fn toggleHidden(self: *Dock) void {
+pub fn toggle(self: *Dock) void {
     if (self.element.visible) {
-        self.element.hide();
+        self.element.elem().hide();
     } else {
-        self.element.show();
+        self.element.elem().show();
     }
 }
 
-fn hit(element: *Element, hit_grid: *HitGrid) void {
-    const self: *Dock = @ptrCast(@alignCast(element.userdata));
+fn hit(self: *Dock, element: *Element, hit_grid: *HitGrid) void {
     const layout = element.layout;
 
     switch (self.side) {
@@ -115,18 +98,16 @@ fn hit(element: *Element, hit_grid: *HitGrid) void {
         },
     }
 }
-
-fn draw(element: *Element, buffer: *Buffer) void {
-    const self: *Dock = @ptrCast(@alignCast(element.userdata));
+fn draw(self: *Dock, element: *Element, buffer: *Buffer) void {
     const layout = element.layout;
-    const theme = global.settings.theme;
+    const theme = global.engine.settings.theme;
 
     element.fill(buffer, .{
-        .style = .{ .bg = theme.bg, .fg = theme.fg },
+        .style = .{ .bg = .{ .rgba = theme.bg.rgba }, .fg = .{ .rgba = theme.fg.rgba } },
     });
 
     buffer.fillRect(layout.left, layout.top -| 1, layout.width, 1, .{ .style = .{
-        .bg = theme.bg,
+        .bg = .{ .rgba = theme.bg.rgba },
     } });
 
     switch (self.side) {
@@ -138,17 +119,17 @@ fn draw(element: *Element, buffer: *Buffer) void {
             while (row <= layout.height) : (row += 1) {
                 if (row == 0) {
                     const alpha: f32 = if (element.hovered or element.dragging) 0.6 else 0.4;
-                    const color: [4]u8 = .{ 244, 128, 52, 255 };
+                    const color: tui.Color = .{ .rgba = .{ 244, 128, 52, 255 } };
                     buffer.writeCell(col, layout.top -| 1 + row, .{
                         .char = .{ .grapheme = "▄" },
-                        .style = .{ .fg = color.setAlpha(alpha), .bg = theme.bg },
+                        .style = .{ .fg = color.setAlpha(alpha), .bg = .{ .rgba = theme.bg.rgba } },
                     });
 
                     continue;
                 }
                 buffer.writeCell(col, layout.top -| 1 + row, .{
                     .char = .{ .grapheme = char },
-                    .style = .{ .fg = self.settings.theme.border, .bg = theme.bg },
+                    .style = .{ .fg = .{ .rgba = theme.border.rgba }, .bg = .{ .rgba = theme.bg.rgba } },
                 });
             }
         },
@@ -158,7 +139,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
             while (row < layout.height) : (row += 1) {
                 buffer.writeCell(col, layout.top + row, .{
                     .char = .{ .grapheme = "│" },
-                    .style = .{ .fg = self.settings.theme.border },
+                    .style = .{ .fg = .{ .rgba = theme.border.rgba } },
                 });
             }
         },
@@ -168,7 +149,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
             while (col < layout.width) : (col += 1) {
                 buffer.writeCell(layout.left + col, row, .{
                     .char = .{ .grapheme = "─" },
-                    .style = .{ .fg = self.settings.theme.border },
+                    .style = .{ .fg = .{ .rgba = theme.border.rgba } },
                 });
             }
         },
@@ -178,7 +159,7 @@ fn draw(element: *Element, buffer: *Buffer) void {
             while (col < layout.width) : (col += 1) {
                 buffer.writeCell(layout.left + col, row, .{
                     .char = .{ .grapheme = "─" },
-                    .style = .{ .fg = self.settings.theme.border },
+                    .style = .{ .fg = .{ .rgba = theme.border.rgba } },
                 });
             }
         },
@@ -194,8 +175,8 @@ fn mouseOver(_: *Dock, data: Element.ElementEvent) void {
 }
 
 fn mouseOut(self: *Dock, _: Element.ElementEvent) void {
-    self.element.context.?.app.screen.mouse_shape = .default;
-    self.element.context.?.requestDraw();
+    self.element.elem().context.?.app.screen.mouse_shape = .default;
+    self.element.elem().context.?.requestDraw();
 }
 
 fn onDrag(self: *Dock, data: Element.ElementEvent) void {
@@ -252,20 +233,20 @@ pub fn setSize(self: *Dock, size: u16) void {
 fn applySize(self: *Dock) void {
     switch (self.side) {
         .left, .right => {
-            self.element.style.width = .{ .point = @floatFromInt(self.size) };
-            self.element.node.setWidth(.{ .point = @floatFromInt(self.size) });
+            self.element.elem().style.width = .{ .point = @floatFromInt(self.size) };
+            self.element.elem().node.setWidth(.{ .point = @floatFromInt(self.size) });
         },
         .top, .bottom => {
-            self.element.style.height = .{ .point = @floatFromInt(self.size) };
-            self.element.node.setHeight(.{ .point = @floatFromInt(self.size) });
+            self.element.elem().style.height = .{ .point = @floatFromInt(self.size) };
+            self.element.elem().node.setHeight(.{ .point = @floatFromInt(self.size) });
         },
     }
 }
 
 fn onBarDragEnd(self: *Dock, _: Element.ElementEvent) void {
-    self.element.context.?.app.screen.mouse_shape = .default;
+    self.element.elem().context.?.app.screen.mouse_shape = .default;
 
-    if (self.element.context) |ctx| {
+    if (self.element.elem().context) |ctx| {
         ctx.requestDraw();
     }
 }
