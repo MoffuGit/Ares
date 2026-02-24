@@ -72,6 +72,62 @@ pub fn Trie(comptime K: type, comptime V: type, comptime Context: type) type {
         }
 
         pub fn name() !void {}
+
+        pub const Iterator = struct {
+            stack: std.ArrayListUnmanaged(StackEntry),
+            prefix: std.ArrayListUnmanaged(K),
+            alloc: Allocator,
+
+            const StackEntry = struct {
+                node: *Node,
+                child_idx: usize,
+                emitted: bool,
+            };
+
+            pub const Entry = struct {
+                prefix: []const K,
+                values: []const V,
+            };
+
+            pub fn next(self: *Iterator) Allocator.Error!?Entry {
+                while (self.stack.items.len > 0) {
+                    const top = &self.stack.items[self.stack.items.len - 1];
+
+                    if (!top.emitted) {
+                        top.emitted = true;
+                        if (top.node.values.items.len > 0) {
+                            return .{ .prefix = self.prefix.items, .values = top.node.values.items };
+                        }
+                    }
+
+                    const child_keys = top.node.childrens.keys();
+                    const child_vals = top.node.childrens.values();
+                    if (top.child_idx < child_keys.len) {
+                        const idx = top.child_idx;
+                        top.child_idx += 1;
+                        try self.prefix.append(self.alloc, child_keys[idx]);
+                        try self.stack.append(self.alloc, .{ .node = child_vals[idx], .child_idx = 0, .emitted = false });
+                    } else {
+                        _ = self.stack.pop();
+                        if (self.prefix.items.len > 0) {
+                            _ = self.prefix.pop();
+                        }
+                    }
+                }
+                return null;
+            }
+
+            pub fn deinit(self: *Iterator) void {
+                self.stack.deinit(self.alloc);
+                self.prefix.deinit(self.alloc);
+            }
+        };
+
+        pub fn iterator(self: *Self) Allocator.Error!Iterator {
+            var stack: std.ArrayListUnmanaged(Iterator.StackEntry) = .{};
+            try stack.append(self.alloc, .{ .node = self.root, .child_idx = 0, .emitted = false });
+            return .{ .stack = stack, .prefix = .{}, .alloc = self.alloc };
+        }
     };
 }
 
@@ -138,4 +194,34 @@ test "Trie get" {
 
     // Get empty prefix returns root (no values)
     try testing.expectEqual(0, trie.get("").?.values.items.len);
+}
+
+test "Trie iterator" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var trie = try Trie(u8, u32, std.array_hash_map.AutoContext(u8)).init(alloc);
+    defer trie.deinit();
+
+    try trie.insert("ab", 1);
+    try trie.insert("ac", 2);
+    try trie.insert("b", 3);
+
+    var iter = try trie.iterator();
+    defer iter.deinit();
+
+    // DFS order: "ab" -> "ac" -> "b"
+    const e1 = (try iter.next()).?;
+    try testing.expectEqualSlices(u8, "ab", e1.prefix);
+    try testing.expectEqual(@as(u32, 1), e1.values[0]);
+
+    const e2 = (try iter.next()).?;
+    try testing.expectEqualSlices(u8, "ac", e2.prefix);
+    try testing.expectEqual(@as(u32, 2), e2.values[0]);
+
+    const e3 = (try iter.next()).?;
+    try testing.expectEqualSlices(u8, "b", e3.prefix);
+    try testing.expectEqual(@as(u32, 3), e3.values[0]);
+
+    try testing.expectEqual(null, try iter.next());
 }

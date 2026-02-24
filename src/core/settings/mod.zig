@@ -193,6 +193,7 @@ fn loadKeymaps(self: *Settings, km_json: std.json.Value) void {
         }
     }
 
+    self.keymaps.logKeymaps();
     self.keymap_generation +%= 1;
 }
 
@@ -255,6 +256,7 @@ fn loadDefaultKeymaps(self: *Settings) void {
         if (d.binding) |b| self.recordBinding(d.action, b);
     }
 
+    self.keymaps.logKeymaps();
     self.keymap_generation +%= 1;
 }
 

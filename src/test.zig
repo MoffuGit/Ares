@@ -1,5 +1,5 @@
 // Core
-comptime {
+test {
     _ = @import("core/keymaps/KeyStroke.zig");
     _ = @import("core/keymaps/mod.zig");
     _ = @import("core/settings/theme/mod.zig");
@@ -7,6 +7,6 @@ comptime {
 }
 
 // Datastruct
-comptime {
-    _ = @import("datastruct/lib.zig");
+test {
+    _ = @import("datastruct");
 }

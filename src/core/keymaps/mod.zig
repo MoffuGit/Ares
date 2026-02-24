@@ -5,6 +5,7 @@ const keystrokepkg = @import("KeyStroke.zig");
 const KeyStroke = keystrokepkg.KeyStroke;
 const KeyStrokeContext = keystrokepkg.KeyStrokeContext;
 
+const log = std.log.scoped(.keymaps);
 const Allocator = std.mem.Allocator;
 const KeyStrokeActions = triepkg.Trie(KeyStroke, Action, KeyStrokeContext);
 
@@ -80,6 +81,14 @@ pub const Action = union(enum) {
         };
     }
 
+    pub fn format(self: Action, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        switch (self) {
+            .workspace => |w| try writer.print("workspace:{s}", .{@tagName(w)}),
+            .editor => |e| try writer.print("editor:{s}", .{@tagName(e)}),
+            .command => |c| try writer.print("command:{s}", .{@tagName(c)}),
+        }
+    }
+
     fn asciiEqlIgnoreCase(a_str: []const u8, comptime b_str: []const u8) bool {
         if (a_str.len != b_str.len) return false;
         for (a_str, b_str) |ac, bc| {
@@ -116,6 +125,23 @@ pub const Keymaps = struct {
             .insert => &self.insert,
             .visual => &self.visual,
         };
+    }
+
+    pub fn logKeymaps(self: *Keymaps) void {
+        const modes = [_]struct { name: []const u8, trie: *KeyStrokeActions }{
+            .{ .name = "normal", .trie = &self.normal },
+            .{ .name = "insert", .trie = &self.insert },
+            .{ .name = "visual", .trie = &self.visual },
+        };
+
+        for (modes) |mode| {
+            var iter = mode.trie.iterator() catch return;
+            defer iter.deinit();
+
+            while (iter.next() catch null) |entry| {
+                log.info("[{s}] {any} -> {any}", .{ mode.name, entry.prefix, entry.values });
+            }
+        }
     }
 };
 

@@ -84,11 +84,14 @@ pub const KeyStroke = struct {
     }
 
     pub fn hash(self: KeyStroke) u32 {
-        const cp_bytes = std.mem.asBytes(&self.codepoint);
+        const cp: u32 = self.codepoint;
+        const cp_bytes = std.mem.asBytes(&cp);
         const mod_byte: u8 = @bitCast(self.mods);
+
         var buf: [cp_bytes.len + 1]u8 = undefined;
         @memcpy(buf[0..cp_bytes.len], cp_bytes);
         buf[cp_bytes.len] = mod_byte;
+
         return std.hash.CityHash32.hash(&buf);
     }
 };

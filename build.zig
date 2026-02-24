@@ -89,6 +89,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     test_mod.addImport("xev", xev_dep.module("xev"));
+    test_mod.addImport("datastruct", datastruct_mod);
 
     const test_exe = b.addTest(.{
         .name = "ares-test",

@@ -65,7 +65,9 @@ pub fn feedKeyStroke(self: *Resolver, mode: Mode, keymaps: *Keymaps, ks: KeyStro
     const trie = keymaps.actions(mode);
     var cur: *Node = self.node orelse trie.root;
 
-    if (cur.childrens.get(ks)) |child| {
+    const maybe = cur.childrens.get(ks);
+
+    if (maybe) |child| {
         return self.consumeChild(child);
     }
 
