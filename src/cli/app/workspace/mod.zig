@@ -8,14 +8,13 @@ const Buffer = tui.Buffer;
 
 const BottomBar = @import("../components/BottomBar.zig");
 const Dock = @import("../components/Dock.zig");
+const Tabs = @import("../components/styled/Tabs.zig").Tabs;
 const global = @import("../global.zig");
 
 // const Context = @import("../app/mod.zig").Context;
-// const TopBar = @import("../components/TopBar.zig");
-// const Dock = @import("../components/Dock.zig");
+const TopBar = @import("../components/TopBar.zig");
 // const FileTree = @import("../components/FileTree.zig");
 // const StyledTabs = @import("../components/styled/Tabs.zig");
-// const Tabs = StyledTabs.Tabs(.block);
 // const Pane = @import("Pane.zig");
 // const EditorView = @import("views/EditorView.zig");
 // const Command = @import("../components/Command.zig");
@@ -30,16 +29,16 @@ element: *Element,
 center_wrapper: *Element,
 center_column: *Element,
 center: *Element,
-//
-// top_bar: *TopBar,
+
+top_bar: *TopBar,
 bottom_bar: *BottomBar,
 
 left_dock: *Dock,
 right_dock: *Dock,
 top_dock: *Dock,
 bottom_dock: *Dock,
-//
-// tabs: *Tabs,
+
+tabs: *Tabs,
 // panes: std.ArrayList(*Pane) = .{},
 // active_pane: ?*Pane = null,
 //
@@ -105,9 +104,9 @@ pub fn create(alloc: std.mem.Allocator, app: *App) !*Workspace {
         },
     });
 
-    // const top_bar = try TopBar.create(alloc, workspace);
-    // errdefer top_bar.destroy(alloc);
-    //
+    const top_bar = try TopBar.create(alloc, workspace);
+    errdefer top_bar.destroy(alloc);
+
     const bottom_bar = try BottomBar.create(alloc, workspace);
     errdefer bottom_bar.destroy(alloc);
 
@@ -123,10 +122,11 @@ pub fn create(alloc: std.mem.Allocator, app: *App) !*Workspace {
     const bottom_dock = try Dock.create(alloc, .bottom, 30, false);
     errdefer bottom_dock.destroy(alloc);
 
-    // const tabs = try Tabs.create(alloc);
-    //
-    // try top_bar.element.elem().addChild(tabs.inner.list);
-    // try center.addChild(tabs.inner.container);
+    const tabs = try Tabs.create(alloc);
+    errdefer tabs.destroy();
+
+    try top_bar.element.elem().addChild(tabs.inner.list);
+    try center.addChild(tabs.inner.container);
 
     try center_column.insertChild(top_dock.element.elem(), 0);
     try center_column.addChild(center);
@@ -136,7 +136,7 @@ pub fn create(alloc: std.mem.Allocator, app: *App) !*Workspace {
     try center_wrapper.addChild(center_column);
     try center_wrapper.addChild(right_dock.element.elem());
 
-    // try element.addChild(top_bar.element.elem());
+    try element.addChild(top_bar.element.elem());
     try element.addChild(center_wrapper);
     try element.addChild(bottom_bar.element.elem());
 
@@ -145,6 +145,7 @@ pub fn create(alloc: std.mem.Allocator, app: *App) !*Workspace {
     app.window.setFocus(element);
 
     workspace.* = .{
+        .tabs = tabs,
         .alloc = alloc,
         .bottom_bar = bottom_bar,
         .center_wrapper = center_wrapper,
@@ -155,6 +156,7 @@ pub fn create(alloc: std.mem.Allocator, app: *App) !*Workspace {
         .bottom_dock = bottom_dock,
         .right_dock = right_dock,
         .top_dock = top_dock,
+        .top_bar = top_bar,
     };
 
     return workspace;
@@ -193,6 +195,9 @@ pub fn destroy(self: *Workspace) void {
     self.right_dock.destroy(self.alloc);
 
     self.bottom_bar.destroy(self.alloc);
+    self.top_bar.destroy(self.alloc);
+
+    self.tabs.destroy();
 
     self.alloc.destroy(self.center);
     self.alloc.destroy(self.center_column);
@@ -222,44 +227,6 @@ pub fn destroy(self: *Workspace) void {
 //
 // pub fn hideDock(self: *Workspace, side: Dock.Side) void {
 //     self.getDock(side).element.hide();
-// }
-//
-// pub fn openProject(self: *Workspace, abs_path: []const u8) !void {
-//     if (self.project) |project| {
-//         if (self.file_tree) |ft| {
-//             ft.destroy(self.alloc);
-//             self.file_tree = null;
-//         }
-//         project.destroy(self.alloc);
-//     }
-//     self.project = try Project.create(self.alloc, abs_path, self.ctx);
-//
-//     const editor = EditorView.create(self.alloc, self.project.?) catch return;
-//     const pane = Pane.create(self.alloc, self.project.?, .{ .editor = editor }) catch return;
-//
-//     self.panes.append(self.alloc, pane) catch return;
-//
-//     const tab = self.tabs.newTab(.{ .userdata = pane }) catch return;
-//     self.tabs.select(tab.id);
-//
-//     tab.content.addChild(pane.element()) catch return;
-//
-//     self.active_pane = pane;
-//
-//     const ft = try FileTree.create(self.alloc, self.project.?, self, self.ctx);
-//     self.file_tree = ft;
-//     try self.left_dock.element.addChild(ft.getElement());
-// }
-//
-// pub fn closeProject(self: *Workspace) void {
-//     if (self.project) |project| {
-//         if (self.file_tree) |ft| {
-//             ft.destroy(self.alloc);
-//             self.file_tree = null;
-//         }
-//         project.destroy(self.alloc);
-//         self.project = null;
-//     }
 // }
 //
 // pub fn closeActiveTab(self: *Workspace) void {
