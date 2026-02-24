@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Bridge = @import("../bridge.zig");
 
 const tui = @import("tui");
 const Element = tui.Element;
@@ -11,14 +12,11 @@ const Dock = @import("../components/Dock.zig");
 const Tabs = @import("../components/styled/Tabs.zig").Tabs;
 const global = @import("../global.zig");
 
-// const Context = @import("../app/mod.zig").Context;
 const TopBar = @import("../components/TopBar.zig");
 // const FileTree = @import("../components/FileTree.zig");
-// const StyledTabs = @import("../components/styled/Tabs.zig");
 // const Pane = @import("Pane.zig");
 // const EditorView = @import("views/EditorView.zig");
 // const Command = @import("../components/Command.zig");
-// const App = @import("../app/mod.zig");
 pub const Workspace = @This();
 
 alloc: Allocator,
@@ -72,8 +70,6 @@ pub fn create(alloc: std.mem.Allocator, app: *App) !*Workspace {
             .flex_direction = .column,
         },
     });
-
-    // _ = try ctx.app.subscribe(.keymap_action, Workspace, workspace, onKeyAction);
 
     center_wrapper.* = Element.init(alloc, .{ .id = "center-wrapper", .zIndex = 10, .style = .{
         .flex_grow = 1,
@@ -159,7 +155,37 @@ pub fn create(alloc: std.mem.Allocator, app: *App) !*Workspace {
         .top_bar = top_bar,
     };
 
+    _ = try global.bridge.subscribe(.keymap_actions, Workspace, workspace, keyMapAction);
+
     return workspace;
+}
+
+pub fn keyMapAction(self: *Workspace, evt: Bridge.EventData) void {
+    const key_action = evt.keymap_actions;
+    switch (key_action.action) {
+        .workspace => |w| {
+            switch (w) {
+                .enter_insert => {
+                    global.engine.dispatch(.{ .set_mode = .insert });
+                },
+                .enter_visual => {
+                    global.engine.dispatch(.{ .set_mode = .visual });
+                },
+                .enter_normal => {
+                    global.engine.dispatch(.{ .set_mode = .normal });
+                },
+                .toggle_left_dock => {
+                    self.toggleDock(.left);
+                },
+                .toggle_right_dock => {
+                    self.toggleDock(.right);
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+    self.element.context.?.requestDraw();
 }
 //
 // fn registerCommandActions(self: *Workspace) !void {
@@ -205,19 +231,19 @@ pub fn destroy(self: *Workspace) void {
     self.alloc.destroy(self.element);
     self.alloc.destroy(self);
 }
-//
-// pub fn toggleDock(self: *Workspace, side: Dock.Side) void {
-//     self.getDock(side).toggleHidden();
-// }
-//
-// pub fn getDock(self: *Workspace, side: Dock.Side) *Dock {
-//     return switch (side) {
-//         .left => self.left_dock,
-//         .right => self.right_dock,
-//         .top => self.top_dock,
-//         .bottom => self.bottom_dock,
-//     };
-// }
+
+pub fn toggleDock(self: *Workspace, side: Dock.Side) void {
+    self.getDock(side).toggle();
+}
+
+pub fn getDock(self: *Workspace, side: Dock.Side) *Dock {
+    return switch (side) {
+        .left => self.left_dock,
+        .right => self.right_dock,
+        .top => self.top_dock,
+        .bottom => self.bottom_dock,
+    };
+}
 //
 // pub fn showDock(self: *Workspace, side: Dock.Side) *Dock {
 //     const dock = self.getDock(side);
@@ -310,12 +336,6 @@ pub fn destroy(self: *Workspace) void {
 //             .prev_tab => {
 //                 self.tabs.prev();
 //                 self.syncActivePaneFromTab();
-//             },
-//             .toggle_left_dock => {
-//                 self.toggleDock(.left);
-//             },
-//             .toggle_right_dock => {
-//                 self.toggleDock(.right);
 //             },
 //             .toggle_command_palette => {
 //                 self.command.toggleShow();

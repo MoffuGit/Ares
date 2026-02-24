@@ -26,7 +26,6 @@ pub const Command = union(enum) {
     set_scheme: Settings.Scheme,
     set_system_scheme: Settings.ColorScheme,
     reload_settings: []const u8,
-    tick: i64,
 };
 
 pub const Engine = @This();
@@ -104,9 +103,6 @@ pub fn dispatch(self: *Engine, cmd: Command) void {
         .reload_settings => |path| {
             self.settings.load(path) catch {};
             self.events.push(.{ .settings_changed = {} });
-        },
-        .tick => |now_us| {
-            self.resolver.tick(now_us);
         },
     }
 }

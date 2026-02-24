@@ -46,8 +46,6 @@ pub fn main() !void {
     const workspace = try Workspace.create(alloc, app);
     defer workspace.destroy();
 
-    _ = try bridge.subscribe(.keymap_actions, Workspace, workspace, keyMapAction);
-
     try app.root().addEventListener(.key_press, Element, app.root(), keyPressFn);
 
     engine.dispatch(.{ .reload_settings = "settings" });
@@ -55,27 +53,6 @@ pub fn main() !void {
     app.run() catch |err| {
         std.log.err("App exit with an err: {}", .{err});
     };
-}
-
-pub fn keyMapAction(_: *Workspace, evt: Bridge.EventData) void {
-    const key_action = evt.keymap_actions;
-    switch (key_action.action) {
-        .workspace => |w| {
-            switch (w) {
-                .enter_insert => {
-                    global.engine.dispatch(.{ .set_mode = .insert });
-                },
-                .enter_visual => {
-                    global.engine.dispatch(.{ .set_mode = .visual });
-                },
-                .enter_normal => {
-                    global.engine.dispatch(.{ .set_mode = .normal });
-                },
-                else => {},
-            }
-        },
-        else => {},
-    }
 }
 
 fn wakeLoop(userdata: ?*anyopaque) void {
@@ -89,6 +66,7 @@ fn onWakeup(app: *App) void {
 }
 
 pub fn keyPressFn(_: *Element, data: Element.ElementEvent) void {
+    if (data.ctx.phase == .bubbling) return;
     const key = data.event.key_press;
     if (key.matches('c', .{ .ctrl = true })) {
         if (data.element.context) |ctx| {
@@ -97,6 +75,5 @@ pub fn keyPressFn(_: *Element, data: Element.ElementEvent) void {
         data.ctx.stopPropagation();
     }
 
-    global.engine.dispatch(.{ .key_stroke = .{ .codepoint = key.codepoint, .mods = .{} } });
-    global.engine.dispatch(.{ .tick = std.time.microTimestamp() });
+    global.engine.dispatch(.{ .key_stroke = .{ .codepoint = key.codepoint, .mods = @bitCast(key.mods) } });
 }

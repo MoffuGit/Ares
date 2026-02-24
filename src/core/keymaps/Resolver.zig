@@ -21,7 +21,12 @@ alloc: Allocator,
 events: *EventQueue,
 node: ?*Node = null,
 last_mode: Mode,
-flush_deadline: ?i64 = null,
+
+mutex: std.Thread.Mutex = .{},
+cond: std.Thread.Condition = .{},
+deadline: ?i64 = null,
+timer_thread: ?std.Thread = null,
+running: bool = true,
 
 pub fn create(alloc: Allocator, events: *EventQueue) !*Resolver {
     const resolver = try alloc.create(Resolver);
@@ -32,16 +37,28 @@ pub fn create(alloc: Allocator, events: *EventQueue) !*Resolver {
         .last_mode = .normal,
     };
 
+    resolver.timer_thread = std.Thread.spawn(.{}, timerLoop, .{resolver}) catch null;
+
     return resolver;
 }
 
 pub fn destroy(self: *Resolver) void {
+    {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        self.running = false;
+        self.cond.signal();
+    }
+    if (self.timer_thread) |t| t.join();
     self.alloc.destroy(self);
 }
 
 pub fn feedKeyStroke(self: *Resolver, mode: Mode, keymaps: *Keymaps, ks: KeyStroke) void {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
     if (self.last_mode != mode) {
-        self.reset();
+        self.resetLocked();
         self.last_mode = mode;
     }
 
@@ -56,7 +73,7 @@ pub fn feedKeyStroke(self: *Resolver, mode: Mode, keymaps: *Keymaps, ks: KeyStro
         if (cur.values.items.len > 0) {
             self.dispatchActions(cur.values.items);
         }
-        self.reset();
+        self.resetLocked();
         cur = trie.root;
 
         if (cur.childrens.get(ks)) |child| {
@@ -64,44 +81,56 @@ pub fn feedKeyStroke(self: *Resolver, mode: Mode, keymaps: *Keymaps, ks: KeyStro
         }
     }
 
-    self.reset();
+    self.resetLocked();
 }
 
-pub fn tick(self: *Resolver, now_us: i64) void {
-    if (self.flush_deadline) |deadline| {
-        if (now_us >= deadline) {
-            self.flush();
-        }
-    }
-}
-
-pub fn flush(self: *Resolver) void {
+fn flushLocked(self: *Resolver) void {
     if (self.node) |n| {
         if (n.values.items.len > 0) {
             self.dispatchActions(n.values.items);
         }
     }
-    self.reset();
+    self.resetLocked();
 }
 
-pub fn reset(self: *Resolver) void {
+fn resetLocked(self: *Resolver) void {
     self.node = null;
-    self.flush_deadline = null;
+    self.deadline = null;
 }
 
 fn consumeChild(self: *Resolver, child: *Node) void {
     if (child.childrens.count() != 0) {
         self.node = child;
-        self.flush_deadline = std.time.microTimestamp() + flush_timeout_us;
+        self.deadline = std.time.microTimestamp() + flush_timeout_us;
+        self.cond.signal();
         return;
     }
 
     if (child.values.items.len > 0) {
-        self.reset();
+        self.resetLocked();
         self.dispatchActions(child.values.items);
     }
 }
 
 fn dispatchActions(self: *Resolver, actions: []const Action) void {
     self.events.push(.{ .keymap_actions = actions });
+}
+
+fn timerLoop(self: *Resolver) void {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    while (self.running) {
+        if (self.deadline) |dl| {
+            const now = std.time.microTimestamp();
+            if (now >= dl) {
+                self.flushLocked();
+            } else {
+                const remaining_ns: u64 = @intCast((dl - now) * 1000);
+                self.cond.timedWait(&self.mutex, remaining_ns) catch {};
+            }
+        } else {
+            self.cond.wait(&self.mutex);
+        }
+    }
 }

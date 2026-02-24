@@ -34,17 +34,19 @@ pub fn create(alloc: Allocator, side: Side, size: u16, visible: bool) !*Dock {
     const display: Style.Display = if (visible) .flex else .none;
 
     const style = switch (side) {
-        .bottom, .top => Style{
+        .left, .right => Style{
             .width = .{ .point = @floatFromInt(size) },
             .height = .{ .percent = 100 },
             .flex_shrink = 0,
             .display = display,
+            .min_width = .{ .point = MIN_SIZE },
         },
-        else => Style{
+        .top, .bottom => Style{
             .width = .{ .percent = 100 },
             .height = .{ .point = @floatFromInt(size) },
             .flex_shrink = 0,
             .display = display,
+            .min_height = .{ .point = MIN_SIZE },
         },
     };
 
@@ -73,7 +75,8 @@ pub fn destroy(self: *Dock, alloc: Allocator) void {
 }
 
 pub fn toggle(self: *Dock) void {
-    if (self.element.visible) {
+    std.log.debug("toggle", .{});
+    if (self.element.elem().visible) {
         self.element.elem().hide();
     } else {
         self.element.elem().show();
