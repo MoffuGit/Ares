@@ -1,9 +1,6 @@
 const std = @import("std");
 const xev = @import("xev").Dynamic;
 
-const Monitor = @import("monitor/mod.zig");
-const MonitorThread = @import("monitor/Thread.zig");
-
 const Scanner = @import("scanner/mod.zig");
 const ScannerThread = @import("scanner/Thread.zig");
 pub const UpdatedEntriesSet = Scanner.UpdatedEntriesSet;
@@ -144,10 +141,6 @@ pub const Worktree = struct {
 
     events: *EventQueue,
 
-    monitor: Monitor,
-    monitor_thread: MonitorThread,
-    monitor_thr: std.Thread,
-
     scanner: Scanner,
     scanner_thread: ScannerThread,
     scanner_thr: std.Thread,
@@ -171,14 +164,8 @@ pub const Worktree = struct {
         var snapshot = try Snapshot.init(alloc);
         errdefer snapshot.deinit();
 
-        var monitor_thread = try MonitorThread.init(alloc, &self.monitor);
-        errdefer monitor_thread.deinit();
-
         var scanner_thread = try ScannerThread.init(alloc, &self.scanner);
         errdefer scanner_thread.deinit();
-
-        var monitor = try Monitor.init(alloc, self);
-        errdefer monitor.deinit();
 
         var scanner = try Scanner.init(alloc, self, &self.snapshot, _abs_path);
         errdefer scanner.deinit();
@@ -191,13 +178,7 @@ pub const Worktree = struct {
             .scanner = scanner,
             .scanner_thread = scanner_thread,
             .scanner_thr = undefined,
-            .monitor = monitor,
-            .monitor_thread = monitor_thread,
-            .monitor_thr = undefined,
         };
-
-        self.monitor_thr = try std.Thread.spawn(.{}, MonitorThread.threadMain, .{&self.monitor_thread});
-        self.scanner_thr = try std.Thread.spawn(.{}, ScannerThread.threadMain, .{&self.scanner_thread});
 
         _ = self.scanner_thread.mailbox.push(.initialScan, .instant);
         self.scanner_thread.wakeup.notify() catch |err| {
@@ -207,13 +188,6 @@ pub const Worktree = struct {
 
     pub fn deinit(self: *Worktree) void {
         {
-            self.monitor_thread.stop.notify() catch |err| {
-                log.err("error notifying monitor thread to stop, may stall err={}", .{err});
-            };
-            self.monitor_thr.join();
-        }
-
-        {
             self.scanner_thread.stop.notify() catch |err| {
                 log.err("error notifying scanner thread to stop, may stall err={}", .{err});
             };
@@ -222,9 +196,6 @@ pub const Worktree = struct {
 
         self.scanner_thread.deinit();
         self.scanner.deinit();
-
-        self.monitor.deinit();
-        self.monitor_thread.deinit();
 
         self.snapshot.deinit();
 
