@@ -78,3 +78,7 @@ pub const Worktree = struct {
         log.info("Worktree closed", .{});
     }
 };
+
+test {
+    _ = Scanner;
+}

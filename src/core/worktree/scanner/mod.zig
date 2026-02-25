@@ -397,3 +397,5 @@ pub const UpdatedEntriesSet = struct {
         try self.updates.append(self.alloc, .{ .delete = .{ .id = id, .path = path } });
     }
 };
+
+test "scan file" {}
