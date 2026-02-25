@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const fmt = std.fmt;
 const worktreepkg = @import("../mod.zig");
 
@@ -90,8 +91,10 @@ pub fn initial_scan(self: *Scanner) !void {
 
     try self.scanRecursive(id);
 
-    const watcher_id = try self.monitor.watchPath(self.abs_root, Scanner, self, monitorCallback);
-    try self.watcher_to_entry.put(watcher_id, id);
+    if (!builtin.is_test) {
+        const watcher_id = try self.monitor.watchPath(self.abs_root, Scanner, self, monitorCallback);
+        try self.watcher_to_entry.put(watcher_id, id);
+    }
 
     //NOTE: notify scan
     // const result = try self.alloc.create(UpdatedEntriesSet);
@@ -154,8 +157,10 @@ fn scanRecursive(self: *Scanner, dir_id: u64) !void {
                     defer self.snapshot.mutex.unlock();
                     break :blk self.snapshot.getAbsPathById(child_id) orelse continue;
                 };
-                const watcher_id = try self.monitor.watchPath(child_abs, Scanner, self, monitorCallback);
-                try self.watcher_to_entry.put(watcher_id, child_id);
+                if (!builtin.is_test) {
+                    const watcher_id = try self.monitor.watchPath(child_abs, Scanner, self, monitorCallback);
+                    try self.watcher_to_entry.put(watcher_id, child_id);
+                }
             }
         }
     }
@@ -176,205 +181,165 @@ fn getEntryStat(_: *Scanner, dir: std.fs.Dir, name: []const u8) !Stat {
     };
 }
 
-// pub fn updateEntryStat(self: *Scanner, entry_id: u64, new_stat: Stat) void {
-//     const kind = blk: {
-//         self.snapshot.mutex.lock();
-//         defer self.snapshot.mutex.unlock();
-//
-//         const path = self.snapshot.getPathById(entry_id) orelse return;
-//         const entry_ref = self.snapshot.entries.get_ref(path) catch return;
-//
-//         if (entry_ref.stat.size == new_stat.size and
-//             entry_ref.stat.mtime == new_stat.mtime and
-//             entry_ref.stat.mode == new_stat.mode)
-//         {
-//             return;
-//         }
-//
-//         entry_ref.stat = new_stat;
-//         break :blk entry_ref.kind;
-//     };
-//
-//     const result = self.alloc.create(UpdatedEntriesSet) catch return;
-//     result.* = UpdatedEntriesSet.init(self.alloc);
-//     result.updateEntry(entry_id, kind) catch {
-//         result.destroy();
-//         return;
-//     };
-//     if (!self.worktree.notifyUpdatedEntries(result)) {
-//         result.destroy();
-//     }
-// }
-//
-// /// Get file stats for an entry
-//
-// /// Stores path + entry info for diffing (path is arena-owned, just a reference)
-// const ChildInfo = struct {
-//     path: []const u8,
-//     entry: Entry,
-// };
-//
-// pub fn process_events(self: *Scanner, fs_events: *std.AutoHashMap(u64, u32)) !*UpdatedEntriesSet {
-//     const result = try self.alloc.create(UpdatedEntriesSet);
-//     result.* = UpdatedEntriesSet.init(self.alloc);
-//     errdefer result.destroy();
-//
-//     var it = fs_events.iterator();
-//     while (it.next()) |event| {
-//         const id = event.key_ptr.*;
-//
-//         // Get path from snapshot
-//         const dir_path = blk: {
-//             self.snapshot.mutex.lock();
-//             defer self.snapshot.mutex.unlock();
-//             break :blk self.snapshot.getPathById(id) orelse continue;
-//         };
-//
-//         // Build abs path on stack
-//         const abs_dir_path = blk: {
-//             self.snapshot.mutex.lock();
-//             defer self.snapshot.mutex.unlock();
-//             break :blk self.snapshot.getAbsPathById(id) orelse continue;
-//         };
-//
-//         try self.update_entries(dir_path, abs_dir_path, result);
-//     }
-//
-//     return result;
-// }
-//
-// fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8, result: *UpdatedEntriesSet) !void {
-//     var current_children = std.AutoHashMap(u64, ChildInfo).init(self.alloc);
-//     defer current_children.deinit();
-//
-//     {
-//         self.snapshot.mutex.lock();
-//         defer self.snapshot.mutex.unlock();
-//
-//         var prefix_buf: [std.fs.max_path_bytes]u8 = undefined;
-//         const prefix = std.fmt.bufPrint(&prefix_buf, "{s}/", .{dir_path}) catch return;
-//
-//         var entries_it = self.snapshot.entries.rangeFrom(prefix);
-//         while (entries_it.next()) |entry| {
-//             const entry_path = entry.key;
-//
-//             if (!std.mem.startsWith(u8, entry_path, prefix)) {
-//                 break;
-//             }
-//
-//             const rest = entry_path[prefix.len..];
-//             if (std.mem.indexOf(u8, rest, "/") == null) {
-//                 try current_children.put(entry.value.id, .{
-//                     .path = entry_path,
-//                     .entry = entry.value,
-//                 });
-//             }
-//         }
-//     }
-//
-//     var dir = std.fs.openDirAbsolute(abs_dir_path, .{ .iterate = true }) catch |err| {
-//         if (err == error.FileNotFound) {
-//             var children_it = current_children.valueIterator();
-//             while (children_it.next()) |child| {
-//                 const deleted_path = try self.alloc.dupe(u8, child.path);
-//                 try result.deleteEntry(child.entry.id, deleted_path);
-//
-//                 self.snapshot.mutex.lock();
-//                 defer self.snapshot.mutex.unlock();
-//                 _ = self.snapshot.remove(deleted_path) catch {};
-//             }
-//         }
-//         return;
-//     };
-//     defer dir.close();
-//
-//     // Track which entries we've seen by building temp path and looking up
-//     var seen_ids = std.AutoHashMap(u64, void).init(self.alloc);
-//     defer seen_ids.deinit();
-//
-//     var iter = dir.iterate();
-//     while (try iter.next()) |entry| {
-//         const kind: Kind = switch (entry.kind) {
-//             .directory => .dir,
-//             .file => .file,
-//             else => continue,
-//         };
-//
-//         // Look up if this child exists in snapshot
-//         const existing_id: ?u64 = blk: {
-//             self.snapshot.mutex.lock();
-//             defer self.snapshot.mutex.unlock();
-//
-//             // Build child path to check
-//             const child_path = try self.snapshot.internPath(dir_path, entry.name);
-//             if (self.snapshot.entries.get(child_path) catch null) |existing| {
-//                 break :blk existing.id;
-//             }
-//             // Path was interned but entry doesn't exist - that's fine, arena owns it
-//             break :blk null;
-//         };
-//
-//         if (existing_id) |id| {
-//             try seen_ids.put(id, {});
-//             if (current_children.get(id)) |child_info| {
-//                 const stat = self.getEntryStat(dir, entry.name) catch Stat{};
-//                 const kind_changed = child_info.entry.kind != kind;
-//                 const stat_changed = child_info.entry.stat.size != stat.size or
-//                     child_info.entry.stat.mtime != stat.mtime or
-//                     child_info.entry.stat.mode != stat.mode;
-//
-//                 if (kind_changed or stat_changed) {
-//                     try result.updateEntry(id, kind);
-//
-//                     self.snapshot.mutex.lock();
-//                     defer self.snapshot.mutex.unlock();
-//                     const child_path = self.snapshot.getPathById(id) orelse continue;
-//                     if (self.snapshot.entries.get_ref(child_path) catch null) |entry_ref| {
-//                         entry_ref.kind = kind;
-//                         entry_ref.stat = stat;
-//                     }
-//                 }
-//             }
-//         } else {
-//             // New entry - get stat and insert
-//             const stat = self.getEntryStat(dir, entry.name) catch Stat{};
-//             const file_type: FileType = if (kind == .file) FileType.fromName(entry.name) else .unknown;
-//
-//             self.snapshot.mutex.lock();
-//             defer self.snapshot.mutex.unlock();
-//
-//             const id = self.snapshot.newId();
-//             const interned_path = try self.snapshot.internPath(dir_path, entry.name);
-//             const interned_abs = try self.snapshot.internPath(abs_dir_path, entry.name);
-//             try self.snapshot.insertInterned(id, interned_path, interned_abs, kind, file_type, stat);
-//             try result.addEntry(id, kind);
-//
-//             // If directory, queue for scanning and monitoring
-//             if (kind == .dir) {
-//                 if (self.worktree.scanner_thread.mailbox.push(.{ .scan_dir = id }, .instant) != 0) {
-//                     self.worktree.scanner_thread.wakeup.notify() catch {};
-//                 }
-//                 if (self.worktree.monitor_thread.mailbox.push(.{ .add = id }, .instant) != 0) {
-//                     self.worktree.monitor_thread.wakeup.notify() catch {};
-//                 }
-//             }
-//         }
-//     }
-//
-//     // Remaining entries in current_children that weren't seen were deleted
-//     var remaining_it = current_children.iterator();
-//     while (remaining_it.next()) |kv| {
-//         if (!seen_ids.contains(kv.key_ptr.*)) {
-//             // Copy path for cross-thread (owned by UpdatedEntriesSet)
-//             const deleted_path = try self.alloc.dupe(u8, kv.value_ptr.path);
-//             try result.deleteEntry(kv.key_ptr.*, deleted_path);
-//
-//             self.snapshot.mutex.lock();
-//             defer self.snapshot.mutex.unlock();
-//             _ = self.snapshot.remove(deleted_path) catch {};
-//         }
-//     }
-// }
+const ChildInfo = struct {
+    path: []const u8,
+    entry: Entry,
+};
+
+pub fn process_events(self: *Scanner, dirty_ids: []const u64) !*UpdatedEntriesSet {
+    const result = try self.alloc.create(UpdatedEntriesSet);
+    result.* = UpdatedEntriesSet.init(self.alloc);
+    errdefer result.destroy();
+
+    for (dirty_ids) |id| {
+        const dir_path = blk: {
+            self.snapshot.mutex.lock();
+            defer self.snapshot.mutex.unlock();
+            break :blk self.snapshot.getPathById(id) orelse continue;
+        };
+
+        const abs_dir_path = blk: {
+            self.snapshot.mutex.lock();
+            defer self.snapshot.mutex.unlock();
+            break :blk self.snapshot.getAbsPathById(id) orelse continue;
+        };
+
+        try self.update_entries(dir_path, abs_dir_path, result);
+    }
+
+    return result;
+}
+
+fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8, result: *UpdatedEntriesSet) !void {
+    var current_children = std.AutoHashMap(u64, ChildInfo).init(self.alloc);
+    defer current_children.deinit();
+
+    {
+        self.snapshot.mutex.lock();
+        defer self.snapshot.mutex.unlock();
+
+        var prefix_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const prefix = std.fmt.bufPrint(&prefix_buf, "{s}/", .{dir_path}) catch return;
+
+        var entries_it = self.snapshot.entries.rangeFrom(prefix);
+        while (entries_it.next()) |entry| {
+            const entry_path = entry.key;
+
+            if (!std.mem.startsWith(u8, entry_path, prefix)) {
+                break;
+            }
+
+            const rest = entry_path[prefix.len..];
+            if (std.mem.indexOf(u8, rest, "/") == null) {
+                try current_children.put(entry.value.id, .{
+                    .path = entry_path,
+                    .entry = entry.value,
+                });
+            }
+        }
+    }
+
+    var dir = std.fs.openDirAbsolute(abs_dir_path, .{ .iterate = true }) catch |err| {
+        if (err == error.FileNotFound) {
+            var children_it = current_children.valueIterator();
+            while (children_it.next()) |child| {
+                const deleted_path = try self.alloc.dupe(u8, child.path);
+                try result.deleteEntry(child.entry.id, deleted_path);
+
+                self.snapshot.mutex.lock();
+                defer self.snapshot.mutex.unlock();
+                _ = self.snapshot.remove(deleted_path);
+            }
+        }
+        return;
+    };
+    defer dir.close();
+
+    var seen_ids = std.AutoHashMap(u64, void).init(self.alloc);
+    defer seen_ids.deinit();
+
+    var iter = dir.iterate();
+    while (try iter.next()) |entry| {
+        const kind: Kind = switch (entry.kind) {
+            .directory => .dir,
+            .file => .file,
+            else => continue,
+        };
+
+        const existing_id: ?u64 = blk: {
+            self.snapshot.mutex.lock();
+            defer self.snapshot.mutex.unlock();
+
+            const child_path = try self.snapshot.internPath(dir_path, entry.name);
+            if (self.snapshot.entries.get(child_path) catch null) |existing| {
+                break :blk existing.id;
+            }
+            break :blk null;
+        };
+
+        if (existing_id) |id| {
+            try seen_ids.put(id, {});
+            if (current_children.get(id)) |child_info| {
+                const stat = self.getEntryStat(dir, entry.name) catch Stat{};
+                const kind_changed = child_info.entry.kind != kind;
+                const stat_changed = child_info.entry.stat.size != stat.size or
+                    child_info.entry.stat.mtime != stat.mtime or
+                    child_info.entry.stat.mode != stat.mode;
+
+                if (kind_changed or stat_changed) {
+                    try result.updateEntry(id, kind);
+
+                    self.snapshot.mutex.lock();
+                    defer self.snapshot.mutex.unlock();
+                    const child_path = self.snapshot.getPathById(id) orelse continue;
+                    if (self.snapshot.entries.get_ref(child_path) catch null) |entry_ref| {
+                        entry_ref.kind = kind;
+                        entry_ref.stat = stat;
+                    }
+                }
+            }
+        } else {
+            const stat = self.getEntryStat(dir, entry.name) catch Stat{};
+            const file_type: FileType = if (kind == .file) FileType.fromName(entry.name) else .unknown;
+
+            const id = self.snapshot.newId();
+            {
+                self.snapshot.mutex.lock();
+                defer self.snapshot.mutex.unlock();
+
+                const interned_path = try self.snapshot.internPath(dir_path, entry.name);
+                const interned_abs = try self.snapshot.internPath(abs_dir_path, entry.name);
+                try self.snapshot.insertInterned(id, interned_path, interned_abs, kind, file_type, stat);
+            }
+            try result.addEntry(id, kind);
+
+            if (kind == .dir) {
+                const child_abs = blk: {
+                    self.snapshot.mutex.lock();
+                    defer self.snapshot.mutex.unlock();
+                    break :blk self.snapshot.getAbsPathById(id) orelse continue;
+                };
+                if (!builtin.is_test) {
+                    const watcher_id = try self.monitor.watchPath(child_abs, Scanner, self, monitorCallback);
+                    try self.watcher_to_entry.put(watcher_id, id);
+                }
+                try self.scanRecursive(id);
+            }
+        }
+    }
+
+    var remaining_it = current_children.iterator();
+    while (remaining_it.next()) |kv| {
+        if (!seen_ids.contains(kv.key_ptr.*)) {
+            const deleted_path = try self.alloc.dupe(u8, kv.value_ptr.path);
+            try result.deleteEntry(kv.key_ptr.*, deleted_path);
+
+            self.snapshot.mutex.lock();
+            defer self.snapshot.mutex.unlock();
+            _ = self.snapshot.remove(deleted_path);
+        }
+    }
+}
 fn getRootStat(self: *Scanner) !Stat {
     const file = try std.fs.openFileAbsolute(self.abs_root, .{});
     defer file.close();

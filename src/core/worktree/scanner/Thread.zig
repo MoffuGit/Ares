@@ -11,6 +11,8 @@ pub const Thread = @This();
 
 pub const Mailbox = BlockingQueue(messagepkg.Message, 100);
 
+const FLUSH_INTERVAL_MS = 100;
+
 alloc: Allocator,
 loop: xev.Loop,
 
@@ -23,6 +25,9 @@ wakeup_c: xev.Completion = .{},
 
 stop: xev.Async,
 stop_c: xev.Completion = .{},
+
+flush_timer: xev.Timer,
+flush_timer_c: xev.Completion = .{},
 
 pub fn init(alloc: Allocator, scanner: *Scanner) !Thread {
     var loop = try xev.Loop.init(.{});
@@ -37,10 +42,14 @@ pub fn init(alloc: Allocator, scanner: *Scanner) !Thread {
     var stop_h = try xev.Async.init();
     errdefer stop_h.deinit();
 
-    return .{ .alloc = alloc, .loop = loop, .mailbox = mailbox, .wakeup = wakeup_h, .stop = stop_h, .scanner = scanner };
+    var flush_timer = try xev.Timer.init();
+    errdefer flush_timer.deinit();
+
+    return .{ .alloc = alloc, .loop = loop, .mailbox = mailbox, .wakeup = wakeup_h, .stop = stop_h, .flush_timer = flush_timer, .scanner = scanner };
 }
 
 pub fn deinit(self: *Thread) void {
+    self.flush_timer.deinit();
     self.wakeup.deinit();
     self.stop.deinit();
     self.loop.deinit();
@@ -58,6 +67,7 @@ fn threadMain_(self: *Thread) !void {
 
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
+    self.scheduleFlushTimer();
 
     log.debug("starting worktree scanner thread", .{});
     defer log.debug("starting worktree scanner thread shutdown", .{});
@@ -74,6 +84,56 @@ fn stopCallback(
     log.debug("scanner stopCallback called, stopping loop", .{});
     self_.?.loop.stop();
     return .disarm;
+}
+
+fn scheduleFlushTimer(self: *Thread) void {
+    self.flush_timer.run(
+        &self.loop,
+        &self.flush_timer_c,
+        FLUSH_INTERVAL_MS,
+        Thread,
+        self,
+        flushTimerCallback,
+    );
+}
+
+fn flushTimerCallback(
+    self_: ?*Thread,
+    _: *xev.Loop,
+    _: *xev.Completion,
+    r: xev.Timer.RunError!void,
+) xev.CallbackAction {
+    _ = r catch |err| {
+        log.err("flush timer error: {}", .{err});
+        return .disarm;
+    };
+
+    const self = self_.?;
+    self.processDirtyEntries();
+    self.scheduleFlushTimer();
+    return .disarm;
+}
+
+fn processDirtyEntries(self: *Thread) void {
+    var entries: std.ArrayList(u64) = .{};
+    defer entries.deinit(self.alloc);
+
+    {
+        self.scanner.mutex.lock();
+        defer self.scanner.mutex.unlock();
+        entries.appendSlice(self.alloc, self.scanner.dirty_entries.items) catch return;
+        self.scanner.dirty_entries.clearRetainingCapacity();
+    }
+
+    if (entries.items.len == 0) return;
+
+    const result = self.scanner.process_events(entries.items) catch |err| {
+        log.err("error processing dirty entries: {}", .{err});
+        return;
+    };
+
+    // TODO: deliver result to consumer
+    _ = result;
 }
 
 fn wakeupCallback(
@@ -97,9 +157,6 @@ fn wakeupCallback(
 }
 
 fn drainMailbox(self: *Thread) !void {
-    // var fs_events = std.AutoHashMap(u64, u32).init(self.alloc);
-    // defer fs_events.deinit();
-
     while (self.mailbox.pop()) |message| {
         switch (message) {
             .scan_dir => |dir_id| {
@@ -110,13 +167,4 @@ fn drainMailbox(self: *Thread) !void {
             },
         }
     }
-
-    // if (fs_events.count() > 0) {
-    //     const updated_entries = try self.scanner.process_events(&fs_events);
-    //
-    //     // Send to app loop; if it fails, destroy the entries ourselves
-    //     if (!self.scanner.worktree.notifyUpdatedEntries(updated_entries)) {
-    //         updated_entries.destroy();
-    //     }
-    // }
 }
