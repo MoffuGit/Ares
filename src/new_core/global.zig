@@ -18,10 +18,4 @@ pub const GlobalState = struct {
             .alloc = alloc,
         };
     }
-
-    pub fn deinit(self: *Self) void {
-        if (self.gpa.deinit() == .leak) {
-            std.log.info("We are leaking 💧", .{});
-        }
-    }
 };
