@@ -1,7 +1,7 @@
 const std = @import("std");
 const xev = @import("xev").Dynamic;
 const xev_pkg = @import("xev");
-const log = std.log.scoped(.worktree_io);
+const log = std.log.scoped(.io);
 
 const Message = @import("message.zig").Message;
 const BlockingQueue = @import("datastruct").BlockingQueue;

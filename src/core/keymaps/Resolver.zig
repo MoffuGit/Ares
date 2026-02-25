@@ -1,3 +1,8 @@
+//NOTE:
+//this probably will get removed
+//i think it would better to handle this from
+//the typescript side, it's going to dpened what
+//can i do with the bindings
 const std = @import("std");
 const triepkg = @import("datastruct");
 const keystrokepkg = @import("KeyStroke.zig");

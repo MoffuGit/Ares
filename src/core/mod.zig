@@ -32,3 +32,7 @@ export fn createIo() ?*Io {
 export fn destroyIo(io: *Io) void {
     io.destroy();
 }
+
+test {
+    _ = @import("keymaps/mod.zig");
+}
