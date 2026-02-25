@@ -148,11 +148,11 @@ pub fn onReadComplete(req: *ReadRequest, bytes_read: usize) void {
         .alloc = alloc,
     });
 }
-//
-// pub fn onReadError(req: *ReadRequest) void {
-//     const callback = req.callback;
-//     const userdata = req.userdata;
-//     req.alloc.free(req.buffer);
-//     req.deinit();
-//     callback(userdata, null);
-// }
+
+pub fn onReadError(req: *ReadRequest) void {
+    const callback = req.callback;
+    const userdata = req.userdata;
+    req.alloc.free(req.buffer);
+    req.deinit();
+    callback(userdata, null);
+}
