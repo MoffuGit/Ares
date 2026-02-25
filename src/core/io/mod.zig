@@ -119,7 +119,8 @@ pub fn readFile(
             log.err("error notifying io thread to wakeup: {}", .{err});
         };
     } else {
-        req.deinit();
+        self.alloc.destroy(path);
+        self.alloc.destroy(req);
     }
 }
 
