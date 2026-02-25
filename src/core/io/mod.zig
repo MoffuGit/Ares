@@ -78,19 +78,30 @@ pub const ReadRequest = struct {
 };
 
 alloc: Allocator,
-thread: *Thread,
+thread: Thread,
+thr: std.Thread,
 
-pub fn create(alloc: Allocator, thread: *Thread.Mailbox) !Io {
-    const io = try alloc.create(Io);
+pub fn create(alloc: Allocator) !Io {
+    var io = try alloc.create(Io);
 
     io.* = .{
         .alloc = alloc,
-        .thread = thread,
+        .thread = Thread.init(alloc, io),
     };
+
+    io.thread = try std.Thread.spawn(.{}, Thread.threadMain, .{&io.thread});
+
     return io;
 }
 
 pub fn destroy(self: *Io) void {
+    {
+        self.thread.stop.notify() catch |err| {
+            log.err("error notifying io thread to stop, may stall err={}", .{err});
+        };
+        self.thr.join();
+    }
+    self.thread.deinit();
     self.alloc.destroy(self);
 }
 
