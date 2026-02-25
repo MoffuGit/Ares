@@ -90,32 +90,33 @@ pub const Action = union(enum) {
 };
 
 pub const Mode = enum { normal, insert, visual };
+pub const Scope = enum { global, editor, command_palette };
 
 pub const Keymaps = struct {
-    normal: KeyStrokeActions,
-    insert: KeyStrokeActions,
-    visual: KeyStrokeActions,
+    const scope_count = @typeInfo(Scope).@"enum".fields.len;
+    const mode_count = @typeInfo(Mode).@"enum".fields.len;
+    const total = scope_count * mode_count;
+
+    tries: [total]KeyStrokeActions,
 
     pub fn init(alloc: std.mem.Allocator) !Keymaps {
-        return .{
-            .normal = try KeyStrokeActions.init(alloc),
-            .insert = try KeyStrokeActions.init(alloc),
-            .visual = try KeyStrokeActions.init(alloc),
-        };
+        var tries: [total]KeyStrokeActions = undefined;
+        var initialized: usize = 0;
+        errdefer for (tries[0..initialized]) |*t| t.deinit();
+        for (&tries) |*t| {
+            t.* = try KeyStrokeActions.init(alloc);
+            initialized += 1;
+        }
+        return .{ .tries = tries };
     }
 
     pub fn deinit(self: *Keymaps) void {
-        self.normal.deinit();
-        self.insert.deinit();
-        self.visual.deinit();
+        for (&self.tries) |*t| t.deinit();
     }
 
-    pub fn actions(self: *Keymaps, mode: Mode) *KeyStrokeActions {
-        return switch (mode) {
-            .normal => &self.normal,
-            .insert => &self.insert,
-            .visual => &self.visual,
-        };
+    pub fn actions(self: *Keymaps, scope: Scope, mode: Mode) *KeyStrokeActions {
+        const idx = @intFromEnum(scope) * mode_count + @intFromEnum(mode);
+        return &self.tries[idx];
     }
 };
 

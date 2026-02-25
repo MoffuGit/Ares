@@ -45,7 +45,7 @@ dark_theme: []const u8 = DEFAULT_DARK,
 active_theme: Theme = Theme.fallback,
 theme: *const Theme = &Theme.fallback,
 
-keymaps: Keymaps = .{ .normal = undefined, .insert = undefined, .visual = undefined },
+keymaps: Keymaps = .{ .tries = undefined },
 keymaps_initialized: bool = false,
 keymap_generation: u64 = 0,
 
@@ -181,27 +181,41 @@ fn loadKeymaps(self: *Settings, km_json: std.json.Value) void {
 
     self.clearBindingMap();
 
+    const scope_names = [_]struct { key: []const u8, scope: keymapspkg.Scope }{
+        .{ .key = "global", .scope = .global },
+        .{ .key = "editor", .scope = .editor },
+        .{ .key = "command_palette", .scope = .command_palette },
+    };
+
     const mode_names = [_]struct { key: []const u8, mode: keymapspkg.Mode }{
         .{ .key = "normal", .mode = .normal },
         .{ .key = "insert", .mode = .insert },
         .{ .key = "visual", .mode = .visual },
     };
 
-    for (mode_names) |entry| {
-        if (obj.get(entry.key)) |mode_json| {
-            self.loadKeymapMode(entry.mode, mode_json);
+    for (scope_names) |scope_entry| {
+        if (obj.get(scope_entry.key)) |scope_json| {
+            const scope_obj = switch (scope_json) {
+                .object => |o| o,
+                else => continue,
+            };
+            for (mode_names) |mode_entry| {
+                if (scope_obj.get(mode_entry.key)) |mode_json| {
+                    self.loadKeymapMode(scope_entry.scope, mode_entry.mode, mode_json);
+                }
+            }
         }
     }
 
     self.keymap_generation +%= 1;
 }
 
-fn loadKeymapMode(self: *Settings, mode: keymapspkg.Mode, mode_json: std.json.Value) void {
+fn loadKeymapMode(self: *Settings, scope: keymapspkg.Scope, mode: keymapspkg.Mode, mode_json: std.json.Value) void {
     const bindings = switch (mode_json) {
         .object => |o| o,
         else => return,
     };
-    const trie = self.keymaps.actions(mode);
+    const trie = self.keymaps.actions(scope, mode);
 
     var it = bindings.iterator();
     while (it.next()) |entry| {
@@ -229,29 +243,29 @@ fn loadDefaultKeymaps(self: *Settings) void {
 
     self.clearBindingMap();
 
-    const DefaultEntry = struct { mode: keymapspkg.Mode, seq: []const KeyStroke, action: Action, binding: ?[]const u8 = null };
+    const DefaultEntry = struct { scope: keymapspkg.Scope, mode: keymapspkg.Mode, seq: []const KeyStroke, action: Action, binding: ?[]const u8 = null };
     const defaults = [_]DefaultEntry{
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'i', .mods = .{} }}, .action = .{ .workspace = .enter_insert }, .binding = "i" },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'v', .mods = .{} }}, .action = .{ .workspace = .enter_visual }, .binding = "v" },
-        .{ .mode = .insert, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .{ .workspace = .enter_normal }, .binding = "escape" },
-        .{ .mode = .visual, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .{ .workspace = .enter_normal }, .binding = "escape" },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'l', .mods = .{ .super = true } }}, .action = .{ .workspace = .toggle_left_dock }, .binding = "super+l" },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 't', .mods = .{ .ctrl = true } }}, .action = .{ .workspace = .new_tab }, .binding = "ctrl+t" },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{} }}, .action = .{ .workspace = .next_tab }, .binding = "tab" },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{ .shift = true } }}, .action = .{ .workspace = .prev_tab }, .binding = "shift+tab" },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'q', .mods = .{ .ctrl = true } }}, .action = .{ .workspace = .close_active_tab }, .binding = "ctrl+q" },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{ .super = true } }}, .action = .{ .workspace = .toggle_command_palette }, .binding = "super+k" },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{} }}, .action = .{ .command = .up } },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'j', .mods = .{} }}, .action = .{ .command = .down } },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = '\r', .mods = .{} }}, .action = .{ .command = .select } },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'u', .mods = .{ .ctrl = true } }}, .action = .{ .command = .scroll_up } },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'd', .mods = .{ .ctrl = true } }}, .action = .{ .command = .scroll_down } },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'g', .mods = .{} }, .{ .codepoint = 'g', .mods = .{} }}, .action = .{ .command = .top } },
-        .{ .mode = .normal, .seq = &.{.{ .codepoint = 'G', .mods = .{ .shift = true } }}, .action = .{ .command = .bottom } },
+        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = 'i', .mods = .{} }}, .action = .{ .workspace = .enter_insert }, .binding = "i" },
+        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = 'v', .mods = .{} }}, .action = .{ .workspace = .enter_visual }, .binding = "v" },
+        .{ .scope = .global, .mode = .insert, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .{ .workspace = .enter_normal }, .binding = "escape" },
+        .{ .scope = .global, .mode = .visual, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .{ .workspace = .enter_normal }, .binding = "escape" },
+        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = 'l', .mods = .{ .super = true } }}, .action = .{ .workspace = .toggle_left_dock }, .binding = "super+l" },
+        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = 't', .mods = .{ .ctrl = true } }}, .action = .{ .workspace = .new_tab }, .binding = "ctrl+t" },
+        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{} }}, .action = .{ .workspace = .next_tab }, .binding = "tab" },
+        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{ .shift = true } }}, .action = .{ .workspace = .prev_tab }, .binding = "shift+tab" },
+        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = 'q', .mods = .{ .ctrl = true } }}, .action = .{ .workspace = .close_active_tab }, .binding = "ctrl+q" },
+        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{ .super = true } }}, .action = .{ .workspace = .toggle_command_palette }, .binding = "super+k" },
+        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{} }}, .action = .{ .command = .up } },
+        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'j', .mods = .{} }}, .action = .{ .command = .down } },
+        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = '\r', .mods = .{} }}, .action = .{ .command = .select } },
+        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'u', .mods = .{ .ctrl = true } }}, .action = .{ .command = .scroll_up } },
+        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'd', .mods = .{ .ctrl = true } }}, .action = .{ .command = .scroll_down } },
+        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'g', .mods = .{} }, .{ .codepoint = 'g', .mods = .{} }}, .action = .{ .command = .top } },
+        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'G', .mods = .{ .shift = true } }}, .action = .{ .command = .bottom } },
     };
 
     for (defaults) |d| {
-        self.keymaps.actions(d.mode).insert(d.seq, d.action) catch continue;
+        self.keymaps.actions(d.scope, d.mode).insert(d.seq, d.action) catch continue;
         if (d.binding) |b| self.recordBinding(d.action, b);
     }
 
