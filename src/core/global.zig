@@ -1,6 +1,8 @@
 const std = @import("std");
 const GPA = std.heap.GeneralPurposeAllocator(.{});
 
+pub const xev = @import("xev").Dynamic;
+
 pub var state: GlobalState = undefined;
 
 pub const GlobalState = struct {
