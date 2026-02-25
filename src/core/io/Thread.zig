@@ -1,5 +1,5 @@
 const std = @import("std");
-const xev = @import("xev").Dynamic;
+const xev = @import("../global.zig").xev;
 const xev_pkg = @import("xev");
 const log = std.log.scoped(.io);
 

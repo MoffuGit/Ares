@@ -35,4 +35,5 @@ export fn destroyIo(io: *Io) void {
 
 test {
     _ = @import("keymaps/mod.zig");
+    _ = @import("monitor/mod.zig");
 }

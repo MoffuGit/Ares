@@ -1,4 +1,6 @@
+const Monitor = @import("mod.zig");
+
 pub const Message = union(enum) {
-    add: u64,
+    add: *Monitor.WatchRequest,
     remove: u64,
 };

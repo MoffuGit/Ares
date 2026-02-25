@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const xev = @import("xev").Dynamic;
+const xev = @import("../global.zig").xev;
 const BlockingQueue = @import("datastruct").BlockingQueue;
 const messagepkg = @import("Message.zig");
 const Monitor = @import("mod.zig");
@@ -11,7 +11,7 @@ pub const Thread = @This();
 
 pub const Mailbox = BlockingQueue(messagepkg.Message, 1024);
 
-const NOTIFY_INTERVAL_MS = 100;
+const FLUSH_INTERVAL_MS = 100;
 
 alloc: Allocator,
 loop: xev.Loop,
@@ -28,9 +28,8 @@ wakeup_c: xev.Completion = .{},
 stop: xev.Async,
 stop_c: xev.Completion = .{},
 
-notify_timer: xev.Timer,
-notify_timer_c: xev.Completion = .{},
-has_pending_events: std.atomic.Value(bool) = .{ .raw = false },
+flush_timer: xev.Timer,
+flush_timer_c: xev.Completion = .{},
 
 pub fn init(alloc: Allocator, monitor: *Monitor) !Thread {
     var loop = try xev.Loop.init(.{});
@@ -48,8 +47,8 @@ pub fn init(alloc: Allocator, monitor: *Monitor) !Thread {
     var fs_h = xev.FileSystem.init();
     errdefer fs_h.deinit();
 
-    var notify_timer = try xev.Timer.init();
-    errdefer notify_timer.deinit();
+    var flush_timer = try xev.Timer.init();
+    errdefer flush_timer.deinit();
 
     return .{
         .monitor = monitor,
@@ -59,15 +58,22 @@ pub fn init(alloc: Allocator, monitor: *Monitor) !Thread {
         .wakeup = wakeup_h,
         .stop = stop_h,
         .fs = fs_h,
-        .notify_timer = notify_timer,
+        .flush_timer = flush_timer,
     };
 }
 
 pub fn deinit(self: *Thread) void {
-    // No cleanup needed - messages are now ID-based (no owned strings)
-    while (self.mailbox.pop()) |_| {}
+    while (self.mailbox.pop()) |message| {
+        switch (message) {
+            .add => |req| {
+                req.alloc.free(req.path);
+                req.alloc.destroy(req);
+            },
+            .remove => {},
+        }
+    }
 
-    self.notify_timer.deinit();
+    self.flush_timer.deinit();
     self.fs.deinit();
     self.wakeup.deinit();
     self.stop.deinit();
@@ -77,55 +83,21 @@ pub fn deinit(self: *Thread) void {
 
 pub fn threadMain(self: *Thread) void {
     self.threadMain_() catch |err| {
-        log.err("error in worktree monitor thread err={}", .{err});
+        log.err("error in monitor thread err={}", .{err});
     };
 }
 
 fn threadMain_(self: *Thread) !void {
-    defer log.debug("worktree monitor thread exited", .{});
+    defer log.debug("monitor thread exited", .{});
 
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
-    self.scheduleNotifyTimer();
+    self.scheduleFlushTimer();
     try self.fs.start(&self.loop);
 
-    log.debug("starting worktree monitor thread", .{});
-    defer log.debug("starting worktree monitor thread shutdown", .{});
+    log.debug("starting monitor thread", .{});
+    defer log.debug("starting monitor thread shutdown", .{});
     _ = try self.loop.run(.until_done);
-}
-
-fn scheduleNotifyTimer(self: *Thread) void {
-    self.notify_timer.run(
-        &self.loop,
-        &self.notify_timer_c,
-        NOTIFY_INTERVAL_MS,
-        Thread,
-        self,
-        notifyTimerCallback,
-    );
-}
-
-fn notifyTimerCallback(
-    self_: ?*Thread,
-    _: *xev.Loop,
-    _: *xev.Completion,
-    r: xev.Timer.RunError!void,
-) xev.CallbackAction {
-    _ = r catch |err| {
-        log.err("notify timer error: {}", .{err});
-        return .disarm;
-    };
-
-    const self = self_.?;
-
-    if (self.has_pending_events.swap(false, .acquire)) {
-        self.monitor.worktree.scanner_thread.wakeup.notify() catch |err| {
-            log.err("error notifying scanner thread: {}", .{err});
-        };
-    }
-
-    self.scheduleNotifyTimer();
-    return .disarm;
 }
 
 fn stopCallback(
@@ -139,6 +111,35 @@ fn stopCallback(
     return .disarm;
 }
 
+fn scheduleFlushTimer(self: *Thread) void {
+    self.flush_timer.run(
+        &self.loop,
+        &self.flush_timer_c,
+        FLUSH_INTERVAL_MS,
+        Thread,
+        self,
+        flushTimerCallback,
+    );
+}
+
+fn flushTimerCallback(
+    self_: ?*Thread,
+    _: *xev.Loop,
+    _: *xev.Completion,
+    r: xev.Timer.RunError!void,
+) xev.CallbackAction {
+    _ = r catch |err| {
+        log.err("flush timer error: {}", .{err});
+        return .disarm;
+    };
+
+    const self = self_.?;
+    self.monitor.flushPendingEvents();
+    self.monitor.cleanupCancelledWatchers();
+    self.scheduleFlushTimer();
+    return .disarm;
+}
+
 fn fsEventsCallback(
     entry: ?*Monitor.WatcherEntry,
     _: *xev.FileSystem.Watcher,
@@ -146,11 +147,11 @@ fn fsEventsCallback(
     events: u32,
 ) xev.CallbackAction {
     const e = entry orelse return .rearm;
-    const thread = e.thread;
-
-    _ = thread.monitor.worktree.scanner_thread.mailbox.push(.{ .fsEvent = .{ .id = e.id, .events = events } }, .instant);
-    thread.has_pending_events.store(true, .release);
-
+    e.pending_events |= events;
+    if (!e.dirty) {
+        e.dirty = true;
+        e.monitor.dirty_queue.append(e.monitor.alloc, e) catch {};
+    }
     return .rearm;
 }
 
@@ -161,37 +162,22 @@ fn wakeupCallback(
     r: xev.Async.WaitError!void,
 ) xev.CallbackAction {
     _ = r catch |err| {
-        log.err("error in worktree monitor wakeup err={}", .{err});
+        log.err("error in monitor wakeup err={}", .{err});
         return .rearm;
     };
 
     const s = self_.?;
 
-    s.monitor.cleanupCancelledWatchers();
-
-    s.drainMailbox() catch |err| {
-        log.err("error draining monitor mailbox err={}", .{err});
-    };
+    s.drainMailbox();
 
     return .rearm;
 }
 
-fn drainMailbox(self: *Thread) !void {
-    const wt = self.monitor.worktree;
-
+fn drainMailbox(self: *Thread) void {
     while (self.mailbox.pop()) |message| {
         switch (message) {
-            .add => |id| {
-                const abs_path = blk: {
-                    wt.snapshot.mutex.lock();
-                    defer wt.snapshot.mutex.unlock();
-                    break :blk wt.snapshot.getAbsPathById(id) orelse continue;
-                };
-
-                const copy_abs_path = try self.alloc.dupe(u8, abs_path);
-                errdefer self.alloc.free(copy_abs_path);
-
-                try self.monitor.addWatcher(&self.fs, copy_abs_path, id, self, fsEventsCallback);
+            .add => |req| {
+                self.monitor.addWatcher(&self.fs, req, fsEventsCallback);
             },
             .remove => |id| {
                 self.monitor.removeWatcher(&self.fs, id);
