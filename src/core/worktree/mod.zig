@@ -20,9 +20,9 @@ pub const Worktree = struct {
     scanner_thread: ScannerThread,
     scanner_thr: std.Thread,
 
-    pub fn create(abs_path: []const u8, alloc: Allocator) !*Worktree {
+    pub fn create(abs_path: []const u8, monitor: *Monitor, alloc: Allocator) !*Worktree {
         const worktree = try alloc.create(Worktree);
-        try worktree.init(abs_path, alloc);
+        try worktree.init(monitor, abs_path, alloc);
 
         return worktree;
     }
