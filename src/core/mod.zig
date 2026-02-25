@@ -2,6 +2,7 @@ const global = @import("global.zig");
 
 const Settings = @import("settings/mod.zig");
 const Io = @import("io/mod.zig");
+const Monitor = @import("monitor/mod.zig");
 
 export fn init_state() void {
     global.state.init();
@@ -31,6 +32,14 @@ export fn createIo() ?*Io {
 
 export fn destroyIo(io: *Io) void {
     io.destroy();
+}
+
+export fn createMonitor() ?*Monitor {
+    return Monitor.create(global.state.alloc) catch null;
+}
+
+export fn destroyMonitor(monitor: *Monitor) void {
+    monitor.destroy();
 }
 
 test {

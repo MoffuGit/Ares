@@ -9,8 +9,6 @@ const Snapshot = @import("Snapshot.zig");
 
 const BPlusTree = @import("datastruct").BPlusTree;
 
-const EventQueue = @import("../EventQueue.zig");
-
 fn entryOrder(a: []const u8, b: []const u8) std.math.Order {
     return std.mem.order(u8, a, b);
 }
@@ -139,15 +137,13 @@ pub const Worktree = struct {
 
     abs_path: []u8,
 
-    events: *EventQueue,
-
     scanner: Scanner,
     scanner_thread: ScannerThread,
     scanner_thr: std.Thread,
 
-    pub fn create(abs_path: []const u8, alloc: Allocator, events: *EventQueue) !*Worktree {
+    pub fn create(abs_path: []const u8, alloc: Allocator) !*Worktree {
         const worktree = try alloc.create(Worktree);
-        try worktree.init(abs_path, alloc, events);
+        try worktree.init(abs_path, alloc);
 
         return worktree;
     }
@@ -157,7 +153,7 @@ pub const Worktree = struct {
         self.alloc.destroy(self);
     }
 
-    pub fn init(self: *Worktree, abs_path: []const u8, alloc: Allocator, events: *EventQueue) !void {
+    pub fn init(self: *Worktree, abs_path: []const u8, alloc: Allocator) !void {
         const _abs_path = try alloc.dupe(u8, abs_path);
         errdefer alloc.free(_abs_path);
 
@@ -174,7 +170,6 @@ pub const Worktree = struct {
             .alloc = alloc,
             .snapshot = snapshot,
             .abs_path = _abs_path,
-            .events = events,
             .scanner = scanner,
             .scanner_thread = scanner_thread,
             .scanner_thr = undefined,
@@ -202,10 +197,5 @@ pub const Worktree = struct {
         self.alloc.free(self.abs_path);
 
         log.info("Worktree closed", .{});
-    }
-
-    pub fn notifyUpdatedEntries(self: *Worktree, entries: *UpdatedEntriesSet) bool {
-        self.events.push(.{ .worktree_updated = entries });
-        return true;
     }
 };
