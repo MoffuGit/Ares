@@ -20,7 +20,7 @@ pub const GlobalState = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        if (self.gpa == .leak) {
+        if (self.gpa.deinit() == .leak) {
             std.log.info("We are leaking 💧", .{});
         }
     }
