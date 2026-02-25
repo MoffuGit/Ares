@@ -72,7 +72,7 @@ pub const ReadRequest = struct {
 
     pub fn deinit(self: *ReadRequest) void {
         self.fd.close();
-        self.alloc.destroy(self.path);
+        self.alloc.free(self.path);
         self.alloc.destroy(self);
     }
 };
@@ -81,15 +81,16 @@ alloc: Allocator,
 thread: Thread,
 thr: std.Thread,
 
-pub fn create(alloc: Allocator) !Io {
+pub fn create(alloc: Allocator) !*Io {
     var io = try alloc.create(Io);
 
     io.* = .{
         .alloc = alloc,
-        .thread = Thread.init(alloc, io),
+        .thread = try Thread.init(alloc, io),
+        .thr = undefined,
     };
 
-    io.thread = try std.Thread.spawn(.{}, Thread.threadMain, .{&io.thread});
+    io.thr = try std.Thread.spawn(.{}, Thread.threadMain, .{&io.thread});
 
     return io;
 }
@@ -130,7 +131,7 @@ pub fn readFile(
             log.err("error notifying io thread to wakeup: {}", .{err});
         };
     } else {
-        self.alloc.destroy(path);
+        self.alloc.free(path);
         self.alloc.destroy(req);
     }
 }

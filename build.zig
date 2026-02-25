@@ -35,22 +35,23 @@ pub fn build(b: *std.Build) void {
     desktop_step.dependOn(&desktop.step);
 
     // // ── Tests ──
-    // const test_filter = b.option([]const u8, "test-filter", "Filter for tests");
-    //
-    // const test_mod = b.createModule(.{
-    //     .root_source_file = b.path("src/test.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    // test_mod.addImport("xev", xev_dep.module("xev"));
-    //
-    // const test_exe = b.addTest(.{
-    //     .name = "ares-test",
-    //     .root_module = test_mod,
-    //     .filters = if (test_filter) |f| &.{f} else &.{},
-    // });
-    //
-    // const test_run = b.addRunArtifact(test_exe);
-    // const test_step = b.step("test", "Run unit tests");
-    // test_step.dependOn(&test_run.step);
+    const test_filter = b.option([]const u8, "test-filter", "Filter for tests");
+
+    const test_mod = b.createModule(.{
+        .root_source_file = b.path("src/test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_mod.addImport("xev", xev_dep.module("xev"));
+    test_mod.addImport("datastruct", datastruct);
+
+    const test_exe = b.addTest(.{
+        .name = "ares-test",
+        .root_module = test_mod,
+        .filters = if (test_filter) |f| &.{f} else &.{},
+    });
+
+    const test_run = b.addRunArtifact(test_exe);
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&test_run.step);
 }
