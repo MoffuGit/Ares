@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     mod.addImport("xev", xev_dep.module("xev"));
-    mod.addImport("datasctruct", datastruct);
+    mod.addImport("datastruct", datastruct);
 
     const lib = b.addLibrary(.{
         .name = "core",
