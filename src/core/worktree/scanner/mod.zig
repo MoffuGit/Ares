@@ -20,6 +20,10 @@ root_name: []const u8,
 snapshot: *Snapshot,
 monitor: *Monitor,
 
+mutex: std.Thread.Mutex = .{},
+watcher_to_entry: std.AutoHashMap(u64, u64),
+dirty_entries: std.ArrayList(u64) = .{},
+
 pub fn init(alloc: Allocator, monitor: *Monitor, snapshot: *Snapshot, abs_root: []const u8) !Scanner {
     return .{
         .alloc = alloc,
@@ -27,11 +31,21 @@ pub fn init(alloc: Allocator, monitor: *Monitor, snapshot: *Snapshot, abs_root: 
         .abs_root = abs_root,
         .root_name = std.fs.path.basename(abs_root),
         .snapshot = snapshot,
+        .watcher_to_entry = std.AutoHashMap(u64, u64).init(alloc),
     };
 }
 
 pub fn deinit(self: *Scanner) void {
-    _ = self;
+    self.watcher_to_entry.deinit();
+    self.dirty_entries.deinit(self.alloc);
+}
+
+fn monitorCallback(self: ?*Scanner, watcher_id: u64, _: u32) void {
+    const s = self.?;
+    s.mutex.lock();
+    defer s.mutex.unlock();
+    const entry_id = s.watcher_to_entry.get(watcher_id) orelse return;
+    s.dirty_entries.append(s.alloc, entry_id) catch return;
 }
 fn buildAbsPath(self: *Scanner, rel_path: []const u8, buf: []u8) ![]const u8 {
     if (std.mem.eql(u8, rel_path, self.root_name)) {
@@ -76,11 +90,8 @@ pub fn initial_scan(self: *Scanner) !void {
 
     try self.scanRecursive(id);
 
-    //NOTE:
-    //monitor
-    // if (self.worktree.monitor_thread.mailbox.push(.{ .add = id }, .instant) != 0) {
-    //     self.worktree.monitor_thread.wakeup.notify() catch {};
-    // }
+    const watcher_id = try self.monitor.watchPath(self.abs_root, Scanner, self, monitorCallback);
+    try self.watcher_to_entry.put(watcher_id, id);
 
     //NOTE: notify scan
     // const result = try self.alloc.create(UpdatedEntriesSet);
@@ -138,11 +149,13 @@ fn scanRecursive(self: *Scanner, dir_id: u64) !void {
             if (kind == .dir) {
                 try child_dirs.append(self.alloc, child_id);
 
-                //NOTE:
-                //add a monitor for the file
-                // if (self.worktree.monitor_thread.mailbox.push(.{ .add = child_id }, .instant) != 0) {
-                //     self.worktree.monitor_thread.wakeup.notify() catch {};
-                // }
+                const child_abs = blk: {
+                    self.snapshot.mutex.lock();
+                    defer self.snapshot.mutex.unlock();
+                    break :blk self.snapshot.getAbsPathById(child_id) orelse continue;
+                };
+                const watcher_id = try self.monitor.watchPath(child_abs, Scanner, self, monitorCallback);
+                try self.watcher_to_entry.put(watcher_id, child_id);
             }
         }
     }
@@ -362,9 +375,6 @@ fn getEntryStat(_: *Scanner, dir: std.fs.Dir, name: []const u8) !Stat {
 //         }
 //     }
 // }
-//
-//
-//
 fn getRootStat(self: *Scanner) !Stat {
     const file = try std.fs.openFileAbsolute(self.abs_root, .{});
     defer file.close();
@@ -377,7 +387,7 @@ fn getRootStat(self: *Scanner) !Stat {
         .mode = @intCast(stat.mode),
     };
 }
-//
+
 pub const UpdatedEntriesSet = struct {
     pub const Update = union(enum) {
         add: struct { id: u64, kind: Kind },

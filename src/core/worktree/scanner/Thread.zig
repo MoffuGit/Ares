@@ -108,14 +108,6 @@ fn drainMailbox(self: *Thread) !void {
             .initialScan => {
                 try self.scanner.initial_scan();
             },
-            // .fsEvent => |data| {
-            //     const entry = try fs_events.getOrPut(data.id);
-            //     if (entry.found_existing) {
-            //         entry.value_ptr.* |= data.events;
-            //     } else {
-            //         entry.value_ptr.* = data.events;
-            //     }
-            // },
         }
     }
 
