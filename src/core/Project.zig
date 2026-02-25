@@ -1,8 +1,8 @@
 const std = @import("std");
-const Worktree = @import("../worktree/mod.zig").Worktree;
-const BufferStore = @import("../buffer/BufferStore.zig");
-const Monitor = @import("../monitor/mod.zig");
-const Io = @import("../io/mod.zig");
+const Worktree = @import("./worktree/mod.zig").Worktree;
+const BufferStore = @import("./buffer/BufferStore.zig");
+const Monitor = @import("./monitor/mod.zig");
+const Io = @import("./io/mod.zig");
 
 const Project = @This();
 
