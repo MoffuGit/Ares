@@ -1,5 +1,6 @@
 const std = @import("std");
 const GPA = std.heap.GeneralPurposeAllocator(.{});
+const Bus = @import("Bus.zig");
 
 pub const xev = @import("xev").Dynamic;
 
@@ -10,14 +11,11 @@ pub const GlobalState = struct {
 
     gpa: GPA,
     alloc: std.mem.Allocator,
+    bus: Bus,
 
-    pub fn init(self: *Self) void {
-        var gpa: GPA = .{};
-        const alloc = gpa.allocator();
-
-        self.* = .{
-            .gpa = gpa,
-            .alloc = alloc,
-        };
+    pub fn init(self: *Self, callback: ?Bus.JsCallback) void {
+        self.gpa = .{};
+        self.alloc = self.gpa.allocator();
+        self.bus = .{ .callback = callback };
     }
 };

@@ -4,7 +4,13 @@
   "private": true,
   "main": "index.ts",
   "types": "index.ts",
+  "scripts": {
+    "test": "bun run test.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
+  },
+  "dependencies": {
+    "bun-ffi-structs": "^0.1.2"
   }
 }
