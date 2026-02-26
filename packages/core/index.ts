@@ -1,68 +1,86 @@
 import { dlopen, FFIType, type Pointer } from "bun:ffi";
 import { resolve } from "node:path";
 
-const { symbols } = dlopen(
-    resolve(import.meta.dir, "../../zig-out/lib/libcore.dylib"),
-    {
-        initState: {
-            args: [],
-            returns: FFIType.void,
+function getCoreLib(path?: string) {
+    const symbols = dlopen(
+        resolve(import.meta.dir, "../../zig-out/lib/libcore.dylib"),
+        {
+            initState: {
+                args: [],
+                returns: FFIType.void,
+            },
+            createSettings: {
+                args: [],
+                returns: FFIType.pointer,
+            },
+            destroySettings: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
+            createIo: {
+                args: [],
+                returns: FFIType.pointer,
+            },
+            destroyIo: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
+            createMonitor: {
+                args: [],
+                returns: FFIType.pointer,
+            },
+            destroyMonitor: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
         },
-        createSettings: {
-            args: [],
-            returns: FFIType.pointer,
-        },
-        destroySettings: {
-            args: [FFIType.pointer],
-            returns: FFIType.void,
-        },
-        createIo: {
-            args: [],
-            returns: FFIType.pointer,
-        },
-        destroyIo: {
-            args: [FFIType.pointer],
-            returns: FFIType.void,
-        },
-        createMonitor: {
-            args: [],
-            returns: FFIType.pointer,
-        },
-        destroyMonitor: {
-            args: [FFIType.pointer],
-            returns: FFIType.void,
-        },
-    },
-);
+    );
 
-export type SettingsHandle = Pointer;
-export type IoHandle = Pointer;
-export type MonitorHandle = Pointer;
-
-export function initState() {
-    symbols.initState();
+    return symbols;
 }
 
-export function createSettings(): SettingsHandle | null {
-    return symbols.createSettings() as Pointer | null;
+export interface CoreLib {
+    initState(): void;
+    createSettings(): Pointer | null;
+    destroySettings(handle: Pointer): void;
+    createIo(): Pointer | null;
+    destroyIo(handle: Pointer): void;
+    createMonitor(): Pointer | null;
+    destroyMonitor(handle: Pointer): void;
 }
 
-export function destroySettings(handle: SettingsHandle): void {
-    symbols.destroySettings(handle);
-}
+export class Core implements CoreLib {
+    private lib: ReturnType<typeof getCoreLib>;
 
-export function createIo(): IoHandle | null {
-    return symbols.createIo() as Pointer | null;
-}
+    constructor(path?: string) {
+        this.lib = getCoreLib(path);
+    }
 
-export function destroyIo(handle: IoHandle): void {
-    symbols.destroyIo(handle);
-}
+    initState(): void {
+        this.lib.symbols.initState();
+    }
 
-export function createMonitor(): MonitorHandle | null {
-    return symbols.createMonitor() as Pointer | null;
-}
+    createSettings(): Pointer | null {
+        return this.lib.symbols.createSettings() as Pointer | null;
+    }
 
-export function destroyMonitor(handle: MonitorHandle): void {
-    symbols.destroyMonitor(handle);
+    destroySettings(handle: Pointer): void {
+        this.lib.symbols.destroySettings(handle);
+    }
+
+    createIo(): Pointer | null {
+        return this.lib.symbols.createIo() as Pointer | null;
+    }
+
+    destroyIo(handle: Pointer): void {
+        this.lib.symbols.destroyIo(handle);
+    }
+
+    createMonitor(): Pointer | null {
+        return this.lib.symbols.createMonitor() as Pointer | null;
+    }
+
+    destroyMonitor(handle: Pointer): void {
+        this.lib.symbols.destroyMonitor(handle);
+    }
 }
