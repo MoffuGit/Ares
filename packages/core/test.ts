@@ -1,8 +1,8 @@
-import { Core, EventType } from "./index";
+import { EventType, resolveCoreLib } from "./index";
 
-const core = new Core();
+const core = resolveCoreLib();
 
-core.nativeEvents.on(EventType.TestData.toString(), (data) => {
+core.events.on(EventType.TestData.toString(), (data) => {
     console.log(`[Zig TestData]: id=${data.id}, allocated=0x${BigInt(data.allocated).toString(16)}`);
     core.destroyAllocated(data.allocated);
     console.log("[Zig TestData]: Allocated destroyed");

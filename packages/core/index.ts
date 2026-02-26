@@ -70,7 +70,21 @@ function getCoreLib() {
     return symbols;
 }
 
-export class Core {
+export interface Core {
+    events: EventEmitter;
+    initState(): void;
+    pollEvents(): void;
+    startLoop(): void;
+    createSettings(): Pointer | null;
+    destroySettings(handle: Pointer): void;
+    createIo(): Pointer | null;
+    destroyIo(handle: Pointer): void;
+    createMonitor(): Pointer | null;
+    destroyMonitor(handle: Pointer): void;
+    destroyAllocated(handle: number | bigint): void;
+}
+
+export class CoreLib implements Core {
     private lib: ReturnType<typeof getCoreLib>;
     private jsCallback: JSCallback | null = null;
     private _events: EventEmitter = new EventEmitter();
@@ -81,6 +95,7 @@ export class Core {
 
     constructor() {
         this.lib = getCoreLib();
+        this.initState();
     }
 
     initState(): void {
@@ -90,8 +105,10 @@ export class Core {
                 const eventType = event as EventType;
                 const structDef = eventStructs[eventType];
                 if (structDef) {
+                    const data = structDef.unpack(toArrayBuffer(dataPtr, 0, Number(dataLen)));
+                    const event = eventType.toString();
                     queueMicrotask(() => {
-                        emitter.emit(eventType.toString(), structDef.unpack(toArrayBuffer(dataPtr, 0, Number(dataLen))));
+                        emitter.emit(event, data);
                     })
                 }
             },
@@ -139,3 +156,19 @@ export class Core {
         this.lib.symbols.destroyAllocated(handle as Pointer);
     }
 }
+
+let coreLib: CoreLib | undefined
+
+export function resolveCoreLib(): CoreLib {
+    if (!coreLib) {
+        try {
+            coreLib = new CoreLib()
+        } catch (error) {
+            throw new Error(
+                `Failed to initialize OpenTUI render library: ${error instanceof Error ? error.message : "Unknown error"}`,
+            )
+        }
+    }
+    return coreLib
+}
+
