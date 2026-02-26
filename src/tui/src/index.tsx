@@ -1,5 +1,6 @@
 import { createCliRenderer, TextAttributes } from "@opentui/core";
 import { createRoot } from "@opentui/react";
+import { initState } from '@core/ts/lib';
 // import { dlopen } from "bun:ffi";
 // import { resolve } from "node:path";
 //
@@ -12,7 +13,7 @@ import { createRoot } from "@opentui/react";
 // });
 
 function App() {
-    // aresLib.symbols.init_state()
+    initState()
     return (
         <box alignItems="center" justifyContent="center" flexGrow={1}>
             <box justifyContent="center" alignItems="flex-end">

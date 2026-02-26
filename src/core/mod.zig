@@ -4,7 +4,7 @@ const Settings = @import("settings/mod.zig");
 const Io = @import("io/mod.zig");
 const Monitor = @import("monitor/mod.zig");
 
-export fn init_state() void {
+export fn initState() void {
     global.state.init();
 }
 
