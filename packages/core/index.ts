@@ -73,10 +73,10 @@ function getCoreLib() {
 export class Core {
     private lib: ReturnType<typeof getCoreLib>;
     private jsCallback: JSCallback | null = null;
-    private _nativeEvents: EventEmitter = new EventEmitter();
+    private _events: EventEmitter = new EventEmitter();
 
-    get nativeEvents(): EventEmitter {
-        return this._nativeEvents;
+    get events(): EventEmitter {
+        return this._events;
     }
 
     constructor() {
@@ -84,13 +84,15 @@ export class Core {
     }
 
     initState(): void {
-        const emitter = this._nativeEvents;
+        const emitter = this._events;
         this.jsCallback = new JSCallback(
             function handleEvent(event: number, dataPtr: Pointer, dataLen: number): void {
                 const eventType = event as EventType;
                 const structDef = eventStructs[eventType];
                 if (structDef) {
-                    emitter.emit(eventType.toString(), structDef.unpack(toArrayBuffer(dataPtr, 0, Number(dataLen))));
+                    queueMicrotask(() => {
+                        emitter.emit(eventType.toString(), structDef.unpack(toArrayBuffer(dataPtr, 0, Number(dataLen))));
+                    })
                 }
             },
             {
