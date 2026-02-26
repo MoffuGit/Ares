@@ -1,8 +1,8 @@
-import { dlopen, ptr, FFIType, type Pointer } from "bun:ffi";
+import { dlopen, FFIType, type Pointer } from "bun:ffi";
 import { resolve } from "node:path";
 
 const { symbols } = dlopen(
-    resolve(import.meta.dir, "../../../zig-out/lib/libcore.dylib"),
+    resolve(import.meta.dir, "../../zig-out/lib/libcore.dylib"),
     {
         initState: {
             args: [],

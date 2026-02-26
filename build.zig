@@ -28,7 +28,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(lib);
 
     const desktop = b.addSystemCommand(&.{ "bun", "run", "dev:hmr" });
-    desktop.setCwd(b.path("src/desktop"));
+    desktop.setCwd(b.path("packages/desktop"));
 
     const desktop_step = b.step("desktop", "Build desktop lib and run the Electrobun application");
     desktop.step.dependOn(b.getInstallStep());
@@ -36,7 +36,7 @@ pub fn build(b: *std.Build) void {
     desktop.step.dependOn(&lib.step);
 
     const tui = b.addSystemCommand(&.{ "bun", "run", "dev" });
-    tui.setCwd(b.path("src/tui"));
+    tui.setCwd(b.path("packages/tui"));
 
     const tui_step = b.step("tui", "Build tui lib and run the opentui application");
     tui_step.dependOn(b.getInstallStep());

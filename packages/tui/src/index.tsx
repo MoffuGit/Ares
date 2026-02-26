@@ -1,16 +1,6 @@
 import { createCliRenderer, TextAttributes } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { initState } from '@core/ts/lib';
-// import { dlopen } from "bun:ffi";
-// import { resolve } from "node:path";
-//
-// const libPath = resolve(import.meta.dir, "../../../zig-out/lib/libcore.dylib");
-// const aresLib = dlopen(libPath, {
-//     init_state: {
-//         args: [],
-//         returns: "void"
-//     }
-// });
+import { initState } from "@ares/core";
 
 function App() {
     initState()

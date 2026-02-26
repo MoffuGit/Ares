@@ -21,6 +21,8 @@ yoga/
 debugWindow.txt
 old_src/
 src/old_core/
+node_modules/
+bun.lock
 
 glad.zip
 /Box_test.ppm

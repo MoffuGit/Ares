@@ -17,10 +17,9 @@
 		"noFallthroughCasesInSwitch": true,
         "baseUrl": ".",
             "paths": {
-	        "@/*": ["./src/mainview/*"],
-	        "@core/*": ["../core/*"]
+	        "@/*": ["./src/mainview/*"]
         }
 	},
 	"include": ["src"],
-	"exclude": ["node_modules", "dist", "build", "../../package/dist"]
+	"exclude": ["node_modules", "dist", "build"]
 }
