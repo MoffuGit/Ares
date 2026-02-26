@@ -45,4 +45,5 @@ export fn destroyMonitor(monitor: *Monitor) void {
 test {
     _ = @import("keymaps/mod.zig");
     _ = @import("monitor/mod.zig");
+    _ = @import("worktree/mod.zig");
 }

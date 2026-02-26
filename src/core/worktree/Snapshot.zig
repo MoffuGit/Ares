@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const BPlusTree = @import("datastruct").BPlusTree;
 
-const Stat = @import("../io/mod.zig").Stat;
+pub const Stat = @import("../io/mod.zig").Stat;
 
 pub const Entries = BPlusTree([]const u8, Entry, entryOrder);
 fn entryOrder(a: []const u8, b: []const u8) std.math.Order {

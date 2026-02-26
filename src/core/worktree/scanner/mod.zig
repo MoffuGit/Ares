@@ -1,4 +1,5 @@
 const std = @import("std");
+const fs = std.fs;
 const builtin = @import("builtin");
 const fmt = std.fmt;
 const worktreepkg = @import("../mod.zig");
@@ -398,4 +399,32 @@ pub const UpdatedEntriesSet = struct {
     }
 };
 
-test "scan file" {}
+test "scan single file" {
+    const test_file_path = "test.txt";
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const log = std.log;
+
+    var file = try fs.cwd().createFile(test_file_path, .{});
+    defer {
+        file.close();
+        fs.cwd().deleteFile(test_file_path) catch {};
+    }
+
+    const abs_path = try fs.cwd().realpathAlloc(alloc, test_file_path);
+    defer alloc.free(abs_path);
+
+    var snapshot = try Snapshot.init(alloc);
+    defer snapshot.deinit();
+
+    var scanner = try Scanner.init(alloc, undefined, &snapshot, abs_path);
+    defer scanner.deinit();
+
+    try scanner.initial_scan();
+
+    var iter = snapshot.entries.iter();
+
+    while (iter.next()) |entry| {
+        log.err("key: {s}", .{entry.key});
+    }
+}
