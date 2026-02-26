@@ -24,12 +24,6 @@ export fn createIo() ?*Io {
     return Io.create(global.state.alloc) catch null;
 }
 
-//NOTE:
-//this needs to be ffi compatible, maybe i will not use it,
-//in teory almost all the io should happen using the project
-//but is not bad having this function avaiable
-// export fn readFile(io: *Io, abs_path, userdata, callback) !void {}
-
 export fn destroyIo(io: *Io) void {
     io.destroy();
 }

@@ -29,10 +29,19 @@ pub fn build(b: *std.Build) void {
 
     const desktop = b.addSystemCommand(&.{ "bun", "run", "dev:hmr" });
     desktop.setCwd(b.path("src/desktop"));
-    desktop.step.dependOn(&lib.step);
 
     const desktop_step = b.step("desktop", "Build desktop lib and run the Electrobun application");
+    desktop.step.dependOn(b.getInstallStep());
     desktop_step.dependOn(&desktop.step);
+    desktop.step.dependOn(&lib.step);
+
+    const tui = b.addSystemCommand(&.{ "bun", "run", "dev" });
+    tui.setCwd(b.path("src/tui"));
+
+    const tui_step = b.step("tui", "Build tui lib and run the opentui application");
+    tui_step.dependOn(b.getInstallStep());
+    tui_step.dependOn(&tui.step);
+    tui_step.dependOn(&lib.step);
 
     // // ── Tests ──
     const test_filter = b.option([]const u8, "test-filter", "Filter for tests");
