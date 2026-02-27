@@ -6,12 +6,16 @@ pub const EventType = enum {
     settings_update,
 };
 
-pub const Event = union(EventType) { settings_update: null };
+pub const Event = union(EventType) {
+    settings_update: void,
+};
 
 pub const AnyEvent = struct {
+    const MAX_DATA_SIZE = 256;
+
     _type: u8,
-    //data: bytes
-    //len: len of the bytes
+    len: u8 = 0,
+    ptr: ?[MAX_DATA_SIZE]u8 = null,
 };
 
 pub const MailBox = BlockingQueue(AnyEvent, 64);
@@ -22,15 +26,14 @@ mailbox: MailBox = .{},
 
 pub fn push(self: *Bus, event: Event) void {
     const any = AnyEvent{ ._type = @intFromEnum(event) };
-    // var ev: Event = .{
-    //     .event_type = event,
-    //     .data_len = @intCast(data.len),
-    // };
-    // @memcpy(ev.data[0..data.len], data);
-    //
+
+    switch (event) {
+        .settings_update => {},
+    }
+
     _ = self.mailbox.push(any, .instant);
 }
-//
+
 pub fn drain(self: *Bus) void {
     const cb = self.callback orelse return;
 
@@ -38,6 +41,6 @@ pub fn drain(self: *Bus) void {
     defer it.deinit();
 
     while (it.next()) |ev| {
-        cb(@intFromEnum(ev.event_type), null, 0);
+        cb(ev._type, ev.ptr, ev.len);
     }
 }

@@ -25,11 +25,9 @@ export fn destroySettings(settings: *Settings) void {
     settings.destroy();
 }
 
-//TODO:
-//update the ts bindings
-// export fn loadSettings(settings: *Settings, path: [*]const u8, len: u64, monitor: *Monitor) void {
-//     settings.load(path) catch {};
-// }
+export fn loadSettings(settings: *Settings, path: [*]const u8, len: u64, monitor: *Monitor) void {
+    settings.load(path[0..len], monitor) catch {};
+}
 
 export fn createIo() ?*Io {
     return Io.create(global.state.alloc) catch null;

@@ -27,6 +27,10 @@ function getCoreLib() {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
+            loadSettings: {
+                args: [FFIType.pointer, FFIType.pointer, FFIType.u64, FFIType.pointer],
+                returns: FFIType.void,
+            },
             createIo: {
                 args: [],
                 returns: FFIType.pointer,
@@ -113,6 +117,11 @@ export class CoreLib {
 
     destroySettings(handle: Pointer): void {
         this.lib.symbols.destroySettings(handle);
+    }
+
+    loadSettings(settings: Pointer, path: string, monitor: Pointer): void {
+        const buf = new TextEncoder().encode(path);
+        this.lib.symbols.loadSettings(settings, buf, buf.byteLength, monitor);
     }
 
     createIo(): Pointer | null {

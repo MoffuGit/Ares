@@ -82,9 +82,8 @@ fn onReadComplete(userdata: ?*anyopaque, file: ?Io.File) void {
             log.err("read failed for entry_id={}", .{entry_id});
         }
     } else {
-        if (file) |f| {
-            var tmp = f;
-            tmp.deinit();
+        if (file) |*f| {
+            f.deinit();
         }
     }
 }
