@@ -11,6 +11,10 @@ function getCoreLib() {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
+            deinitState: {
+                args: [],
+                returns: FFIType.void,
+            },
             drainEvents: {
                 args: [],
                 returns: FFIType.void,
@@ -92,6 +96,10 @@ export class CoreLib {
         }
 
         this.lib.symbols.initState(this.jsCallback.ptr);
+    }
+
+    deinitState(): void {
+        this.lib.symbols.deinitState();
     }
 
     drainEvents(): void {
