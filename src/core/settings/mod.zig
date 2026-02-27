@@ -6,6 +6,7 @@ const Keymaps = keymapspkg.Keymaps;
 const Action = keymapspkg.Action;
 const KeyStroke = @import("../keymaps/KeyStroke.zig").KeyStroke;
 const parseSequence = @import("../keymaps/KeyStroke.zig").parseSequence;
+const Monitor = @import("../monitor/mod.zig");
 
 pub const Settings = @This();
 
@@ -49,6 +50,9 @@ keymaps: Keymaps = .{ .tries = undefined },
 keymaps_initialized: bool = false,
 keymap_generation: u64 = 0,
 
+settings_watcher: u64 = 0,
+theme_watcher: u64 = 0,
+
 binding_map: std.AutoHashMapUnmanaged(u32, []const u8) = .{},
 
 pub fn create(alloc: Allocator) !*Settings {
@@ -78,16 +82,26 @@ pub fn destroy(self: *Settings) void {
     self.alloc.destroy(self);
 }
 
-pub fn load(self: *Settings, path: []const u8) !void {
+pub fn load(self: *Settings, path: []const u8, monitor: *Monitor) !void {
     var dir = std.fs.openDirAbsolute(path, .{}) catch return LoadError.SettingsNotFound;
     defer dir.close();
 
+    self.settings_watcher = try monitor.watchPath(path, Settings, self, settingsCallback);
+
+    const themes_dir = try dir.realpathAlloc(self.alloc, "themes/");
+    defer self.alloc.free(themes_dir);
+
     const settings_error = self.loadSettings(dir);
+
+    self.theme_watcher = try monitor.watchPath(themes_dir, Settings, self, themeCallback);
 
     try self.loadThemes(dir);
 
     if (settings_error) |err| return err;
 }
+
+fn settingsCallback(self: ?*Settings, watcher: u64, event: u32) void {}
+fn themeCallback(self: ?*Settings, watcher: u64, event: u32) void {}
 
 fn loadThemes(self: *Settings, dir: std.fs.Dir) LoadError!void {
     const theme_names = [_][]const u8{
