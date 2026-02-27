@@ -6,7 +6,7 @@ pub const EventType = enum {
     settings_update,
 };
 
-pub const Event = union(EventType) { settings_update: void };
+pub const Event = union(EventType) { settings_update: null };
 
 pub const AnyEvent = struct {
     _type: u8,
@@ -16,7 +16,7 @@ pub const AnyEvent = struct {
 
 pub const MailBox = BlockingQueue(AnyEvent, 64);
 
-pub const JsCallback = *const fn (event: u8, dataPtr: ?[*]const u8, dataLen: usize) callconv(.c) void;
+pub const JsCallback = *const fn (event: u8, ptr: ?[*]const u8, dataLen: usize) callconv(.c) void;
 callback: ?JsCallback = null,
 queue: MailBox = .{},
 

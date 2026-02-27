@@ -1,24 +1,7 @@
 import { dlopen, FFIType, JSCallback, toArrayBuffer, type Pointer } from "bun:ffi";
-// import { defineStruct, type StructDef } from "bun-ffi-structs";
 import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
-
-// export enum EventType {
-//     TestData = 1,
-// }
-//
-// export const TestDataStruct = defineStruct([
-//     ["id", "u64"],
-//     ["allocated", "pointer"],
-// ]);
-//
-// const eventStructs: Record<EventType, StructDef<any>> = {
-//     [EventType.TestData]: TestDataStruct,
-// };
-//
-// export type EventDataMap = {
-//     [EventType.TestData]: ReturnType<typeof TestDataStruct.unpack>;
-// };
+import { EventType, Events } from "./structs";
 
 function getCoreLib() {
     const symbols = dlopen(
@@ -90,16 +73,24 @@ export class CoreLib implements Core {
     initState(): void {
         const emitter = this._events;
         this.jsCallback = new JSCallback(
-            function handleEvent(event: number, dataPtr: Pointer, dataLen: number): void {
-                // const eventType = event as EventType;
-                // const structDef = eventStructs[eventType];
-                // if (structDef) {
-                //     const data = structDef.unpack(toArrayBuffer(dataPtr, 0, Number(dataLen)));
-                //     const event = eventType.toString();
-                //     queueMicrotask(() => {
-                //         emitter.emit(event, data);
-                //     })
-                // }
+            function handleEvent(event: number, ptr: Pointer | null, len: number | bigint): void {
+                const _len = typeof len === "bigint" ? Number(len) : len;
+                const _type = event as EventType;
+                const data_type = Events[_type];
+
+                if (data_type == null) {
+                    const event = _type.toString();
+                    queueMicrotask(() => {
+                        emitter.emit(event);
+                    })
+                } else if (data_type != null && ptr != null && _len != 0) {
+                    const data = data_type.unpack(toArrayBuffer(ptr, 0, Number(_len)));
+                    const event = _type.toString();
+                    queueMicrotask(() => {
+                        emitter.emit(event, data);
+                    })
+
+                }
             },
             {
                 args: [FFIType.u8, FFIType.pointer, FFIType.u64],
