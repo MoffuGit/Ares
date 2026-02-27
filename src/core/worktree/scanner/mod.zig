@@ -399,32 +399,326 @@ pub const UpdatedEntriesSet = struct {
     }
 };
 
-test "scan single file" {
-    const test_file_path = "test.txt";
-    const testing = std.testing;
+const testing = std.testing;
+
+fn testInit(alloc: Allocator, snapshot: *Snapshot, abs_path: []const u8) !Scanner {
+    return Scanner.init(alloc, undefined, snapshot, abs_path);
+}
+
+test "initial_scan single file" {
     const alloc = testing.allocator;
-    const log = std.log;
 
-    var file = try fs.cwd().createFile(test_file_path, .{});
-    defer {
-        file.close();
-        fs.cwd().deleteFile(test_file_path) catch {};
-    }
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
 
-    const abs_path = try fs.cwd().realpathAlloc(alloc, test_file_path);
-    defer alloc.free(abs_path);
+    (try tmp.dir.createFile("test.zig", .{})).close();
+
+    const abs_file = try tmp.dir.realpathAlloc(alloc, "test.zig");
+    defer alloc.free(abs_file);
 
     var snapshot = try Snapshot.init(alloc);
     defer snapshot.deinit();
 
-    var scanner = try Scanner.init(alloc, undefined, &snapshot, abs_path);
+    var scanner = try testInit(alloc, &snapshot, abs_file);
     defer scanner.deinit();
 
     try scanner.initial_scan();
 
-    var iter = snapshot.entries.iter();
+    try testing.expectEqual(@as(usize, 1), snapshot.id_to_path.count());
+    const entry = try snapshot.entries.get("test.zig");
+    try testing.expectEqual(Kind.file, entry.kind);
+    try testing.expectEqual(FileType.zig, entry.file_type);
+}
 
-    while (iter.next()) |entry| {
-        log.err("key: {s}", .{entry.key});
+test "initial_scan directory contents" {
+    const alloc = testing.allocator;
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    (try tmp.dir.createFile("hello.zig", .{})).close();
+    (try tmp.dir.createFile("world.txt", .{})).close();
+
+    var path_buf: [fs.max_path_bytes]u8 = undefined;
+    const abs_path = try tmp.dir.realpath(".", &path_buf);
+
+    var snapshot = try Snapshot.init(alloc);
+    defer snapshot.deinit();
+
+    var scanner = try testInit(alloc, &snapshot, abs_path);
+    defer scanner.deinit();
+
+    try scanner.initial_scan();
+
+    const root_name = fs.path.basename(abs_path);
+
+    const root = try snapshot.entries.get(root_name);
+    try testing.expectEqual(Kind.dir, root.kind);
+
+    var buf1: [fs.max_path_bytes]u8 = undefined;
+    const zig_path = try fmt.bufPrint(&buf1, "{s}/hello.zig", .{root_name});
+    const zig_entry = try snapshot.entries.get(zig_path);
+    try testing.expectEqual(Kind.file, zig_entry.kind);
+    try testing.expectEqual(FileType.zig, zig_entry.file_type);
+
+    var buf2: [fs.max_path_bytes]u8 = undefined;
+    const txt_path = try fmt.bufPrint(&buf2, "{s}/world.txt", .{root_name});
+    const txt_entry = try snapshot.entries.get(txt_path);
+    try testing.expectEqual(Kind.file, txt_entry.kind);
+    try testing.expectEqual(FileType.txt, txt_entry.file_type);
+
+    try testing.expectEqual(@as(usize, 3), snapshot.id_to_path.count());
+}
+
+test "initial_scan nested directories" {
+    const alloc = testing.allocator;
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.makeDir("sub");
+    (try tmp.dir.createFile("sub/nested.go", .{})).close();
+    try tmp.dir.makePath("sub/deep");
+    (try tmp.dir.createFile("sub/deep/leaf.py", .{})).close();
+
+    var path_buf: [fs.max_path_bytes]u8 = undefined;
+    const abs_path = try tmp.dir.realpath(".", &path_buf);
+
+    var snapshot = try Snapshot.init(alloc);
+    defer snapshot.deinit();
+
+    var scanner = try testInit(alloc, &snapshot, abs_path);
+    defer scanner.deinit();
+
+    try scanner.initial_scan();
+
+    const root_name = fs.path.basename(abs_path);
+
+    var buf1: [fs.max_path_bytes]u8 = undefined;
+    const nested_path = try fmt.bufPrint(&buf1, "{s}/sub/nested.go", .{root_name});
+    const nested = try snapshot.entries.get(nested_path);
+    try testing.expectEqual(Kind.file, nested.kind);
+    try testing.expectEqual(FileType.go, nested.file_type);
+
+    var buf2: [fs.max_path_bytes]u8 = undefined;
+    const deep_path = try fmt.bufPrint(&buf2, "{s}/sub/deep/leaf.py", .{root_name});
+    const deep = try snapshot.entries.get(deep_path);
+    try testing.expectEqual(Kind.file, deep.kind);
+    try testing.expectEqual(FileType.py, deep.file_type);
+
+    // root + sub + sub/deep + nested.go + leaf.py = 5
+    try testing.expectEqual(@as(usize, 5), snapshot.id_to_path.count());
+}
+//
+test "initial_scan populates stat" {
+    const alloc = testing.allocator;
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    {
+        const f = try tmp.dir.createFile("data.txt", .{});
+        try f.writeAll("hello world");
+        f.close();
     }
+
+    var path_buf: [fs.max_path_bytes]u8 = undefined;
+    const abs_path = try tmp.dir.realpath(".", &path_buf);
+
+    var snapshot = try Snapshot.init(alloc);
+    defer snapshot.deinit();
+
+    var scanner = try testInit(alloc, &snapshot, abs_path);
+    defer scanner.deinit();
+
+    try scanner.initial_scan();
+
+    const root_name = fs.path.basename(abs_path);
+    var buf: [fs.max_path_bytes]u8 = undefined;
+    const file_path = try fmt.bufPrint(&buf, "{s}/data.txt", .{root_name});
+    const entry = try snapshot.entries.get(file_path);
+    try testing.expectEqual(@as(u64, 11), entry.stat.size);
+    try testing.expect(entry.stat.mtime != 0);
+}
+//
+test "process_scan_by_id scans specific directory" {
+    const alloc = testing.allocator;
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.makeDir("target");
+    (try tmp.dir.createFile("target/file.lua", .{})).close();
+
+    var path_buf: [fs.max_path_bytes]u8 = undefined;
+    const abs_path = try tmp.dir.realpath(".", &path_buf);
+
+    var snapshot = try Snapshot.init(alloc);
+    defer snapshot.deinit();
+
+    var scanner = try testInit(alloc, &snapshot, abs_path);
+    defer scanner.deinit();
+
+    const root_name = fs.path.basename(abs_path);
+    const dir_id = snapshot.newId();
+    {
+        snapshot.mutex.lock();
+        defer snapshot.mutex.unlock();
+
+        const dir_rel = try snapshot.internPath(root_name, "target");
+        var abs_buf: [fs.max_path_bytes]u8 = undefined;
+        const dir_abs = try snapshot.internPathSingle(try fmt.bufPrint(&abs_buf, "{s}/target", .{abs_path}));
+        try snapshot.insertInterned(dir_id, dir_rel, dir_abs, .dir, .unknown, .{});
+    }
+
+    try scanner.process_scan_by_id(dir_id);
+
+    var buf: [fs.max_path_bytes]u8 = undefined;
+    const child_path = try fmt.bufPrint(&buf, "{s}/target/file.lua", .{root_name});
+    const child = try snapshot.entries.get(child_path);
+    try testing.expectEqual(Kind.file, child.kind);
+    try testing.expectEqual(FileType.lua, child.file_type);
+}
+
+test "process_events detects new files" {
+    const alloc = testing.allocator;
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    (try tmp.dir.createFile("original.zig", .{})).close();
+
+    var path_buf: [fs.max_path_bytes]u8 = undefined;
+    const abs_path = try tmp.dir.realpath(".", &path_buf);
+
+    var snapshot = try Snapshot.init(alloc);
+    defer snapshot.deinit();
+
+    var scanner = try testInit(alloc, &snapshot, abs_path);
+    defer scanner.deinit();
+
+    try scanner.initial_scan();
+
+    const root_name = fs.path.basename(abs_path);
+    const root = try snapshot.entries.get(root_name);
+    const root_id = root.id;
+
+    // Add a new file after initial scan
+    (try tmp.dir.createFile("added.rs", .{})).close();
+
+    const result = try scanner.process_events(&.{root_id});
+    defer result.destroy();
+
+    var found_add = false;
+    for (result.updates.items) |update| {
+        switch (update) {
+            .add => |a| {
+                if (a.kind == .file) found_add = true;
+            },
+            else => {},
+        }
+    }
+    try testing.expect(found_add);
+
+    // Verify the new file is in the snapshot
+    var buf: [fs.max_path_bytes]u8 = undefined;
+    const added_path = try fmt.bufPrint(&buf, "{s}/added.rs", .{root_name});
+    const added = try snapshot.entries.get(added_path);
+    try testing.expectEqual(Kind.file, added.kind);
+    try testing.expectEqual(FileType.rs, added.file_type);
+}
+
+test "process_events detects deleted files" {
+    const alloc = testing.allocator;
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    (try tmp.dir.createFile("keep.zig", .{})).close();
+    (try tmp.dir.createFile("remove.txt", .{})).close();
+
+    var path_buf: [fs.max_path_bytes]u8 = undefined;
+    const abs_path = try tmp.dir.realpath(".", &path_buf);
+
+    var snapshot = try Snapshot.init(alloc);
+    defer snapshot.deinit();
+
+    var scanner = try testInit(alloc, &snapshot, abs_path);
+    defer scanner.deinit();
+
+    try scanner.initial_scan();
+
+    const root_name = fs.path.basename(abs_path);
+    const root = try snapshot.entries.get(root_name);
+
+    // Delete the file
+    try tmp.dir.deleteFile("remove.txt");
+
+    const result = try scanner.process_events(&.{root.id});
+    defer result.destroy();
+
+    var found_delete = false;
+    for (result.updates.items) |update| {
+        switch (update) {
+            .delete => {
+                found_delete = true;
+            },
+            else => {},
+        }
+    }
+    try testing.expect(found_delete);
+
+    // Verify deleted file is gone from snapshot
+    var buf: [fs.max_path_bytes]u8 = undefined;
+    const removed_path = try fmt.bufPrint(&buf, "{s}/remove.txt", .{root_name});
+    const removed = snapshot.entries.get(removed_path) catch null;
+    try testing.expect(removed == null);
+}
+
+test "process_events detects modified files" {
+    const alloc = testing.allocator;
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    {
+        const f = try tmp.dir.createFile("data.txt", .{});
+        try f.writeAll("short");
+        f.close();
+    }
+
+    var path_buf: [fs.max_path_bytes]u8 = undefined;
+    const abs_path = try tmp.dir.realpath(".", &path_buf);
+
+    var snapshot = try Snapshot.init(alloc);
+    defer snapshot.deinit();
+
+    var scanner = try testInit(alloc, &snapshot, abs_path);
+    defer scanner.deinit();
+
+    try scanner.initial_scan();
+
+    const root_name = fs.path.basename(abs_path);
+    const root = try snapshot.entries.get(root_name);
+
+    // Modify the file with different content size
+    {
+        const f = try tmp.dir.createFile("data.txt", .{ .truncate = true });
+        try f.writeAll("much longer content here");
+        f.close();
+    }
+
+    const result = try scanner.process_events(&.{root.id});
+    defer result.destroy();
+
+    var found_update = false;
+    for (result.updates.items) |update| {
+        switch (update) {
+            .update => {
+                found_update = true;
+            },
+            else => {},
+        }
+    }
+    try testing.expect(found_update);
 }

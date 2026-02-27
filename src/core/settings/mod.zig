@@ -78,74 +78,69 @@ pub fn destroy(self: *Settings) void {
     self.alloc.destroy(self);
 }
 
-pub fn load(self: *Settings, path: []const u8) LoadError!void {
-    var settings_error: ?LoadError = null;
+pub fn load(self: *Settings, path: []const u8) !void {
+    var dir = std.fs.openDirAbsolute(path, .{}) catch return LoadError.SettingsNotFound;
+    defer dir.close();
 
-    const file = std.fs.path.join(self.alloc, &.{ path, "settings.json" }) catch return LoadError.OutOfMemory;
-    defer self.alloc.free(file);
+    const settings_error = self.loadSettings(dir);
 
-    const json_str = std.fs.cwd().readFileAlloc(self.alloc, file, 1024 * 1024) catch |err| blk: {
-        settings_error = switch (err) {
-            error.FileNotFound => LoadError.SettingsNotFound,
-            else => LoadError.SettingsNotFound,
-        };
-        break :blk null;
+    try self.loadThemes(dir);
+
+    if (settings_error) |err| return err;
+}
+
+fn loadThemes(self: *Settings, dir: std.fs.Dir) LoadError!void {
+    const theme_names = [_][]const u8{
+        self.light_theme,
+        self.dark_theme,
     };
-    defer if (json_str) |str| self.alloc.free(str);
 
-    if (json_str) |str| parse_settings: {
-        const parsed = std.json.parseFromSlice(JsonSettings, self.alloc, str, .{ .allocate = .alloc_always }) catch {
-            settings_error = LoadError.InvalidSettings;
-            break :parse_settings;
-        };
-        defer parsed.deinit();
+    var themes_dir = dir.openDir("themes", .{}) catch null;
+    defer if (themes_dir) |*d| d.close();
 
-        const json_settings = parsed.value;
+    for (theme_names) |name| {
+        if (name.len == 0) continue;
+        if (self.themes.get(name) != null) continue;
 
-        if (self.dark_theme.ptr != DEFAULT_DARK.ptr) self.alloc.free(self.dark_theme);
-        if (self.light_theme.ptr != DEFAULT_LIGHT.ptr) self.alloc.free(self.light_theme);
+        const td = themes_dir orelse continue;
 
-        self.dark_theme = self.alloc.dupe(u8, json_settings.dark_theme) catch DEFAULT_DARK;
-        self.light_theme = self.alloc.dupe(u8, json_settings.light_theme) catch DEFAULT_LIGHT;
-        self.scheme = std.meta.stringToEnum(Scheme, json_settings.appearance) orelse .system;
+        const theme_with_ext = std.mem.concat(self.alloc, u8, &.{ name, ".json" }) catch return LoadError.OutOfMemory;
+        defer self.alloc.free(theme_with_ext);
 
-        if (json_settings.keymaps) |km_json| {
-            self.loadKeymaps(km_json);
-        }
+        const theme_content = td.readFileAlloc(self.alloc, theme_with_ext, 1024 * 1024) catch continue;
+        defer self.alloc.free(theme_content);
+
+        const theme = Theme.parse(self.alloc, theme_content) catch continue;
+
+        self.themes.put(self.alloc, theme.name, theme) catch continue;
+    }
+
+    self.applyTheme();
+}
+
+fn loadSettings(self: *Settings, dir: std.fs.Dir) !void {
+    const json_str = try dir.readFileAlloc(self.alloc, "settings.json", 1024 * 1024);
+    defer self.alloc.free(json_str);
+
+    const parsed = try std.json.parseFromSlice(JsonSettings, self.alloc, json_str, .{ .allocate = .alloc_always });
+    defer parsed.deinit();
+
+    const json_settings = parsed.value;
+
+    if (self.dark_theme.ptr != DEFAULT_DARK.ptr) self.alloc.free(self.dark_theme);
+    if (self.light_theme.ptr != DEFAULT_LIGHT.ptr) self.alloc.free(self.light_theme);
+
+    self.dark_theme = self.alloc.dupe(u8, json_settings.dark_theme) catch DEFAULT_DARK;
+    self.light_theme = self.alloc.dupe(u8, json_settings.light_theme) catch DEFAULT_LIGHT;
+    self.scheme = std.meta.stringToEnum(Scheme, json_settings.appearance) orelse .system;
+
+    if (json_settings.keymaps) |km_json| {
+        self.loadKeymaps(km_json);
     }
 
     if (!self.keymaps_initialized) {
         self.loadDefaultKeymaps();
     }
-
-    {
-        const theme_names = [_][]const u8{
-            self.light_theme,
-            self.dark_theme,
-        };
-
-        for (theme_names) |name| {
-            if (name.len == 0) continue;
-            if (self.themes.get(name) != null) continue;
-
-            const theme_file = std.fs.path.join(self.alloc, &.{ path, "themes", name }) catch return LoadError.OutOfMemory;
-            defer self.alloc.free(theme_file);
-
-            const theme_with_ext = std.mem.concat(self.alloc, u8, &.{ theme_file, ".json" }) catch return LoadError.OutOfMemory;
-            defer self.alloc.free(theme_with_ext);
-
-            const theme_content = std.fs.cwd().readFileAlloc(self.alloc, theme_with_ext, 1024 * 1024) catch continue;
-            defer self.alloc.free(theme_content);
-
-            const theme = Theme.parse(self.alloc, theme_content) catch continue;
-
-            self.themes.put(self.alloc, theme.name, theme) catch continue;
-        }
-
-        self.applyTheme();
-    }
-
-    if (settings_error) |err| return err;
 }
 
 pub fn getTheme(self: *Settings) *const Theme {
@@ -260,7 +255,7 @@ fn loadDefaultKeymaps(self: *Settings) void {
         .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = '\r', .mods = .{} }}, .action = .{ .command = .select } },
         .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'u', .mods = .{ .ctrl = true } }}, .action = .{ .command = .scroll_up } },
         .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'd', .mods = .{ .ctrl = true } }}, .action = .{ .command = .scroll_down } },
-        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'g', .mods = .{} }, .{ .codepoint = 'g', .mods = .{} }}, .action = .{ .command = .top } },
+        .{ .scope = .command_palette, .mode = .normal, .seq = &.{ .{ .codepoint = 'g', .mods = .{} }, .{ .codepoint = 'g', .mods = .{} } }, .action = .{ .command = .top } },
         .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'G', .mods = .{ .shift = true } }}, .action = .{ .command = .bottom } },
     };
 
@@ -295,4 +290,76 @@ pub fn keymapBindingString(self: *Settings, action: Action) ?[]const u8 {
 
 test {
     _ = Theme;
+}
+
+test "loadSettings parses settings.json" {
+    const alloc = std.testing.allocator;
+    var self = Settings{
+        .alloc = alloc,
+    };
+    self.theme = &self.active_theme;
+    defer {
+        if (self.light_theme.ptr != DEFAULT_LIGHT.ptr) alloc.free(self.light_theme);
+        if (self.dark_theme.ptr != DEFAULT_DARK.ptr) alloc.free(self.dark_theme);
+        if (self.keymaps_initialized) self.keymaps.deinit();
+        self.clearBindingMap();
+        self.binding_map.deinit(alloc);
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const json =
+        \\{"appearance":"dark","light_theme":"my_light","dark_theme":"my_dark"}
+    ;
+    tmp.dir.writeFile(.{ .sub_path = "settings.json", .data = json }) catch unreachable;
+
+    self.loadSettings(tmp.dir) catch |err| {
+        std.debug.panic("loadSettings failed: {}", .{err});
+    };
+
+    try std.testing.expectEqual(Scheme.dark, self.scheme);
+    try std.testing.expectEqualStrings("my_light", self.light_theme);
+    try std.testing.expectEqualStrings("my_dark", self.dark_theme);
+    try std.testing.expect(self.keymaps_initialized);
+}
+
+test "loadSettings returns error for missing settings.json" {
+    const alloc = std.testing.allocator;
+    var self = Settings{
+        .alloc = alloc,
+    };
+    self.theme = &self.active_theme;
+    defer {
+        if (self.keymaps_initialized) self.keymaps.deinit();
+        self.clearBindingMap();
+        self.binding_map.deinit(alloc);
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const result = self.loadSettings(tmp.dir);
+    try std.testing.expectError(error.FileNotFound, result);
+}
+
+test "loadSettings returns error for invalid json" {
+    const alloc = std.testing.allocator;
+    var self = Settings{
+        .alloc = alloc,
+    };
+    self.theme = &self.active_theme;
+    defer {
+        if (self.keymaps_initialized) self.keymaps.deinit();
+        self.clearBindingMap();
+        self.binding_map.deinit(alloc);
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    tmp.dir.writeFile(.{ .sub_path = "settings.json", .data = "not valid json" }) catch unreachable;
+
+    const result = self.loadSettings(tmp.dir);
+    try std.testing.expectError(error.SyntaxError, result);
 }

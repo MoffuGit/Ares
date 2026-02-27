@@ -1,24 +1,24 @@
 import { dlopen, FFIType, JSCallback, toArrayBuffer, type Pointer } from "bun:ffi";
-import { defineStruct, type StructDef } from "bun-ffi-structs";
+// import { defineStruct, type StructDef } from "bun-ffi-structs";
 import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
 
-export enum EventType {
-    TestData = 1,
-}
-
-export const TestDataStruct = defineStruct([
-    ["id", "u64"],
-    ["allocated", "pointer"],
-]);
-
-const eventStructs: Record<EventType, StructDef<any>> = {
-    [EventType.TestData]: TestDataStruct,
-};
-
-export type EventDataMap = {
-    [EventType.TestData]: ReturnType<typeof TestDataStruct.unpack>;
-};
+// export enum EventType {
+//     TestData = 1,
+// }
+//
+// export const TestDataStruct = defineStruct([
+//     ["id", "u64"],
+//     ["allocated", "pointer"],
+// ]);
+//
+// const eventStructs: Record<EventType, StructDef<any>> = {
+//     [EventType.TestData]: TestDataStruct,
+// };
+//
+// export type EventDataMap = {
+//     [EventType.TestData]: ReturnType<typeof TestDataStruct.unpack>;
+// };
 
 function getCoreLib() {
     const symbols = dlopen(
@@ -29,10 +29,6 @@ function getCoreLib() {
                 returns: FFIType.void,
             },
             pollEvents: {
-                args: [],
-                returns: FFIType.void,
-            },
-            startLoop: {
                 args: [],
                 returns: FFIType.void,
             },
@@ -60,10 +56,6 @@ function getCoreLib() {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
-            destroyAllocated: {
-                args: [FFIType.pointer],
-                returns: FFIType.void,
-            },
         },
     );
 
@@ -71,17 +63,14 @@ function getCoreLib() {
 }
 
 export interface Core {
-    events: EventEmitter;
     initState(): void;
     pollEvents(): void;
-    startLoop(): void;
     createSettings(): Pointer | null;
     destroySettings(handle: Pointer): void;
     createIo(): Pointer | null;
     destroyIo(handle: Pointer): void;
     createMonitor(): Pointer | null;
     destroyMonitor(handle: Pointer): void;
-    destroyAllocated(handle: number | bigint): void;
 }
 
 export class CoreLib implements Core {
@@ -102,15 +91,15 @@ export class CoreLib implements Core {
         const emitter = this._events;
         this.jsCallback = new JSCallback(
             function handleEvent(event: number, dataPtr: Pointer, dataLen: number): void {
-                const eventType = event as EventType;
-                const structDef = eventStructs[eventType];
-                if (structDef) {
-                    const data = structDef.unpack(toArrayBuffer(dataPtr, 0, Number(dataLen)));
-                    const event = eventType.toString();
-                    queueMicrotask(() => {
-                        emitter.emit(event, data);
-                    })
-                }
+                // const eventType = event as EventType;
+                // const structDef = eventStructs[eventType];
+                // if (structDef) {
+                //     const data = structDef.unpack(toArrayBuffer(dataPtr, 0, Number(dataLen)));
+                //     const event = eventType.toString();
+                //     queueMicrotask(() => {
+                //         emitter.emit(event, data);
+                //     })
+                // }
             },
             {
                 args: [FFIType.u8, FFIType.pointer, FFIType.u64],
@@ -124,9 +113,6 @@ export class CoreLib implements Core {
         this.lib.symbols.pollEvents();
     }
 
-    startLoop(): void {
-        this.lib.symbols.startLoop();
-    }
 
     createSettings(): Pointer | null {
         return this.lib.symbols.createSettings() as Pointer | null;
@@ -152,9 +138,6 @@ export class CoreLib implements Core {
         this.lib.symbols.destroyMonitor(handle);
     }
 
-    destroyAllocated(handle: number | bigint): void {
-        this.lib.symbols.destroyAllocated(handle as Pointer);
-    }
 }
 
 let coreLib: CoreLib | undefined
