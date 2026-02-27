@@ -18,7 +18,7 @@ pub const MailBox = BlockingQueue(AnyEvent, 64);
 
 pub const JsCallback = *const fn (event: u8, ptr: ?[*]const u8, dataLen: usize) callconv(.c) void;
 callback: ?JsCallback = null,
-queue: MailBox = .{},
+mailbox: MailBox = .{},
 
 pub fn push(self: *Bus, event: Event) void {
     const any = AnyEvent{ ._type = @intFromEnum(event) };
@@ -28,13 +28,13 @@ pub fn push(self: *Bus, event: Event) void {
     // };
     // @memcpy(ev.data[0..data.len], data);
     //
-    _ = self.queue.push(any, .instant);
+    _ = self.mailbox.push(any, .instant);
 }
 //
 pub fn drain(self: *Bus) void {
     const cb = self.callback orelse return;
 
-    var it = self.queue.drain();
+    var it = self.mailbox.drain();
     defer it.deinit();
 
     while (it.next()) |ev| {
