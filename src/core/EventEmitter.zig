@@ -2,8 +2,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 pub fn EventEmitter(comptime EventType: type) type {
-    if (@typeInfo(EventType) != .@"enum") {
-        @compileError("EventType must be an enum");
+    if (@typeInfo(EventType) != .@"union") {
+        @compileError("EventType must be an union");
     }
 
     return struct {
