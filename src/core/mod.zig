@@ -37,8 +37,7 @@ pub const SettingsView = extern struct {
     dark_theme_len: usize,
 };
 
-export fn readSettings(settings: *Settings, buf: [*]u8, buf_len: usize) usize {
-    if (buf_len < @sizeOf(SettingsView)) return 0;
+export fn readSettings(settings: *Settings, buf: [*]u8) void {
     const view: *SettingsView = @ptrCast(@alignCast(buf));
     view.* = .{
         .scheme = @intFromEnum(settings.scheme),
@@ -47,7 +46,6 @@ export fn readSettings(settings: *Settings, buf: [*]u8, buf_len: usize) usize {
         .dark_theme_ptr = @intFromPtr(settings.dark_theme.ptr),
         .dark_theme_len = settings.dark_theme.len,
     };
-    return @sizeOf(SettingsView);
 }
 
 export fn createIo() ?*Io {

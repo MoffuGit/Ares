@@ -34,8 +34,8 @@ function getCoreLib() {
                 returns: FFIType.void,
             },
             readSettings: {
-                args: [FFIType.pointer, FFIType.pointer, FFIType.u64],
-                returns: FFIType.u64,
+                args: [FFIType.pointer, FFIType.pointer],
+                returns: FFIType.void,
             },
             createIo: {
                 args: [],
@@ -132,7 +132,7 @@ export class CoreLib {
 
     readSettings(settings: Pointer) {
         const buf = new ArrayBuffer(SettingsView.size);
-        this.lib.symbols.readSettings(settings, ptr(buf), buf.byteLength);
+        this.lib.symbols.readSettings(settings, ptr(buf));
         return SettingsView.unpack(buf);
     }
 
