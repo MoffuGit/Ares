@@ -1,9 +1,7 @@
 import { createCliRenderer, TextAttributes } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { initState } from "@ares/core";
 
 function App() {
-    initState()
     return (
         <box alignItems="center" justifyContent="center" flexGrow={1}>
             <box justifyContent="center" alignItems="flex-end">
