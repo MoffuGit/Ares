@@ -21,7 +21,9 @@ export fn destroySettings(settings: *Settings) void {
     settings.destroy();
 }
 
-// export fn loadSettings(settings: *Settings, path: [*]const u8) void {
+//TODO:
+//update the ts bindings
+// export fn loadSettings(settings: *Settings, path: [*]const u8, len: u64, monitor: *Monitor) void {
 //     settings.load(path) catch {};
 // }
 

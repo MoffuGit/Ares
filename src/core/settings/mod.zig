@@ -1,4 +1,5 @@
 const std = @import("std");
+const global = @import("../global.zig");
 const Allocator = std.mem.Allocator;
 const Theme = @import("theme/mod.zig");
 const keymapspkg = @import("../keymaps/mod.zig");
@@ -104,11 +105,15 @@ fn settingsCallback(self: ?*Settings, watcher: u64, event: u32) void {
     _ = self;
     _ = watcher;
     _ = event;
+
+    global.state.bus.push(.settings_update);
 }
 fn themeCallback(self: ?*Settings, watcher: u64, event: u32) void {
     _ = self;
     _ = watcher;
     _ = event;
+
+    global.state.bus.push(.settings_update);
 }
 
 fn loadThemes(self: *Settings, dir: std.fs.Dir) LoadError!void {
