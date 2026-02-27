@@ -45,18 +45,7 @@ function getCoreLib() {
     return symbols;
 }
 
-export interface Core {
-    initState(): void;
-    drainEvents(): void;
-    createSettings(): Pointer | null;
-    destroySettings(handle: Pointer): void;
-    createIo(): Pointer | null;
-    destroyIo(handle: Pointer): void;
-    createMonitor(): Pointer | null;
-    destroyMonitor(handle: Pointer): void;
-}
-
-export class CoreLib implements Core {
+export class CoreLib {
     private lib: ReturnType<typeof getCoreLib>;
     private jsCallback: JSCallback | null = null;
     private _events: EventEmitter = new EventEmitter();
@@ -97,6 +86,11 @@ export class CoreLib implements Core {
                 returns: FFIType.void,
             },
         );
+
+        if (!this.jsCallback.ptr) {
+            throw new Error("Failed to create event callback")
+        }
+
         this.lib.symbols.initState(this.jsCallback.ptr);
     }
 
