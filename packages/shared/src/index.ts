@@ -1,4 +1,3 @@
-export type { ColorScheme, SettingsDTO, BackendEvent } from "./types.ts";
-export type { AresBackend, BackendEvents } from "./backend.ts";
+export type { ColorScheme, Settings } from "./types.ts";
+export type { App, AppState, AppEvents } from "./app.ts";
 export { Emitter, type EventMap } from "./emitter.ts";
-export { createAresStore, type AresSnapshot, type StoreEvents } from "./store.ts";
