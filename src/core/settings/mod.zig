@@ -99,6 +99,8 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor) !void {
     try self.loadThemes(dir);
 
     if (settings_error) |err| return err;
+
+    global.state.bus.push(.settings_update);
 }
 
 fn settingsCallback(self: ?*Settings, watcher: u64, event: u32) void {
