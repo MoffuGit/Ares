@@ -29,6 +29,27 @@ export fn loadSettings(settings: *Settings, path: [*]const u8, len: u64, monitor
     settings.load(path[0..len], monitor) catch {};
 }
 
+pub const SettingsView = extern struct {
+    scheme: u64,
+    light_theme_ptr: usize,
+    light_theme_len: usize,
+    dark_theme_ptr: usize,
+    dark_theme_len: usize,
+};
+
+export fn readSettings(settings: *Settings, buf: [*]u8, buf_len: usize) usize {
+    if (buf_len < @sizeOf(SettingsView)) return 0;
+    const view: *SettingsView = @ptrCast(@alignCast(buf));
+    view.* = .{
+        .scheme = @intFromEnum(settings.scheme),
+        .light_theme_ptr = @intFromPtr(settings.light_theme.ptr),
+        .light_theme_len = settings.light_theme.len,
+        .dark_theme_ptr = @intFromPtr(settings.dark_theme.ptr),
+        .dark_theme_len = settings.dark_theme.len,
+    };
+    return @sizeOf(SettingsView);
+}
+
 export fn createIo() ?*Io {
     return Io.create(global.state.alloc) catch null;
 }

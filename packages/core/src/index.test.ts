@@ -5,7 +5,7 @@ import { CoreLib } from "./index";
 const settingsPath = resolve(import.meta.dir, "../../../settings");
 
 describe("CoreLib lifecycle", () => {
-    test("init, load settings, and teardown without errors", () => {
+    test("init, load, and teardown", () => {
         const core = new CoreLib();
 
         const monitor = core.createMonitor();
@@ -15,6 +15,10 @@ describe("CoreLib lifecycle", () => {
         expect(settings).not.toBeNull();
 
         core.loadSettings(settings!, settingsPath, monitor!);
+
+        const settingsData = core.readSettings(settings!);
+        console.log("Settings:", settingsData);
+
         core.drainEvents();
 
         core.destroySettings(settings!);
