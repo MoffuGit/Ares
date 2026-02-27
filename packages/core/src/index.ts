@@ -47,7 +47,7 @@ function getCoreLib() {
 
 export interface Core {
     initState(): void;
-    pollEvents(): void;
+    drainEvents(): void;
     createSettings(): Pointer | null;
     destroySettings(handle: Pointer): void;
     createIo(): Pointer | null;
@@ -100,8 +100,8 @@ export class CoreLib implements Core {
         this.lib.symbols.initState(this.jsCallback.ptr);
     }
 
-    pollEvents(): void {
-        this.lib.symbols.pollEvents();
+    drainEvents(): void {
+        this.lib.symbols.drainEvents();
     }
 
 
