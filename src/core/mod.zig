@@ -10,8 +10,8 @@ export fn initState(callback: ?Bus.JsCallback) void {
     global.state.init(callback);
 }
 
-export fn pollEvents() void {
-    // global.state.bus.poll();
+export fn drainEvents() void {
+    global.state.bus.drain();
 }
 export fn createSettings() ?*Settings {
     return Settings.create(global.state.alloc) catch null;

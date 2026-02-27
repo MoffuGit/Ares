@@ -31,7 +31,7 @@ pub fn push(self: *Bus, event: Event) void {
     _ = self.queue.push(any, .instant);
 }
 //
-pub fn poll(self: *Bus) void {
+pub fn drain(self: *Bus) void {
     const cb = self.callback orelse return;
 
     var it = self.queue.drain();

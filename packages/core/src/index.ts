@@ -11,7 +11,7 @@ function getCoreLib() {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
-            pollEvents: {
+            drainEvents: {
                 args: [],
                 returns: FFIType.void,
             },
@@ -84,7 +84,7 @@ export class CoreLib implements Core {
                         emitter.emit(event);
                     })
                 } else if (data_type != null && ptr != null && _len != 0) {
-                    const data = data_type.unpack(toArrayBuffer(ptr, 0, Number(_len)));
+                    const data = data_type.unpack(toArrayBuffer(ptr, 0, _len));
                     const event = _type.toString();
                     queueMicrotask(() => {
                         emitter.emit(event, data);
