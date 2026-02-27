@@ -5,7 +5,7 @@ import { EventType, Events } from "./events";
 
 function getCoreLib() {
     const symbols = dlopen(
-        resolve(import.meta.dir, "../../zig-out/lib/libcore.dylib"),
+        resolve(import.meta.dir, "../../../zig-out/lib/libcore.dylib"),
         {
             initState: {
                 args: [FFIType.pointer],

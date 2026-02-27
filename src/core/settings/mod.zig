@@ -92,13 +92,13 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor) !void {
     const themes_dir = try dir.realpathAlloc(self.alloc, "themes/");
     defer self.alloc.free(themes_dir);
 
-    const settings_error = self.loadSettings(dir);
+    const settings_result = self.loadSettings(dir);
 
     self.theme_watcher = try monitor.watchPath(themes_dir, Settings, self, themeCallback);
 
     try self.loadThemes(dir);
 
-    if (settings_error) |err| return err;
+    try settings_result;
 
     global.state.bus.push(.settings_update);
 }

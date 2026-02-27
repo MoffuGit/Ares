@@ -63,4 +63,9 @@ pub fn build(b: *std.Build) void {
     const test_run = b.addRunArtifact(test_exe);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&test_run.step);
+
+    const bun_test = b.addSystemCommand(&.{ "bun", "test" });
+    bun_test.setCwd(b.path("packages/core"));
+    bun_test.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&bun_test.step);
 }

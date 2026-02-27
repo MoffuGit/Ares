@@ -15,7 +15,7 @@ pub const AnyEvent = struct {
 
     _type: u8,
     len: u8 = 0,
-    ptr: ?[MAX_DATA_SIZE]u8 = null,
+    data: [MAX_DATA_SIZE]u8 = undefined,
 };
 
 pub const MailBox = BlockingQueue(AnyEvent, 64);
@@ -41,6 +41,7 @@ pub fn drain(self: *Bus) void {
     defer it.deinit();
 
     while (it.next()) |ev| {
-        cb(ev._type, ev.ptr, ev.len);
+        const ptr: ?[*]const u8 = if (ev.len > 0) &ev.data else null;
+        cb(ev._type, ptr, ev.len);
     }
 }

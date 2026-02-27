@@ -6,6 +6,8 @@ pub fn EventEmitter(comptime EventType: type) type {
         @compileError("EventType must be an union");
     }
 
+    const Tag = std.meta.Tag(EventType);
+
     return struct {
         const Self = @This();
 
@@ -15,12 +17,12 @@ pub fn EventEmitter(comptime EventType: type) type {
         };
 
         allocator: Allocator,
-        listeners: std.EnumMap(EventType, std.ArrayList(Listener)),
+        listeners: std.EnumMap(Tag, std.ArrayListUnmanaged(Listener)),
 
         pub fn init(allocator: Allocator) Self {
             return .{
                 .allocator = allocator,
-                .listeners = std.EnumMap(EventType, std.ArrayListUnmanaged(Listener)).init(.{}),
+                .listeners = std.EnumMap(Tag, std.ArrayListUnmanaged(Listener)).init(.{}),
             };
         }
 
@@ -32,8 +34,9 @@ pub fn EventEmitter(comptime EventType: type) type {
         }
 
         pub fn on(self: *Self, event: EventType, listener: Listener) !void {
-            const list_ptr = self.listeners.getPtr(event) orelse {
-                self.listeners.put(event, .{});
+            const tag = std.meta.activeTag(event);
+            const list_ptr = self.listeners.getPtr(tag) orelse {
+                self.listeners.put(tag, .{});
                 return self.on(event, listener);
             };
 
@@ -41,7 +44,8 @@ pub fn EventEmitter(comptime EventType: type) type {
         }
 
         pub fn off(self: *Self, event: EventType, listener: Listener) void {
-            const list_ptr = self.listeners.getPtr(event) orelse return;
+            const tag = std.meta.activeTag(event);
+            const list_ptr = self.listeners.getPtr(tag) orelse return;
 
             var i: usize = 0;
             while (i < list_ptr.items.len) {
@@ -55,7 +59,8 @@ pub fn EventEmitter(comptime EventType: type) type {
         }
 
         pub fn emit(self: *Self, event: EventType) void {
-            const list_ptr = self.listeners.getPtr(event) orelse return;
+            const tag = std.meta.activeTag(event);
+            const list_ptr = self.listeners.getPtr(tag) orelse return;
 
             for (list_ptr.items) |listener| {
                 listener.handle(listener.ctx);
