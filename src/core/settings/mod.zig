@@ -100,8 +100,16 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor) !void {
     if (settings_error) |err| return err;
 }
 
-fn settingsCallback(self: ?*Settings, watcher: u64, event: u32) void {}
-fn themeCallback(self: ?*Settings, watcher: u64, event: u32) void {}
+fn settingsCallback(self: ?*Settings, watcher: u64, event: u32) void {
+    _ = self;
+    _ = watcher;
+    _ = event;
+}
+fn themeCallback(self: ?*Settings, watcher: u64, event: u32) void {
+    _ = self;
+    _ = watcher;
+    _ = event;
+}
 
 fn loadThemes(self: *Settings, dir: std.fs.Dir) LoadError!void {
     const theme_names = [_][]const u8{
