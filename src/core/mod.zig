@@ -10,6 +10,10 @@ export fn initState(callback: ?Bus.JsCallback) void {
     global.state.init(callback);
 }
 
+export fn deinitState() void {
+    global.state.deinit();
+}
+
 export fn drainEvents() void {
     global.state.bus.drain();
 }

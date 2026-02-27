@@ -7,4 +7,7 @@ and add it to the mailbox
 The monitor it's not going to live on the CoreLib,
 you need to create it as part of you application,
 you need to destroy it as well once you are done with it,
-the same for the settings,
+the same for the settings and the io
+
+i need a function for deiniting the global state,
+we can check for leaks in here as well
