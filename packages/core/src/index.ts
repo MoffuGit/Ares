@@ -162,7 +162,7 @@ export function resolveCoreLib(): CoreLib {
             coreLib = new CoreLib()
         } catch (error) {
             throw new Error(
-                `Failed to initialize OpenTUI render library: ${error instanceof Error ? error.message : "Unknown error"}`,
+                `Failed to initialize the core lib`,
             )
         }
     }
