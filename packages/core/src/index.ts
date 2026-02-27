@@ -1,7 +1,7 @@
 import { dlopen, FFIType, JSCallback, toArrayBuffer, type Pointer } from "bun:ffi";
 import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
-import { EventType, Events } from "./structs";
+import { EventType, Events } from "./events";
 
 function getCoreLib() {
     const symbols = dlopen(
