@@ -1,4 +1,4 @@
 test {
     _ = @import("datastruct");
-    _ = @import("core/mod.zig");
+    _ = @import("mod.zig");
 }

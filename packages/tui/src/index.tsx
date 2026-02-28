@@ -1,6 +1,6 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { AresProvider, useSettings } from "@ares/shared/react";
+import { AppProvider, useSettings } from "@ares/shared/react";
 import { TuiApp } from "./app.ts";
 import { resolve } from "node:path";
 
@@ -26,7 +26,7 @@ app.start();
 
 const renderer = await createCliRenderer();
 createRoot(renderer).render(
-    <AresProvider app={app}>
+    <AppProvider app={app}>
         <App />
-    </AresProvider>,
+    </AppProvider>,
 );
