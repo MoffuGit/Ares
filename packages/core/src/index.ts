@@ -2,8 +2,7 @@ import { dlopen, FFIType, JSCallback, ptr, toArrayBuffer, type Pointer } from "b
 import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
 import { EventType, Events } from "./events";
-import { SettingsView } from "./structs";
-
+import { Settings, Theme } from "./structs";
 
 function getCoreLib() {
     const symbols = dlopen(
@@ -34,6 +33,10 @@ function getCoreLib() {
                 returns: FFIType.void,
             },
             readSettings: {
+                args: [FFIType.pointer, FFIType.pointer],
+                returns: FFIType.void,
+            },
+            readTheme: {
                 args: [FFIType.pointer, FFIType.pointer],
                 returns: FFIType.void,
             },
@@ -131,9 +134,15 @@ export class CoreLib {
     }
 
     readSettings(settings: Pointer) {
-        const buf = new ArrayBuffer(SettingsView.size);
+        const buf = new ArrayBuffer(Settings.size);
         this.lib.symbols.readSettings(settings, ptr(buf));
-        return SettingsView.unpack(buf);
+        return Settings.unpack(buf);
+    }
+
+    readTheme(settings: Pointer) {
+        const buf = new ArrayBuffer(Theme.size);
+        this.lib.symbols.readTheme(settings, ptr(buf));
+        return Theme.unpack(buf);
     }
 
     createIo(): Pointer | null {

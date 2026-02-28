@@ -1,8 +1,9 @@
 import type { Emitter } from "./emitter.ts";
-import type { Settings } from "./types.ts";
+import type { Settings, Theme } from "./types.ts";
 
 export type AppState = {
     settings: Settings | null;
+    theme: Theme | null;
 };
 
 export type AppEvents = {

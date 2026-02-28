@@ -51,8 +51,8 @@ export fn readSettings(settings: *Settings, buf: [*]u8) void {
 pub const PackedTheme = extern struct {
     name: u64,
     len: u64,
-    bg: [4]u8,
     fg: [4]u8,
+    bg: [4]u8,
     primaryBg: [4]u8,
     primaryFg: [4]u8,
     mutedBg: [4]u8,

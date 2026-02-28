@@ -1,6 +1,6 @@
 import { createContext, createElement, useContext, useSyncExternalStore, type ReactNode } from "react";
 import type { App, AppState } from "../app.ts";
-import type { Settings } from "../types.ts";
+import type { Settings, Theme } from "../types.ts";
 
 const AppContext = createContext<App | null>(null);
 
@@ -27,5 +27,16 @@ export function useSettings(): Settings | null {
             return () => app.events.off("settingsUpdate", cb);
         },
         () => app.state.settings,
+    );
+}
+
+export function useTheme(): Theme | null {
+    const app = useApp();
+    return useSyncExternalStore(
+        (cb) => {
+            app.events.on("themeUpdate", cb);
+            return () => app.events.off("themeUpdate", cb);
+        },
+        () => app.state.theme,
     );
 }

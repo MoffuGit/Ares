@@ -1,11 +1,25 @@
 import { defineStruct, defineEnum } from "bun-ffi-structs";
 
-const SchemeEnum = defineEnum({ light: 0, dark: 1, system: 2 }, "u64");
+const Scheme = defineEnum({ light: 0, dark: 1, system: 2 }, "u64");
 
-export const SettingsView = defineStruct([
-    ["scheme", SchemeEnum],
+export const Settings = defineStruct([
+    ["scheme", Scheme],
     ["light_theme", "char*"],
     ["light_theme_len", "u64", { lengthOf: "light_theme" }],
     ["dark_theme", "char*"],
     ["dark_theme_len", "u64", { lengthOf: "dark_theme" }],
+] as const);
+
+export const Theme = defineStruct([
+    ["name", "char*"],
+    ["len", "u64", { lengthOf: "name" }],
+    ["fg", "u32"],
+    ["bg", "u32"],
+    ["primaryBg", "u32"],
+    ["primaryFg", "u32"],
+    ["mutedBg", "u32"],
+    ["mutedFg", "u32"],
+    ["scrollThumb", "u32"],
+    ["scrollTrack", "u32"],
+    ["border", "u32"],
 ] as const);

@@ -145,7 +145,6 @@ fn loadThemes(self: *Settings, dir: std.fs.Dir) LoadError!void {
 
     for (theme_names) |name| {
         if (name.len == 0) continue;
-        if (self.themes.get(name) != null) continue;
 
         const td = themes_dir orelse continue;
 
