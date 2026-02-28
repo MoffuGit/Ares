@@ -4,7 +4,7 @@ import { AppProvider, useSettings } from "@ares/shared/react";
 import { TuiApp } from "./app.ts";
 import { resolve } from "node:path";
 
-const settingsPath = resolve(import.meta.dir, "../../../settings/settings.json");
+const settingsPath = resolve(import.meta.dir, "../../../settings");
 const app = new TuiApp(settingsPath);
 
 function App() {

@@ -51,6 +51,8 @@ keymaps: Keymaps = .{ .tries = undefined },
 keymaps_initialized: bool = false,
 keymap_generation: u64 = 0,
 
+settings_path: []const u8 = "",
+
 settings_watcher: u64 = 0,
 theme_watcher: u64 = 0,
 
@@ -68,6 +70,7 @@ pub fn create(alloc: Allocator) !*Settings {
 }
 
 pub fn destroy(self: *Settings) void {
+    if (self.settings_path.len > 0) self.alloc.free(self.settings_path);
     if (self.light_theme.len > 0 and self.light_theme.ptr != DEFAULT_LIGHT.ptr) self.alloc.free(self.light_theme);
     if (self.dark_theme.len > 0 and self.dark_theme.ptr != DEFAULT_DARK.ptr) self.alloc.free(self.dark_theme);
     var it = self.themes.iterator();
@@ -87,6 +90,8 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor) !void {
     var dir = std.fs.openDirAbsolute(path, .{}) catch return LoadError.SettingsNotFound;
     defer dir.close();
 
+    self.settings_path = self.alloc.dupe(u8, path) catch return LoadError.OutOfMemory;
+
     self.settings_watcher = try monitor.watchPath(path, Settings, self, settingsCallback);
 
     const themes_dir = try dir.realpathAlloc(self.alloc, "themes/");
@@ -104,18 +109,29 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor) !void {
 }
 
 fn settingsCallback(self: ?*Settings, watcher: u64, event: u32) void {
-    _ = self;
     _ = watcher;
     _ = event;
+    const s = self orelse return;
+
+    var dir = std.fs.openDirAbsolute(s.settings_path, .{}) catch return;
+    defer dir.close();
+
+    s.loadSettings(dir) catch {};
+    s.loadThemes(dir) catch {};
 
     global.state.bus.push(.settings_update);
 }
 fn themeCallback(self: ?*Settings, watcher: u64, event: u32) void {
-    _ = self;
     _ = watcher;
     _ = event;
+    const s = self orelse return;
 
-    global.state.bus.push(.settings_update);
+    var dir = std.fs.openDirAbsolute(s.settings_path, .{}) catch return;
+    defer dir.close();
+
+    s.loadThemes(dir) catch {};
+
+    global.state.bus.push(.theme_update);
 }
 
 fn loadThemes(self: *Settings, dir: std.fs.Dir) LoadError!void {
