@@ -37,7 +37,6 @@ export class TuiApp implements App {
 
     start() {
         this._state = { ...this._state, settings: this.readSettings() };
-        this.events.emit("change");
         this.drainTimer = setInterval(() => this.core.drainEvents(), 16);
         this.core.events.on(String(EventType.SettingsUpdate), this.onSettingsUpdate);
     }
@@ -55,7 +54,7 @@ export class TuiApp implements App {
 
     private onSettingsUpdate = () => {
         this._state = { ...this._state, settings: this.readSettings() };
-        this.events.emit("change");
+        this.events.emit("settingsUpdate");
     };
 
     private readSettings(): Settings {

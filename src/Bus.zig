@@ -4,10 +4,12 @@ const Bus = @This();
 
 pub const EventType = enum {
     settings_update,
+    theme_update,
 };
 
 pub const Event = union(EventType) {
     settings_update: void,
+    theme_update: void,
 };
 
 pub const AnyEvent = struct {
@@ -28,7 +30,7 @@ pub fn push(self: *Bus, event: Event) void {
     const any = AnyEvent{ ._type = @intFromEnum(event) };
 
     switch (event) {
-        .settings_update => {},
+        else => {},
     }
 
     _ = self.mailbox.push(any, .instant);

@@ -16,15 +16,16 @@ export function useApp(): App {
 
 export function useAppState(): AppState {
     const app = useApp();
-    return useSyncExternalStore(
-        (cb) => {
-            app.events.on("change", cb);
-            return () => app.events.off("change", cb);
-        },
-        () => app.state,
-    );
+    return app.state;
 }
 
 export function useSettings(): Settings | null {
-    return useAppState().settings;
+    const app = useApp();
+    return useSyncExternalStore(
+        (cb) => {
+            app.events.on("settingsUpdate", cb);
+            return () => app.events.off("settingsUpdate", cb);
+        },
+        () => app.state.settings,
+    );
 }

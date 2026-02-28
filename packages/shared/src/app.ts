@@ -6,7 +6,8 @@ export type AppState = {
 };
 
 export type AppEvents = {
-    change: [];
+    settingsUpdate: [];
+    themeUpdate: [];
 };
 
 export interface App {

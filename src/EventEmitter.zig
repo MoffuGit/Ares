@@ -1,12 +1,12 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-pub fn EventEmitter(comptime EventType: type) type {
-    if (@typeInfo(EventType) != .@"union") {
+pub fn EventEmitter(comptime Event: type) type {
+    if (@typeInfo(Event) != .@"union") {
         @compileError("EventType must be an union");
     }
 
-    const Tag = std.meta.Tag(EventType);
+    const Tag = std.meta.Tag(Event);
 
     return struct {
         const Self = @This();
@@ -33,7 +33,7 @@ pub fn EventEmitter(comptime EventType: type) type {
             }
         }
 
-        pub fn on(self: *Self, event: EventType, listener: Listener) !void {
+        pub fn on(self: *Self, event: Event, listener: Listener) !void {
             const tag = std.meta.activeTag(event);
             const list_ptr = self.listeners.getPtr(tag) orelse {
                 self.listeners.put(tag, .{});
@@ -43,7 +43,7 @@ pub fn EventEmitter(comptime EventType: type) type {
             try list_ptr.append(self.allocator, listener);
         }
 
-        pub fn off(self: *Self, event: EventType, listener: Listener) void {
+        pub fn off(self: *Self, event: Event, listener: Listener) void {
             const tag = std.meta.activeTag(event);
             const list_ptr = self.listeners.getPtr(tag) orelse return;
 
@@ -58,7 +58,7 @@ pub fn EventEmitter(comptime EventType: type) type {
             }
         }
 
-        pub fn emit(self: *Self, event: EventType) void {
+        pub fn emit(self: *Self, event: Event) void {
             const tag = std.meta.activeTag(event);
             const list_ptr = self.listeners.getPtr(tag) orelse return;
 
