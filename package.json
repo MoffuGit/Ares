@@ -1,5 +1,5 @@
 {
   "name": "ares",
   "private": true,
-  "workspaces": ["packages/*"]
+  "workspaces": ["packages/*", "packages/app/*"]
 }
