@@ -29,7 +29,7 @@ export fn loadSettings(settings: *Settings, path: [*]const u8, len: u64, monitor
     settings.load(path[0..len], monitor) catch {};
 }
 
-pub const SettingsView = extern struct {
+pub const PackedSettings = extern struct {
     scheme: u64,
     light_theme_ptr: usize,
     light_theme_len: usize,
@@ -38,13 +38,45 @@ pub const SettingsView = extern struct {
 };
 
 export fn readSettings(settings: *Settings, buf: [*]u8) void {
-    const view: *SettingsView = @ptrCast(@alignCast(buf));
-    view.* = .{
+    const pack: *PackedSettings = @ptrCast(@alignCast(buf));
+    pack.* = .{
         .scheme = @intFromEnum(settings.scheme),
         .light_theme_ptr = @intFromPtr(settings.light_theme.ptr),
         .light_theme_len = settings.light_theme.len,
         .dark_theme_ptr = @intFromPtr(settings.dark_theme.ptr),
         .dark_theme_len = settings.dark_theme.len,
+    };
+}
+
+pub const PackedTheme = extern struct {
+    name: u64,
+    len: u64,
+    bg: [4]u8,
+    fg: [4]u8,
+    primaryBg: [4]u8,
+    primaryFg: [4]u8,
+    mutedBg: [4]u8,
+    mutedFg: [4]u8,
+    scrollThumb: [4]u8,
+    scrollTrack: [4]u8,
+    border: [4]u8,
+};
+
+export fn readTheme(settings: *Settings, buf: [*]u8) void {
+    const pack: *PackedTheme = @ptrCast(@alignCast(buf));
+    const theme = settings.theme;
+    pack.* = .{
+        .name = @intFromPtr(theme.name.ptr),
+        .len = theme.name.len,
+        .bg = theme.bg,
+        .fg = theme.fg,
+        .border = theme.border,
+        .mutedBg = theme.mutedBg,
+        .mutedFg = theme.mutedFg,
+        .primaryBg = theme.primaryBg,
+        .primaryFg = theme.primaryFg,
+        .scrollThumb = theme.scrollThumb,
+        .scrollTrack = theme.scrollTrack,
     };
 }
 

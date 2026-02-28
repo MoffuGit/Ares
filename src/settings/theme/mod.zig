@@ -2,9 +2,7 @@ const std = @import("std");
 
 pub const Theme = @This();
 
-pub const Color = struct {
-    rgba: [4]u8,
-};
+pub const Color = [4]u8;
 
 name: []const u8 = "",
 bg: Color,
@@ -20,15 +18,15 @@ fileType: std.StringHashMapUnmanaged(Color) = .{},
 
 pub const fallback = Theme{
     .name = "fallback",
-    .bg = Color{ .rgba = .{ 255, 30, 30, 255 } },
-    .fg = Color{ .rgba = .{ 220, 220, 220, 255 } },
-    .primaryBg = Color{ .rgba = .{ 40, 40, 40, 255 } },
-    .primaryFg = Color{ .rgba = .{ 200, 200, 200, 255 } },
-    .mutedBg = Color{ .rgba = .{ 60, 60, 60, 255 } },
-    .mutedFg = Color{ .rgba = .{ 160, 160, 160, 255 } },
-    .scrollThumb = Color{ .rgba = .{ 100, 100, 100, 255 } },
-    .scrollTrack = Color{ .rgba = .{ 50, 50, 50, 255 } },
-    .border = Color{ .rgba = .{ 0, 255, 0, 255 } },
+    .bg = Color{ 255, 30, 30, 255 },
+    .fg = Color{ 220, 220, 220, 255 },
+    .primaryBg = Color{ 40, 40, 40, 255 },
+    .primaryFg = Color{ 200, 200, 200, 255 },
+    .mutedBg = Color{ 60, 60, 60, 255 },
+    .mutedFg = Color{ 160, 160, 160, 255 },
+    .scrollThumb = Color{ 100, 100, 100, 255 },
+    .scrollTrack = Color{ 50, 50, 50, 255 },
+    .border = Color{ 0, 255, 0, 255 },
 };
 
 pub fn getFileTypeColor(self: Theme, key: []const u8) Color {
@@ -136,13 +134,13 @@ fn parseHexColor(hex_str: []const u8) !Color {
         const r = std.fmt.parseInt(u8, hex[0..2], 16) catch return error.InvalidFormat;
         const g = std.fmt.parseInt(u8, hex[2..4], 16) catch return error.InvalidFormat;
         const b = std.fmt.parseInt(u8, hex[4..6], 16) catch return error.InvalidFormat;
-        return Color{ .rgba = .{ r, g, b, 255 } };
+        return Color{ r, g, b, 255 };
     } else if (hex.len == 8) {
         const r = std.fmt.parseInt(u8, hex[0..2], 16) catch return error.InvalidFormat;
         const g = std.fmt.parseInt(u8, hex[2..4], 16) catch return error.InvalidFormat;
         const b = std.fmt.parseInt(u8, hex[4..6], 16) catch return error.InvalidFormat;
         const a = std.fmt.parseInt(u8, hex[6..8], 16) catch return error.InvalidFormat;
-        return Color{ .rgba = .{ r, g, b, a } };
+        return Color{ r, g, b, a };
     }
 
     return error.InvalidFormat;
@@ -180,14 +178,14 @@ test "parse theme" {
     defer theme.deinit(std.testing.allocator);
 
     try std.testing.expectEqualStrings("dark", theme.name);
-    try std.testing.expectEqual(Color{ .rgba = .{ 10, 10, 10, 255 } }, theme.bg);
-    try std.testing.expectEqual(Color{ .rgba = .{ 238, 238, 238, 255 } }, theme.fg);
-    try std.testing.expectEqual(Color{ .rgba = .{ 26, 26, 26, 255 } }, theme.primaryBg);
-    try std.testing.expectEqual(Color{ .rgba = .{ 255, 255, 255, 255 } }, theme.primaryFg);
-    try std.testing.expectEqual(Color{ .rgba = .{ 42, 42, 42, 255 } }, theme.mutedBg);
-    try std.testing.expectEqual(Color{ .rgba = .{ 136, 136, 136, 255 } }, theme.mutedFg);
-    try std.testing.expectEqual(Color{ .rgba = .{ 102, 102, 102, 255 } }, theme.scrollThumb);
-    try std.testing.expectEqual(Color{ .rgba = .{ 51, 51, 51, 255 } }, theme.scrollTrack);
+    try std.testing.expectEqual(Color{ 10, 10, 10, 255 }, theme.bg);
+    try std.testing.expectEqual(Color{ 238, 238, 238, 255 }, theme.fg);
+    try std.testing.expectEqual(Color{ 26, 26, 26, 255 }, theme.primaryBg);
+    try std.testing.expectEqual(Color{ 255, 255, 255, 255 }, theme.primaryFg);
+    try std.testing.expectEqual(Color{ 42, 42, 42, 255 }, theme.mutedBg);
+    try std.testing.expectEqual(Color{ 136, 136, 136, 255 }, theme.mutedFg);
+    try std.testing.expectEqual(Color{ 102, 102, 102, 255 }, theme.scrollThumb);
+    try std.testing.expectEqual(Color{ 51, 51, 51, 255 }, theme.scrollTrack);
 }
 
 test "parse theme with fileType" {
@@ -229,9 +227,9 @@ test "parse theme with fileType" {
     var theme = try Theme.parse(std.testing.allocator, json_str);
     defer theme.deinit(std.testing.allocator);
 
-    try std.testing.expectEqual(Color{ .rgba = .{ 222, 165, 132, 255 } }, theme.getFileTypeColor("rust"));
-    try std.testing.expectEqual(Color{ .rgba = .{ 247, 164, 29, 255 } }, theme.getFileTypeColor("zig"));
-    try std.testing.expectEqual(Color{ .rgba = .{ 204, 204, 204, 255 } }, theme.getFileTypeColor("lua"));
+    try std.testing.expectEqual(Color{ 222, 165, 132, 255 }, theme.getFileTypeColor("rust"));
+    try std.testing.expectEqual(Color{ 247, 164, 29, 255 }, theme.getFileTypeColor("zig"));
+    try std.testing.expectEqual(Color{ 204, 204, 204, 255 }, theme.getFileTypeColor("lua"));
 }
 
 test "parse theme fileType missing fallback" {
