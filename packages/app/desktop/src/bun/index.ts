@@ -1,15 +1,11 @@
-import { BrowserWindow, Updater, Utils } from "electrobun/bun";
-
-// Load the Zig shared library
-// Electrobun copies assets into Contents/Resources/app/
-// import.meta.dir resolves to Contents/Resources/app/bun/
-// const libPath = resolve(import.meta.dir, "../lib/libares_desktop.dylib");
-// const aresLib = dlopen(libPath, {});
+import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
+import { resolve } from "node:path";
+import { DesktopApp } from "./app.ts";
+import { AppRPC } from "src/rpc.ts";
 
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 
-// Check if Vite dev server is running for HMR
 async function getMainViewUrl(): Promise<string> {
     const channel = await Updater.localInfo.channel();
     if (channel === "dev") {
@@ -26,11 +22,24 @@ async function getMainViewUrl(): Promise<string> {
     return "views://mainview/index.html";
 }
 
-// Create the main application window
+const settingsPath = resolve(import.meta.dir, "../../../../../../../../../../settings/");
+const libPath = resolve(import.meta.dir, "../lib/libcore.dylib");
+const app = new DesktopApp(settingsPath, libPath);
+
 const url = await getMainViewUrl();
 
+const rpc = BrowserView.defineRPC<AppRPC>({
+    maxRequestTime: 5000,
+    handlers: {
+        requests: {
+            getState: ({ }) => app._state,
+        },
+        messages: {},
+    },
+});
+
 const mainWindow = new BrowserWindow({
-    title: "React + Tailwind + Vite",
+    title: "Ares",
     url,
     frame: {
         width: 900,
@@ -38,11 +47,21 @@ const mainWindow = new BrowserWindow({
         x: 200,
         y: 200,
     },
+    rpc: rpc,
 });
 
-// Quit the app when the main window is closed
+app.events.on("settingsUpdate", () => {
+    if (app._state.settings) {
+        console.log("sending new settings:", app._state.settings);
+        mainWindow.webview.rpc?.send.settingsUpdate(app._state.settings)
+    }
+});
+
+app.start();
+
 mainWindow.on("close", () => {
+    app.stop();
     Utils.quit();
 });
 
-console.log("React Tailwind Vite app started!");
+console.log("Ares desktop app started!");

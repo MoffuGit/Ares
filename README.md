@@ -1,10 +1,5 @@
-the zig project it's going to get used by the desktop app(electrobun) and
-for the cli app (opentui)
-
-if the watcher gets and event we need to read again the settings or the theme files,
-once that's done, we need to notify our bus, right now i dont have any zig piece that needs
-the settings data
-
-the resolver it needs to have some part on zig and other parts on ts,
-or maybe on wasm?, or maybe i should recreate the structure from the zig side to a structure on ts
-or maybe all happens on the zig side and ts only send and receive events?
+I'm working on two things, the initla setup for the desktop app,
+and writing the bindings for my zig tui library, i choose not using opentui
+because i write a lot for the zig tui library and i prefer using it, opentui is better
+but i want to try writing the library myself,
+for the desktop i need to give a little bit more or structure but it's kinda there

@@ -13,6 +13,8 @@ export default defineConfig({
     resolve: {
 	    alias: {
 	        "@": path.resolve(__dirname, "./src/mainview"),
+	        "@ares/shared/react": path.resolve(__dirname, "../shared/src/react/index.ts"),
+	        "@ares/shared": path.resolve(__dirname, "../shared/src/index.ts"),
 	    },
     },
 	server: {
