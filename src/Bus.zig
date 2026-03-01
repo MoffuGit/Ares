@@ -22,8 +22,8 @@ pub const AnyEvent = struct {
 
 pub const MailBox = BlockingQueue(AnyEvent, 64);
 
-pub const JsCallback = *const fn (event: u8, ptr: ?[*]const u8, dataLen: usize) callconv(.c) void;
-callback: ?JsCallback = null,
+pub const Callback = *const fn (event: u8, ptr: ?[*]const u8, dataLen: usize) callconv(.c) void;
+callback: ?Callback = null,
 mailbox: MailBox = .{},
 
 pub fn push(self: *Bus, event: Event) void {

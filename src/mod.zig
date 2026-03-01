@@ -6,7 +6,7 @@ const Settings = @import("settings/mod.zig");
 const Io = @import("io/mod.zig");
 const Monitor = @import("monitor/mod.zig");
 
-export fn initState(callback: ?Bus.JsCallback) void {
+export fn initState(callback: ?Bus.Callback) void {
     global.state.init(callback);
 }
 
@@ -29,7 +29,7 @@ export fn loadSettings(settings: *Settings, path: [*]const u8, len: u64, monitor
     settings.load(path[0..len], monitor) catch {};
 }
 
-pub const PackedSettings = extern struct {
+pub const ExternSettings = extern struct {
     scheme: u64,
     light_theme_ptr: usize,
     light_theme_len: usize,
@@ -37,9 +37,8 @@ pub const PackedSettings = extern struct {
     dark_theme_len: usize,
 };
 
-export fn readSettings(settings: *Settings, buf: [*]u8) void {
-    const pack: *PackedSettings = @ptrCast(@alignCast(buf));
-    pack.* = .{
+export fn readSettings(settings: *Settings, @"extern": *ExternSettings) void {
+    @"extern".* = .{
         .scheme = @intFromEnum(settings.scheme),
         .light_theme_ptr = @intFromPtr(settings.light_theme.ptr),
         .light_theme_len = settings.light_theme.len,
@@ -48,7 +47,7 @@ export fn readSettings(settings: *Settings, buf: [*]u8) void {
     };
 }
 
-pub const PackedTheme = extern struct {
+pub const ExternTheme = extern struct {
     name: u64,
     len: u64,
     fg: [4]u8,
@@ -62,10 +61,9 @@ pub const PackedTheme = extern struct {
     border: [4]u8,
 };
 
-export fn readTheme(settings: *Settings, buf: [*]u8) void {
-    const pack: *PackedTheme = @ptrCast(@alignCast(buf));
+export fn readTheme(settings: *Settings, @"extern": *ExternTheme) void {
     const theme = settings.theme;
-    pack.* = .{
+    @"extern".* = .{
         .name = @intFromPtr(theme.name.ptr),
         .len = theme.name.len,
         .bg = theme.bg,

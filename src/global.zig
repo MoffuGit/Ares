@@ -19,7 +19,7 @@ pub const GlobalState = struct {
     bus: Bus,
     events: EventEmitter,
 
-    pub fn init(self: *Self, callback: ?Bus.JsCallback) void {
+    pub fn init(self: *Self, callback: ?Bus.Callback) void {
         self.gpa = .{};
         self.alloc = self.gpa.allocator();
         self.bus = .{ .callback = callback };
