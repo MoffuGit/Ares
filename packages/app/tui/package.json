@@ -16,7 +16,7 @@
     "@ares/core": "workspace:*",
     "@ares/shared": "workspace:*",
     "@opentui/core": "^0.1.81",
-    "@opentui/react": "^0.1.81",
-    "react": "^19.2.4"
+    "@opentui/solid": "^0.1.81",
+    "solid-js": "1.9.9"
   }
 }
