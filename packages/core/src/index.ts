@@ -4,9 +4,11 @@ import { resolve } from "node:path";
 import { EventType, Events } from "./events";
 import { Settings, Theme } from "./structs";
 
-function getCoreLib() {
+const DEFAULT_LIB_PATH = resolve(import.meta.dir, "../../../zig-out/lib/libcore.dylib");
+
+function getCoreLib(libPath: string) {
     const symbols = dlopen(
-        resolve(import.meta.dir, "../../../zig-out/lib/libcore.dylib"),
+        libPath,
         {
             initState: {
                 args: [FFIType.pointer],
@@ -71,8 +73,8 @@ export class CoreLib {
         return this._events;
     }
 
-    constructor() {
-        this.lib = getCoreLib();
+    constructor(libPath?: string) {
+        this.lib = getCoreLib(libPath ?? DEFAULT_LIB_PATH);
         this.initState();
     }
 
@@ -165,10 +167,10 @@ export class CoreLib {
 
 let coreLib: CoreLib | undefined
 
-export function resolveCoreLib(): CoreLib {
+export function resolveCoreLib(libPath?: string): CoreLib {
     if (!coreLib) {
         try {
-            coreLib = new CoreLib()
+            coreLib = new CoreLib(libPath)
         } catch (error) {
             throw new Error(
                 `Failed to initialize the core lib`,

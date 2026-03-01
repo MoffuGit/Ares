@@ -5,7 +5,7 @@ import type { Settings, Theme } from "../types.ts";
 const AppContext = createContext<App | null>(null);
 
 export function AppProvider({ app, children }: { app: App; children: ReactNode }) {
-    return createElement(AppContext, { value: app }, children);
+    return createElement(AppContext.Provider, { value: app }, children);
 }
 
 export function useApp(): App {
