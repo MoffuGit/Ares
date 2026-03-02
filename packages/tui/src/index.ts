@@ -1,4 +1,4 @@
-import { dlopen, FFIType, type Pointer } from "bun:ffi";
+import { dlopen, FFIType, JSCallback, type Pointer } from "bun:ffi";
 import { resolve } from "node:path";
 
 function getTuiLib() {
@@ -6,7 +6,7 @@ function getTuiLib() {
         resolve(import.meta.dir, "../../../zig-out/lib/libtui.dylib"),
         {
             initState: {
-                args: [],
+                args: [FFIType.pointer],
                 returns: FFIType.void,
             },
             deinitState: {
@@ -30,6 +30,7 @@ function getTuiLib() {
 
 export class TuiLib {
     private lib: ReturnType<typeof getTuiLib>;
+    private jsCallback: JSCallback | null = null;
 
     constructor() {
         this.lib = getTuiLib();
@@ -37,7 +38,16 @@ export class TuiLib {
     }
 
     initState() {
-        this.lib.symbols.initState()
+        this.jsCallback = new JSCallback(
+            function handleEvent(event: number, target: number, ptr: Pointer | null, len: number | bigint): void {
+            },
+            {
+                args: [FFIType.u8, FFIType.u64, FFIType.pointer, FFIType.u64],
+                returns: FFIType.void,
+                threadsafe: true
+            },
+        );
+        this.lib.symbols.initState(this.jsCallback.ptr)
     }
 
     deinitState() {

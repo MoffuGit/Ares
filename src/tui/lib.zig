@@ -1,8 +1,9 @@
 const global = @import("global.zig");
 const App = @import("mod.zig");
+const Bus = @import("Bus.zig");
 
-export fn initState() void {
-    global.state.init();
+export fn initState(callback: ?Bus.Callback) void {
+    global.state.init(callback);
 }
 
 export fn deinitState() void {
