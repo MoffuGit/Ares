@@ -15,7 +15,6 @@ export class DesktopApp implements App {
     private core: CoreLib;
     private monitor: Pointer;
     private settings: Pointer;
-    private drainTimer: ReturnType<typeof setInterval> | null = null;
 
     _state: AppState = { settings: null, theme: null };
 
@@ -38,7 +37,6 @@ export class DesktopApp implements App {
 
     start() {
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme() };
-        this.drainTimer = setInterval(() => this.core.drainEvents(), 16);
         this.core.events.on(String(EventType.SettingsUpdate), this.onSettingsUpdate);
         this.core.events.on(String(EventType.ThemeUpdate), this.onThemeUpdate);
     }
@@ -46,10 +44,6 @@ export class DesktopApp implements App {
     stop() {
         this.core.events.off(String(EventType.SettingsUpdate), this.onSettingsUpdate);
         this.core.events.off(String(EventType.ThemeUpdate), this.onThemeUpdate);
-        if (this.drainTimer) {
-            clearInterval(this.drainTimer);
-            this.drainTimer = null;
-        }
         this.core.destroySettings(this.settings);
         this.core.destroyMonitor(this.monitor);
         this.core.deinitState();
@@ -58,9 +52,6 @@ export class DesktopApp implements App {
     private onSettingsUpdate = () => {
         const settings = this.readSettings();
         const theme = this.readTheme();
-
-        console.log(settings);
-        console.log(theme);
 
         this._state = { ...this._state, settings, theme };
         this.events.emit("settingsUpdate");

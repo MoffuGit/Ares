@@ -55,6 +55,15 @@ app.events.on("settingsUpdate", () => {
         console.log("sending new settings:", app._state.settings);
         mainWindow.webview.rpc?.send.settingsUpdate(app._state.settings)
     }
+    if (app._state.theme) {
+        mainWindow.webview.rpc?.send.themeUpdate(app._state.theme)
+    }
+});
+
+app.events.on("themeUpdate", () => {
+    if (app._state.theme) {
+        mainWindow.webview.rpc?.send.themeUpdate(app._state.theme)
+    }
 });
 
 app.start();
