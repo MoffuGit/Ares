@@ -23,10 +23,12 @@ pub const GlobalState = struct {
         self.gpa = .{};
         self.alloc = self.gpa.allocator();
         self.bus = .{ .callback = callback };
+        self.bus.startDrain();
         self.events = EventEmitter.init(self.alloc);
     }
 
     pub fn deinit(self: *Self) void {
+        self.bus.stopDrain();
         self.events.deinit();
         if (self.gpa.deinit() == .leak) {
             std.log.debug("WE HAVE LEAKS", .{});

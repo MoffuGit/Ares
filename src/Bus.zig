@@ -26,6 +26,43 @@ pub const Callback = *const fn (event: u8, ptr: ?[*]const u8, dataLen: usize) ca
 callback: ?Callback = null,
 mailbox: MailBox = .{},
 
+drain_mutex: std.Thread.Mutex = .{},
+drain_cond: std.Thread.Condition = .{},
+drain_pending: bool = false,
+drain_running: bool = false,
+drain_thread: ?std.Thread = null,
+
+pub fn startDrain(self: *Bus) void {
+    self.drain_running = true;
+    self.drain_thread = std.Thread.spawn(.{}, drainLoop, .{self}) catch null;
+}
+
+pub fn stopDrain(self: *Bus) void {
+    self.drain_mutex.lock();
+    self.drain_running = false;
+    self.drain_mutex.unlock();
+    self.drain_cond.signal();
+    if (self.drain_thread) |t| t.join();
+    self.drain_thread = null;
+}
+
+fn drainLoop(self: *Bus) void {
+    while (true) {
+        self.drain_mutex.lock();
+        while (!self.drain_pending and self.drain_running) {
+            self.drain_cond.wait(&self.drain_mutex);
+        }
+        if (!self.drain_running) {
+            self.drain_mutex.unlock();
+            return;
+        }
+        self.drain_pending = false;
+        self.drain_mutex.unlock();
+
+        self.drain();
+    }
+}
+
 pub fn push(self: *Bus, event: Event) void {
     const any = AnyEvent{ ._type = @intFromEnum(event) };
 
@@ -34,6 +71,11 @@ pub fn push(self: *Bus, event: Event) void {
     }
 
     _ = self.mailbox.push(any, .instant);
+
+    self.drain_mutex.lock();
+    self.drain_pending = true;
+    self.drain_mutex.unlock();
+    self.drain_cond.signal();
 }
 
 pub fn drain(self: *Bus) void {

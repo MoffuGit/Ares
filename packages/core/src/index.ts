@@ -103,6 +103,7 @@ export class CoreLib {
             {
                 args: [FFIType.u8, FFIType.pointer, FFIType.u64],
                 returns: FFIType.void,
+                threadsafe: true
             },
         );
 

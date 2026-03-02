@@ -3,7 +3,7 @@ import { AppContext, useSettings, useTheme } from "@ares/shared/solid";
 import { TuiApp } from "./app.ts";
 import { resolve } from "node:path";
 
-const settingsPath = resolve(import.meta.dir, "../../../settings");
+const settingsPath = resolve(import.meta.dir, "../../../../settings");
 const app = new TuiApp(settingsPath);
 
 function App() {
