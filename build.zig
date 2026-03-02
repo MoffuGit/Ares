@@ -53,6 +53,10 @@ pub fn build(b: *std.Build) void {
     tui_lib.linkLibrary(yoga_lib);
     b.installArtifact(tui_lib);
 
+    const tui_lib_step = b.step("tui-lib", "Build tui lib and run the opentui application");
+    tui_lib_step.dependOn(b.getInstallStep());
+    tui_lib_step.dependOn(&tui_lib.step);
+
     const desktop = b.addSystemCommand(&.{ "bun", "run", "dev:hmr" });
     desktop.setCwd(b.path("packages/app/desktop"));
 
@@ -68,7 +72,6 @@ pub fn build(b: *std.Build) void {
     tui_step.dependOn(b.getInstallStep());
     tui_step.dependOn(&tui.step);
     tui_step.dependOn(&lib.step);
-    tui.step.dependOn(&tui_lib.step);
 
     // // ── Tests ──
     const test_filter = b.option([]const u8, "test-filter", "Filter for tests");

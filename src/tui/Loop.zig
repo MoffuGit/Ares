@@ -83,6 +83,9 @@ pub fn threadMain(self: *Loop) void {
 pub fn threadMain_(self: *Loop) !void {
     defer log.debug("loop exited", .{});
 
+    const winsize = try vaxis.Tty.getWinsize(self.app.shared_context.tty.fd);
+    self.app.window.resize(winsize);
+
     self.wakeup.wait(&self.loop, &self.wakeup_c, Loop, self, wakeupCallback);
     self.stop.wait(&self.loop, &self.stop_c, Loop, self, stopCallback);
 

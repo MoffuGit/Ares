@@ -99,6 +99,7 @@ renderer_thread: RendererThread,
 renderer_thr: std.Thread,
 
 loop: Loop,
+loop_thr: std.Thread,
 
 window: Window,
 draw: std.atomic.Value(bool) = .init(true),
@@ -151,6 +152,7 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
             .app = app,
             .userdata = opts.userdata,
         },
+        .loop_thr = undefined,
         .screen = screen,
         .window = window,
         .tty_thread = tty_thread,
@@ -161,6 +163,7 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
         .on_wakeup = opts.on_wakeup,
     };
 
+    app.loop_thr = try std.Thread.spawn(.{}, Loop.threadMain, .{&app.loop});
     app.tty_thr = try std.Thread.spawn(.{}, TtyThread.threadMain, .{&app.tty_thread});
     app.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&app.renderer_thread});
 
@@ -181,6 +184,13 @@ pub fn destroy(self: *App) void {
             log.err("error notifying renderer thread to stop, may stall err={}", .{err});
         };
         self.renderer_thr.join();
+    }
+
+    {
+        self.loop.stop.notify() catch |err| {
+            log.err("error notifying renderer thread to stop, may stall err={}", .{err});
+        };
+        self.loop_thr.join();
     }
 
     self.renderer_thread.deinit();
@@ -211,13 +221,6 @@ pub fn requestDraw(self: *App) void {
 
 pub fn root(self: *App) *Window.Element {
     return self.window.root;
-}
-
-pub fn run(self: *App) !void {
-    const winsize = try vaxis.Tty.getWinsize(self.shared_context.tty.fd);
-
-    self.window.resize(winsize);
-    self.loop.threadMain();
 }
 
 pub fn drawWindow(self: *App) !void {
