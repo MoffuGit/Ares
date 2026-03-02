@@ -1,0 +1,4 @@
+module AresKit {
+    umbrella header "Ares.h"
+    export *
+}

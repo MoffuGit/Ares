@@ -28,6 +28,9 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(lib);
 
+    // ── macOS App (zig build mac) ──
+    buildMacApp(b, optimize);
+
     const vaxis_dep = b.dependency("vaxis", .{ .target = target, .optimize = optimize });
     const yoga_lib = buildYogaLib(b, target, optimize);
     const yoga_mod = buildYogaModule(b, target, optimize);
@@ -140,6 +143,75 @@ fn buildYogaModule(
         .target = target,
         .optimize = optimize,
     });
+}
+
+fn buildMacApp(b: *std.Build, optimize: std.builtin.OptimizeMode) void {
+    const aarch64_target = b.resolveTargetQuery(.{ .cpu_arch = .aarch64, .os_tag = .macos });
+    const x86_64_target = b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .macos });
+
+    const aarch64_lib = buildMacStaticLib(b, aarch64_target, optimize);
+    const x86_64_lib = buildMacStaticLib(b, x86_64_target, optimize);
+
+    // lipo: create universal binary
+    const lipo = b.addSystemCommand(&.{ "lipo", "-create" });
+    lipo.addArtifactArg(aarch64_lib);
+    lipo.addArtifactArg(x86_64_lib);
+    lipo.addArg("-output");
+    const universal_lib = lipo.addOutputFileArg("libares.a");
+
+    // remove old xcframework (xcodebuild fails if it exists)
+    const rm = b.addSystemCommand(&.{ "rm", "-rf", "packages/app/macos/AresKit.xcframework" });
+    rm.setCwd(b.path("."));
+
+    // create xcframework
+    const xcframework = b.addSystemCommand(&.{ "xcodebuild", "-create-xcframework" });
+    xcframework.addArg("-library");
+    xcframework.addFileArg(universal_lib);
+    xcframework.addArg("-headers");
+    xcframework.addDirectoryArg(b.path("include"));
+    xcframework.addArgs(&.{ "-output", "packages/app/macos/AresKit.xcframework" });
+    xcframework.setCwd(b.path("."));
+    xcframework.step.dependOn(&rm.step);
+
+    // regenerate xcode project
+    const xcodegen = b.addSystemCommand(&.{ "xcodegen", "generate" });
+    xcodegen.setCwd(b.path("packages/app/macos"));
+    xcodegen.step.dependOn(&xcframework.step);
+
+    const mac_step = b.step("mac", "Build XCFramework and open the macOS Xcode project");
+    mac_step.dependOn(&xcodegen.step);
+}
+
+fn buildMacStaticLib(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) *std.Build.Step.Compile {
+    const xev_dep = b.dependency("libxev", .{ .target = target, .optimize = optimize });
+
+    const datastruct = b.createModule(.{
+        .root_source_file = b.path("src/datastruct/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const mod = b.createModule(.{
+        .root_source_file = b.path("src/mod.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    mod.addImport("xev", xev_dep.module("xev"));
+    mod.addImport("datastruct", datastruct);
+
+    const lib = b.addLibrary(.{
+        .name = "ares",
+        .root_module = mod,
+        .linkage = .static,
+    });
+    lib.bundle_compiler_rt = true;
+    lib.linkLibC();
+
+    return lib;
 }
 
 fn ensureYogaCloned(b: *std.Build, dependent_step: *std.Build.Step) void {
