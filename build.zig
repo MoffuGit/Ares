@@ -36,7 +36,7 @@ pub fn build(b: *std.Build) void {
     const yoga_mod = buildYogaModule(b, target, optimize);
 
     const tui_lib_mod = b.createModule(.{
-        .root_source_file = b.path("src/tui/lib.zig"),
+        .root_source_file = b.path("tui/lib.zig"),
         .target = target,
         .optimize = optimize,
     });

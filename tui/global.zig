@@ -1,6 +1,6 @@
 const std = @import("std");
 const GPA = std.heap.GeneralPurposeAllocator(.{});
-const App = @import("mod.zig");
+const App = @import("App.zig");
 const Bus = @import("Bus.zig");
 
 pub const xev = @import("xev").Dynamic;

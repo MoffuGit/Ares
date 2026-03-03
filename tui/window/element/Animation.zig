@@ -1,6 +1,5 @@
 const std = @import("std");
-const messagepkg = @import("../message.zig");
-const Tick = messagepkg.Tick;
+const Tick = @import("../../Loop.zig").Tick;
 const Timer = @import("Timer.zig");
 const AnimState = Timer.State;
 const Easing = @import("Easing.zig").Type;

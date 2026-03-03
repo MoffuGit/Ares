@@ -1,18 +1,6 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 const log = std.log.scoped(.app);
-const messagepkg = @import("message.zig");
-const EventListeners = @import("events.zig").EventListeners;
-
-pub const EventType = enum {
-    scheme,
-};
-
-pub const EventData = union(EventType) {
-    scheme: vaxis.Color.Scheme,
-};
-
-pub const AppEventListeners = EventListeners(EventType, EventData);
 
 const Allocator = std.mem.Allocator;
 
@@ -27,63 +15,6 @@ const Renderer = @import("renderer/mod.zig");
 const RendererThread = @import("renderer/Thread.zig");
 
 const Window = @import("window/mod.zig");
-const Element = Window.Element;
-
-pub const Message = messagepkg.Message;
-
-pub const Context = struct {
-    app: *App,
-    userdata: ?*anyopaque,
-
-    pub fn requestDraw(self: *Context) void {
-        self.app.requestDraw();
-    }
-
-    pub fn startAnimation(self: *Context, animation: *Element.Animation.BaseAnimation) void {
-        animation.context = self;
-        _ = self.app.loop.mailbox.push(.{ .window = .{ .animation = .{ .start = animation } } }, .instant);
-        self.app.loop.wakeup.notify() catch {};
-    }
-
-    pub fn pauseAnimation(self: *Context, id: u64) void {
-        _ = self.app.loop.mailbox.push(.{ .window = .{ .animation = .{ .pause = id } } }, .instant);
-        self.app.loop.wakeup.notify() catch {};
-    }
-
-    pub fn resumeAnimation(self: *Context, id: u64) void {
-        _ = self.app.loop.mailbox.push(.{ .window = .{ .animation = .{ ._resume = id } } }, .instant);
-        self.app.loop.wakeup.notify() catch {};
-    }
-
-    pub fn cancelAnimation(self: *Context, id: u64) void {
-        _ = self.app.loop.mailbox.push(.{ .window = .{ .animation = .{ .cancel = id } } }, .instant);
-        self.app.loop.wakeup.notify() catch {};
-    }
-
-    pub fn stop(self: *Context) !void {
-        try self.app.loop.stop.notify();
-    }
-
-    pub fn subscribe(
-        self: *Context,
-        event: EventType,
-        comptime Userdata: type,
-        userdata: *Userdata,
-        comptime cb: *const fn (userdata: *Userdata, data: EventData) void,
-    ) !u64 {
-        return self.app.subscribe(event, Userdata, userdata, cb);
-    }
-
-    pub fn unsubscribe(self: *Context, event: EventType, id: u64) void {
-        self.app.unsubscribe(event, id);
-    }
-};
-
-pub const Options = struct {
-    root: Element.Options = .{},
-    userdata: ?*anyopaque = null,
-    on_wakeup: ?*const fn (*App) void = null,
-};
 
 const App = @This();
 
@@ -103,15 +34,12 @@ loop_thr: std.Thread,
 
 window: Window,
 draw: std.atomic.Value(bool) = .init(true),
-context: Context,
 
 scheme: vaxis.Color.Scheme = .dark,
 
 on_wakeup: ?*const fn (*App) void = null,
 
-subs: AppEventListeners = .{},
-
-pub fn create(alloc: Allocator, opts: Options) !*App {
+pub fn create(alloc: Allocator) !*App {
     const app = try alloc.create(App);
 
     var screen = try Screen.init(alloc, .{
@@ -131,7 +59,6 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
     var window = try Window.init(
         alloc,
         &app.screen,
-        .{ .context = &app.context, .root = opts.root },
     );
     errdefer window.deinit();
 
@@ -148,10 +75,6 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
         .alloc = alloc,
         .shared_context = shared_context,
         .loop = loop,
-        .context = .{
-            .app = app,
-            .userdata = opts.userdata,
-        },
         .loop_thr = undefined,
         .screen = screen,
         .window = window,
@@ -160,7 +83,6 @@ pub fn create(alloc: Allocator, opts: Options) !*App {
         .renderer_thread = renderer_thread,
         .renderer_thr = undefined,
         .tty_thr = undefined,
-        .on_wakeup = opts.on_wakeup,
     };
 
     app.loop_thr = try std.Thread.spawn(.{}, Loop.threadMain, .{&app.loop});
@@ -200,8 +122,6 @@ pub fn destroy(self: *App) void {
     self.window.deinit();
     self.renderer.deinit();
 
-    self.subs.deinit(self.alloc);
-
     self.screen.deinit();
     self.shared_context.deinit(self.alloc);
     self.alloc.destroy(self);
@@ -219,10 +139,6 @@ pub fn requestDraw(self: *App) void {
     self.draw.store(true, .release);
 }
 
-pub fn root(self: *App) *Window.Element {
-    return self.window.root;
-}
-
 pub fn drawWindow(self: *App) !void {
     if (!self.needsDraw()) return;
     defer self.markDrawn();
@@ -230,31 +146,4 @@ pub fn drawWindow(self: *App) !void {
     try self.window.draw();
 
     try self.renderer_thread.wakeup.notify();
-}
-
-pub fn handleMessage(self: *App, msg: Message) !void {
-    switch (msg) {
-        .scheme => |scheme| {
-            self.scheme = scheme;
-            self.notifySubs(.{ .scheme = scheme });
-        },
-    }
-}
-
-pub fn notifySubs(self: *App, data: EventData) void {
-    self.subs.notify(@as(EventType, data), data);
-}
-
-pub fn subscribe(
-    self: *App,
-    event: EventType,
-    comptime Userdata: type,
-    userdata: *Userdata,
-    comptime cb: *const fn (userdata: *Userdata, data: EventData) void,
-) !u64 {
-    return self.subs.addSubscription(self.alloc, event, Userdata, userdata, cb);
-}
-
-pub fn unsubscribe(self: *App, event: EventType, id: u64) void {
-    self.subs.removeSubscription(event, id);
 }

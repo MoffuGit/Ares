@@ -1,8 +1,7 @@
 pub const Timer = @This();
 
 const std = @import("std");
-const messagepkg = @import("../message.zig");
-const Tick = messagepkg.Tick;
+const Tick = @import("../../Loop.zig").Tick;
 
 const apppkg = @import("../../mod.zig");
 const Context = apppkg.Context;

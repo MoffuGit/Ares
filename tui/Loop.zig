@@ -9,16 +9,13 @@ const log = std.log.scoped(.loop);
 const BlockingQueue = datastruct.BlockingQueue;
 const Allocator = std.mem.Allocator;
 
-const App = @import("mod.zig");
+const App = @import("App.zig");
 const Window = @import("window/mod.zig");
 
 const WindowMessage = Window.Message;
 const AppMessage = App.Message;
 
-pub const Message = union(enum) {
-    window: WindowMessage,
-    app: AppMessage,
-};
+pub const Message = union(enum) { none };
 
 pub const Mailbox = BlockingQueue(Message, 64);
 
@@ -130,56 +127,51 @@ pub fn scheduleNextTick(self: *Loop) void {
 
     self.tick_active = true;
 
-    self.tick_h.run(
-        &self.loop,
-        &self.tick_c,
-        6,
-        Loop,
-        self,
-        tickCallback,
-    );
+    // self.tick_h.run(
+    //     &self.loop,
+    //     &self.tick_c,
+    //     6,
+    //     Loop,
+    //     self,
+    //     tickCallback,
+    // );
 }
 
-fn tickCallback(
-    self_: ?*Loop,
-    _: *xev.Loop,
-    _: *xev.Completion,
-    r: xev.Timer.RunError!void,
-) xev.CallbackAction {
-    _ = r catch {};
-    const l: *Loop = self_ orelse {
-        log.warn("tick callback fired without data set", .{});
-        return .disarm;
-    };
-
-    l.tick_active = false;
-
-    const now = std.time.microTimestamp();
-    l.app.window.time.processDue(now) catch |err| {
-        log.err("tick error: {}", .{err});
-    };
-
-    l.app.drawWindow() catch |err|
-        log.err("draw error: {}", .{err});
-
-    l.scheduleNextTick();
-
-    return .disarm;
-}
+// fn tickCallback(
+//     self_: ?*Loop,
+//     _: *xev.Loop,
+//     _: *xev.Completion,
+//     r: xev.Timer.RunError!void,
+// ) xev.CallbackAction {
+//     _ = r catch {};
+//     const l: *Loop = self_ orelse {
+//         log.warn("tick callback fired without data set", .{});
+//         return .disarm;
+//     };
+//
+//     l.tick_active = false;
+//
+//     const now = std.time.microTimestamp();
+//     l.app.window.time.processDue(now) catch |err| {
+//         log.err("tick error: {}", .{err});
+//     };
+//
+//     l.app.drawWindow() catch |err|
+//         log.err("draw error: {}", .{err});
+//
+//     l.scheduleNextTick();
+//
+//     return .disarm;
+// }
 
 fn drainMailbox(self: *Loop) !void {
     while (self.mailbox.pop()) |message| {
         switch (message) {
-            .window => |msg| {
-                try self.app.window.handleMessage(msg);
-            },
-            .app => |msg| {
-                try self.app.handleMessage(msg);
-            },
+            else => {},
         }
     }
 
-    self.scheduleNextTick();
+    // self.scheduleNextTick();
 }
 
 fn stopCallback(

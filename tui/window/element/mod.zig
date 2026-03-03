@@ -2,35 +2,20 @@ const std = @import("std");
 const vaxis = @import("vaxis");
 const unicode = vaxis.unicode;
 const gwidth = vaxis.gwidth.gwidth;
-const messagepkg = @import("../message.zig");
-const eventpkg = @import("../event.zig");
 const log = std.log.scoped(.element);
 
 pub var element_counter: std.atomic.Value(u64) = .init(0);
 
-pub const Animation = @import("Animation.zig");
-pub const Timer = @import("Timer.zig");
 pub const Style = @import("Style.zig");
 pub const Node = @import("Node.zig");
-pub const Scrollable = @import("Scrollable.zig");
-pub const TypedElement = @import("TypedElement.zig").TypedElement;
-pub const TypedAnimation = @import("TypedElement.zig").TypedAnimation;
-pub const Box = @import("Box.zig");
-pub const Input = @import("Input.zig");
 pub const Color = vaxis.Color;
 
 const Buffer = @import("../../Buffer.zig");
 const HitGrid = @import("../HitGrid.zig");
-const apppkg = @import("../../mod.zig");
-const Context = apppkg.Context;
-const EventContext = @import("../EventContext.zig");
-const Event = eventpkg.Event;
-const Mouse = eventpkg.Mouse;
+const App = @import("../../App.zig");
 const Allocator = std.mem.Allocator;
 const Childrens = @import("Childrens.zig");
 
-const subspkg = @import("../../events.zig");
-pub const Listeners = subspkg.EventListeners(EventType, ElementEvent);
 pub const DrawFn = *const fn (element: *Element, buffer: *Buffer) void;
 pub const HitFn = *const fn (element: *Element, hit_grid: *HitGrid) void;
 pub const UpdateFn = *const fn (element: *Element) void;
@@ -56,55 +41,8 @@ pub const Layout = struct {
     };
 };
 
-pub const EventType = enum {
-    remove,
-    key_press,
-    key_release,
-    focus,
-    blur,
-    mouse_down,
-    mouse_up,
-    click,
-    mouse_move,
-    mouse_enter,
-    mouse_leave,
-    mouse_over,
-    mouse_out,
-    wheel,
-    drag,
-    drag_end,
-    resize,
-};
-
-pub const ElementData = union(EventType) {
-    remove: void,
-    key_press: vaxis.Key,
-    key_release: vaxis.Key,
-    focus: void,
-    blur: void,
-    mouse_down: Mouse,
-    mouse_up: Mouse,
-    click: Mouse,
-    mouse_move: Mouse,
-    mouse_enter: Mouse,
-    mouse_leave: Mouse,
-    mouse_over: Mouse,
-    mouse_out: Mouse,
-    wheel: Mouse,
-    drag: Mouse,
-    drag_end: Mouse,
-    resize: struct { width: u16, height: u16 },
-};
-
-pub const ElementEvent = struct {
-    ctx: *EventContext,
-    element: *Element,
-    event: ElementData,
-};
-
 pub const Options = struct {
     id: ?[]const u8 = null,
-    visible: bool = true,
     zIndex: usize = 0,
     style: Style = .{},
     userdata: ?*anyopaque = null,
@@ -158,12 +96,6 @@ num: u64,
 
 node: Node,
 
-visible: bool = true,
-removed: bool = true,
-focused: bool = false,
-hovered: bool = false,
-dragging: bool = false,
-
 zIndex: usize = 0,
 
 childrens: ?Childrens = null,
@@ -172,8 +104,6 @@ parent: ?*Element = null,
 layout: Layout = .{},
 
 style: Style = .{},
-
-context: ?*Context = null,
 
 userdata: ?*anyopaque = null,
 
@@ -186,8 +116,6 @@ beforeDrawFn: ?DrawFn = null,
 afterDrawFn: ?DrawFn = null,
 beforeHitFn: ?HitFn = null,
 afterHitFn: ?HitFn = null,
-
-listeners: Listeners = .{},
 
 pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
     const num = element_counter.fetchAdd(1, .monotonic);
@@ -210,7 +138,6 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
         .id = id,
         .id_allocated = id_allocated,
         .num = num,
-        .visible = opts.visible,
         .zIndex = opts.zIndex,
         .style = opts.style,
         .userdata = opts.userdata,
@@ -223,20 +150,6 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
         .updateFn = opts.updateFn,
         .node = node,
     };
-}
-
-pub fn addEventListener(
-    self: *Element,
-    event_type: EventType,
-    comptime Userdata: type,
-    userdata: *Userdata,
-    comptime cb: *const fn (userdata: *Userdata, data: ElementEvent) void,
-) !void {
-    _ = try self.listeners.addSubscription(self.alloc, event_type, Userdata, userdata, cb);
-}
-
-pub fn dispatchEvent(self: *Element, data: ElementEvent) void {
-    self.listeners.notifyConsumable(@as(EventType, data.event), data, &data.ctx.stopped);
 }
 
 pub fn fill(element: *Element, buffer: *Buffer, cell: vaxis.Cell) void {
@@ -782,9 +695,6 @@ pub fn hitRounded(element: *Element, hit_grid: *HitGrid, radius: f32) void {
 }
 
 pub fn syncLayout(self: *Element) bool {
-    const old_width = self.layout.width;
-    const old_height = self.layout.height;
-
     const new_width = self.node.getLayoutWidth();
     const new_height = self.node.getLayoutHeight();
 
@@ -826,14 +736,6 @@ pub fn syncLayout(self: *Element) bool {
         },
     };
 
-    if (old_width != new_width or old_height != new_height) {
-        var ctx = EventContext{ .phase = .at_target, .target = self };
-        self.dispatchEvent(
-            .{ .ctx = &ctx, .element = self, .event = .{
-                .resize = .{ .width = new_width, .height = new_height },
-            } },
-        );
-    }
     return (curr_left != new_left) or (curr_top != curr_top);
 }
 
@@ -843,8 +745,6 @@ pub fn deinit(self: *Element) void {
         self.childrens = null;
     }
 
-    self.listeners.deinit(self.alloc);
-
     self.node.deinit();
 
     if (self.id_allocated) {
@@ -852,21 +752,7 @@ pub fn deinit(self: *Element) void {
     }
 }
 
-pub fn update(self: *Element) void {
-    if (self.updateFn) |callback| {
-        callback(self);
-    }
-
-    if (self.childrens) |*childrens| {
-        for (childrens.by_order.items) |child| {
-            child.update();
-        }
-    }
-}
-
 pub fn draw(self: *Element, buffer: *Buffer) void {
-    if (!self.visible) return;
-
     if (self.beforeDrawFn) |callback| {
         callback(self, buffer);
     }
@@ -887,8 +773,6 @@ pub fn draw(self: *Element, buffer: *Buffer) void {
 }
 
 pub fn hit(self: *Element, hit_grid: *HitGrid) void {
-    if (!self.visible) return;
-
     if (self.beforeHitFn) |callback| {
         callback(self, hit_grid);
     }
@@ -905,17 +789,6 @@ pub fn hit(self: *Element, hit_grid: *HitGrid) void {
 
     if (self.afterHitFn) |callback| {
         callback(self, hit_grid);
-    }
-}
-
-pub fn setContext(self: *Element, ctx: *Context) !void {
-    self.context = ctx;
-    try ctx.app.window.addElement(self);
-
-    if (self.childrens) |*childrens| {
-        for (childrens.by_order.items) |child| {
-            try child.setContext(ctx);
-        }
     }
 }
 
@@ -1006,9 +879,6 @@ pub fn removeChild(self: *Element, num: u64) void {
         child.markRemoved(true);
 
         child.parent = null;
-
-        var ctx = EventContext{ .phase = .at_target, .target = self };
-        child.dispatchEvent(.{ .ctx = &ctx, .element = self, .event = .remove });
     }
 }
 
@@ -1023,41 +893,12 @@ pub fn getChildById(self: *Element, id: []const u8) ?*Element {
     return null;
 }
 
-pub fn handleFocus(self: *Element) void {
-    var ctx = EventContext{ .phase = .at_target, .target = self };
-    self.dispatchEvent(.{ .element = self, .ctx = &ctx, .event = .focus });
-}
-
-pub fn handleBlur(self: *Element) void {
-    var ctx = EventContext{ .phase = .at_target, .target = self };
-    self.dispatchEvent(.{ .ctx = &ctx, .element = self, .event = .blur });
-}
-
-pub fn handleResize(self: *Element, width: u16, height: u16) void {
-    var ctx = EventContext{ .phase = .at_target, .target = self };
-    self.dispatchEvent(.{ .ctx = &ctx, .element = self, .resize = .{ .width = width, .height = height } });
-}
-
 pub fn isAncestorOf(self: *Element, other: *Element) bool {
     var current: ?*Element = other.parent;
     while (current) |elem| : (current = elem.parent) {
         if (elem == self) return true;
     }
     return false;
-}
-
-pub fn hide(self: *Element) void {
-    self.style.display = .none;
-    self.node.setDisplay(.none);
-
-    self.visible = false;
-}
-
-pub fn show(self: *Element) void {
-    self.style.display = .flex;
-    self.node.setDisplay(.flex);
-
-    self.visible = true;
 }
 
 test "add child to element" {

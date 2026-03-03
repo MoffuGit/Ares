@@ -1,10 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const message = @import("message.zig");
-const Tick = message.Tick;
-const AnimationMessage = message.AnimationMessage;
-const TimerMessage = message.TimerMessage;
+const Tick = @import("../Loop.zig").Tick;
+const AnimationMessage = @import("../Loop.zig").AnimationMessage;
+const TimerMessage = @import("../Loop.zig").TimerMessage;
 
 const Timer = @import("element/Timer.zig");
 const AnimationMod = @import("element/Animation.zig");
