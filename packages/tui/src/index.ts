@@ -47,7 +47,6 @@ export class TuiLib {
             {
                 args: [FFIType.u8, FFIType.u64, FFIType.pointer, FFIType.u64],
                 returns: FFIType.void,
-                threadsafe: false
             },
         );
         this.lib.symbols.initState(this.jsCallback.ptr)
