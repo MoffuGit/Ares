@@ -1,24 +1,18 @@
 import { resolveCoreLib, type CoreLib } from "@ares/core";
 import { EventType } from "@ares/core/events";
-import { Emitter, type App, type AppEvents, type AppState, type ColorScheme, type Settings, type Theme } from "@ares/shared";
+import * as Shared from "@ares/shared";
 import type { Pointer } from "bun:ffi";
 
-const SCHEME_MAP: Record<number, ColorScheme> = {
-    0: "light",
-    1: "dark",
-    2: "system",
-};
-
-export class TuiApp implements App {
-    readonly events = new Emitter<AppEvents>();
+export class TuiApp implements Shared.App {
+    readonly events = new Shared.Emitter<Shared.AppEvents>();
 
     private core: CoreLib;
     private monitor: Pointer;
     private settings: Pointer;
 
-    private _state: AppState = { settings: null, theme: null };
+    private _state: Shared.AppState = { settings: null, theme: null, worktree: [] };
 
-    get state(): AppState {
+    get state(): Shared.AppState {
         return this._state;
     }
 
@@ -60,16 +54,16 @@ export class TuiApp implements App {
         this.events.emit("themeUpdate");
     };
 
-    private readSettings(): Settings {
+    private readSettings(): Shared.Settings {
         const raw = this.core.readSettings(this.settings);
         return {
-            scheme: SCHEME_MAP[Number(raw.scheme)] ?? "system",
+            scheme: Shared.SchemeMap[Number(raw.scheme)] ?? "system",
             light_theme: raw.light_theme ?? "",
             dark_theme: raw.dark_theme ?? "",
         };
     }
 
-    private readTheme(): Theme {
+    private readTheme(): Shared.Theme {
         const raw = this.core.readTheme(this.settings);
         const toRgba = (v: number): number[] => [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
         return {

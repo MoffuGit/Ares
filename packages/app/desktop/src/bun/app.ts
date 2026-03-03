@@ -1,22 +1,11 @@
 import { resolveCoreLib, type CoreLib } from "@ares/core";
 import { EventType } from "@ares/core/events";
-import { Emitter, type App, type AppEvents, type AppState, type ColorScheme, type Settings, type Theme, type WorktreeEntry } from "@ares/shared";
+import * as Shared from "@ares/shared";
 import type { Pointer } from "bun:ffi";
 
-const SCHEME_MAP: Record<number, ColorScheme> = {
-    0: "light",
-    1: "dark",
-    2: "system",
-};
 
-const FILE_TYPE_MAP: string[] = [
-    "zig", "c", "cpp", "h", "py", "js", "ts", "json", "xml", "yaml",
-    "toml", "md", "txt", "html", "css", "sh", "go", "rs", "java", "rb",
-    "lua", "makefile", "dockerfile", "gitignore", "license", "unknown",
-];
-
-export class DesktopApp implements App {
-    readonly events = new Emitter<AppEvents>();
+export class DesktopApp implements Shared.App {
+    readonly events = new Shared.Emitter<Shared.AppEvents>();
 
     private core: CoreLib;
     private monitor: Pointer;
@@ -24,9 +13,9 @@ export class DesktopApp implements App {
     private settings: Pointer;
     private project: Pointer | null = null;
 
-    _state: AppState = { settings: null, theme: null, worktree: [] };
+    _state: Shared.AppState = { settings: null, theme: null, worktree: [] };
 
-    get state(): AppState {
+    get state(): Shared.AppState {
         return this._state;
     }
 
@@ -83,7 +72,7 @@ export class DesktopApp implements App {
     refreshWorktree() {
         if (!this.project) return;
         const raw = this.core.readWorktreeEntries(this.project);
-        const entries: WorktreeEntry[] = raw.map((e) => {
+        const entries: Shared.WorktreeEntry[] = raw.map((e) => {
             const path = e.path ?? "";
             const parts = path.split("/");
             return {
@@ -91,7 +80,7 @@ export class DesktopApp implements App {
                 name: parts[parts.length - 1] ?? path,
                 path,
                 kind: e.kind === 1 ? "dir" : "file",
-                fileType: FILE_TYPE_MAP[e.file_type] ?? "unknown",
+                fileType: Shared.FileType[e.file_type] ?? "unknown",
                 depth: e.depth,
             };
         });
@@ -119,16 +108,16 @@ export class DesktopApp implements App {
         this.refreshWorktree();
     };
 
-    private readSettings(): Settings {
+    private readSettings(): Shared.Settings {
         const raw = this.core.readSettings(this.settings);
         return {
-            scheme: SCHEME_MAP[Number(raw.scheme)] ?? "system",
+            scheme: Shared.SchemeMap[Number(raw.scheme)] ?? "system",
             light_theme: raw.light_theme ?? "",
             dark_theme: raw.dark_theme ?? "",
         };
     }
 
-    private readTheme(): Theme {
+    private readTheme(): Shared.Theme {
         const raw = this.core.readTheme(this.settings);
         const toRgba = (v: number): number[] => [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
         return {
