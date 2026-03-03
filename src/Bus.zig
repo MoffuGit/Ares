@@ -34,12 +34,12 @@ drain_pending: bool = false,
 drain_running: bool = false,
 drain_thread: ?std.Thread = null,
 
-pub fn startDrain(self: *Bus) void {
+pub fn start(self: *Bus) void {
     self.drain_running = true;
     self.drain_thread = std.Thread.spawn(.{}, drainLoop, .{self}) catch null;
 }
 
-pub fn stopDrain(self: *Bus) void {
+pub fn stop(self: *Bus) void {
     self.drain_mutex.lock();
     self.drain_running = false;
     self.drain_mutex.unlock();
