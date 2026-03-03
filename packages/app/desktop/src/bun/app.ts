@@ -52,6 +52,7 @@ export class DesktopApp implements App {
         this.core.events.on(String(EventType.WorktreeUpdate), this.onWorktreeUpdate);
 
         this.openProject(this.projectPath);
+        this.refreshWorktree();
     }
 
     stop() {
@@ -94,6 +95,7 @@ export class DesktopApp implements App {
                 depth: e.depth,
             };
         });
+        console.log("refreshWorktree: count=", raw.length, "entries=", JSON.stringify(entries.slice(0, 5)));
         this._state = { ...this._state, worktree: entries };
         this.events.emit("worktreeUpdate");
     }

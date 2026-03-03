@@ -20,6 +20,7 @@ export class WebviewApp implements App {
                         this.events.emit("themeUpdate");
                     },
                     worktreeUpdate: (worktree) => {
+                        console.log("worktree update");
                         this._state = { ...this._state, worktree };
                         this.events.emit("worktreeUpdate");
                     },

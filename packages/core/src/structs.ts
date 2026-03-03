@@ -29,6 +29,7 @@ export const WorktreeEntry = defineStruct([
     ["kind", "u8"],
     ["file_type", "u8"],
     ["depth", "u16"],
+    ["_pad", "u32"],
     ["path", "char*"],
     ["path_len", "u64", { lengthOf: "path" }],
 ] as const);
