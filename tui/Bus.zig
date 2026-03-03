@@ -1,91 +1,82 @@
 const std = @import("std");
 const BlockingQueue = @import("datastruct").BlockingQueue;
+const vaxis = @import("vaxis");
 const Bus = @This();
 
-pub const EventType = enum {
+pub const EventType = enum(u8) {
     key_down,
     key_up,
-    mouse,
+    mouse_down,
+    mouse_up,
+    mouse_move,
+    click,
+    mouse_enter,
+    mouse_leave,
+    wheel,
     focus,
     blur,
     resize,
+    scheme,
 };
 
-pub const Event = union(EventType) {
-    key_down: void,
-    key_up: void,
-    mouse: void,
-    focus: void,
-    blur: void,
-    resize: void,
+pub const KeyData = struct {
+    codepoint: u21,
+    mods: u8,
+    text_len: u8 = 0,
+    text: [32]u8 = undefined,
+
+    pub fn fromVaxis(key: vaxis.Key) KeyData {
+        var data = KeyData{
+            .codepoint = key.codepoint,
+            .mods = @bitCast(key.mods),
+        };
+        if (key.text) |t| {
+            const len: u8 = @intCast(@min(t.len, 32));
+            @memcpy(data.text[0..len], t[0..len]);
+            data.text_len = len;
+        }
+        return data;
+    }
 };
 
-pub const AnyEvent = struct {
-    const MAX_DATA_SIZE = 256;
+pub const MouseData = struct {
+    col: u16,
+    row: u16,
+    button: u8,
+};
 
-    _type: u8,
+pub const ResizeData = struct {
+    cols: u16,
+    rows: u16,
+};
+
+pub const SchemeData = struct {
+    scheme: u8,
+};
+
+pub const Event = struct {
+    _type: EventType,
     target: u64,
-    len: u8 = 0,
-    data: [MAX_DATA_SIZE]u8 = undefined,
+    data: Data,
+
+    pub const Data = union {
+        key: KeyData,
+        mouse: MouseData,
+        resize: ResizeData,
+        scheme: SchemeData,
+        none: void,
+    };
 };
 
-pub const MailBox = BlockingQueue(AnyEvent, 64);
+pub const MailBox = BlockingQueue(Event, 64);
 
 pub const Callback = *const fn (event: u8, target: u64, ptr: ?[*]const u8, dataLen: usize) callconv(.c) void;
 
 callback: ?Callback = null,
 mailbox: MailBox = .{},
 
-drain_mutex: std.Thread.Mutex = .{},
-drain_cond: std.Thread.Condition = .{},
-drain_pending: bool = false,
-drain_running: bool = false,
-drain_thread: ?std.Thread = null,
-
-pub fn startDrain(self: *Bus) void {
-    self.drain_running = true;
-    self.drain_thread = std.Thread.spawn(.{}, drainLoop, .{self}) catch null;
-}
-
-pub fn stopDrain(self: *Bus) void {
-    self.drain_mutex.lock();
-    self.drain_running = false;
-    self.drain_mutex.unlock();
-    self.drain_cond.signal();
-    if (self.drain_thread) |t| t.join();
-    self.drain_thread = null;
-}
-
-fn drainLoop(self: *Bus) void {
-    while (true) {
-        self.drain_mutex.lock();
-        while (!self.drain_pending and self.drain_running) {
-            self.drain_cond.wait(&self.drain_mutex);
-        }
-        if (!self.drain_running) {
-            self.drain_mutex.unlock();
-            return;
-        }
-        self.drain_pending = false;
-        self.drain_mutex.unlock();
-
-        self.drain();
-    }
-}
-
-pub fn push(self: *Bus, event: Event, target: u64) void {
-    const any = AnyEvent{ ._type = @intFromEnum(event), .target = target };
-
-    switch (event) {
-        else => {},
-    }
-
-    _ = self.mailbox.push(any, .instant);
-
-    self.drain_mutex.lock();
-    self.drain_pending = true;
-    self.drain_mutex.unlock();
-    self.drain_cond.signal();
+pub fn push(self: *Bus, _type: EventType, target: u64, data: Event.Data) void {
+    _ = self.mailbox.push(.{ ._type = _type, .target = target, .data = data }, .instant);
 }
 
 pub fn drain(self: *Bus) void {
@@ -95,7 +86,15 @@ pub fn drain(self: *Bus) void {
     defer it.deinit();
 
     while (it.next()) |ev| {
-        const ptr: ?[*]const u8 = if (ev.len > 0) &ev.data else null;
-        cb(ev._type, ev.target, ptr, ev.len);
+        const bytes: []const u8 = switch (ev._type) {
+            .key_down, .key_up => std.mem.asBytes(&ev.data.key),
+            .mouse_down, .mouse_up, .mouse_move, .click, .mouse_enter, .mouse_leave, .wheel => std.mem.asBytes(&ev.data.mouse),
+            .resize => std.mem.asBytes(&ev.data.resize),
+            .scheme => std.mem.asBytes(&ev.data.scheme),
+            .focus, .blur => &.{},
+        };
+
+        const ptr: ?[*]const u8 = if (bytes.len > 0) bytes.ptr else null;
+        cb(@intFromEnum(ev._type), ev.target, ptr, bytes.len);
     }
 }

@@ -19,3 +19,7 @@ export fn createApp() ?*App {
 export fn destroyApp(app: *App) void {
     app.destroy();
 }
+
+export fn drainEvents() void {
+    global.state.bus.drain();
+}

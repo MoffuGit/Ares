@@ -12,13 +12,11 @@ pub const Color = vaxis.Color;
 
 const Buffer = @import("../../Buffer.zig");
 const HitGrid = @import("../HitGrid.zig");
-const App = @import("../../App.zig");
 const Allocator = std.mem.Allocator;
 const Childrens = @import("Childrens.zig");
 
 pub const DrawFn = *const fn (element: *Element, buffer: *Buffer) void;
 pub const HitFn = *const fn (element: *Element, hit_grid: *HitGrid) void;
-pub const UpdateFn = *const fn (element: *Element) void;
 
 pub const Layout = struct {
     left: u16 = 0,
@@ -42,7 +40,6 @@ pub const Layout = struct {
 };
 
 pub const Options = struct {
-    id: ?[]const u8 = null,
     zIndex: usize = 0,
     style: Style = .{},
     userdata: ?*anyopaque = null,
@@ -52,7 +49,6 @@ pub const Options = struct {
     beforeHitFn: ?HitFn = null,
     hitFn: ?HitFn = null,
     afterHitFn: ?HitFn = null,
-    updateFn: ?UpdateFn = null,
 };
 
 pub const Segment = struct {
@@ -90,8 +86,6 @@ pub const PrintResult = struct {
 pub const Element = @This();
 
 alloc: Allocator,
-id: []const u8,
-id_allocated: bool = false,
 num: u64,
 
 node: Node,
@@ -107,8 +101,6 @@ style: Style = .{},
 
 userdata: ?*anyopaque = null,
 
-updateFn: ?UpdateFn = null,
-
 drawFn: ?DrawFn = null,
 hitFn: ?HitFn = null,
 
@@ -120,23 +112,12 @@ afterHitFn: ?HitFn = null,
 pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
     const num = element_counter.fetchAdd(1, .monotonic);
 
-    var id_allocated = false;
-    const id = opts.id orelse blk: {
-        var id_buf: [32]u8 = undefined;
-        const generated = std.fmt.bufPrint(&id_buf, "element-{}", .{num}) catch "element-?";
-        const duped = alloc.dupe(u8, generated) catch break :blk "element-?";
-        id_allocated = true;
-        break :blk duped;
-    };
-
     const node = Node.init();
 
     opts.style.apply(node);
 
     return .{
         .alloc = alloc,
-        .id = id,
-        .id_allocated = id_allocated,
         .num = num,
         .zIndex = opts.zIndex,
         .style = opts.style,
@@ -147,7 +128,6 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
         .afterHitFn = opts.afterHitFn,
         .drawFn = opts.drawFn,
         .hitFn = opts.hitFn,
-        .updateFn = opts.updateFn,
         .node = node,
     };
 }
@@ -746,10 +726,6 @@ pub fn deinit(self: *Element) void {
     }
 
     self.node.deinit();
-
-    if (self.id_allocated) {
-        self.alloc.free(@constCast(self.id));
-    }
 }
 
 pub fn draw(self: *Element, buffer: *Buffer) void {
@@ -792,59 +768,12 @@ pub fn hit(self: *Element, hit_grid: *HitGrid) void {
     }
 }
 
-pub fn removeContext(self: *Element) void {
-    if (self.context) |ctx| {
-        ctx.app.window.removeElement(self.num);
-        self.context = null;
-
-        if (self.childrens) |*childrens| {
-            for (childrens.by_order.items) |child| {
-                child.removeContext();
-            }
-        }
-    }
-}
-
-pub fn markRemoved(self: *Element, removed: bool) void {
-    self.removed = removed;
-
-    if (self.childrens) |*childrens| {
-        for (childrens.by_order.items) |child| {
-            child.markRemoved(removed);
-        }
-    }
-}
-
-pub fn remove(self: *Element) void {
-    if (self.removed) return;
-
-    if (self.parent) |parent| {
-        parent.removeChild(self.num);
-    } else {
-        self.removeContext();
-        self.markRemoved(true);
-    }
-}
-
-pub fn removeChildrens(self: *Element) void {
-    if (self.childrens) |childrens| {
-        for (childrens.by_order.items) |child| {
-            self.removeChild(child.num);
-        }
-    }
-}
-
 pub fn addChild(self: *Element, child: *Element) !void {
     if (self.childrens == null) {
         self.childrens = .{};
     }
 
     child.parent = self;
-    child.markRemoved(false);
-
-    if (self.context) |ctx| {
-        try child.setContext(ctx);
-    }
 
     try self.childrens.?.add(child, self.alloc);
 
@@ -858,12 +787,6 @@ pub fn insertChild(self: *Element, child: *Element, index: usize) !void {
 
     child.parent = self;
 
-    child.markRemoved(false);
-
-    if (self.context) |ctx| {
-        try child.setContext(ctx);
-    }
-
     try self.childrens.?.insert(child, index, self.alloc);
 
     self.node.insertChild(child.node, index);
@@ -875,22 +798,8 @@ pub fn removeChild(self: *Element, num: u64) void {
 
         self.node.removeChild(child.node);
 
-        child.removeContext();
-        child.markRemoved(true);
-
         child.parent = null;
     }
-}
-
-pub fn getChildById(self: *Element, id: []const u8) ?*Element {
-    if (self.childrens) |*childrens| {
-        for (childrens.by_order.items) |child| {
-            if (std.mem.eql(u8, child.id, id)) {
-                return child;
-            }
-        }
-    }
-    return null;
 }
 
 pub fn isAncestorOf(self: *Element, other: *Element) bool {
@@ -970,7 +879,6 @@ test "remove child from element" {
     try testing.expectEqual(@as(usize, 0), parent.childrens.?.by_order.items.len);
     try testing.expectEqual(@as(usize, 0), parent.childrens.?.by_z_index.items.len);
     try testing.expect(child.parent == null);
-    try testing.expect(child.removed == true);
 }
 
 test "remove middle child preserves order" {
@@ -1000,25 +908,6 @@ test "remove middle child preserves order" {
     try testing.expect(parent.childrens.?.by_order.items[1] == &child3);
 }
 
-test "element remove via parent" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    var parent = Element.init(alloc, .{});
-    defer parent.deinit();
-
-    var child = Element.init(alloc, .{});
-    defer child.deinit();
-
-    try parent.addChild(&child);
-
-    child.remove();
-
-    try testing.expectEqual(@as(usize, 0), parent.childrens.?.by_order.items.len);
-    try testing.expect(child.parent == null);
-    try testing.expect(child.removed == true);
-}
-
 test "isAncestorOf" {
     const testing = std.testing;
     const alloc = testing.allocator;
@@ -1040,30 +929,6 @@ test "isAncestorOf" {
     try testing.expect(parent.isAncestorOf(&child) == true);
     try testing.expect(child.isAncestorOf(&grandparent) == false);
     try testing.expect(child.isAncestorOf(&parent) == false);
-}
-
-test "getChildById" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    var parent = Element.init(alloc, .{});
-    defer parent.deinit();
-
-    var child1 = Element.init(alloc, .{ .id = "first" });
-    defer child1.deinit();
-
-    var child2 = Element.init(alloc, .{ .id = "second" });
-    defer child2.deinit();
-
-    try parent.addChild(&child1);
-    try parent.addChild(&child2);
-
-    const found = parent.getChildById("second");
-    try testing.expect(found != null);
-    try testing.expect(found.? == &child2);
-
-    const not_found = parent.getChildById("nonexistent");
-    try testing.expect(not_found == null);
 }
 
 test "remove nonexistent child does nothing" {

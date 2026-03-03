@@ -21,6 +21,7 @@ yoga/
 debugWindow.txt
 old_src/
 src/old_core/
+old_tui/
 node_modules/
 bun.lock
 

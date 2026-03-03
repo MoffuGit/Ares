@@ -3,60 +3,48 @@ const vaxis = @import("vaxis");
 const yoga = @import("element/Node.zig").yoga;
 
 pub const Element = @import("element/mod.zig");
+pub const Mouse = @import("Mouse.zig");
 const Buffer = @import("../Buffer.zig");
-const App = @import("../App.zig");
+const Bus = @import("../Bus.zig");
 const Screen = @import("../Screen.zig");
 const HitGrid = @import("HitGrid.zig");
 const Allocator = std.mem.Allocator;
 const Elements = std.AutoHashMap(u64, *Element);
-const eventpkg = @import("event.zig");
-const Event = eventpkg.Event;
-const Mouse = eventpkg.Mouse;
 
 const Window = @This();
 
 alloc: Allocator,
 
-root: *Element,
+root: ?*Element = null,
 
 size: vaxis.Winsize,
 screen: *Screen,
 
-focused: ?*Element = null,
-focus_path: std.ArrayList(*Element) = .{},
+focused_id: ?u64 = null,
 hit_grid: HitGrid,
-hovered: ?*Element = null,
-pressed_on: ?*Element = null,
+hovered_id: ?u64 = null,
+pressed_id: ?u64 = null,
 elements: Elements,
 
 pub fn init(alloc: Allocator, screen: *Screen) !Window {
-    const root = try alloc.create(Element);
-    errdefer alloc.destroy(root);
-
-    root.* = Element.init(alloc, .{});
-    root.hitFn = Element.hitSelf;
-
-    var elements = Elements.init(alloc);
-    try elements.put(root.num, root);
-
     const hit_grid = try HitGrid.init(alloc, 0, 0);
 
     return .{
         .screen = screen,
         .alloc = alloc,
-        .root = root,
         .size = .{ .cols = 0, .rows = 0, .x_pixel = 0, .y_pixel = 0 },
-        .elements = elements,
+        .elements = Elements.init(alloc),
         .hit_grid = hit_grid,
     };
 }
 
 pub fn deinit(self: *Window) void {
-    self.root.deinit();
-    self.alloc.destroy(self.root);
-    self.focus_path.deinit(self.alloc);
     self.hit_grid.deinit();
     self.elements.deinit();
+}
+
+pub fn setRoot(self: *Window, elem: *Element) void {
+    self.root = elem;
 }
 
 pub fn addElement(self: *Window, elem: *Element) !void {
@@ -65,11 +53,14 @@ pub fn addElement(self: *Window, elem: *Element) !void {
 
 pub fn removeElement(self: *Window, num: u64) void {
     _ = self.elements.remove(num);
-    if (self.hovered) |h| {
-        if (h.num == num) self.hovered = null;
+    if (self.hovered_id) |id| {
+        if (id == num) self.hovered_id = null;
     }
-    if (self.pressed_on) |p| {
-        if (p.num == num) self.pressed_on = null;
+    if (self.pressed_id) |id| {
+        if (id == num) self.pressed_id = null;
+    }
+    if (self.focused_id) |id| {
+        if (id == num) self.focused_id = null;
     }
 }
 
@@ -79,17 +70,11 @@ pub fn getElement(self: *Window, num: u64) ?*Element {
 
 pub fn resize(self: *Window, size: vaxis.Winsize) void {
     if (self.size.rows == size.rows and self.size.cols == size.cols) return;
-
     self.size = size;
-    // self.requestDraw();
-}
-
-pub fn requestDraw(self: *Window) void {
-    self.context.requestDraw();
 }
 
 pub fn draw(self: *Window) !void {
-    // self.root.update();
+    const root = self.root orelse return;
 
     self.calculateLayout();
 
@@ -102,7 +87,7 @@ pub fn draw(self: *Window) !void {
         try hit_grid.resize(size.cols, size.rows);
     }
 
-    self.root.hit(&self.hit_grid);
+    root.hit(&self.hit_grid);
 
     const buffer = try screen.nextBuffer();
     errdefer screen.releaseBuffer();
@@ -113,13 +98,13 @@ pub fn draw(self: *Window) !void {
 
     buffer.clear();
 
-    self.root.draw(buffer);
+    root.draw(buffer);
 }
 
 pub fn calculateLayout(self: *Window) void {
-    const root_node = self.root.node.yg_node;
-    yoga.YGNodeCalculateLayout(root_node, @floatFromInt(self.size.cols), @floatFromInt(self.size.rows), yoga.YGDirectionLTR);
-    applyLayout(self.root, false);
+    const root = self.root orelse return;
+    yoga.YGNodeCalculateLayout(root.node.yg_node, @floatFromInt(self.size.cols), @floatFromInt(self.size.rows), yoga.YGDirectionLTR);
+    applyLayout(root, false);
 }
 
 fn applyLayout(element: *Element, parent_changed: bool) void {
@@ -144,224 +129,73 @@ fn applyLayout(element: *Element, parent_changed: bool) void {
     }
 }
 
-pub fn tryHit(self: *Window, col: u16, row: u16) ?*Element {
-    const num = self.hit_grid.get(col, row) orelse return null;
-    return self.getElement(num);
+pub fn tryHit(self: *Window, col: u16, row: u16) ?u64 {
+    return self.hit_grid.get(col, row);
 }
 
-// pub fn dispatchEvent(target: *Element, ctx: *EventContext, data: Element.ElementEvent) void {
-//     var event = data;
-//
-//     ctx.* = .{ .phase = .capturing, .target = target };
-//     capture(target, ctx, &event);
-//
-//     if (ctx.stopped) return;
-//
-//     ctx.phase = .at_target;
-//     event.element = target;
-//     target.dispatchEvent(event);
-//
-//     if (ctx.stopped) return;
-//
-//     ctx.phase = .bubbling;
-//     bubble(target, ctx, &event);
-// }
-//
-// fn capture(target: *Element, ctx: *EventContext, data: *Element.ElementEvent) void {
-//     var path: [64]*Element = undefined;
-//     var depth: usize = 0;
-//
-//     var current: ?*Element = target.parent;
-//     while (current) |elem| : (current = elem.parent) {
-//         if (depth >= path.len) break;
-//         path[depth] = elem;
-//         depth += 1;
-//     }
-//
-//     var i: usize = depth;
-//     while (i > 0) {
-//         i -= 1;
-//         data.element = path[i];
-//         path[i].dispatchEvent(data.*);
-//         if (ctx.stopped) return;
-//     }
-// }
-//
-// fn bubble(target: *Element, ctx: *EventContext, data: *Element.ElementEvent) void {
-//     var current = target.parent;
-//     while (current) |elem| : (current = elem.parent) {
-//         data.element = elem;
-//         elem.dispatchEvent(data.*);
-//         if (ctx.stopped) return;
-//     }
-// }
-//
-// pub fn handleEvent(self: *Window, event: Event) !void {
-//     if (event == .mouse) {
-//         const mouse = Mouse.fromVaxis(event.mouse, self.size);
-//         return self.handleMouseEvent(mouse);
-//     }
-//
-//     const target = self.focused orelse self.root;
-//
-//     var ctx = EventContext{
-//         .target = target,
-//     };
-//
-//     const event_data = switch (event) {
-//         .blur => Element.ElementData{ .blur = {} },
-//         .focus => Element.ElementData{ .focus = {} },
-//         .key_press => |key| Element.ElementData{ .key_press = key },
-//         .key_release => |key| Element.ElementData{ .key_release = key },
-//         else => return,
-//     };
-//
-//     dispatchEvent(target, &ctx, .{ .ctx = &ctx, .element = target, .event = event_data });
-// }
-//
-// fn handleMouseEvent(self: *Window, mouse: Mouse) void {
-//     const curr = self.tryHit(mouse.col, mouse.row);
-//     const prev = self.hovered;
-//
-//     self.processHoverChange(prev, curr, mouse);
-//
-//     if (curr) |target| {
-//         switch (mouse.type) {
-//             .press => self.processMouseDown(target, mouse),
-//             .release => self.processMouseUp(target, mouse),
-//             .motion, .drag => self.processMouseMove(target, mouse),
-//         }
-//
-//         const is_wheel = switch (mouse.button) {
-//             .wheel_up,
-//             .wheel_down,
-//             .wheel_left,
-//             .wheel_right,
-//             => true,
-//             else => false,
-//         };
-//
-//         if (is_wheel) {
-//             self.processWheel(target, mouse);
-//         }
-//     }
-// }
-//
-// fn processHoverChange(self: *Window, prev_target: ?*Element, curr_target: ?*Element, mouse: Mouse) void {
-//     if (prev_target == curr_target) return;
-//
-//     if (prev_target) |prev| {
-//         var ctx = EventContext{ .target = prev };
-//         const is_leaving = curr_target == null or !prev.isAncestorOf(curr_target.?);
-//         prev.hovered = false;
-//         if (is_leaving) {
-//             dispatchEvent(prev, &ctx, .{ .ctx = &ctx, .element = prev, .event = .{ .mouse_leave = mouse } });
-//         }
-//
-//         dispatchEvent(prev, &ctx, .{ .ctx = &ctx, .element = prev, .event = .{ .mouse_out = mouse } });
-//     }
-//
-//     if (curr_target) |curr| {
-//         var ctx = EventContext{ .target = curr };
-//         const is_entering = prev_target == null or !curr.isAncestorOf(prev_target.?);
-//         curr.hovered = true;
-//         if (is_entering) {
-//             dispatchEvent(curr, &ctx, .{ .ctx = &ctx, .element = curr, .event = .{ .mouse_enter = mouse } });
-//         }
-//         dispatchEvent(curr, &ctx, .{ .ctx = &ctx, .element = curr, .event = .{ .mouse_over = mouse } });
-//     }
-//
-//     self.hovered = curr_target;
-// }
-//
-// fn processMouseDown(self: *Window, target: *Element, mouse: Mouse) void {
-//     self.pressed_on = target;
-//     var ctx = EventContext{ .target = target };
-//     dispatchEvent(target, &ctx, .{ .ctx = &ctx, .element = target, .event = .{ .mouse_down = mouse } });
-// }
-//
-// fn processMouseUp(self: *Window, target: *Element, mouse: Mouse) void {
-//     var ctx = EventContext{ .target = target };
-//     dispatchEvent(target, &ctx, .{ .ctx = &ctx, .element = target, .event = .{ .mouse_up = mouse } });
-//
-//     if (self.pressed_on) |pressed| {
-//         if (pressed.dragging) {
-//             pressed.dragging = false;
-//             dispatchEvent(pressed, &ctx, .{ .ctx = &ctx, .element = target, .event = .{ .drag_end = mouse } });
-//         }
-//     }
-//
-//     if (!ctx.stopped and self.pressed_on == target) {
-//         dispatchEvent(target, &ctx, .{ .ctx = &ctx, .element = target, .event = .{ .click = mouse } });
-//     }
-//     self.pressed_on = null;
-// }
-//
-// fn processMouseMove(self: *Window, target: *Element, mouse: Mouse) void {
-//     var ctx = EventContext{ .target = target };
-//
-//     dispatchEvent(target, &ctx, .{ .ctx = &ctx, .element = target, .event = .{ .mouse_move = mouse } });
-//     if (mouse.type == .drag) {
-//         if (self.pressed_on) |pressed| {
-//             pressed.dragging = true;
-//             dispatchEvent(pressed, &ctx, .{ .ctx = &ctx, .element = target, .event = .{ .drag = mouse } });
-//         }
-//     }
-// }
-//
-// fn processWheel(_: *Window, target: *Element, mouse: Mouse) void {
-//     var ctx = EventContext{ .target = target };
-//     dispatchEvent(target, &ctx, .{ .ctx = &ctx, .element = target, .event = .{ .wheel = mouse } });
-// }
-//
-// pub fn handleKeyPress(self: *Window, ctx: *EventContext, key: vaxis.Key) void {
-//     self.root.handleKeyPress(ctx, key);
-// }
-//
-// pub fn handleKeyRelease(self: *Window, ctx: *EventContext, key: vaxis.Key) void {
-//     self.root.handleKeyRelease(ctx, key);
-// }
-
-pub fn handleFocus(self: *Window) void {
-    self.root.handleFocus();
+pub fn setFocus(self: *Window, id: ?u64) void {
+    self.focused_id = id;
 }
 
-pub fn handleBlur(self: *Window) void {
-    self.root.handleBlur();
+pub fn getFocusedId(self: *Window) ?u64 {
+    return self.focused_id;
 }
 
-pub fn setFocus(self: *Window, element: ?*Element) void {
-    if (self.focused == element) return;
+pub fn resolveMouseEvent(self: *Window, vaxis_mouse: vaxis.Mouse, bus: *Bus) void {
+    const mouse = Mouse.fromVaxis(vaxis_mouse, self.size);
+    const curr_id = self.tryHit(mouse.col, mouse.row);
+    const prev_id = self.hovered_id;
 
-    const previous = self.focused;
+    const mouse_data = Bus.MouseData{
+        .col = mouse.col,
+        .row = mouse.row,
+        .button = @intFromEnum(mouse.button),
+    };
 
-    if (previous) |prev| {
-        prev.focused = false;
-        prev.handleBlur();
+    // hover changes
+    if (curr_id != prev_id) {
+        if (prev_id) |old| {
+            bus.push(.mouse_leave, old, .{ .mouse = mouse_data });
+        }
+        if (curr_id) |new| {
+            bus.push(.mouse_enter, new, .{ .mouse = mouse_data });
+        }
+        self.hovered_id = curr_id;
     }
 
-    self.focused = element;
-    self.rebuildFocusPath();
+    const target = curr_id orelse return;
 
-    if (element) |elem| {
-        elem.focused = true;
-        elem.handleFocus();
+    switch (mouse.type) {
+        .press => {
+            self.pressed_id = target;
+            bus.push(.mouse_down, target, .{ .mouse = mouse_data });
+        },
+        .release => {
+            bus.push(.mouse_up, target, .{ .mouse = mouse_data });
+            if (self.pressed_id) |pressed| {
+                if (pressed == target) {
+                    bus.push(.click, target, .{ .mouse = mouse_data });
+                }
+            }
+            self.pressed_id = null;
+        },
+        .motion, .drag => {
+            bus.push(.mouse_move, target, .{ .mouse = mouse_data });
+        },
     }
 
-    self.requestDraw();
-}
+    const is_wheel = switch (mouse.button) {
+        .wheel_up, .wheel_down, .wheel_left, .wheel_right => true,
+        else => false,
+    };
 
-fn rebuildFocusPath(self: *Window) void {
-    self.focus_path.clearRetainingCapacity();
-
-    var current: ?*Element = self.focused;
-    while (current) |elem| : (current = elem.parent) {
-        self.focus_path.append(self.alloc, elem) catch break;
+    if (is_wheel) {
+        bus.push(.wheel, target, .{ .mouse = mouse_data });
     }
-
-    std.mem.reverse(*Element, self.focus_path.items);
 }
 
-pub fn getFocus(self: *Window) ?*Element {
-    return self.focused;
+pub fn resolveKeyEvent(self: *Window, key: vaxis.Key, event_type: Bus.EventType, bus: *Bus) void {
+    const root_id = if (self.root) |r| r.num else return;
+    const target = self.focused_id orelse root_id;
+    bus.push(event_type, target, .{ .key = Bus.KeyData.fromVaxis(key) });
 }

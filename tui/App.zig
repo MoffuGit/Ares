@@ -35,10 +35,6 @@ loop_thr: std.Thread,
 window: Window,
 draw: std.atomic.Value(bool) = .init(true),
 
-scheme: vaxis.Color.Scheme = .dark,
-
-on_wakeup: ?*const fn (*App) void = null,
-
 pub fn create(alloc: Allocator) !*App {
     const app = try alloc.create(App);
 
@@ -79,10 +75,10 @@ pub fn create(alloc: Allocator) !*App {
         .screen = screen,
         .window = window,
         .tty_thread = tty_thread,
+        .tty_thr = undefined,
         .renderer = renderer,
         .renderer_thread = renderer_thread,
         .renderer_thr = undefined,
-        .tty_thr = undefined,
     };
 
     app.loop_thr = try std.Thread.spawn(.{}, Loop.threadMain, .{&app.loop});

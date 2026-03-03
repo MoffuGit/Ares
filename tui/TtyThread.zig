@@ -71,32 +71,31 @@ fn threadMain_(self: *Thread) !void {
 //can get deallocated after a while, if i start having problems with that
 //is because i should store a copy and use the copy instead
 fn handleEvent(self: *Thread, event: vaxis.Event) !void {
-    _ = self;
-    // const mailbox = self.loop.mailbox;
+    const mailbox = self.loop.mailbox;
 
     switch (event) {
-        // .color_scheme => |scheme| {
-        //     _ = mailbox.push(.{ .app = .{ .scheme = scheme } }, .instant);
-        // },
-        // .winsize => |size| {
-        //     vaxis.Tty.resetSignalHandler();
-        //     _ = mailbox.push(.{ .window = .{ .resize = size } }, .instant);
-        // },
-        // .key_press => |key| {
-        //     _ = mailbox.push(.{ .window = .{ .event = .{ .key_press = key } } }, .instant);
-        // },
-        // .key_release => |key| {
-        //     _ = mailbox.push(.{ .window = .{ .event = .{ .key_release = key } } }, .instant);
-        // },
-        // .focus_in => {
-        //     _ = mailbox.push(.{ .window = .{ .event = .focus } }, .instant);
-        // },
-        // .focus_out => {
-        //     _ = mailbox.push(.{ .window = .{ .event = .blur } }, .instant);
-        // },
-        // .mouse => |mouse| {
-        //     _ = mailbox.push(.{ .window = .{ .event = .{ .mouse = mouse } } }, .instant);
-        // },
+        .color_scheme => |scheme| {
+            _ = mailbox.push(.{ .scheme = scheme }, .instant);
+        },
+        .winsize => |size| {
+            vaxis.Tty.resetSignalHandler();
+            _ = mailbox.push(.{ .resize = size }, .instant);
+        },
+        .key_press => |key| {
+            _ = mailbox.push(.{ .key_press = key }, .instant);
+        },
+        .key_release => |key| {
+            _ = mailbox.push(.{ .key_release = key }, .instant);
+        },
+        .focus_in => {
+            _ = mailbox.push(.focus, .instant);
+        },
+        .focus_out => {
+            _ = mailbox.push(.blur, .instant);
+        },
+        .mouse => |mouse| {
+            _ = mailbox.push(.{ .mouse = mouse }, .instant);
+        },
         else => {},
     }
 }

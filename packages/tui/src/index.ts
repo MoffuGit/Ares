@@ -19,8 +19,11 @@ function getTuiLib() {
             },
             destroyApp: {
                 args: [FFIType.pointer],
-                returns: FFIType.void
-                ,
+                returns: FFIType.void,
+            },
+            drainEvents: {
+                args: [],
+                returns: FFIType.void,
             },
         },
     );
@@ -44,7 +47,7 @@ export class TuiLib {
             {
                 args: [FFIType.u8, FFIType.u64, FFIType.pointer, FFIType.u64],
                 returns: FFIType.void,
-                threadsafe: true
+                threadsafe: false
             },
         );
         this.lib.symbols.initState(this.jsCallback.ptr)
@@ -60,6 +63,10 @@ export class TuiLib {
 
     destroyApp(app: Pointer) {
         this.lib.symbols.destroyApp(app)
+    }
+
+    drainEvents() {
+        this.lib.symbols.drainEvents()
     }
 }
 
