@@ -36,7 +36,7 @@ drain_thread: ?std.Thread = null,
 
 pub fn start(self: *Bus) void {
     self.drain_running = true;
-    self.drain_thread = std.Thread.spawn(.{}, drainLoop, .{self}) catch null;
+    self.drain_thread = std.Thread.spawn(.{}, threadMain, .{self}) catch null;
 }
 
 pub fn stop(self: *Bus) void {
@@ -48,7 +48,7 @@ pub fn stop(self: *Bus) void {
     self.drain_thread = null;
 }
 
-fn drainLoop(self: *Bus) void {
+fn threadMain(self: *Bus) void {
     while (true) {
         self.drain_mutex.lock();
         while (!self.drain_pending and self.drain_running) {
