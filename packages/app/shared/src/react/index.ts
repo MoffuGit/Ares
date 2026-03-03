@@ -1,6 +1,6 @@
 import { createContext, createElement, useContext, useSyncExternalStore, type ReactNode } from "react";
 import type { App, AppState } from "../app.ts";
-import type { Settings, Theme } from "../types.ts";
+import type { Settings, Theme, WorktreeEntry } from "../types.ts";
 
 const AppContext = createContext<App | null>(null);
 
@@ -38,5 +38,16 @@ export function useTheme(): Theme | null {
             return () => app.events.off("themeUpdate", cb);
         },
         () => app.state.theme,
+    );
+}
+
+export function useWorktree(): WorktreeEntry[] {
+    const app = useApp();
+    return useSyncExternalStore(
+        (cb) => {
+            app.events.on("worktreeUpdate", cb);
+            return () => app.events.off("worktreeUpdate", cb);
+        },
+        () => app.state.worktree,
     );
 }

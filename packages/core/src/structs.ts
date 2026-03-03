@@ -23,3 +23,12 @@ export const Theme = defineStruct([
     ["scrollTrack", "u32"],
     ["border", "u32"],
 ] as const);
+
+export const WorktreeEntry = defineStruct([
+    ["id", "u64"],
+    ["kind", "u8"],
+    ["file_type", "u8"],
+    ["depth", "u16"],
+    ["path", "char*"],
+    ["path_len", "u64", { lengthOf: "path" }],
+] as const);

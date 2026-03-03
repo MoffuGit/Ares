@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const xev = @import("../../global.zig").xev;
+const global = @import("../../global.zig");
+const xev = global.xev;
 const BlockingQueue = @import("datastruct").BlockingQueue;
 const messagepkg = @import("./Message.zig");
 const Scanner = @import("mod.zig");
@@ -131,9 +132,11 @@ fn processDirtyEntries(self: *Thread) void {
         log.err("error processing dirty entries: {}", .{err});
         return;
     };
+    defer result.destroy();
 
-    // TODO: deliver result to consumer
-    _ = result;
+    if (result.updates.items.len > 0) {
+        global.state.bus.push(.worktree_update);
+    }
 }
 
 fn wakeupCallback(
@@ -157,14 +160,20 @@ fn wakeupCallback(
 }
 
 fn drainMailbox(self: *Thread) !void {
+    var changed = false;
     while (self.mailbox.pop()) |message| {
         switch (message) {
             .scan_dir => |dir_id| {
                 try self.scanner.process_scan_by_id(dir_id);
+                changed = true;
             },
             .initialScan => {
                 try self.scanner.initial_scan();
+                changed = true;
             },
         }
+    }
+    if (changed) {
+        global.state.bus.push(.worktree_update);
     }
 }

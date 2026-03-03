@@ -19,11 +19,15 @@ export class WebviewApp implements App {
                         this._state = { ...this._state, theme };
                         this.events.emit("themeUpdate");
                     },
+                    worktreeUpdate: (worktree) => {
+                        this._state = { ...this._state, worktree };
+                        this.events.emit("worktreeUpdate");
+                    },
                 },
             },
         })
         ;
-    private _state: AppState = { settings: null, theme: null };
+    private _state: AppState = { settings: null, theme: null, worktree: [] };
 
     get state(): AppState {
         return this._state;

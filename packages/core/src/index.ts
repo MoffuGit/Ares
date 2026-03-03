@@ -2,7 +2,7 @@ import { dlopen, FFIType, JSCallback, ptr, toArrayBuffer, type Pointer } from "b
 import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
 import { EventType, Events } from "./events";
-import { Settings, Theme } from "./structs";
+import { Settings, Theme, WorktreeEntry } from "./structs";
 
 const DEFAULT_LIB_PATH = resolve(import.meta.dir, "../../../zig-out/lib/libcore.dylib");
 
@@ -57,6 +57,22 @@ function getCoreLib(libPath: string) {
             destroyMonitor: {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
+            },
+            createProject: {
+                args: [FFIType.pointer, FFIType.pointer, FFIType.pointer, FFIType.u64],
+                returns: FFIType.pointer,
+            },
+            destroyProject: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
+            getWorktreeEntryCount: {
+                args: [FFIType.pointer],
+                returns: FFIType.u64,
+            },
+            readWorktreeEntries: {
+                args: [FFIType.pointer, FFIType.pointer, FFIType.u64],
+                returns: FFIType.u64,
             },
         },
     );
@@ -162,6 +178,31 @@ export class CoreLib {
 
     destroyMonitor(handle: Pointer): void {
         this.lib.symbols.destroyMonitor(handle);
+    }
+
+    createProject(monitor: Pointer, io: Pointer, path: string): Pointer | null {
+        const buf = new TextEncoder().encode(path);
+        return this.lib.symbols.createProject(monitor, io, buf, buf.byteLength) as Pointer | null;
+    }
+
+    destroyProject(handle: Pointer): void {
+        this.lib.symbols.destroyProject(handle);
+    }
+
+    readWorktreeEntries(project: Pointer) {
+        const count = Number(this.lib.symbols.getWorktreeEntryCount(project));
+        if (count === 0) return [];
+
+        const entrySize = WorktreeEntry.size;
+        const buf = new ArrayBuffer(count * entrySize);
+        const actual = Number(this.lib.symbols.readWorktreeEntries(project, ptr(buf), count));
+
+        const entries: ReturnType<typeof WorktreeEntry.unpack>[] = [];
+        for (let i = 0; i < actual; i++) {
+            const slice = buf.slice(i * entrySize, (i + 1) * entrySize);
+            entries.push(WorktreeEntry.unpack(slice));
+        }
+        return entries;
     }
 
 }

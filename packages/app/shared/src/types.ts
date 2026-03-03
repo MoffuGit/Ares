@@ -18,3 +18,12 @@ export type Theme = {
     scrollTrack: number[];
     border: number[];
 }
+
+export type WorktreeEntry = {
+    id: number;
+    name: string;
+    path: string;
+    kind: "file" | "dir";
+    fileType: string;
+    depth: number;
+}

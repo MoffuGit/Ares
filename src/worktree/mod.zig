@@ -54,6 +54,8 @@ pub const Worktree = struct {
             .scanner_thr = undefined,
         };
 
+        self.scanner_thr = try std.Thread.spawn(.{}, ScannerThread.threadMain, .{&self.scanner_thread});
+
         _ = self.scanner_thread.mailbox.push(.initialScan, .instant);
         self.scanner_thread.wakeup.notify() catch |err| {
             log.err("error notifying scanner thread to wakeup, err={}", .{err});

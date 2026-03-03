@@ -24,7 +24,8 @@ async function getMainViewUrl(): Promise<string> {
 
 const settingsPath = resolve(import.meta.dir, "../../../../../../../../../../settings/");
 const libPath = resolve(import.meta.dir, "../lib/libcore.dylib");
-const app = new DesktopApp(settingsPath, libPath);
+const projectPath = process.argv[2] || process.cwd();
+const app = new DesktopApp(settingsPath, projectPath, libPath);
 
 const url = await getMainViewUrl();
 
@@ -66,7 +67,13 @@ app.events.on("themeUpdate", () => {
     }
 });
 
-app.start();
+app.events.on("worktreeUpdate", () => {
+    mainWindow.webview.rpc?.send.worktreeUpdate(app._state.worktree);
+});
+
+mainWindow.webview.on("dom-ready", () => {
+    app.start();
+});
 
 mainWindow.on("close", () => {
     app.stop();

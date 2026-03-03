@@ -1,6 +1,6 @@
 import { resolveCoreLib, type CoreLib } from "@ares/core";
 import { EventType } from "@ares/core/events";
-import { Emitter, type App, type AppEvents, type AppState, type ColorScheme, type Settings, type Theme } from "@ares/shared";
+import { Emitter, type App, type AppEvents, type AppState, type ColorScheme, type Settings, type Theme, type WorktreeEntry } from "@ares/shared";
 import type { Pointer } from "bun:ffi";
 
 const SCHEME_MAP: Record<number, ColorScheme> = {
@@ -9,27 +9,37 @@ const SCHEME_MAP: Record<number, ColorScheme> = {
     2: "system",
 };
 
+const FILE_TYPE_MAP: string[] = [
+    "zig", "c", "cpp", "h", "py", "js", "ts", "json", "xml", "yaml",
+    "toml", "md", "txt", "html", "css", "sh", "go", "rs", "java", "rb",
+    "lua", "makefile", "dockerfile", "gitignore", "license", "unknown",
+];
+
 export class DesktopApp implements App {
     readonly events = new Emitter<AppEvents>();
 
     private core: CoreLib;
     private monitor: Pointer;
+    private io: Pointer;
     private settings: Pointer;
+    private project: Pointer | null = null;
 
-    _state: AppState = { settings: null, theme: null };
+    _state: AppState = { settings: null, theme: null, worktree: [] };
 
     get state(): AppState {
         return this._state;
     }
 
-    constructor(settingsPath: string, libPath?: string) {
+    constructor(settingsPath: string, private projectPath: string, libPath?: string) {
         this.core = resolveCoreLib(libPath);
 
         const monitor = this.core.createMonitor();
+        const io = this.core.createIo();
         const settings = this.core.createSettings();
-        if (!monitor || !settings) throw new Error("Failed to init core handles");
+        if (!monitor || !io || !settings) throw new Error("Failed to init core handles");
 
         this.monitor = monitor;
+        this.io = io;
         this.settings = settings;
         console.log("setting path:", settingsPath);
         this.core.loadSettings(this.settings, settingsPath, this.monitor);
@@ -39,14 +49,53 @@ export class DesktopApp implements App {
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme() };
         this.core.events.on(String(EventType.SettingsUpdate), this.onSettingsUpdate);
         this.core.events.on(String(EventType.ThemeUpdate), this.onThemeUpdate);
+        this.core.events.on(String(EventType.WorktreeUpdate), this.onWorktreeUpdate);
+
+        this.openProject(this.projectPath);
     }
 
     stop() {
         this.core.events.off(String(EventType.SettingsUpdate), this.onSettingsUpdate);
         this.core.events.off(String(EventType.ThemeUpdate), this.onThemeUpdate);
+        this.core.events.off(String(EventType.WorktreeUpdate), this.onWorktreeUpdate);
+        if (this.project) {
+            this.core.destroyProject(this.project);
+            this.project = null;
+        }
         this.core.destroySettings(this.settings);
+        this.core.destroyIo(this.io);
         this.core.destroyMonitor(this.monitor);
         this.core.deinitState();
+    }
+
+    openProject(path: string) {
+        if (this.project) {
+            this.core.destroyProject(this.project);
+        }
+        this.project = this.core.createProject(this.monitor, this.io, path);
+        if (!this.project) {
+            console.error("Failed to create project for path:", path);
+            return;
+        }
+    }
+
+    refreshWorktree() {
+        if (!this.project) return;
+        const raw = this.core.readWorktreeEntries(this.project);
+        const entries: WorktreeEntry[] = raw.map((e) => {
+            const path = e.path ?? "";
+            const parts = path.split("/");
+            return {
+                id: Number(e.id),
+                name: parts[parts.length - 1] ?? path,
+                path,
+                kind: e.kind === 1 ? "dir" : "file",
+                fileType: FILE_TYPE_MAP[e.file_type] ?? "unknown",
+                depth: e.depth,
+            };
+        });
+        this._state = { ...this._state, worktree: entries };
+        this.events.emit("worktreeUpdate");
     }
 
     private onSettingsUpdate = () => {
@@ -62,6 +111,10 @@ export class DesktopApp implements App {
         const theme = this.readTheme();
         this._state = { ...this._state, theme };
         this.events.emit("themeUpdate");
+    };
+
+    private onWorktreeUpdate = () => {
+        this.refreshWorktree();
     };
 
     private readSettings(): Settings {

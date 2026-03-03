@@ -5,6 +5,8 @@ const Bus = @import("Bus.zig");
 const Settings = @import("settings/mod.zig");
 const Io = @import("io/mod.zig");
 const Monitor = @import("monitor/mod.zig");
+const Project = @import("Project.zig");
+const Snapshot = @import("worktree/Snapshot.zig");
 
 export fn initState(callback: ?Bus.Callback) void {
     global.state.init(callback);
@@ -92,6 +94,68 @@ export fn createMonitor() ?*Monitor {
 
 export fn destroyMonitor(monitor: *Monitor) void {
     monitor.destroy();
+}
+
+// ── Project ──
+
+export fn createProject(monitor: *Monitor, io: *Io, path: [*]const u8, len: u64) ?*Project {
+    return Project.create(global.state.alloc, monitor, io, path[0..len]) catch null;
+}
+
+export fn destroyProject(project: *Project) void {
+    project.destroy(global.state.alloc);
+}
+
+pub const ExternWorktreeEntry = extern struct {
+    id: u64,
+    kind: u8, // 0 = file, 1 = dir
+    file_type: u8,
+    depth: u16,
+    path_ptr: usize,
+    path_len: usize,
+};
+
+export fn getWorktreeEntryCount(project: *Project) u64 {
+    project.worktree.snapshot.mutex.lock();
+    defer project.worktree.snapshot.mutex.unlock();
+
+    var it = project.worktree.snapshot.entries.iter();
+    var count: u64 = 0;
+    while (it.next()) |_| {
+        count += 1;
+    }
+    return count;
+}
+
+export fn readWorktreeEntries(project: *Project, out: [*]ExternWorktreeEntry, max_count: u64) u64 {
+    project.worktree.snapshot.mutex.lock();
+    defer project.worktree.snapshot.mutex.unlock();
+
+    var it = project.worktree.snapshot.entries.iter();
+    var i: u64 = 0;
+    while (it.next()) |entry| {
+        if (i >= max_count) break;
+        const path = entry.key;
+        const depth = countDepth(path);
+        out[i] = .{
+            .id = entry.value.id,
+            .kind = @intFromEnum(entry.value.kind),
+            .file_type = @intFromEnum(entry.value.file_type),
+            .depth = depth,
+            .path_ptr = @intFromPtr(path.ptr),
+            .path_len = path.len,
+        };
+        i += 1;
+    }
+    return i;
+}
+
+fn countDepth(path: []const u8) u16 {
+    var depth: u16 = 0;
+    for (path) |c| {
+        if (c == '/') depth += 1;
+    }
+    return depth;
 }
 
 test {

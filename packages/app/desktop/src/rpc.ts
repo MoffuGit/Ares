@@ -1,5 +1,5 @@
 import type { RPCSchema } from "electrobun/bun";
-import type { AppState, Settings, Theme } from "@ares/shared";
+import type { AppState, Settings, Theme, WorktreeEntry } from "@ares/shared";
 
 export type AppRPC = {
     bun: RPCSchema<{
@@ -13,6 +13,7 @@ export type AppRPC = {
         messages: {
             settingsUpdate: Settings;
             themeUpdate: Theme;
+            worktreeUpdate: WorktreeEntry[];
         };
     }>;
 };

@@ -5,11 +5,13 @@ const Bus = @This();
 pub const EventType = enum {
     settings_update,
     theme_update,
+    worktree_update,
 };
 
 pub const Event = union(EventType) {
     settings_update: void,
     theme_update: void,
+    worktree_update: void,
 };
 
 pub const AnyEvent = struct {
