@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Buffer = @import("Buffer.zig");
 const Io = @import("../io/mod.zig");
+const Worktree = @import("../worktree/mod.zig").Worktree;
 
 const log = std.log.scoped(.buffer_store);
 
@@ -15,12 +16,14 @@ const ReadContext = struct {
 alloc: Allocator,
 buffers: std.AutoHashMap(u64, Buffer),
 io: *Io,
+worktree: *Worktree,
 
-pub fn init(alloc: Allocator, io: *Io) BufferStore {
+pub fn init(alloc: Allocator, io: *Io, worktree: *Worktree) BufferStore {
     return .{
         .alloc = alloc,
         .buffers = std.AutoHashMap(u64, Buffer).init(alloc),
         .io = io,
+        .worktree = worktree,
     };
 }
 
@@ -33,28 +36,26 @@ pub fn deinit(self: *BufferStore) void {
 }
 
 pub fn open(self: *BufferStore, entry_id: u64) ?*Buffer {
-    if (self.buffers.getPtr(entry_id)) |buf| return buf;
+    if (self.get(entry_id)) |buf| return buf;
 
+    const abs_path = self.worktree.getAbsPath(entry_id) orelse return null;
     self.buffers.put(entry_id, Buffer.initLoading(entry_id)) catch |err| {
         log.err("failed to create buffer for entry_id={}: {}", .{ entry_id, err });
         return null;
     };
 
-    const ctx = self.alloc.create(ReadContext) catch |err| {
-        log.err("failed to alloc read context for entry_id={}: {}", .{ entry_id, err });
-        if (self.buffers.getPtr(entry_id)) |buf| buf.applyError();
-        return self.buffers.getPtr(entry_id);
-    };
-    ctx.* = .{ .store = self, .entry_id = entry_id };
+    self.io.readFile(abs_path, Buffer, self.get(entry_id), readCallback) catch return null;
 
-    self.io.readFile(entry_id, @ptrCast(ctx), onReadComplete) catch |err| {
-        log.err("failed to request read for entry_id={}: {}", .{ entry_id, err });
-        self.alloc.destroy(ctx);
-        if (self.buffers.getPtr(entry_id)) |buf| buf.applyError();
-        return self.buffers.getPtr(entry_id);
-    };
+    return self.get(entry_id);
+}
 
-    return self.buffers.getPtr(entry_id);
+fn readCallback(bufffer: ?*Buffer, file: ?Io.File) void {
+    const buf = bufffer orelse return;
+    if (file) |f| {
+        buf.applyFile(f);
+    } else {
+        buf.applyError();
+    }
 }
 
 pub fn get(self: *BufferStore, entry_id: u64) ?*Buffer {
@@ -65,25 +66,5 @@ pub fn close(self: *BufferStore, entry_id: u64) void {
     if (self.buffers.fetchRemove(entry_id)) |kv| {
         var buf = kv.value;
         buf.deinit();
-    }
-}
-
-fn onReadComplete(userdata: ?*anyopaque, file: ?Io.File) void {
-    const ctx: *ReadContext = @ptrCast(@alignCast(userdata));
-    const self = ctx.store;
-    const entry_id = ctx.entry_id;
-    self.alloc.destroy(ctx);
-
-    if (self.buffers.getPtr(entry_id)) |buf| {
-        if (file) |f| {
-            buf.applyFile(f);
-        } else {
-            buf.applyError();
-            log.err("read failed for entry_id={}", .{entry_id});
-        }
-    } else {
-        if (file) |*f| {
-            f.deinit();
-        }
     }
 }

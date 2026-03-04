@@ -111,7 +111,7 @@ pub fn readFile(
     abs_path: []const u8,
     comptime Userdata: type,
     userdata: ?*Userdata,
-    callback: *const fn (userdata: ?*Userdata, file: ?File) void,
+    comptime callback: *const fn (userdata: ?*Userdata, file: ?File) void,
 ) !void {
     const path = try self.alloc.dupe(u8, abs_path);
     const req = try self.alloc.create(ReadRequest);
@@ -124,7 +124,15 @@ pub fn readFile(
         .alloc = self.alloc,
         .io = self,
         .userdata = userdata,
-        .callback = callback,
+        .callback = (struct {
+            pub fn cb(ud: ?*anyopaque, f: ?File) void {
+                @call(
+                    .always_inline,
+                    callback,
+                    .{ @as(*Userdata, @ptrCast(@alignCast(ud orelse return))), f },
+                );
+            }
+        }).cb,
     };
     if (self.thread.mailbox.push(.{ .read = req }, .instant) != 0) {
         self.thread.wakeup.notify() catch |err| {

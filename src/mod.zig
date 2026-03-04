@@ -7,6 +7,7 @@ const Io = @import("io/mod.zig");
 const Monitor = @import("monitor/mod.zig");
 const Project = @import("Project.zig");
 const Snapshot = @import("worktree/Snapshot.zig");
+const Buffer = @import("buffer/Buffer.zig");
 
 export fn initState(callback: ?Bus.Callback) void {
     global.state.init(callback);
@@ -113,16 +114,8 @@ pub const ExternWorktreeEntry = extern struct {
     path_len: usize,
 };
 
-export fn getWorktreeEntryCount(project: *Project) u64 {
-    project.worktree.snapshot.mutex.lock();
-    defer project.worktree.snapshot.mutex.unlock();
-
-    var it = project.worktree.snapshot.entries.iter();
-    var count: u64 = 0;
-    while (it.next()) |_| {
-        count += 1;
-    }
-    return count;
+export fn getWorktreeEntryCount(project: *Project) usize {
+    return project.worktree.count();
 }
 
 export fn readWorktreeEntries(project: *Project, out: [*]ExternWorktreeEntry, max_count: u64) u64 {
@@ -154,6 +147,10 @@ fn countDepth(path: []const u8) u16 {
         if (c == '/') depth += 1;
     }
     return depth;
+}
+
+export fn openBuffer(project: *Project, entry_id: u64) ?*Buffer {
+    return project.openBuffer(entry_id);
 }
 
 test {

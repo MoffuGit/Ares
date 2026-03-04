@@ -716,6 +716,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
 
         root: *Node,
         alloc: Allocator,
+        count: usize = 0,
 
         pub const Iterator = struct {
             leaf: ?*Node,
@@ -898,6 +899,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             try node.add_item(key, value);
 
             try self.root.append(node, self.alloc);
+            self.count += 1;
         }
 
         pub fn get(self: *Self, key: K) !V {
@@ -909,6 +911,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
 
             const root = try self.alloc.create(Node);
             root.* = .{ .Leaf = .{} };
+            self.count = 0;
         }
 
         pub fn get_ref(self: *Self, key: K) !*V {
@@ -924,6 +927,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
                 self.alloc.destroy(old_root);
             }
 
+            self.count -= 1;
             return removed;
         }
 
@@ -1580,4 +1584,33 @@ test "B+ Tree range iterator with string keys" {
     try testing.expectEqualStrings("cherry", results.items[1]);
     try testing.expectEqualStrings("date", results.items[2]);
     try testing.expectEqualStrings("elderberry", results.items[3]);
+}
+
+test "B+ Tree count tracks inserts and removes" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree = try T.init(alloc);
+    defer tree.deinit();
+
+    try testing.expectEqual(@as(usize, 0), tree.count);
+
+    for (0..50) |key| {
+        try tree.insert(key, key + 1);
+    }
+
+    try testing.expectEqual(@as(usize, 50), tree.count);
+
+    _ = try tree.remove(10);
+    _ = try tree.remove(20);
+    _ = try tree.remove(30);
+
+    try testing.expectEqual(@as(usize, 47), tree.count);
+
+    for (50..100) |key| {
+        try tree.insert(key, key + 1);
+    }
+
+    try testing.expectEqual(@as(usize, 97), tree.count);
 }

@@ -41,6 +41,10 @@ pub fn deinit(self: *Snapshot) void {
     self.arena.deinit();
 }
 
+pub fn count(self: *Snapshot) usize {
+    return self.entries.count;
+}
+
 pub fn newId(self: *Snapshot) u64 {
     return self.next_id.fetchAdd(1, .monotonic);
 }

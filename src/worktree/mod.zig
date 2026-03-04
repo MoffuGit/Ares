@@ -62,6 +62,20 @@ pub const Worktree = struct {
         };
     }
 
+    pub fn count(self: *Worktree) usize {
+        self.snapshot.mutex.lock();
+        defer self.snapshot.mutex.unlock();
+
+        return self.snapshot.count();
+    }
+
+    pub fn getAbsPath(self: *Worktree, id: u64) ?[]const u8 {
+        self.snapshot.mutex.lock();
+        defer self.snapshot.mutex.unlock();
+
+        return self.snapshot.getAbsPathById(id);
+    }
+
     pub fn deinit(self: *Worktree) void {
         {
             self.scanner_thread.stop.notify() catch |err| {

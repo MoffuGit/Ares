@@ -1,8 +1,10 @@
 const std = @import("std");
-const Worktree = @import("./worktree/mod.zig").Worktree;
+
 const BufferStore = @import("./buffer/BufferStore.zig");
-const Monitor = @import("./monitor/mod.zig");
+const Buffer = @import("buffer/Buffer.zig");
 const Io = @import("./io/mod.zig");
+const Monitor = @import("./monitor/mod.zig");
+const Worktree = @import("./worktree/mod.zig").Worktree;
 
 const Project = @This();
 
@@ -18,10 +20,14 @@ pub fn create(alloc: std.mem.Allocator, monitor: *Monitor, io: *Io, abs_path: []
 
     project.* = .{
         .worktree = worktree,
-        .buffer_store = BufferStore.init(alloc, io),
+        .buffer_store = BufferStore.init(alloc, io, worktree),
     };
 
     return project;
+}
+
+pub fn openBuffer(self: *Project, entry_id: u64) ?*Buffer {
+    return self.buffer_store.open(entry_id);
 }
 
 pub fn destroy(self: *Project, alloc: std.mem.Allocator) void {
