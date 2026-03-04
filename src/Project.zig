@@ -9,8 +9,6 @@ const Project = @This();
 worktree: *Worktree,
 buffer_store: BufferStore,
 
-selected_entry: ?u64 = null,
-
 pub fn create(alloc: std.mem.Allocator, monitor: *Monitor, io: *Io, abs_path: []const u8) !*Project {
     const project = try alloc.create(Project);
     errdefer alloc.destroy(project);

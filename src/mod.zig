@@ -96,8 +96,6 @@ export fn destroyMonitor(monitor: *Monitor) void {
     monitor.destroy();
 }
 
-// ── Project ──
-
 export fn createProject(monitor: *Monitor, io: *Io, path: [*]const u8, len: u64) ?*Project {
     return Project.create(global.state.alloc, monitor, io, path[0..len]) catch null;
 }
@@ -108,7 +106,7 @@ export fn destroyProject(project: *Project) void {
 
 pub const ExternWorktreeEntry = extern struct {
     id: u64,
-    kind: u8, // 0 = file, 1 = dir
+    kind: u8,
     file_type: u8,
     depth: u16,
     path_ptr: usize,
