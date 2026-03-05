@@ -44,6 +44,7 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
 
     const outer = try alloc.create(Element);
     outer.* = Element.init(alloc, .{
+        .kind = .scrollable,
         .style = style,
         .beforeDrawFn = beforeDrawFn,
         .afterDrawFn = afterDrawFn,
@@ -52,11 +53,6 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
         .afterHitFn = afterHitFn,
         .userdata = self,
     });
-
-    try outer.addEventListener(.wheel, Scrollable, self, onWheel);
-    try outer.addEventListener(.mouse_over, Scrollable, self, mouseOver);
-    try outer.addEventListener(.mouse_out, Scrollable, self, mouseOut);
-    try outer.addEventListener(.drag, Scrollable, self, onDraw);
 
     const inner = try alloc.create(Element);
     inner.* = Element.init(alloc, .{
@@ -87,7 +83,6 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
                 .position = .{ .right = .{ .point = 0 } },
                 .height = .{ .percent = 100 },
             },
-            .visible = false,
             .drawFn = drawBar,
             .zIndex = 10,
             .userdata = self,
@@ -95,10 +90,6 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
         });
 
         self.bar = bar;
-
-        try bar.addEventListener(.click, Scrollable, self, onBarClick);
-        try bar.addEventListener(.drag, Scrollable, self, onBarDrag);
-        try bar.addEventListener(.drag_end, Scrollable, self, onBarDragEnd);
 
         try outer.addChild(bar);
     }

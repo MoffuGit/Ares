@@ -39,7 +39,14 @@ pub const Layout = struct {
     };
 };
 
+pub const Kind = enum(u8) {
+    raw,
+    box,
+};
+
 pub const Options = struct {
+    num: ?u64 = null,
+    kind: Kind = .raw,
     zIndex: usize = 0,
     style: Style = .{},
     userdata: ?*anyopaque = null,
@@ -87,6 +94,7 @@ pub const Element = @This();
 
 alloc: Allocator,
 num: u64,
+kind: Kind = .raw,
 
 node: Node,
 
@@ -110,7 +118,10 @@ beforeHitFn: ?HitFn = null,
 afterHitFn: ?HitFn = null,
 
 pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
-    const num = element_counter.fetchAdd(1, .monotonic);
+    const num = if (opts.num) |explicit| blk: {
+        bumpCounterPast(explicit);
+        break :blk explicit;
+    } else element_counter.fetchAdd(1, .monotonic);
 
     const node = Node.init();
 
@@ -119,6 +130,7 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
     return .{
         .alloc = alloc,
         .num = num,
+        .kind = opts.kind,
         .zIndex = opts.zIndex,
         .style = opts.style,
         .userdata = opts.userdata,
@@ -130,6 +142,17 @@ pub fn init(alloc: std.mem.Allocator, opts: Options) Element {
         .hitFn = opts.hitFn,
         .node = node,
     };
+}
+
+pub fn bumpCounterPast(id: u64) void {
+    var cur = element_counter.load(.monotonic);
+    while (cur <= id) {
+        if (element_counter.cmpxchgWeak(cur, id + 1, .monotonic, .monotonic)) |old| {
+            cur = old;
+        } else {
+            break;
+        }
+    }
 }
 
 pub fn fill(element: *Element, buffer: *Buffer, cell: vaxis.Cell) void {

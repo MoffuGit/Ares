@@ -170,8 +170,7 @@ pub const Border = struct {
 };
 
 pub const Options = struct {
-    id: ?[]const u8 = null,
-    visible: bool = true,
+    num: ?u64 = null,
     zIndex: usize = 0,
     style: Style = .{},
     bg: *const vaxis.Color = &default_color,
@@ -209,8 +208,8 @@ pub fn init(alloc: Allocator, opts: Options) !*Box {
             .beforeDrawFn = beforeDraw,
             .afterDrawFn = afterDraw,
         }, .{
-            .id = opts.id,
-            .visible = opts.visible,
+            .num = opts.num,
+            .kind = .box,
             .zIndex = opts.zIndex,
             .style = style,
         }),

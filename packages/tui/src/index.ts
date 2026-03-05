@@ -1,6 +1,8 @@
 import { dlopen, FFIType, JSCallback, type Pointer } from "bun:ffi";
 import { resolve } from "node:path";
 
+const encoder = new TextEncoder();
+
 function getTuiLib() {
     const symbols = dlopen(
         resolve(import.meta.dir, "../../../zig-out/lib/libtui.dylib"),
@@ -25,6 +27,10 @@ function getTuiLib() {
                 args: [],
                 returns: FFIType.void,
             },
+            // postBatch: {
+            //     args: [FFIType.pointer, FFIType.pointer, FFIType.u64],
+            //     returns: FFIType.void,
+            // },
         },
     );
 
@@ -66,6 +72,13 @@ export class TuiLib {
 
     drainEvents() {
         this.lib.symbols.drainEvents()
+    }
+
+    postBatch(app: Pointer, commands: unknown[]) {
+        if (commands.length === 0) return;
+        const json = JSON.stringify(commands);
+        const encoded = encoder.encode(json);
+        this.lib.symbols.postBatch(app, encoded, encoded.byteLength);
     }
 }
 

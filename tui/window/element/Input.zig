@@ -41,8 +41,10 @@ pub fn create(alloc: std.mem.Allocator, comptime callbacks: InputElement.Callbac
         .hitFn = callbacks.hitFn orelse hitFn,
         .beforeHitFn = callbacks.beforeHitFn,
         .afterHitFn = callbacks.afterHitFn,
-        .updateFn = callbacks.updateFn,
     };
+
+    var elem_opts = opts.element;
+    elem_opts.kind = .input;
 
     input.* = .{
         .buf = GapBuffer.init(alloc),
@@ -51,12 +53,9 @@ pub fn create(alloc: std.mem.Allocator, comptime callbacks: InputElement.Callbac
             alloc,
             input,
             merged,
-            opts.element,
+            elem_opts,
         ),
     };
-
-    try input.element.on(.key_press, onKeyPress);
-    try input.element.on(.click, onClick);
 
     return input;
 }
