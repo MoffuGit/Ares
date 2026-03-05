@@ -120,7 +120,6 @@ fn settingsCallback(self: ?*Settings, watcher: u64, event: u32) void {
     s.loadThemes(dir) catch {};
 
     global.state.bus.push(.settings_update);
-    global.state.bus.drain();
 }
 fn themeCallback(self: ?*Settings, watcher: u64, event: u32) void {
     _ = watcher;
