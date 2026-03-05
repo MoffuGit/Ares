@@ -1,20 +1,11 @@
 const std = @import("std");
 const yoga_sources = @import("yoga.zig");
 
-//NOTE:
-//what we want to build?,
-//core -> library
-//tui-core -> library
-//
-//desktop -> app
-//tui -> app
-//
-//tests -> all the above
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const vaxis_dep = b.dependency("vaxis", .{ .target = target, .optimize = optimize });
     const xev_dep = b.dependency("libxev", .{ .target = target, .optimize = optimize });
     const objc_dep = b.dependency("zig_objc", .{
         .target = target,
@@ -55,8 +46,7 @@ pub fn build(b: *std.Build) void {
     desktop_step.dependOn(&lib_install.step);
     desktop_step.dependOn(&desktop_bun.step);
 
-    // const vaxis_dep = b.dependency("vaxis", .{ .target = target, .optimize = optimize });
-    // const yoga_lib = buildYogaLib(b, target, optimize);
+    const yoga_lib = buildYogaLib(b, target, optimize);
     const yoga_mod = buildYogaModule(b, target, optimize);
     //
     // const tui_lib_mod = b.createModule(.{
@@ -116,6 +106,8 @@ pub fn build(b: *std.Build) void {
     test_tui_core.addImport("xev", xev_dep.module("xev"));
     test_tui_core.addImport("datastruct", datastruct);
     test_tui_core.addImport("yoga", yoga_mod);
+    test_tui_core.addImport("vaxis", vaxis_dep.module("vaxis"));
+    test_tui_core.linkLibrary(yoga_lib);
 
     const test_core_exe = b.addTest(.{
         .name = "test-core",
