@@ -130,48 +130,48 @@ pub const Iterator = struct {
     items: []const json.Value,
     index: usize = 0,
 
-    pub fn next(self: *Iterator) ?union(enum) { ok: Command, err: Error } {
+    pub fn next(self: *Iterator) ?Error!Command {
         while (self.index < self.items.len) {
             const val = self.items[self.index];
             self.index += 1;
 
             const obj = switch (val) {
                 .object => |o| o,
-                else => return .{ .err = .not_object },
+                else => return error.not_object,
             };
 
             const cmd_type = parseEnum(CmdType, obj.get("cmd")) orelse
-                return .{ .err = .missing_cmd };
+                return error.missing_cmd;
 
             if (cmd_type == .request_draw) {
-                return .{ .ok = .{ .request_draw = {} } };
+                return .request_draw;
             }
 
             const id = parseU64(obj.get("id")) orelse
-                return .{ .err = .missing_id };
+                return error.missing_id;
 
             const cmd: Command = switch (cmd_type) {
                 .create => blk: {
                     const elem_type = parseEnum(ElementType, obj.get("element_type")) orelse
-                        return .{ .err = .missing_element_type };
+                        return error.missing_element_type;
                     break :blk .{ .create = .{ .id = id, .element_type = elem_type } };
                 },
                 .set_props => .{ .set_props = .{ .id = id, .props = parseProps(obj) } },
                 .append_child => blk: {
                     const child_id = parseU64(obj.get("child_id")) orelse
-                        return .{ .err = .missing_child_id };
+                        return error.missing_child_id;
                     break :blk .{ .append_child = .{ .id = id, .child_id = child_id } };
                 },
                 .insert_before => blk: {
                     const child_id = parseU64(obj.get("child_id")) orelse
-                        return .{ .err = .missing_child_id };
+                        return error.missing_child_id;
                     const before_id = parseU64(obj.get("before_id")) orelse
-                        return .{ .err = .missing_before_id };
+                        return error.missing_before_id;
                     break :blk .{ .insert_before = .{ .id = id, .child_id = child_id, .before_id = before_id } };
                 },
                 .remove_child => blk: {
                     const child_id = parseU64(obj.get("child_id")) orelse
-                        return .{ .err = .missing_child_id };
+                        return error.missing_child_id;
                     break :blk .{ .remove_child = .{ .id = id, .child_id = child_id } };
                 },
                 .delete => .{ .delete = .{ .id = id } },
@@ -180,7 +180,7 @@ pub const Iterator = struct {
                 .request_draw => unreachable,
             };
 
-            return .{ .ok = cmd };
+            return cmd;
         }
         return null;
     }

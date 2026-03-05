@@ -3,27 +3,22 @@ const testing = std.testing;
 const Parser = @import("mutations/Parser.zig");
 const Style = @import("window/element/Style.zig").Style;
 
-fn parseSingle(data: []const u8) ?union(enum) { ok: Parser.Command, err: Parser.Error } {
-    const result = Parser.parse(testing.allocator, data) orelse return null;
+fn expectCmd(data: []const u8) Parser.Command {
+    const result = Parser.parse(testing.allocator, data) orelse unreachable;
     defer result.parsed.deinit();
     var iter = result.iter;
-    return iter.next();
-}
-
-fn expectCmd(data: []const u8) Parser.Command {
-    const r = parseSingle(data) orelse unreachable;
-    return switch (r) {
-        .ok => |cmd| cmd,
-        .err => unreachable,
-    };
+    return (iter.next() orelse unreachable) catch unreachable;
 }
 
 fn expectErr(data: []const u8) Parser.Error {
-    const r = parseSingle(data) orelse unreachable;
-    return switch (r) {
-        .ok => unreachable,
-        .err => |e| e,
-    };
+    const result = Parser.parse(testing.allocator, data) orelse unreachable;
+    defer result.parsed.deinit();
+    var iter = result.iter;
+    if (iter.next()) |v| {
+        _ = v catch |e| return e;
+        unreachable;
+    }
+    unreachable;
 }
 
 // ---- Basic command parsing ----
@@ -200,16 +195,16 @@ test "iterate multiple commands" {
     var iter = result.iter;
 
     // First: create
-    const c1 = (iter.next() orelse return error.UnexpectedEnd).ok;
-    try testing.expectEqual(Parser.CmdType.create, c1);
+    const c1 = try (iter.next() orelse return error.UnexpectedEnd);
+    try testing.expect(c1 == .create);
 
     // Second: set_root
-    const c2 = (iter.next() orelse return error.UnexpectedEnd).ok;
-    try testing.expectEqual(Parser.CmdType.set_root, c2);
+    const c2 = try (iter.next() orelse return error.UnexpectedEnd);
+    try testing.expect(c2 == .set_root);
 
     // Third: request_draw
-    const c3 = (iter.next() orelse return error.UnexpectedEnd).ok;
-    try testing.expectEqual(Parser.CmdType.request_draw, c3);
+    const c3 = try (iter.next() orelse return error.UnexpectedEnd);
+    try testing.expect(c3 == .request_draw);
 
     // Done
     try testing.expect(iter.next() == null);
