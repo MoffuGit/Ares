@@ -1,7 +1,7 @@
 const global = @import("global.zig");
 const App = @import("App.zig");
 const Bus = @import("Bus.zig");
-const MutationQueue = @import("MutationQueue.zig");
+const MutationQueue = @import("mutations/Queue.zig");
 
 export fn initState(callback: ?Bus.Callback) void {
     global.state.init(callback);

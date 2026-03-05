@@ -2,12 +2,12 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.mutations);
 
-const Element = @import("window/element/mod.zig");
+const Element = @import("../window/element/mod.zig");
 const Style = Element.Style;
 const Node = Element.Node;
-const Box = @import("window/element/Box.zig");
-const Window = @import("window/mod.zig");
-const App = @import("App.zig");
+const Box = @import("../window/element/Box.zig");
+const Window = @import("../window/mod.zig");
+const App = @import("../App.zig");
 
 const MutationQueue = @This();
 

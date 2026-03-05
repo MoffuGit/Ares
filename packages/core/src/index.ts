@@ -18,10 +18,6 @@ function getCoreLib(libPath: string) {
                 args: [],
                 returns: FFIType.void,
             },
-            drainEvents: {
-                args: [],
-                returns: FFIType.void,
-            },
             createSettings: {
                 args: [],
                 returns: FFIType.pointer,
@@ -134,11 +130,6 @@ export class CoreLib {
         this.lib.symbols.deinitState();
     }
 
-    drainEvents(): void {
-        this.lib.symbols.drainEvents();
-    }
-
-
     createSettings(): Pointer | null {
         return this.lib.symbols.createSettings() as Pointer | null;
     }
@@ -165,7 +156,7 @@ export class CoreLib {
     }
 
     createIo(): Pointer | null {
-        return this.lib.symbols.createIo() as Pointer | null;
+        return this.lib.symbols.createIo();
     }
 
     destroyIo(handle: Pointer): void {
@@ -173,7 +164,7 @@ export class CoreLib {
     }
 
     createMonitor(): Pointer | null {
-        return this.lib.symbols.createMonitor() as Pointer | null;
+        return this.lib.symbols.createMonitor();
     }
 
     destroyMonitor(handle: Pointer): void {

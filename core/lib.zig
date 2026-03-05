@@ -18,9 +18,6 @@ export fn deinitState() void {
     global.state.deinit();
 }
 
-export fn drainEvents() void {
-    global.state.bus.drain();
-}
 export fn createSettings() ?*Settings {
     return Settings.create(global.state.alloc) catch null;
 }
