@@ -4,6 +4,11 @@ import { CoreLib } from "./index";
 
 const settingsPath = resolve(import.meta.dir, "../../../settings");
 
+//NOTE:
+//this fail with this:
+//index.test.ts:
+// debug(monitor): starting monitor thread
+// fish: Job 1, 'bun test' terminated by signal SIGTRAP (Trace or breakpoint trap)
 describe("CoreLib lifecycle", () => {
     test("init, load, and teardown", () => {
         const core = new CoreLib();

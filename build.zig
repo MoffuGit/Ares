@@ -6,6 +6,10 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const xev_dep = b.dependency("libxev", .{ .target = target, .optimize = optimize });
+    const objc_dep = b.dependency("zig_objc", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     const datastruct = b.createModule(.{
         .root_source_file = b.path("src/datastruct/lib.zig"),
@@ -20,6 +24,7 @@ pub fn build(b: *std.Build) void {
     });
     mod.addImport("xev", xev_dep.module("xev"));
     mod.addImport("datastruct", datastruct);
+    mod.addImport("objc", objc_dep.module("objc"));
 
     const lib = b.addLibrary(.{
         .name = "core",
@@ -80,6 +85,7 @@ pub fn build(b: *std.Build) void {
     });
     test_mod.addImport("xev", xev_dep.module("xev"));
     test_mod.addImport("datastruct", datastruct);
+    test_mod.addImport("objc", objc_dep.module("objc"));
 
     const test_exe = b.addTest(.{
         .name = "ares-test",

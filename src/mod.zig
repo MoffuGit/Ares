@@ -8,6 +8,7 @@ const Monitor = @import("monitor/mod.zig");
 const Project = @import("Project.zig");
 const Snapshot = @import("worktree/Snapshot.zig");
 const Buffer = @import("buffer/Buffer.zig");
+const native = @import("native/mod.zig");
 
 export fn initState(callback: ?Bus.Callback) void {
     global.state.init(callback);
@@ -154,6 +155,7 @@ export fn openBuffer(project: *Project, entry_id: u64) ?*Buffer {
 }
 
 test {
+    _ = native;
     _ = @import("keymaps/mod.zig");
     _ = @import("monitor/mod.zig");
     _ = @import("worktree/mod.zig");
