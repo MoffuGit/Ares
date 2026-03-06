@@ -16,30 +16,53 @@ pub const Observer = struct {
     const Self = @This();
 
     alloc: Allocator,
+    mutex: std.Thread.Mutex = .{},
     events: EventEmitter,
-    observerDelegate: objc.Class,
+
+    autorelase_pool: *objc.AutoreleasePool,
+    // observerDelegate: objc.Class,
 
     pub fn create(alloc: Allocator) !*Self {
         const observer = try alloc.create(Self);
+        errdefer alloc.destroy(observer);
 
-        //NOTE:
-        //we need to create our class,
-        // Create a new class declaration
-        // const class = objc.allocateClassPair(objc.getClass("NSObject"), "MyDelegate").?;
-        // Register a method conforming to the protocol
-        // _ = class.addMethod("foo:bar:", myHandlerFn);
-        // Optionally, explicitly mark the new class for conformance
-        // const protocol = objc.getProtocol("SomeDelegateProtocol").?;
-        // _ = objc.c.class_addProtocol(self.class.value, protocol.value);
-        // Finalize the class declaration
-        // objc.registerClassPair(class);
-        //
-        //the detail is how we can access to the observer events for emitting the change
+        const pool = objc.AutoreleasePool.init();
+        errdefer pool.deinit();
+
+        const NSObject = objc.getClass("NSObject").?;
+
+        const ObserverClass = objc.allocateClassPair(NSObject, "NSColorChangesObserver");
+        if (ObserverClass == null) {
+            return error.ClassAllocationFailed;
+        }
 
         observer.* = .{
             .alloc = alloc,
             .events = EventEmitter.init(alloc),
+            .autorelase_pool = pool,
         };
+
+        //NOTE:
+        //I don't think it's going to be that much issue with the emit call,
+        //i will only use it for adding an Event to the queue of the application,
+
+        const ObserverBlock = objc.Block(struct { observer: *Observer }, .{}, void);
+
+        const ObserverCapture: ObserverBlock.Captures = .{
+            .observer = observer,
+        };
+
+        var Block: ObserverBlock.Context = ObserverBlock.init(ObserverCapture, (struct {
+            fn emit(block: *const ObserverBlock.Context) callconv(.c) void {
+                const _observer = block.observer;
+                _observer.mutex.lock();
+                _observer.mutex.unlock();
+
+                _observer.events.emit(.Change);
+            }
+        }).emit);
+
+        ObserverBlock.invoke(&Block, .{});
 
         return observer;
     }
@@ -49,26 +72,11 @@ pub const Observer = struct {
     }
 
     pub fn destroy(self: *Self) void {
+        self.autorelase_pool.deinit();
         self.events.deinit();
         self.alloc.destroy(self);
     }
 };
-
-// fn themeChangedCallback(self: objc.Object, _cmd: objc.Selector, notification: objc.Object) void {
-//     _ = self; // self is the instance of NSColorChangesObserver
-//     _ = _cmd; // _cmd is the selector for the method, "handleAppleThemeChanged:"
-//     _ = notification; // notification is the NSDistributedNotification object
-//
-//     // In a real application, you would put your theme change handling logic here.
-//     // For now, let's just print something.
-//     std.debug.print("Theme changed notification received!\n", .{});
-//
-//     // You could inspect the notification object if needed:
-//     // const userInfo = notification.msgSend(objc.Object, "userInfo");
-//     // if (userInfo != null) {
-//     //     // ... process userInfo
-//     // }
-// }
 
 // pub fn setupThemeObserver() !void {
 //     const pool = objc.AutoreleasePool.init();

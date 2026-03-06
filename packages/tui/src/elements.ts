@@ -1,5 +1,3 @@
-// ---- Style types mirroring Zig structures ----
-
 export type StyleValue =
     | "undefined"
     | "auto"
