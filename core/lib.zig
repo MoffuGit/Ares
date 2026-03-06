@@ -38,6 +38,11 @@ pub const ExternSettings = extern struct {
     dark_theme_len: usize,
 };
 
+//BUG:
+//i fucked up with this, i know
+//i need to add a mutex for protecting the settings data (monitor thread and other threads)
+//and i need to check how the ts side handle the data, it makes a copy?, it takes ownership of the ptr?,
+//should i dupe the strings and then dealloc?
 export fn readSettings(settings: *Settings, @"extern": *ExternSettings) void {
     @"extern".* = .{
         .scheme = @intFromEnum(settings.scheme),

@@ -45,6 +45,8 @@ pub const Observer = struct {
         //NOTE:
         //I don't think it's going to be that much issue with the emit call,
         //i will only use it for adding an Event to the queue of the application,
+        //this Block should then get set as part of the observerDelegate class
+        //then invoked when a change happens
 
         const ObserverBlock = objc.Block(struct { observer: *Observer }, .{}, void);
 

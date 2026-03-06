@@ -10,17 +10,16 @@ const Style = Element.Style;
 const Node = Element.Node;
 const Box = @import("../window/element/Box.zig");
 const Window = @import("../window/mod.zig");
-const App = @import("../App.zig");
 
 const Mutations = @This();
 alloc: Allocator,
-app: *App,
+window: *Window,
 
-pub fn create(alloc: Allocator, app: *App) !Mutations {
+pub fn create(alloc: Allocator, window: *Window) !Mutations {
     const mutations = try alloc.create(Mutations);
     mutations.* = .{
         .alloc = alloc,
-        .app = app,
+        .window = window,
     };
 
     return mutations;
@@ -53,7 +52,7 @@ pub fn processMutations(self: *Mutations, data: []const u8) void {
             .set_root => |d| self.setRoot(d.id),
             .delete => |d| self.delete(d.id),
             .remove_child => self.removeChild(cmd),
-            .set_focus => |d| self.app.window.setFocus(d.id),
+            .set_focus => |d| self.window.setFocus(d.id),
         }
     }
 }
@@ -67,7 +66,7 @@ fn createCmd(self: *Mutations, cmd: Command) void {
                 log.err("create box id={}: {}", .{ data.id, err });
                 return;
             };
-            self.app.window.addElement(box.elem()) catch |err| {
+            self.window.addElement(box.elem()) catch |err| {
                 log.err("register box id={}: {}", .{ data.id, err });
                 box.deinit(self.alloc);
             };
@@ -77,7 +76,7 @@ fn createCmd(self: *Mutations, cmd: Command) void {
 
 fn setProps(self: *Mutations, cmd: Command) void {
     const data = cmd.set_props;
-    const elem = self.app.window.getElement(data.id) orelse {
+    const elem = self.window.getElement(data.id) orelse {
         log.err("set_props: unknown element id={}", .{data.id});
         return;
     };
@@ -98,7 +97,7 @@ fn setProps(self: *Mutations, cmd: Command) void {
 
 fn appendChild(self: *Mutations, cmd: Command) void {
     const data = cmd.append_child;
-    const window = self.app.window;
+    const window = self.window;
 
     const parent = window.getElement(data.id) orelse {
         log.err("append_child: unknown parent id={}", .{data.id});
@@ -116,7 +115,7 @@ fn appendChild(self: *Mutations, cmd: Command) void {
 
 fn insertBefore(self: *Mutations, cmd: Command) void {
     const data = cmd.insert_before;
-    const window = self.app.window;
+    const window = self.window;
 
     const parent = window.getElement(data.id) orelse {
         log.err("insert_before: unknown parent id={}", .{data.id});
@@ -145,7 +144,7 @@ fn insertBefore(self: *Mutations, cmd: Command) void {
 fn removeChild(self: *Mutations, cmd: Command) void {
     const data = cmd.remove_child;
 
-    const parent = self.app.window.getElement(data.id) orelse {
+    const parent = self.window.getElement(data.id) orelse {
         log.err("remove_child: unknown parent id={}", .{data.id});
         return;
     };
@@ -154,7 +153,7 @@ fn removeChild(self: *Mutations, cmd: Command) void {
 }
 
 fn delete(self: *Mutations, id: u64) void {
-    const window = self.app.window;
+    const window = self.window;
     const elem = window.getElement(id) orelse return;
 
     if (elem.parent) |parent| {
@@ -176,11 +175,11 @@ fn delete(self: *Mutations, id: u64) void {
 }
 
 fn setRoot(self: *Mutations, id: u64) void {
-    const elem = self.app.window.getElement(id) orelse {
+    const elem = self.window.getElement(id) orelse {
         log.err("set_root: unknown element id={}", .{id});
         return;
     };
-    self.app.window.setRoot(elem);
+    self.window.setRoot(elem);
 }
 
 fn applyBoxProps(elem: *Element, props: cmdpkg.BoxProps) void {
@@ -348,4 +347,253 @@ fn applyGapPatch(gap: *Style.Gap, node: Node, patch: cmdpkg.GapValues) void {
             node.setGap(entry.gutter, sv);
         }
     }
+}
+
+const testing = std.testing;
+const vaxis = @import("vaxis");
+
+fn testSetup(alloc: Allocator) !struct { screen: *Screen, window: *Window, mutations: Mutations } {
+    const screen = try alloc.create(Screen);
+    screen.* = try Screen.init(alloc, .{ .cols = 80, .rows = 24, .x_pixel = 0, .y_pixel = 0 });
+
+    const window = try alloc.create(Window);
+    window.* = try Window.init(alloc, screen);
+
+    return .{
+        .screen = screen,
+        .window = window,
+        .mutations = .{ .alloc = alloc, .window = window },
+    };
+}
+
+fn testTeardown(alloc: Allocator, ctx: *@TypeOf(testSetup(undefined) catch unreachable)) void {
+    var it = ctx.window.elements.valueIterator();
+    while (it.next()) |entry| {
+        const elem = entry.*;
+        switch (elem.kind) {
+            .box => {
+                const box: *Box = @ptrCast(@alignCast(elem.userdata orelse continue));
+                box.deinit(alloc);
+            },
+            .raw => {
+                elem.deinit();
+                alloc.destroy(elem);
+            },
+        }
+    }
+    ctx.window.deinit();
+    alloc.destroy(ctx.window);
+    ctx.screen.deinit();
+    alloc.destroy(ctx.screen);
+}
+
+const Screen = @import("../Screen.zig");
+
+test "create element and set_root" {
+    const alloc = testing.allocator;
+    var ctx = try testSetup(alloc);
+    defer testTeardown(alloc, &ctx);
+
+    ctx.mutations.processMutations(
+        \\[
+        \\  {"cmd": 0, "id": 1, "element_type": 0},
+        \\  {"cmd": 6, "id": 1}
+        \\]
+    );
+
+    try testing.expect(ctx.window.getElement(1) != null);
+    try testing.expect(ctx.window.root != null);
+    try testing.expectEqual(@as(u64, 1), ctx.window.root.?.num);
+}
+
+test "set_props applies style" {
+    const alloc = testing.allocator;
+    var ctx = try testSetup(alloc);
+    defer testTeardown(alloc, &ctx);
+
+    ctx.mutations.processMutations(
+        \\[
+        \\  {"cmd": 0, "id": 1, "element_type": 0},
+        \\  {"cmd": 1, "id": 1, "props": {"style": {
+        \\    "flex_direction": "row",
+        \\    "width": 100,
+        \\    "height": 50
+        \\  }}}
+        \\]
+    );
+
+    const elem = ctx.window.getElement(1).?;
+    try testing.expectEqual(Style.FlexDirection.row, elem.style.flex_direction);
+    try testing.expectEqual(Style.StyleValue{ .point = 100.0 }, elem.style.width);
+    try testing.expectEqual(Style.StyleValue{ .point = 50.0 }, elem.style.height);
+}
+
+test "set_props applies z_index and box props" {
+    const alloc = testing.allocator;
+    var ctx = try testSetup(alloc);
+    defer testTeardown(alloc, &ctx);
+
+    ctx.mutations.processMutations(
+        \\[
+        \\  {"cmd": 0, "id": 1, "element_type": 0},
+        \\  {"cmd": 1, "id": 1, "props": {"zIndex": 5, "opacity": 0.5, "rounded": 4.0}}
+        \\]
+    );
+
+    const elem = ctx.window.getElement(1).?;
+    try testing.expectEqual(@as(usize, 5), elem.zIndex);
+
+    const box: *Box = @ptrCast(@alignCast(elem.userdata.?));
+    try testing.expectApproxEqAbs(@as(f32, 0.5), box.opacity, 0.001);
+    try testing.expectApproxEqAbs(@as(f32, 4.0), box.rounded.?, 0.001);
+}
+
+test "append_child builds parent-child relationship" {
+    const alloc = testing.allocator;
+    var ctx = try testSetup(alloc);
+    defer testTeardown(alloc, &ctx);
+
+    ctx.mutations.processMutations(
+        \\[
+        \\  {"cmd": 0, "id": 1, "element_type": 0},
+        \\  {"cmd": 0, "id": 2, "element_type": 0},
+        \\  {"cmd": 2, "id": 1, "child_id": 2}
+        \\]
+    );
+
+    const parent = ctx.window.getElement(1).?;
+    const child = ctx.window.getElement(2).?;
+
+    try testing.expect(parent.childrens != null);
+    try testing.expectEqual(@as(usize, 1), parent.childrens.?.by_order.items.len);
+    try testing.expect(child.parent == parent);
+}
+
+test "insert_before places child at correct position" {
+    const alloc = testing.allocator;
+    var ctx = try testSetup(alloc);
+    defer testTeardown(alloc, &ctx);
+
+    ctx.mutations.processMutations(
+        \\[
+        \\  {"cmd": 0, "id": 1, "element_type": 0},
+        \\  {"cmd": 0, "id": 2, "element_type": 0},
+        \\  {"cmd": 0, "id": 3, "element_type": 0},
+        \\  {"cmd": 2, "id": 1, "child_id": 2},
+        \\  {"cmd": 3, "id": 1, "child_id": 3, "before_id": 2}
+        \\]
+    );
+
+    const parent = ctx.window.getElement(1).?;
+    const children = parent.childrens.?.by_order.items;
+
+    try testing.expectEqual(@as(usize, 2), children.len);
+    try testing.expectEqual(@as(u64, 3), children[0].num);
+    try testing.expectEqual(@as(u64, 2), children[1].num);
+}
+
+test "remove_child detaches child from parent" {
+    const alloc = testing.allocator;
+    var ctx = try testSetup(alloc);
+    defer testTeardown(alloc, &ctx);
+
+    ctx.mutations.processMutations(
+        \\[
+        \\  {"cmd": 0, "id": 1, "element_type": 0},
+        \\  {"cmd": 0, "id": 2, "element_type": 0},
+        \\  {"cmd": 2, "id": 1, "child_id": 2},
+        \\  {"cmd": 4, "id": 1, "child_id": 2}
+        \\]
+    );
+
+    const parent = ctx.window.getElement(1).?;
+    try testing.expectEqual(@as(usize, 0), parent.childrens.?.by_order.items.len);
+
+    const child = ctx.window.getElement(2).?;
+    try testing.expect(child.parent == null);
+}
+
+test "delete removes element from window" {
+    const alloc = testing.allocator;
+    var ctx = try testSetup(alloc);
+    defer testTeardown(alloc, &ctx);
+
+    ctx.mutations.processMutations(
+        \\[
+        \\  {"cmd": 0, "id": 1, "element_type": 0},
+        \\  {"cmd": 0, "id": 2, "element_type": 0},
+        \\  {"cmd": 2, "id": 1, "child_id": 2},
+        \\  {"cmd": 5, "id": 2}
+        \\]
+    );
+
+    try testing.expect(ctx.window.getElement(2) == null);
+
+    const parent = ctx.window.getElement(1).?;
+    try testing.expectEqual(@as(usize, 0), parent.childrens.?.by_order.items.len);
+}
+
+test "set_focus updates focused_id" {
+    const alloc = testing.allocator;
+    var ctx = try testSetup(alloc);
+    defer testTeardown(alloc, &ctx);
+
+    ctx.mutations.processMutations(
+        \\[
+        \\  {"cmd": 0, "id": 1, "element_type": 0},
+        \\  {"cmd": 7, "id": 1}
+        \\]
+    );
+
+    try testing.expectEqual(@as(?u64, 1), ctx.window.focused_id);
+}
+
+test "set_props applies edge padding and margin" {
+    const alloc = testing.allocator;
+    var ctx = try testSetup(alloc);
+    defer testTeardown(alloc, &ctx);
+
+    ctx.mutations.processMutations(
+        \\[
+        \\  {"cmd": 0, "id": 1, "element_type": 0},
+        \\  {"cmd": 1, "id": 1, "props": {"style": {
+        \\    "padding": {"left": 5, "top": 10},
+        \\    "margin": {"all": 2}
+        \\  }}}
+        \\]
+    );
+
+    const elem = ctx.window.getElement(1).?;
+    try testing.expectEqual(Style.StyleValue{ .point = 5.0 }, elem.style.padding.left);
+    try testing.expectEqual(Style.StyleValue{ .point = 10.0 }, elem.style.padding.top);
+    try testing.expectEqual(Style.StyleValue{ .point = 2.0 }, elem.style.margin.all);
+}
+
+test "full tree: create, nest, set_root, then delete leaf" {
+    const alloc = testing.allocator;
+    var ctx = try testSetup(alloc);
+    defer testTeardown(alloc, &ctx);
+
+    ctx.mutations.processMutations(
+        \\[
+        \\  {"cmd": 0, "id": 10, "element_type": 0},
+        \\  {"cmd": 0, "id": 20, "element_type": 0},
+        \\  {"cmd": 0, "id": 30, "element_type": 0},
+        \\  {"cmd": 2, "id": 10, "child_id": 20},
+        \\  {"cmd": 2, "id": 10, "child_id": 30},
+        \\  {"cmd": 6, "id": 10},
+        \\  {"cmd": 1, "id": 20, "props": {"style": {"width": 40}}},
+        \\  {"cmd": 5, "id": 30}
+        \\]
+    );
+
+    try testing.expectEqual(@as(u64, 10), ctx.window.root.?.num);
+
+    const root = ctx.window.getElement(10).?;
+    try testing.expectEqual(@as(usize, 1), root.childrens.?.by_order.items.len);
+
+    const child = ctx.window.getElement(20).?;
+    try testing.expectEqual(Style.StyleValue{ .point = 40.0 }, child.style.width);
+
+    try testing.expect(ctx.window.getElement(30) == null);
 }

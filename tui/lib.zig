@@ -1,7 +1,8 @@
 const global = @import("global.zig");
 const App = @import("App.zig");
+const Window = @import("window/mod.zig");
 const Bus = @import("Bus.zig");
-const MutationQueue = @import("mutations/Queue.zig");
+const Mutations = @import("mutations/mod.zig");
 
 export fn initState(callback: ?Bus.Callback) void {
     global.state.init(callback);
@@ -21,10 +22,18 @@ export fn destroyApp(app: *App) void {
     app.destroy();
 }
 
-export fn drainEvents() void {
-    global.state.bus.drain();
+export fn getWindow(app: *App) *Window {
+    return &app.window;
 }
 
-export fn postBatch(app: *App, ptr: [*]const u8, len: usize) void {
-    MutationQueue.processBatch(app, ptr[0..len]);
+export fn createMutations(window: *Window) ?*Mutations {
+    return Mutations.create(global.state.alloc, window) catch null;
+}
+
+export fn processMutations(mutations: *Mutations, ptr: [*]const u8, len: u64) void {
+    mutations.processMutations(ptr[0..len]);
+}
+
+export fn drainEvents() void {
+    global.state.bus.drain();
 }
