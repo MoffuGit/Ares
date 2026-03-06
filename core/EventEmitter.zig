@@ -6,10 +6,10 @@ pub fn EventEmitter(comptime Event: type) type {
         @compileError("EventType must be an union");
     }
 
-    const Tag = std.meta.Tag(Event);
-
     return struct {
         const Self = @This();
+
+        pub const Tag = std.meta.Tag(Event);
 
         pub const Listener = struct {
             ctx: *anyopaque,
@@ -33,7 +33,7 @@ pub fn EventEmitter(comptime Event: type) type {
             }
         }
 
-        pub fn on(self: *Self, event: Event, listener: Listener) !void {
+        pub fn on(self: *Self, event: Tag, listener: Listener) !void {
             const tag = std.meta.activeTag(event);
             const list_ptr = self.listeners.getPtr(tag) orelse {
                 self.listeners.put(tag, .{});
@@ -43,7 +43,7 @@ pub fn EventEmitter(comptime Event: type) type {
             try list_ptr.append(self.allocator, listener);
         }
 
-        pub fn off(self: *Self, event: Event, listener: Listener) void {
+        pub fn off(self: *Self, event: Tag, listener: Listener) void {
             const tag = std.meta.activeTag(event);
             const list_ptr = self.listeners.getPtr(tag) orelse return;
 
