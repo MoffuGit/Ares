@@ -22,8 +22,8 @@ describe("CoreLib lifecycle", () => {
         core.loadSettings(settings!, settingsPath, monitor!);
 
         //BUG:
-        // const settingsData = core.readSettings(settings!);
-        // console.log("Settings:", settingsData);
+        const settingsData = core.readSettings(settings!);
+        console.log("Settings:", settingsData);
 
         core.destroySettings(settings!);
         core.destroyMonitor(monitor!);

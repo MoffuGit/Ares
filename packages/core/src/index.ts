@@ -26,6 +26,14 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
+            lockSettings: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
+            unlockSettings: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
             loadSettings: {
                 args: [FFIType.pointer, FFIType.pointer, FFIType.u64, FFIType.pointer],
                 returns: FFIType.void,
@@ -144,15 +152,25 @@ export class CoreLib {
     }
 
     readSettings(settings: Pointer) {
-        const buf = new ArrayBuffer(Settings.size);
-        this.lib.symbols.readSettings(settings, ptr(buf));
-        return Settings.unpack(buf);
+        this.lib.symbols.lockSettings(settings);
+        try {
+            const buf = new ArrayBuffer(Settings.size);
+            this.lib.symbols.readSettings(settings, ptr(buf));
+            return Settings.unpack(buf);
+        } finally {
+            this.lib.symbols.unlockSettings(settings);
+        }
     }
 
     readTheme(settings: Pointer) {
-        const buf = new ArrayBuffer(Theme.size);
-        this.lib.symbols.readTheme(settings, ptr(buf));
-        return Theme.unpack(buf);
+        this.lib.symbols.lockSettings(settings);
+        try {
+            const buf = new ArrayBuffer(Theme.size);
+            this.lib.symbols.readTheme(settings, ptr(buf));
+            return Theme.unpack(buf);
+        } finally {
+            this.lib.symbols.unlockSettings(settings);
+        }
     }
 
     createIo(): Pointer | null {

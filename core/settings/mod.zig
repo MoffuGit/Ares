@@ -35,6 +35,7 @@ const JsonSettings = struct {
 };
 
 alloc: Allocator,
+mutex: std.Thread.Mutex = .{},
 
 scheme: Scheme = .system,
 system_scheme: ColorScheme = .dark,
@@ -113,6 +114,9 @@ fn settingsCallback(self: ?*Settings, watcher: u64, event: u32) void {
     _ = event;
     const s = self orelse return;
 
+    s.mutex.lock();
+    defer s.mutex.unlock();
+
     var dir = std.fs.openDirAbsolute(s.settings_path, .{}) catch return;
     defer dir.close();
 
@@ -125,6 +129,9 @@ fn themeCallback(self: ?*Settings, watcher: u64, event: u32) void {
     _ = watcher;
     _ = event;
     const s = self orelse return;
+
+    s.mutex.lock();
+    defer s.mutex.unlock();
 
     var dir = std.fs.openDirAbsolute(s.settings_path, .{}) catch return;
     defer dir.close();
