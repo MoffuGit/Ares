@@ -48,7 +48,6 @@ pub fn processMutations(self: *Mutations, data: []const u8) void {
             .set_props => self.setProps(cmd),
             .append_child => self.appendChild(cmd),
             .insert_before => self.insertBefore(cmd),
-            .request_draw => {},
             .set_root => |d| self.setRoot(d.id),
             .delete => |d| self.delete(d.id),
             .remove_child => self.removeChild(cmd),
@@ -367,20 +366,6 @@ fn testSetup(alloc: Allocator) !struct { screen: *Screen, window: *Window, mutat
 }
 
 fn testTeardown(alloc: Allocator, ctx: *@TypeOf(testSetup(undefined) catch unreachable)) void {
-    var it = ctx.window.elements.valueIterator();
-    while (it.next()) |entry| {
-        const elem = entry.*;
-        switch (elem.kind) {
-            .box => {
-                const box: *Box = @ptrCast(@alignCast(elem.userdata orelse continue));
-                box.deinit(alloc);
-            },
-            .raw => {
-                elem.deinit();
-                alloc.destroy(elem);
-            },
-        }
-    }
     ctx.window.deinit();
     alloc.destroy(ctx.window);
     ctx.screen.deinit();

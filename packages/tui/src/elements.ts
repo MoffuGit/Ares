@@ -1,3 +1,5 @@
+import { allocId, enqueue } from ".";
+
 export type StyleValue =
     | "undefined"
     | "auto"
@@ -104,12 +106,7 @@ export interface Segment {
     };
 }
 
-// ---- Wire command type (JSON objects sent to Zig) ----
-
 export type ElementType = "box";
-export type WireCommand = Record<string, unknown>;
-
-// ---- Event handler types ----
 
 export type EventHandler = (event: ElementEvent) => void;
 
@@ -124,25 +121,6 @@ export interface ElementEvent {
 
 // ---- ID generation ----
 
-let nextId = 1;
-
-function allocId(): number {
-    return nextId++;
-}
-
-// ---- Mutation queue ----
-
-const mutationQueue: WireCommand[] = [];
-
-export function enqueue(cmd: WireCommand): void {
-    mutationQueue.push(cmd);
-}
-
-export function drainMutations(): WireCommand[] {
-    const batch = mutationQueue.slice();
-    mutationQueue.length = 0;
-    return batch;
-}
 
 // ---- Base Element ----
 
@@ -288,12 +266,6 @@ export class Element {
 
     setAsRoot(): void {
         enqueue({ cmd: "set_root", id: this.id });
-    }
-
-    // ---- Draw request ----
-
-    requestDraw(): void {
-        enqueue({ cmd: "request_draw", id: this.id });
     }
 }
 

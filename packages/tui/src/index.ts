@@ -1,6 +1,5 @@
 import { dlopen, FFIType, JSCallback, toArrayBuffer, type Pointer } from "bun:ffi";
 import { resolve } from "node:path";
-import { drainMutations } from "./elements";
 
 function getTuiLib() {
     const symbols = dlopen(
@@ -62,10 +61,34 @@ function getTuiLib() {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
+            requestDraw: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
         },
     );
 
     return symbols;
+}
+
+let nextId = 1;
+
+export function allocId(): number {
+    return nextId++;
+}
+
+const mutationQueue: WireCommand[] = [];
+
+export function enqueue(cmd: WireCommand): void {
+    mutationQueue.push(cmd);
+}
+
+export type WireCommand = Record<string, unknown>;
+
+export function drainMutations(): WireCommand[] {
+    const batch = mutationQueue.slice();
+    mutationQueue.length = 0;
+    return batch;
 }
 
 export class TuiLib {
@@ -79,7 +102,7 @@ export class TuiLib {
 
     initState() {
         this.jsCallback = new JSCallback(
-            function handleEvent(event: number, target: number, ptr: Pointer | null, len: number | bigint): void {
+            function handleEvent(_event: number, _target: number, _ptr: Pointer | null, _len: number | bigint): void {
             },
             {
                 args: [FFIType.u8, FFIType.u64, FFIType.pointer, FFIType.u64],
@@ -145,6 +168,10 @@ export class TuiLib {
         const jsonStr = new TextDecoder().decode(buf);
         this.lib.symbols.freeDumpTree();
         return JSON.parse(jsonStr);
+    }
+
+    requestDraw(app: Pointer) {
+        this.lib.symbols.requestDraw(app);
     }
 }
 

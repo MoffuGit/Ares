@@ -57,22 +57,6 @@ export fn destroyTestWindow(window: *Window) void {
     const alloc = global.state.alloc;
     const screen = window.screen;
 
-    // Clean up all elements
-    var it = window.elements.valueIterator();
-    while (it.next()) |entry| {
-        const elem = entry.*;
-        switch (elem.kind) {
-            .box => {
-                const box: *Box = @ptrCast(@alignCast(elem.userdata orelse continue));
-                box.deinit(alloc);
-            },
-            .raw => {
-                elem.deinit();
-                alloc.destroy(elem);
-            },
-        }
-    }
-
     window.deinit();
     alloc.destroy(window);
     screen.deinit();
@@ -117,6 +101,10 @@ export fn getDumpPtr() [*]const u8 {
 
 export fn freeDumpTree() void {
     dump_buf.clearAndFree(global.state.alloc);
+}
+
+export fn requestDraw(app: *App) void {
+    app.requestDraw();
 }
 
 fn writeElementJson(elem: *Element, alloc: std.mem.Allocator, buf: *std.ArrayList(u8)) !void {

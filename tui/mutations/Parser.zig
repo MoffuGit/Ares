@@ -12,6 +12,7 @@ const StylePatch = cmdpkg.StylePatch;
 const EdgeValues = cmdpkg.EdgeValues;
 const BorderEdgeValues = cmdpkg.BorderEdgeValues;
 const GapValues = cmdpkg.GapValues;
+const ColorValue = cmdpkg.ColorValue;
 
 const Style = @import("../window/element/Style.zig").Style;
 
@@ -46,10 +47,6 @@ pub const Iterator = struct {
             const cmd_type = parseEnum(CmdType, obj.get("cmd")) orelse
                 return error.missing_cmd;
 
-            if (cmd_type == .request_draw) {
-                return .request_draw;
-            }
-
             const id = parseU64(obj.get("id")) orelse
                 return error.missing_id;
 
@@ -80,7 +77,6 @@ pub const Iterator = struct {
                 .delete => .{ .delete = .{ .id = id } },
                 .set_root => .{ .set_root = .{ .id = id } },
                 .set_focus => .{ .set_focus = .{ .id = id } },
-                .request_draw => unreachable,
             };
 
             return cmd;
@@ -148,7 +144,20 @@ fn parseBoxProps(props: json.ObjectMap) ?BoxProps {
         if (bp.rounded != null) has_any = true;
     }
 
+    if (props.get("bg")) |bg| {
+        bp.bg = parseColor(bg);
+    }
+
+    if (props.get("fg")) |fg| {
+        bp.fg = parseColor(fg);
+    }
+
     return if (has_any) bp else null;
+}
+
+fn parseColor(color: json.Value) ?ColorValue {
+    _ = color;
+    return null;
 }
 
 fn parseStylePatch(obj: json.ObjectMap) StylePatch {
@@ -398,16 +407,6 @@ test "parse set_focus command" {
     }
 }
 
-test "parse request_draw command (no id required)" {
-    const cmd = expectCmd(
-        \\[{"cmd": 8}]
-    );
-    switch (cmd) {
-        .request_draw => {},
-        else => return error.UnexpectedCommand,
-    }
-}
-
 test "parse append_child command" {
     const cmd = expectCmd(
         \\[{"cmd": 2, "id": 1, "child_id": 5}]
@@ -507,8 +506,7 @@ test "iterate multiple commands" {
     const data =
         \\[
         \\  {"cmd": 0, "id": 1, "element_type": 0},
-        \\  {"cmd": 6, "id": 1},
-        \\  {"cmd": 8}
+        \\  {"cmd": 6, "id": 1}
         \\]
     ;
     var parser = Parser.parse(testing.allocator, data) catch return error.ParseFailed;
@@ -522,10 +520,6 @@ test "iterate multiple commands" {
     // Second: set_root
     const c2 = try (_iter.next() orelse return error.UnexpectedEnd);
     try testing.expect(c2 == .set_root);
-
-    // Third: request_draw
-    const c3 = try (_iter.next() orelse return error.UnexpectedEnd);
-    try testing.expect(c3 == .request_draw);
 
     // Done
     try testing.expect(_iter.next() == null);

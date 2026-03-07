@@ -10,6 +10,7 @@ const Screen = @import("../Screen.zig");
 const HitGrid = @import("HitGrid.zig");
 const Allocator = std.mem.Allocator;
 const Elements = std.AutoHashMap(u64, *Element);
+const Box = @import("element/Box.zig");
 
 const Window = @This();
 
@@ -39,6 +40,20 @@ pub fn init(alloc: Allocator, screen: *Screen) !Window {
 }
 
 pub fn deinit(self: *Window) void {
+    var it = self.elements.valueIterator();
+    while (it.next()) |entry| {
+        const elem = entry.*;
+        switch (elem.kind) {
+            .box => {
+                const box: *Box = @ptrCast(@alignCast(elem.userdata orelse continue));
+                box.deinit(self.alloc);
+            },
+            .raw => {
+                elem.deinit();
+                self.alloc.destroy(elem);
+            },
+        }
+    }
     self.hit_grid.deinit();
     self.elements.deinit();
 }

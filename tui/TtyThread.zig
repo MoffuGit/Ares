@@ -7,17 +7,17 @@ const log = std.log.scoped(.events_thread);
 
 const Allocator = std.mem.Allocator;
 const SharedContext = @import("SharedContext.zig");
-const Loop = @import("Loop.zig");
+const App = @import("App.zig");
 
 alloc: Allocator,
 shared_context: *SharedContext,
-loop: *Loop,
+mailbox: *App.Mailbox,
 running: std.atomic.Value(bool),
 
-pub fn init(alloc: Allocator, shared: *SharedContext, loop: *Loop) Thread {
+pub fn init(alloc: Allocator, shared: *SharedContext, mailbox: *App.Mailbox) Thread {
     return .{
         .shared_context = shared,
-        .loop = loop,
+        .mailbox = mailbox,
         .alloc = alloc,
         .running = std.atomic.Value(bool).init(true),
     };
@@ -60,8 +60,6 @@ fn threadMain_(self: *Thread) !void {
 
             const event = result.event orelse continue;
             try self.handleEvent(event);
-
-            try self.loop.wakeup.notify();
         }
     }
 }
@@ -71,7 +69,7 @@ fn threadMain_(self: *Thread) !void {
 //can get deallocated after a while, if i start having problems with that
 //is because i should store a copy and use the copy instead
 fn handleEvent(self: *Thread, event: vaxis.Event) !void {
-    const mailbox = self.loop.mailbox;
+    const mailbox = self.mailbox;
 
     switch (event) {
         .color_scheme => |scheme| {

@@ -1,13 +1,12 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 const log = std.log.scoped(.app);
+const datastruct = @import("datastruct");
 
 const Allocator = std.mem.Allocator;
 
 const SharedContext = @import("SharedContext.zig");
 const Screen = @import("Screen.zig");
-
-const Loop = @import("Loop.zig");
 
 const TtyThread = @import("TtyThread.zig");
 
@@ -15,6 +14,20 @@ const Renderer = @import("renderer/mod.zig");
 const RendererThread = @import("renderer/Thread.zig");
 
 const Window = @import("window/mod.zig");
+
+const BlockingQueue = datastruct.BlockingQueue;
+
+pub const Message = union(enum) {
+    scheme: vaxis.Color.Scheme,
+    resize: vaxis.Winsize,
+    key_press: vaxis.Key,
+    key_release: vaxis.Key,
+    focus: void,
+    blur: void,
+    mouse: vaxis.Mouse,
+};
+
+pub const Mailbox = BlockingQueue(Message, 64);
 
 const App = @This();
 
@@ -29,11 +42,9 @@ renderer: Renderer,
 renderer_thread: RendererThread,
 renderer_thr: std.Thread,
 
-loop: Loop,
-loop_thr: std.Thread,
-
 window: Window,
 draw: std.atomic.Value(bool) = .init(true),
+mailbox: *Mailbox,
 
 pub fn create(alloc: Allocator) !*App {
     const app = try alloc.create(App);
@@ -49,8 +60,8 @@ pub fn create(alloc: Allocator) !*App {
     var shared_context = try SharedContext.init(alloc);
     errdefer shared_context.deinit(alloc);
 
-    var loop = try Loop.init(alloc, app);
-    errdefer loop.deinit();
+    var mailbox = try Mailbox.create(alloc);
+    errdefer mailbox.destroy(alloc);
 
     var window = try Window.init(
         alloc,
@@ -58,7 +69,7 @@ pub fn create(alloc: Allocator) !*App {
     );
     errdefer window.deinit();
 
-    var tty_thread = TtyThread.init(alloc, &app.shared_context, &app.loop);
+    var tty_thread = TtyThread.init(alloc, &app.shared_context, app.mailbox);
     _ = &tty_thread;
 
     var renderer = try Renderer.init(alloc, &app.shared_context, &app.screen);
@@ -70,8 +81,7 @@ pub fn create(alloc: Allocator) !*App {
     app.* = .{
         .alloc = alloc,
         .shared_context = shared_context,
-        .loop = loop,
-        .loop_thr = undefined,
+        .mailbox = mailbox,
         .screen = screen,
         .window = window,
         .tty_thread = tty_thread,
@@ -81,7 +91,6 @@ pub fn create(alloc: Allocator) !*App {
         .renderer_thr = undefined,
     };
 
-    app.loop_thr = try std.Thread.spawn(.{}, Loop.threadMain, .{&app.loop});
     app.tty_thr = try std.Thread.spawn(.{}, TtyThread.threadMain, .{&app.tty_thread});
     app.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&app.renderer_thread});
 
@@ -104,16 +113,9 @@ pub fn destroy(self: *App) void {
         self.renderer_thr.join();
     }
 
-    {
-        self.loop.stop.notify() catch |err| {
-            log.err("error notifying renderer thread to stop, may stall err={}", .{err});
-        };
-        self.loop_thr.join();
-    }
-
     self.renderer_thread.deinit();
 
-    self.loop.deinit();
+    self.mailbox.destroy(self.alloc);
 
     self.window.deinit();
     self.renderer.deinit();

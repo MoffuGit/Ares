@@ -10,7 +10,6 @@ pub const CmdType = enum(u8) {
     delete = 5,
     set_root = 6,
     set_focus = 7,
-    request_draw = 8,
 };
 
 pub const ElementType = enum(u8) {
@@ -89,10 +88,18 @@ pub const StylePatch = struct {
     gap: ?GapValues = null,
 };
 
+pub const ColorValue = union(enum) {
+    default,
+    rgb: [3]u8,
+    rgba: [4]u8,
+};
+
 pub const BoxProps = struct {
     opacity: ?f32 = null,
     text_align: ?TextAlign = null,
     rounded: ?f32 = null,
+    bg: ?ColorValue = null,
+    fg: ?ColorValue = null,
 };
 
 pub const Props = struct {
@@ -110,5 +117,4 @@ pub const Command = union(CmdType) {
     delete: struct { id: u64 },
     set_root: struct { id: u64 },
     set_focus: struct { id: u64 },
-    request_draw: void,
 };
