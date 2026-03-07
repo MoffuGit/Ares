@@ -2,6 +2,7 @@ const std = @import("std");
 const vaxis = @import("vaxis");
 const log = std.log.scoped(.app);
 const datastruct = @import("datastruct");
+const global = @import("global.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -144,4 +145,34 @@ pub fn drawWindow(self: *App) !void {
     try self.window.draw();
 
     try self.renderer_thread.wakeup.notify();
+}
+
+pub fn drainMailbox(self: *App) void {
+    const bus = &global.state.bus;
+    while (self.mailbox.pop()) |message| {
+        switch (message) {
+            .scheme => |scheme| {
+                bus.push(.scheme, 0, .{ .scheme = .{ .scheme = @intFromEnum(scheme) } });
+            },
+            .resize => |size| {
+                self.window.resize(size);
+                bus.push(.resize, 0, .{ .resize = .{ .cols = size.cols, .rows = size.rows } });
+            },
+            .key_press => |key| {
+                self.window.resolveKeyEvent(key, .key_down, bus);
+            },
+            .key_release => |key| {
+                self.window.resolveKeyEvent(key, .key_up, bus);
+            },
+            .focus => {
+                bus.push(.focus, 0, .{ .none = {} });
+            },
+            .blur => {
+                bus.push(.blur, 0, .{ .none = {} });
+            },
+            .mouse => |mouse| {
+                self.window.resolveMouseEvent(mouse, bus);
+            },
+        }
+    }
 }

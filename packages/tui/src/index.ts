@@ -65,6 +65,10 @@ function getTuiLib() {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
+            drainMailbox: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
         },
     );
 
@@ -172,6 +176,10 @@ export class TuiLib {
 
     requestDraw(app: Pointer) {
         this.lib.symbols.requestDraw(app);
+    }
+
+    drainMailbox(app: Pointer) {
+        this.lib.symbols.drainMailbox(app);
     }
 }
 

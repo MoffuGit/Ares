@@ -52,6 +52,10 @@ export fn createTestWindow() ?*Window {
     return window;
 }
 
+export fn drainMailbox(app: *App) void {
+    app.drainMailbox();
+}
+
 /// Destroy a headless test window created by `createTestWindow`.
 export fn destroyTestWindow(window: *Window) void {
     const alloc = global.state.alloc;
