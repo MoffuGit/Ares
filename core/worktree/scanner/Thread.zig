@@ -135,7 +135,7 @@ fn processDirtyEntries(self: *Thread) void {
     defer result.destroy();
 
     if (result.updates.items.len > 0) {
-        global.state.bus.push(.worktree_update);
+        _ = global.state.mailbox.push(.worktree_update, .instant);
     }
 }
 
@@ -174,6 +174,6 @@ fn drainMailbox(self: *Thread) !void {
         }
     }
     if (changed) {
-        global.state.bus.push(.worktree_update);
+        _ = global.state.mailbox.push(.worktree_update, .instant);
     }
 }

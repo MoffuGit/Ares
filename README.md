@@ -1,39 +1,34 @@
 Three things are on top right now
 
-Tui
-now that i think about it the mutations
-happen on a different thread to the app Loop thread,
-meaning, the draw happens on a different thread to where we apply our mutations,
-what options we have?
+this can be done with amp
+adding a loop should not be hard
+and i can provide a reference
 
-protecting the window with a mutex,
-applying the mutations inside the Loop,
+the ts side its going to own the loop now,
+the part that was giving me problems when thinking
+is was how the animation would work with the drainMailbox call,
+now i know, the ts animations receive delta updated from the ts loop,
+they dont own they own interval nor have a loop on their own,
+that means that this loop would always calls drain mailbox, then animation,
+or maybe the other way around, but the point is that there are not two loop
+calling app draw at any point,
+this loop tries to run at a fixed frame speed,
+one very frame we can ask for drainMailbox to run,
+and do what it needs to do, and then we can call for our animation to
+update their progress and data,
 
-what's our process?
 
-the tty send his events to the loop,
-the loop drains them, resolve them and send the correct
-event to our bus, we take that events, send them to our elements,
-our elements update their values if they need, we send our mutations
-the mutatins update the tree then we draw,
-
-the loop is not needed anymore,
-the ts side controls the main loop,
-we call mailbox.drain from ts,
-we receive the events and update our elements
-we send our updates,
-we apply them,
-we draw,
-
-repeat,
-
-we dont need any mutex for this and is more natural this way
-
+this depend on zig objc bindings,
+(amp will fuck this up)
+this is a manual job
 Appearance Observer
 we need to add a delegate class to the NSDistributedNotificationCenter
 and call our block, this will let us notify our application that the apperance changed,
 meaning, updating the loaded theme,
 
+
+this can be fix with amp
+it needs little context to fix this
 Read Settings
 i fucked up this part, the read of the settings is naive and wrong,
 i need to protect my settings (they get updated and read it on different theads)

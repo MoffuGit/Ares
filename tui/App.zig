@@ -148,30 +148,33 @@ pub fn drawWindow(self: *App) !void {
 }
 
 pub fn drainMailbox(self: *App) void {
-    const bus = &global.state.bus;
-    while (self.mailbox.pop()) |message| {
-        switch (message) {
+    var state = global.state;
+    var it = self.mailbox.drain();
+    defer it.deinit();
+
+    while (it.next()) |evt| {
+        switch (evt) {
             .scheme => |scheme| {
-                bus.push(.scheme, 0, .{ .scheme = .{ .scheme = @intFromEnum(scheme) } });
+                state.notify(.{ .scheme = @intFromEnum(scheme) }, 0);
             },
             .resize => |size| {
                 self.window.resize(size);
-                bus.push(.resize, 0, .{ .resize = .{ .cols = size.cols, .rows = size.rows } });
+                state.notify(.{ .resize = .{ .cols = size.cols, .rows = size.rows } }, 0);
             },
             .key_press => |key| {
-                self.window.resolveKeyEvent(key, .key_down, bus);
+                state.notify(.{ .key_down = global.KeyEvent.fromVaxis(key) }, self.window.target());
             },
             .key_release => |key| {
-                self.window.resolveKeyEvent(key, .key_up, bus);
+                state.notify(.{ .key_up = global.KeyEvent.fromVaxis(key) }, self.window.target());
             },
             .focus => {
-                bus.push(.focus, 0, .{ .none = {} });
+                state.notify(.focus, 0);
             },
             .blur => {
-                bus.push(.blur, 0, .{ .none = {} });
+                state.notify(.blur, 0);
             },
             .mouse => |mouse| {
-                self.window.resolveMouseEvent(mouse, bus);
+                self.window.resolveMouseEvent(mouse);
             },
         }
     }

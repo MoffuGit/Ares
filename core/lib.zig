@@ -1,6 +1,5 @@
 const std = @import("std");
 const global = @import("global.zig");
-const Bus = @import("Bus.zig");
 
 const Settings = @import("settings/mod.zig");
 const Io = @import("io/mod.zig");
@@ -10,12 +9,28 @@ const Snapshot = @import("worktree/Snapshot.zig");
 const Buffer = @import("buffer/Buffer.zig");
 const native = @import("native/mod.zig");
 
-export fn initState(callback: ?Bus.Callback) void {
+export fn initState(callback: ?global.Callback) void {
     global.state.init(callback);
 }
 
 export fn deinitState() void {
     global.state.deinit();
+}
+
+export fn drainMailbox() void {
+    const cb = global.state.callback orelse return;
+    var mailbox = global.state.mailbox;
+
+    var it = mailbox.drain();
+    defer it.deinit();
+
+    while (it.next()) |ev| {
+        const bytes: []const u8 = switch (ev) {
+            .settings_update, .theme_update, .worktree_update => &.{},
+        };
+        const ptr: ?[*]const u8 = if (bytes.len > 0) bytes.ptr else null;
+        cb(@intFromEnum(ev), ptr, bytes.len);
+    }
 }
 
 export fn createSettings() ?*Settings {

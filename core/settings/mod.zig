@@ -105,7 +105,7 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor) !void {
 
     try settings_result;
 
-    global.state.bus.push(.settings_update);
+    _ = global.state.mailbox.push(.settings_update, .instant);
 }
 
 fn settingsCallback(self: ?*Settings, watcher: u64, event: u32) void {
@@ -119,7 +119,7 @@ fn settingsCallback(self: ?*Settings, watcher: u64, event: u32) void {
     s.loadSettings(dir) catch {};
     s.loadThemes(dir) catch {};
 
-    global.state.bus.push(.settings_update);
+    _ = global.state.mailbox.push(.settings_update, .instant);
 }
 fn themeCallback(self: ?*Settings, watcher: u64, event: u32) void {
     _ = watcher;
@@ -131,7 +131,7 @@ fn themeCallback(self: ?*Settings, watcher: u64, event: u32) void {
 
     s.loadThemes(dir) catch {};
 
-    global.state.bus.push(.theme_update);
+    _ = global.state.mailbox.push(.theme_update, .instant);
 }
 
 fn loadThemes(self: *Settings, dir: std.fs.Dir) LoadError!void {

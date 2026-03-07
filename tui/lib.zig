@@ -5,10 +5,9 @@ const Window = @import("window/mod.zig");
 const Element = Window.Element;
 const Screen = @import("Screen.zig");
 const Box = @import("window/element/Box.zig");
-const Bus = @import("Bus.zig");
 const Mutations = @import("mutations/mod.zig");
 
-export fn initState(callback: ?Bus.Callback) void {
+export fn initState(callback: ?global.Callback) void {
     global.state.init(callback);
 }
 
@@ -56,7 +55,6 @@ export fn drainMailbox(app: *App) void {
     app.drainMailbox();
 }
 
-/// Destroy a headless test window created by `createTestWindow`.
 export fn destroyTestWindow(window: *Window) void {
     const alloc = global.state.alloc;
     const screen = window.screen;
@@ -77,10 +75,6 @@ export fn destroyMutations(mutations: *Mutations) void {
 
 export fn processMutations(mutations: *Mutations, ptr: [*]const u8, len: u64) void {
     mutations.processMutations(ptr[0..len]);
-}
-
-export fn drainEvents() void {
-    global.state.bus.drain();
 }
 
 var dump_buf: std.ArrayList(u8) = .{};

@@ -21,10 +21,6 @@ function getTuiLib() {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
-            drainEvents: {
-                args: [],
-                returns: FFIType.void,
-            },
             getWindow: {
                 args: [FFIType.pointer],
                 returns: FFIType.pointer,

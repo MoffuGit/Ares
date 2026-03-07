@@ -1,11 +1,11 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 const yoga = @import("element/Node.zig").yoga;
+const global = @import("../global.zig");
 
 pub const Element = @import("element/mod.zig");
 pub const Mouse = @import("Mouse.zig");
 const Buffer = @import("../Buffer.zig");
-const Bus = @import("../Bus.zig");
 const Screen = @import("../Screen.zig");
 const HitGrid = @import("HitGrid.zig");
 const Allocator = std.mem.Allocator;
@@ -156,46 +156,41 @@ pub fn getFocusedId(self: *Window) ?u64 {
     return self.focused_id;
 }
 
-pub fn resolveMouseEvent(self: *Window, vaxis_mouse: vaxis.Mouse, bus: *Bus) void {
+pub fn resolveMouseEvent(self: *Window, vaxis_mouse: vaxis.Mouse) void {
+    var state = &global.state;
     const mouse = Mouse.fromVaxis(vaxis_mouse, self.size);
     const curr_id = self.tryHit(mouse.col, mouse.row);
     const prev_id = self.hovered_id;
 
-    const mouse_data = Bus.MouseData{
-        .col = mouse.col,
-        .row = mouse.row,
-        .button = @intFromEnum(mouse.button),
-    };
-
     // hover changes
     if (curr_id != prev_id) {
         if (prev_id) |old| {
-            bus.push(.mouse_leave, old, .{ .mouse = mouse_data });
+            state.notify(.{ .mouse_leave = mouse }, old);
         }
         if (curr_id) |new| {
-            bus.push(.mouse_enter, new, .{ .mouse = mouse_data });
+            state.notify(.{ .mouse_enter = mouse }, new);
         }
         self.hovered_id = curr_id;
     }
 
-    const target = curr_id orelse return;
+    const hit_target = curr_id orelse return;
 
     switch (mouse.type) {
         .press => {
-            self.pressed_id = target;
-            bus.push(.mouse_down, target, .{ .mouse = mouse_data });
+            self.pressed_id = hit_target;
+            state.notify(.{ .mouse_down = mouse }, hit_target);
         },
         .release => {
-            bus.push(.mouse_up, target, .{ .mouse = mouse_data });
+            state.notify(.{ .mouse_up = mouse }, hit_target);
             if (self.pressed_id) |pressed| {
-                if (pressed == target) {
-                    bus.push(.click, target, .{ .mouse = mouse_data });
+                if (pressed == hit_target) {
+                    state.notify(.{ .click = mouse }, hit_target);
                 }
             }
             self.pressed_id = null;
         },
         .motion, .drag => {
-            bus.push(.mouse_move, target, .{ .mouse = mouse_data });
+            state.notify(.{ .mouse_move = mouse }, hit_target);
         },
     }
 
@@ -205,12 +200,10 @@ pub fn resolveMouseEvent(self: *Window, vaxis_mouse: vaxis.Mouse, bus: *Bus) voi
     };
 
     if (is_wheel) {
-        bus.push(.wheel, target, .{ .mouse = mouse_data });
+        state.notify(.{ .wheel = mouse }, hit_target);
     }
 }
-
-pub fn resolveKeyEvent(self: *Window, key: vaxis.Key, event_type: Bus.EventType, bus: *Bus) void {
-    const root_id = if (self.root) |r| r.num else return;
-    const target = self.focused_id orelse root_id;
-    bus.push(event_type, target, .{ .key = Bus.KeyData.fromVaxis(key) });
+pub fn target(self: *Window) u64 {
+    const root_id = if (self.root) |r| r.num else return 0;
+    return self.focused_id orelse root_id;
 }
