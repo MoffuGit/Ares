@@ -1,5 +1,6 @@
 const Element = @import("../window/element/mod.zig");
 const Style = Element.Style;
+const Color = @import("vaxis").Color;
 
 pub const CmdType = enum(u8) {
     create = 0,
@@ -88,18 +89,12 @@ pub const StylePatch = struct {
     gap: ?GapValues = null,
 };
 
-pub const ColorValue = union(enum) {
-    default,
-    rgb: [3]u8,
-    rgba: [4]u8,
-};
-
 pub const BoxProps = struct {
     opacity: ?f32 = null,
     text_align: ?TextAlign = null,
     rounded: ?f32 = null,
-    bg: ?ColorValue = null,
-    fg: ?ColorValue = null,
+    bg: ?Color = null,
+    fg: ?Color = null,
 };
 
 pub const Props = struct {

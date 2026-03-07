@@ -1,4 +1,5 @@
 const std = @import("std");
+const vaxis = @import("vaxis");
 const Allocator = std.mem.Allocator;
 const json = std.json;
 const cmdpkg = @import("cmd.zig");
@@ -12,7 +13,7 @@ const StylePatch = cmdpkg.StylePatch;
 const EdgeValues = cmdpkg.EdgeValues;
 const BorderEdgeValues = cmdpkg.BorderEdgeValues;
 const GapValues = cmdpkg.GapValues;
-const ColorValue = cmdpkg.ColorValue;
+const Color = vaxis.Color;
 
 const Style = @import("../window/element/Style.zig").Style;
 
@@ -146,17 +147,52 @@ fn parseBoxProps(props: json.ObjectMap) ?BoxProps {
 
     if (props.get("bg")) |bg| {
         bp.bg = parseColor(bg);
+        if (bp.bg != null) has_any = true;
     }
 
     if (props.get("fg")) |fg| {
         bp.fg = parseColor(fg);
+        if (bp.fg != null) has_any = true;
     }
 
     return if (has_any) bp else null;
 }
 
-fn parseColor(color: json.Value) ?ColorValue {
-    _ = color;
+fn parseU8(val: ?json.Value) ?u8 {
+    const v = val orelse return null;
+    return switch (v) {
+        .integer => |i| if (i >= 0 and i <= 255) @intCast(i) else null,
+        .float => |f| if (f >= 0 and f <= 255) @intFromFloat(f) else null,
+        else => null,
+    };
+}
+
+fn parseColor(color: json.Value) ?Color {
+    const obj = switch (color) {
+        .object => |o| o,
+        else => return null,
+    };
+
+    const type_str = switch (obj.get("type") orelse return null) {
+        .string => |s| s,
+        else => return null,
+    };
+
+    if (std.mem.eql(u8, type_str, "default")) {
+        return .default;
+    } else if (std.mem.eql(u8, type_str, "rgb")) {
+        const r = parseU8(obj.get("r")) orelse return null;
+        const g = parseU8(obj.get("g")) orelse return null;
+        const b = parseU8(obj.get("b")) orelse return null;
+        return .{ .rgb = .{ r, g, b } };
+    } else if (std.mem.eql(u8, type_str, "rgba")) {
+        const r = parseU8(obj.get("r")) orelse return null;
+        const g = parseU8(obj.get("g")) orelse return null;
+        const b = parseU8(obj.get("b")) orelse return null;
+        const a = parseU8(obj.get("a")) orelse return null;
+        return .{ .rgba = .{ r, g, b, a } };
+    }
+
     return null;
 }
 

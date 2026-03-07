@@ -105,6 +105,10 @@ export fn requestDraw(app: *App) void {
     app.requestDraw();
 }
 
+export fn drawWindow(app: *App) void {
+    app.drawWindow() catch {};
+}
+
 fn writeElementJson(elem: *Element, alloc: std.mem.Allocator, buf: *std.ArrayList(u8)) !void {
     try appendSlice(alloc, buf, "{\"id\":");
     try appendInt(alloc, buf, elem.num);

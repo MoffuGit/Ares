@@ -1,5 +1,7 @@
 import { dlopen, FFIType, JSCallback, toArrayBuffer, type Pointer } from "bun:ffi";
+import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
+import { EventType, Events } from "./events";
 
 function getTuiLib() {
     const symbols = dlopen(
@@ -65,6 +67,10 @@ function getTuiLib() {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
+            drawWindow: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
         },
     );
 
@@ -94,6 +100,11 @@ export function drainMutations(): WireCommand[] {
 export class TuiLib {
     private lib: ReturnType<typeof getTuiLib>;
     private jsCallback: JSCallback | null = null;
+    private _events: EventEmitter = new EventEmitter();
+
+    get events(): EventEmitter {
+        return this._events;
+    }
 
     constructor() {
         this.lib = getTuiLib();
@@ -101,8 +112,26 @@ export class TuiLib {
     }
 
     initState() {
+        const emitter = this._events;
         this.jsCallback = new JSCallback(
-            function handleEvent(_event: number, _target: number, _ptr: Pointer | null, _len: number | bigint): void {
+            function handleEvent(event: number, target: number, ptr: Pointer | null, len: number | bigint): void {
+                const _len = typeof len === "bigint" ? Number(len) : len;
+                const _type = event as EventType;
+                const targetId = typeof target === "bigint" ? Number(target) : target;
+                const structDef = Events[_type];
+
+                if (structDef == null) {
+                    const event = _type.toString();
+                    queueMicrotask(() => {
+                        emitter.emit(event, null, targetId);
+                    });
+                } else if (ptr != null && _len !== 0) {
+                    const data = structDef.unpack(toArrayBuffer(ptr, 0, _len));
+                    const event = _type.toString();
+                    queueMicrotask(() => {
+                        emitter.emit(event, data, targetId);
+                    });
+                }
             },
             {
                 args: [FFIType.u8, FFIType.u64, FFIType.pointer, FFIType.u64],
@@ -176,6 +205,10 @@ export class TuiLib {
 
     drainMailbox(app: Pointer) {
         this.lib.symbols.drainMailbox(app);
+    }
+
+    drawWindow(app: Pointer) {
+        this.lib.symbols.drawWindow(app);
     }
 }
 

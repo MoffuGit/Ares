@@ -70,7 +70,7 @@ pub fn create(alloc: Allocator) !*App {
     );
     errdefer window.deinit();
 
-    var tty_thread = TtyThread.init(alloc, &app.shared_context, app.mailbox);
+    var tty_thread = TtyThread.init(alloc, &app.shared_context, mailbox);
     _ = &tty_thread;
 
     var renderer = try Renderer.init(alloc, &app.shared_context, &app.screen);

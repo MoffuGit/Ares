@@ -187,6 +187,8 @@ fn applyBoxProps(elem: *Element, props: cmdpkg.BoxProps) void {
     if (props.opacity) |o| box.opacity = o;
     if (props.text_align) |ta| box.text_align = @enumFromInt(@intFromEnum(ta));
     if (props.rounded) |r| box.rounded = r;
+    if (props.bg) |bg| box.bg = bg;
+    if (props.fg) |fg| box.fg = fg;
 }
 
 fn applyStylePatch(elem: *Element, patch: cmdpkg.StylePatch) void {

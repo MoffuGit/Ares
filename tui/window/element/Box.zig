@@ -171,7 +171,7 @@ pub const Options = struct {
     num: ?u64 = null,
     zIndex: usize = 0,
     style: Style = .{},
-    bg: vaxis.Color = .{ .rgba = .{ 0, 0, 0, 255 } },
+    bg: vaxis.Color = .default,
     fg: vaxis.Color = .default,
     opacity: f32 = 1,
     segments: ?[]const Element.Segment = null,
