@@ -387,6 +387,27 @@ export function createElement(type: ElementType): Element {
     }
 }
 
+// ---- Tree snapshot (for testing) ----
+
+export interface TreeNode {
+    id: number;
+    kind: string;
+    zIndex: number;
+    children?: TreeNode[];
+}
+
+export function snapshotTree(elem: Element): TreeNode {
+    const node: TreeNode = {
+        id: elem.id,
+        kind: elem.elementType,
+        zIndex: elem.zIndex,
+    };
+    if (elem.children.length > 0) {
+        node.children = elem.children.map(snapshotTree);
+    }
+    return node;
+}
+
 // ---- Event creation helper ----
 
 export function createEvent(type: string, target: Element, data: unknown): ElementEvent {

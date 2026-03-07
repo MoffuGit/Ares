@@ -1,5 +1,6 @@
-import { dlopen, FFIType, JSCallback, type Pointer } from "bun:ffi";
+import { dlopen, FFIType, JSCallback, toArrayBuffer, type Pointer } from "bun:ffi";
 import { resolve } from "node:path";
+import { drainMutations } from "./elements";
 
 function getTuiLib() {
     const symbols = dlopen(
@@ -34,8 +35,33 @@ function getTuiLib() {
                 returns: FFIType.pointer,
             },
             processMutations: {
-                args: [FFIType.pointer, FFIType.pointer, FFIType.u64]
-            }
+                args: [FFIType.pointer, FFIType.pointer, FFIType.u64],
+                returns: FFIType.void,
+            },
+            destroyMutations: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
+            dumpTree: {
+                args: [FFIType.pointer],
+                returns: FFIType.u64,
+            },
+            freeDumpTree: {
+                args: [],
+                returns: FFIType.void,
+            },
+            getDumpPtr: {
+                args: [],
+                returns: FFIType.pointer,
+            },
+            createTestWindow: {
+                args: [],
+                returns: FFIType.pointer,
+            },
+            destroyTestWindow: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
         },
     );
 
@@ -87,8 +113,38 @@ export class TuiLib {
         return this.lib.symbols.createMutations(window);
     }
 
-    processMutation(mutations: Pointer) {
+    destroyMutations(mutations: Pointer) {
+        this.lib.symbols.destroyMutations(mutations);
+    }
 
+    processMutations(mutationsPtr: Pointer) {
+        const batch = drainMutations();
+        if (batch.length === 0) return;
+
+        const payload = JSON.stringify(batch);
+        const encoded = new TextEncoder().encode(payload);
+
+        this.lib.symbols.processMutations(mutationsPtr, encoded, encoded.byteLength);
+    }
+
+    createTestWindow(): Pointer | null {
+        return this.lib.symbols.createTestWindow();
+    }
+
+    destroyTestWindow(window: Pointer) {
+        this.lib.symbols.destroyTestWindow(window);
+    }
+
+    dumpTree(window: Pointer): object | null {
+        const rawLen = this.lib.symbols.dumpTree(window);
+        const len = Number(rawLen);
+        if (len === 0) return null;
+
+        const ptr = this.lib.symbols.getDumpPtr()!;
+        const buf = new Uint8Array(toArrayBuffer(ptr, 0, len));
+        const jsonStr = new TextDecoder().decode(buf);
+        this.lib.symbols.freeDumpTree();
+        return JSON.parse(jsonStr);
     }
 }
 

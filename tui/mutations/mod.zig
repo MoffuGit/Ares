@@ -15,7 +15,7 @@ const Mutations = @This();
 alloc: Allocator,
 window: *Window,
 
-pub fn create(alloc: Allocator, window: *Window) !Mutations {
+pub fn create(alloc: Allocator, window: *Window) !*Mutations {
     const mutations = try alloc.create(Mutations);
     mutations.* = .{
         .alloc = alloc,

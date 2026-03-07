@@ -1,8 +1,17 @@
-The mutationQueue should use an parser iterator for the mutations,
-easier to test, reduce number of functions
+Three things are on top right now
 
-the desktop is missing a way to know that system apperance it has, for mac i will use
-zib-objc and add a notifycation consumer for when this change happens
-the tui app dont needs this notifycations, only the desktop app,
-this will be part of the core lib, only that the tui would not consume it,
-maybe i can skip it when building for tui
+testing the Mutations,
+the parser is already tested, and the element tree as well,
+we should test that the Commands produce the expected tree,
+and that update the correct elements,
+
+Appearance Observer
+we need to add a delegate class to the NSDistributedNotificationCenter
+and call our block, this will let us notify our application that the apperance changed,
+meaning, updating the loaded theme,
+
+Read Settings
+i fucked up this part, the read of the settings is naive and wrong,
+i need to protect my settings (they get updated and read it on different theads)
+and the strings probably should be part of an arena allocator,
+its the most easier way to not access deallocated memory,
