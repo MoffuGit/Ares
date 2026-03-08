@@ -36,9 +36,13 @@ export class DesktopApp implements Shared.App {
 
     start() {
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme() };
-        this.core.events.on(String(EventType.SettingsUpdate), this.onSettingsUpdate);
-        this.core.events.on(String(EventType.ThemeUpdate), this.onThemeUpdate);
-        this.core.events.on(String(EventType.WorktreeUpdate), this.onWorktreeUpdate);
+        this.core.events.on("SettingsUpdate", this.onSettingsUpdate);
+        this.core.events.on("ThemeUpdate", this.onThemeUpdate);
+        this.core.events.on("WorktreeUpdate", this.onWorktreeUpdate);
+
+        setInterval(() => {
+            this.core.drainMailbox()
+        }, 1000);
 
         this.openProject(this.projectPath);
         this.refreshWorktree();

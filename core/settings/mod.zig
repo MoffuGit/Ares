@@ -93,25 +93,22 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor) !void {
 
     self.settings_path = self.alloc.dupe(u8, path) catch return LoadError.OutOfMemory;
 
-    self.settings_watcher = try monitor.watchPath(path, Settings, self, settingsCallback);
-
     const themes_dir = try dir.realpathAlloc(self.alloc, "themes/");
     defer self.alloc.free(themes_dir);
 
     const settings_result = self.loadSettings(dir);
-
-    self.theme_watcher = try monitor.watchPath(themes_dir, Settings, self, themeCallback);
 
     try self.loadThemes(dir);
 
     try settings_result;
 
     _ = global.state.mailbox.push(.settings_update, .instant);
+
+    self.settings_watcher = try monitor.watchPath(path, Settings, self, settingsCallback);
+    self.theme_watcher = try monitor.watchPath(themes_dir, Settings, self, themeCallback);
 }
 
-fn settingsCallback(self: ?*Settings, watcher: u64, event: u32) void {
-    _ = watcher;
-    _ = event;
+fn settingsCallback(self: ?*Settings, _: u64, _: u32) void {
     const s = self orelse return;
 
     s.mutex.lock();
@@ -125,9 +122,7 @@ fn settingsCallback(self: ?*Settings, watcher: u64, event: u32) void {
 
     _ = global.state.mailbox.push(.settings_update, .instant);
 }
-fn themeCallback(self: ?*Settings, watcher: u64, event: u32) void {
-    _ = watcher;
-    _ = event;
+fn themeCallback(self: ?*Settings, _: u64, _: u32) void {
     const s = self orelse return;
 
     s.mutex.lock();

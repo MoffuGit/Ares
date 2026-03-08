@@ -42,8 +42,7 @@ pub fn build(b: *std.Build) void {
     desktop_bun.setCwd(b.path("packages/app/desktop"));
 
     const desktop_step = b.step("desktop", "Build desktop lib and run the Electrobun application");
-    desktop_step.dependOn(&core_lib.step);
-    desktop_step.dependOn(&lib_install.step);
+    desktop_step.dependOn(core_step);
     desktop_step.dependOn(&desktop_bun.step);
 
     const yoga_lib = buildYogaLib(b, target, optimize);

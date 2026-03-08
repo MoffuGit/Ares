@@ -27,20 +27,24 @@ pub const GlobalState = struct {
     gpa: GPA = .{},
     alloc: std.mem.Allocator,
     events: EventEmitter,
-    mailbox: MailBox = .{},
+    mailbox: *MailBox,
     callback: ?Callback = null,
 
-    pub fn init(self: *Self, callback: ?Callback) void {
+    pub fn init(self: *Self, callback: ?Callback) !void {
+        const gpa: GPA = .{};
+        const alloc = self.gpa.allocator();
         self.* = .{
-            .alloc = self.gpa.allocator(),
-            .events = EventEmitter.init(self.alloc),
+            .gpa = gpa,
+            .alloc = alloc,
+            .events = EventEmitter.init(alloc),
             .callback = callback,
-            .mailbox = .{},
+            .mailbox = try MailBox.create(alloc),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.events.deinit();
+        self.mailbox.destroy(self.alloc);
         if (self.gpa.deinit() == .leak) {
             std.log.debug("WE HAVE LEAKS", .{});
         }

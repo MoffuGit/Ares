@@ -42,12 +42,6 @@ pub const Observer = struct {
             .autorelase_pool = pool,
         };
 
-        //NOTE:
-        //I don't think it's going to be that much issue with the emit call,
-        //i will only use it for adding an Event to the queue of the application,
-        //this Block should then get set as part of the observerDelegate class
-        //then invoked when a change happens
-
         const ObserverBlock = objc.Block(struct { observer: *Observer }, .{}, void);
 
         const ObserverCapture: ObserverBlock.Captures = .{
@@ -92,6 +86,8 @@ pub const Observer = struct {
 //     }
 //
 //     const handleSelector = objc.selector("handleAppleThemeChanged:");
+//     //NOTE:
+//     in here we add our block
 //     if (!ObserverClass.?.addMethod(handleSelector, themeChangedCallback, "v@:@")) {
 //         return error.MethodAdditionFailed;
 //     }

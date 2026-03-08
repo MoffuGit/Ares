@@ -11,7 +11,7 @@ test {
 test {
     const testings = std.testing;
     const alloc = testings.allocator;
-    global.state.init(null);
+    try global.state.init(null);
     defer global.state.deinit();
 
     const monitor = try Monitor.create(alloc);

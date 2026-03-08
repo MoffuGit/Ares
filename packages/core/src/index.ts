@@ -1,7 +1,7 @@
 import { dlopen, FFIType, JSCallback, ptr, toArrayBuffer, type Pointer } from "bun:ffi";
 import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
-import { EventType, Events } from "./events";
+import { EventType, Events, EventsName } from "./events";
 import { Settings, Theme, WorktreeEntry } from "./structs";
 
 const DEFAULT_LIB_PATH = resolve(import.meta.dir, "../../../zig-out/lib/libcore.dylib");
@@ -78,6 +78,10 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.pointer, FFIType.u64],
                 returns: FFIType.u64,
             },
+            drainMailbox: {
+                args: [],
+                return: FFIType.void,
+            }
         },
     );
 
@@ -107,14 +111,16 @@ export class CoreLib {
                 const data_type = Events[_type];
 
                 if (data_type == null) {
-                    const event = _type.toString();
+                    const event = EventsName[_type];
                     queueMicrotask(() => {
+                        console.log("event received", event);
                         emitter.emit(event);
                     })
                 } else if (data_type != null && ptr != null && _len != 0) {
                     const data = data_type.unpack(toArrayBuffer(ptr, 0, _len));
-                    const event = _type.toString();
+                    const event = EventsName[_type];
                     queueMicrotask(() => {
+                        console.log("event received", event);
                         emitter.emit(event, data);
                     })
 
@@ -212,6 +218,10 @@ export class CoreLib {
             entries.push(WorktreeEntry.unpack(slice));
         }
         return entries;
+    }
+
+    drainMailbox() {
+        this.lib.symbols.drainMailbox();
     }
 
 }

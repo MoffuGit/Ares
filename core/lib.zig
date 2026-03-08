@@ -10,7 +10,7 @@ const Buffer = @import("buffer/Buffer.zig");
 const native = @import("native/mod.zig");
 
 export fn initState(callback: ?global.Callback) void {
-    global.state.init(callback);
+    global.state.init(callback) catch {};
 }
 
 export fn deinitState() void {
@@ -19,9 +19,7 @@ export fn deinitState() void {
 
 export fn drainMailbox() void {
     const cb = global.state.callback orelse return;
-    var mailbox = global.state.mailbox;
-
-    var it = mailbox.drain();
+    var it = global.state.mailbox.drain();
     defer it.deinit();
 
     while (it.next()) |ev| {
