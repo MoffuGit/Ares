@@ -2,7 +2,7 @@ const Thread = @This();
 
 const std = @import("std");
 const vaxis = @import("vaxis");
-const xev = @import("xev").Dynamic;
+const xev = @import("global.zig").xev;
 const log = std.log.scoped(.events_thread);
 
 const Allocator = std.mem.Allocator;

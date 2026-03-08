@@ -42,7 +42,7 @@ export class DesktopApp implements Shared.App {
 
         setInterval(() => {
             this.core.drainMailbox()
-        }, 1000);
+        }, 100);
 
         this.openProject(this.projectPath);
         this.refreshWorktree();

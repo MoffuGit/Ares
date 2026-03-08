@@ -1,5 +1,5 @@
 const std = @import("std");
-const xev = @import("xev").Dynamic;
+const xev = @import("../global.zig").xev;
 const vaxis = @import("vaxis");
 const log = std.log.scoped(.renderer_thread);
 
