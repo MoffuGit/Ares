@@ -5,9 +5,18 @@ const EventEmitter = @import("../../EventEmitter.zig").EventEmitter(ObserverEven
 
 const Appearance = @This();
 
+const ObserverBlock = objc.Block(struct { observer: *Observer }, .{}, void);
+
 const ObserverEvents = union(enum) {
     Change: void,
 };
+
+fn emitColorChange(target: objc.c.id, _: objc.c.SEL) callconv(.c) void {
+    const self = objc.Object.fromId(target);
+    const ivar_obj = self.getInstanceVariable("colorChangeBlock");
+    const ctx: *const ObserverBlock.Context = @ptrCast(@alignCast(ivar_obj.value));
+    ObserverBlock.invoke(ctx, .{});
+}
 
 pub const Observer = struct {
     pub const Tag = EventEmitter.Tag;
@@ -20,7 +29,7 @@ pub const Observer = struct {
     events: EventEmitter,
 
     autorelase_pool: *objc.AutoreleasePool,
-    // observerDelegate: objc.Class,
+    heap_block: *const ObserverBlock.Context,
 
     pub fn create(alloc: Allocator) !*Self {
         const observer = try alloc.create(Self);
@@ -36,21 +45,23 @@ pub const Observer = struct {
             return error.ClassAllocationFailed;
         }
 
+        _ = ObserverClass.?.addIvar("colorChangeBlock");
+        _ = ObserverClass.?.addMethod("emitColorChange", emitColorChange);
+
+        objc.registerClassPair(ObserverClass.?);
+
         observer.* = .{
             .alloc = alloc,
             .events = EventEmitter.init(alloc),
             .autorelase_pool = pool,
+            .heap_block = undefined,
         };
 
-        const ObserverBlock = objc.Block(struct { observer: *Observer }, .{}, void);
-
-        const ObserverCapture: ObserverBlock.Captures = .{
+        var block: ObserverBlock.Context = ObserverBlock.init(.{
             .observer = observer,
-        };
-
-        var Block: ObserverBlock.Context = ObserverBlock.init(ObserverCapture, (struct {
-            fn emit(block: *const ObserverBlock.Context) callconv(.c) void {
-                const _observer = block.observer;
+        }, (struct {
+            fn emit(ctx: *const ObserverBlock.Context) callconv(.c) void {
+                const _observer = ctx.observer;
                 _observer.mutex.lock();
                 _observer.mutex.unlock();
 
@@ -58,7 +69,16 @@ pub const Observer = struct {
             }
         }).emit);
 
-        ObserverBlock.invoke(&Block, .{});
+        const heap_block = try ObserverBlock.copy(&block);
+        observer.heap_block = heap_block;
+
+        const instance = ObserverClass.?.msgSend(objc.Object, "alloc", .{})
+            .msgSend(objc.Object, "init", .{});
+
+        const block_as_obj: objc.Object = .{ .value = @ptrCast(@alignCast(heap_block)) };
+        instance.setInstanceVariable("colorChangeBlock", block_as_obj);
+
+        instance.msgSend(void, "emitColorChange", .{});
 
         return observer;
     }
@@ -68,57 +88,12 @@ pub const Observer = struct {
     }
 
     pub fn destroy(self: *Self) void {
+        ObserverBlock.release(self.heap_block);
         self.autorelase_pool.deinit();
         self.events.deinit();
         self.alloc.destroy(self);
     }
 };
-
-// pub fn setupThemeObserver() !void {
-//     const pool = objc.AutoreleasePool.init();
-//     defer pool.deinit();
-//
-//     const NSObject = objc.getClass("NSObject").?;
-//
-//     const ObserverClass = objc.allocateClassPair(NSObject, "NSColorChangesObserver");
-//     if (ObserverClass == null) {
-//         return error.ClassAllocationFailed;
-//     }
-//
-//     const handleSelector = objc.selector("handleAppleThemeChanged:");
-//     //NOTE:
-//     in here we add our block
-//     if (!ObserverClass.?.addMethod(handleSelector, themeChangedCallback, "v@:@")) {
-//         return error.MethodAdditionFailed;
-//     }
-//     objc.registerClassPair(ObserverClass.?);
-//
-//     const observerDelegate = ObserverClass.?.msgSend(objc.Object, "new");
-//     if (observerDelegate == null) {
-//         return error.ObserverInstanceCreationFailed;
-//     }
-//
-//     const NSDistributedNotificationCenter = objc.getClass("NSDistributedNotificationCenter").?;
-//     const defaultCenter = NSDistributedNotificationCenter.msgSend(
-//         objc.Object,
-//         "defaultCenter"
-//     );
-//
-//     const notificationName = objc.nsString("AppleInterfaceThemeChangedNotification");
-//
-//     defaultCenter.msgSend(
-//         void,
-//         "addObserver:selector:name:object:",
-//         .{
-//             observerDelegate,
-//             handleSelector,
-//             notificationName,
-//             objc.nil,
-//         }
-//     );
-//
-//     std.debug.print("NSColorChangesObserver setup complete. Observing 'AppleInterfaceThemeChangedNotification'.\n", .{});
-// }
 
 pub fn isDark() bool {
     const pool = objc.AutoreleasePool.init();
