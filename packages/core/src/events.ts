@@ -6,7 +6,7 @@ export enum EventType {
     WorktreeUpdate,
 }
 
-export const EventsName: Record<EventType, String> = {
+export const EventsName: Record<EventType, string> = {
     [EventType.WorktreeUpdate]: "WorktreeUpdate",
     [EventType.SettingsUpdate]: "SettingsUpdate",
     [EventType.ThemeUpdate]: "ThemeUpdate",

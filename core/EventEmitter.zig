@@ -34,9 +34,8 @@ pub fn EventEmitter(comptime Event: type) type {
         }
 
         pub fn on(self: *Self, event: Tag, listener: Listener) !void {
-            const tag = std.meta.activeTag(event);
-            const list_ptr = self.listeners.getPtr(tag) orelse {
-                self.listeners.put(tag, .{});
+            const list_ptr = self.listeners.getPtr(event) orelse {
+                self.listeners.put(event, .{});
                 return self.on(event, listener);
             };
 
@@ -44,8 +43,7 @@ pub fn EventEmitter(comptime Event: type) type {
         }
 
         pub fn off(self: *Self, event: Tag, listener: Listener) void {
-            const tag = std.meta.activeTag(event);
-            const list_ptr = self.listeners.getPtr(tag) orelse return;
+            const list_ptr = self.listeners.getPtr(event) orelse return;
 
             var i: usize = 0;
             while (i < list_ptr.items.len) {

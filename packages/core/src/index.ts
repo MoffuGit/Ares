@@ -26,6 +26,14 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
+            createAppearance: {
+                args: [],
+                returns: FFIType.pointer,
+            },
+            destroyAppearance: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
             lockSettings: {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
@@ -35,7 +43,7 @@ function getCoreLib(libPath: string) {
                 returns: FFIType.void,
             },
             loadSettings: {
-                args: [FFIType.pointer, FFIType.pointer, FFIType.u64, FFIType.pointer],
+                args: [FFIType.pointer, FFIType.pointer, FFIType.u64, FFIType.pointer, FFIType.pointer],
                 returns: FFIType.void,
             },
             readSettings: {
@@ -152,9 +160,17 @@ export class CoreLib {
         this.lib.symbols.destroySettings(handle);
     }
 
-    loadSettings(settings: Pointer, path: string, monitor: Pointer): void {
+    createAppearance(): Pointer | null {
+        return this.lib.symbols.createAppearance() as Pointer | null;
+    }
+
+    destroyAppearance(handle: Pointer): void {
+        this.lib.symbols.destroyAppearance(handle);
+    }
+
+    loadSettings(settings: Pointer, path: string, monitor: Pointer, appearance?: Pointer | null): void {
         const buf = new TextEncoder().encode(path);
-        this.lib.symbols.loadSettings(settings, buf, buf.byteLength, monitor);
+        this.lib.symbols.loadSettings(settings, buf, buf.byteLength, monitor, appearance ?? null);
     }
 
     readSettings(settings: Pointer) {

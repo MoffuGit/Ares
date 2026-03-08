@@ -23,5 +23,5 @@ test {
     const abs_path = try std.fs.cwd().realpathAlloc(alloc, "settings");
     defer alloc.free(abs_path);
 
-    try settings.load(abs_path, monitor);
+    try settings.load(abs_path, monitor, null);
 }

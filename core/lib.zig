@@ -7,6 +7,7 @@ const Monitor = @import("monitor/mod.zig");
 const Project = @import("Project.zig");
 const Snapshot = @import("worktree/Snapshot.zig");
 const Buffer = @import("buffer/Buffer.zig");
+const Appearance = @import("native/Appearance.zig");
 const native = @import("native/mod.zig");
 
 export fn initState(callback: ?global.Callback) void {
@@ -31,6 +32,14 @@ export fn drainMailbox() void {
     }
 }
 
+export fn createAppearance() ?*Appearance {
+    return Appearance.create(global.state.alloc) catch null;
+}
+
+export fn destroyAppearance(appe: *Appearance) void {
+    appe.destroy();
+}
+
 export fn createSettings() ?*Settings {
     return Settings.create(global.state.alloc) catch null;
 }
@@ -39,8 +48,8 @@ export fn destroySettings(settings: *Settings) void {
     settings.destroy();
 }
 
-export fn loadSettings(settings: *Settings, path: [*]const u8, len: u64, monitor: *Monitor) void {
-    settings.load(path[0..len], monitor) catch {};
+export fn loadSettings(settings: *Settings, path: [*]const u8, len: u64, monitor: *Monitor, appe: ?*Appearance) void {
+    settings.load(path[0..len], monitor, appe) catch {};
 }
 
 pub const ExternSettings = extern struct {

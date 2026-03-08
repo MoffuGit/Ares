@@ -11,6 +11,7 @@ export class DesktopApp implements Shared.App {
     private monitor: Pointer;
     private io: Pointer;
     private settings: Pointer;
+    private appearance: Pointer | null = null;
     private project: Pointer | null = null;
 
     _state: Shared.AppState = { settings: null, theme: null, worktree: [] };
@@ -30,8 +31,9 @@ export class DesktopApp implements Shared.App {
         this.monitor = monitor;
         this.io = io;
         this.settings = settings;
+        this.appearance = this.core.createAppearance();
         console.log("setting path:", settingsPath);
-        this.core.loadSettings(this.settings, settingsPath, this.monitor);
+        this.core.loadSettings(this.settings, settingsPath, this.monitor, this.appearance);
     }
 
     start() {
@@ -57,6 +59,7 @@ export class DesktopApp implements Shared.App {
             this.project = null;
         }
         this.core.destroySettings(this.settings);
+        if (this.appearance) this.core.destroyAppearance(this.appearance);
         this.core.destroyIo(this.io);
         this.core.destroyMonitor(this.monitor);
         this.core.deinitState();

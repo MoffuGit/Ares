@@ -8,6 +8,7 @@ const Action = keymapspkg.Action;
 const KeyStroke = @import("../keymaps/KeyStroke.zig").KeyStroke;
 const parseSequence = @import("../keymaps/KeyStroke.zig").parseSequence;
 const Monitor = @import("../monitor/mod.zig");
+const Appearance = @import("../native/Appearance.zig");
 
 pub const Settings = @This();
 
@@ -57,6 +58,7 @@ settings_path: []const u8 = "",
 settings_watcher: u64 = 0,
 theme_watcher: u64 = 0,
 
+appearance: ?*Appearance = null,
 binding_map: std.AutoHashMapUnmanaged(u32, []const u8) = .{},
 
 pub fn create(alloc: Allocator) !*Settings {
@@ -87,7 +89,7 @@ pub fn destroy(self: *Settings) void {
     self.alloc.destroy(self);
 }
 
-pub fn load(self: *Settings, path: []const u8, monitor: *Monitor) !void {
+pub fn load(self: *Settings, path: []const u8, monitor: *Monitor, appe: ?*Appearance) !void {
     var dir = std.fs.openDirAbsolute(path, .{}) catch return LoadError.SettingsNotFound;
     defer dir.close();
 
@@ -104,8 +106,30 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor) !void {
 
     _ = global.state.mailbox.push(.settings_update, .instant);
 
+    if (appe) |a| {
+        self.appearance = a;
+        self.system_scheme = if (a.isDark()) .dark else .light;
+        self.applyTheme();
+        try a.observer.observe(.Change, .{
+            .ctx = @ptrCast(self),
+            .handle = appearanceChanged,
+        });
+    }
+
     self.settings_watcher = try monitor.watchPath(path, Settings, self, settingsCallback);
     self.theme_watcher = try monitor.watchPath(themes_dir, Settings, self, themeCallback);
+}
+
+fn appearanceChanged(ctx: *anyopaque) void {
+    const self: *Settings = @ptrCast(@alignCast(ctx));
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    const a = self.appearance orelse return;
+    self.system_scheme = if (a.isDark()) .dark else .light;
+    self.applyThemeLocked();
+
+    _ = global.state.mailbox.push(.settings_update, .instant);
 }
 
 fn settingsCallback(self: ?*Settings, _: u64, _: u32) void {
@@ -161,7 +185,7 @@ fn loadThemes(self: *Settings, dir: std.fs.Dir) LoadError!void {
         self.themes.put(self.alloc, theme.name, theme) catch continue;
     }
 
-    self.applyTheme();
+    self.applyThemeLocked();
 }
 
 fn loadSettings(self: *Settings, dir: std.fs.Dir) !void {
@@ -190,6 +214,12 @@ fn loadSettings(self: *Settings, dir: std.fs.Dir) !void {
 }
 
 pub fn getTheme(self: *Settings) *const Theme {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+    return self.getThemeLocked();
+}
+
+fn getThemeLocked(self: *Settings) *const Theme {
     const dark = self.scheme == .dark or (self.scheme == .system and self.system_scheme == .dark);
 
     const name = if (dark) self.dark_theme else self.light_theme;
@@ -198,14 +228,22 @@ pub fn getTheme(self: *Settings) *const Theme {
 }
 
 pub fn applyTheme(self: *Settings) void {
-    const source = self.getTheme();
+    self.mutex.lock();
+    defer self.mutex.unlock();
+    self.applyThemeLocked();
+}
+
+fn applyThemeLocked(self: *Settings) void {
+    const source = self.getThemeLocked();
     self.active_theme = source.*;
     self.theme = &self.active_theme;
 }
 
 pub fn setSystemScheme(self: *Settings, scheme: ColorScheme) void {
+    self.mutex.lock();
+    defer self.mutex.unlock();
     self.system_scheme = scheme;
-    self.applyTheme();
+    self.applyThemeLocked();
 }
 
 fn loadKeymaps(self: *Settings, km_json: std.json.Value) void {
