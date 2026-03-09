@@ -36,7 +36,7 @@ pub fn processMutations(self: *Mutations, data: []const u8) void {
     };
     defer parser.deinit();
 
-    var iter = parser.iter() catch |err| {
+    var iter = parser.iter(self.alloc) catch |err| {
         log.err("iter mutations: {}", .{err});
         return;
     };
@@ -90,7 +90,7 @@ fn setProps(self: *Mutations, cmd: Command) void {
     }
 
     if (props.box) |box_props| {
-        applyBoxProps(elem, box_props);
+        applyBoxProps(self.alloc, elem, box_props);
     }
 }
 
@@ -181,7 +181,7 @@ fn setRoot(self: *Mutations, id: u64) void {
     self.window.setRoot(elem);
 }
 
-fn applyBoxProps(elem: *Element, props: cmdpkg.BoxProps) void {
+fn applyBoxProps(alloc: Allocator, elem: *Element, props: cmdpkg.BoxProps) void {
     const box: *Box = @ptrCast(@alignCast(elem.userdata orelse return));
 
     if (props.opacity) |o| box.opacity = o;
@@ -189,6 +189,57 @@ fn applyBoxProps(elem: *Element, props: cmdpkg.BoxProps) void {
     if (props.rounded) |r| box.rounded = r;
     if (props.bg) |bg| box.bg = bg;
     if (props.fg) |fg| box.fg = fg;
+
+    if (props.segments) |parsed_segments| {
+        // Free old segments
+        freeSegments(alloc, box.segments);
+
+        if (parsed_segments.len == 0) {
+            box.segments = null;
+            alloc.free(parsed_segments);
+        } else {
+            // Allocate new segments, duping text from parser-owned memory
+            const segments = alloc.alloc(Element.Segment, parsed_segments.len) catch {
+                alloc.free(parsed_segments);
+                return;
+            };
+            var ok = true;
+            for (parsed_segments, 0..) |sd, i| {
+                const duped = alloc.dupe(u8, sd.text) catch {
+                    // Free already-duped texts
+                    for (segments[0..i]) |s| alloc.free(s.text);
+                    alloc.free(segments);
+                    ok = false;
+                    break;
+                };
+                segments[i] = .{
+                    .text = duped,
+                    .style = .{
+                        .fg = sd.fg orelse .default,
+                        .bg = sd.bg orelse .default,
+                        .bold = sd.bold,
+                        .italic = sd.italic,
+                        // .underline = if (sd.underline) .single else .off,
+                        .strikethrough = sd.strikethrough,
+                    },
+                };
+            }
+            // Free the temporary parsed segment slice
+            alloc.free(parsed_segments);
+
+            if (ok) {
+                box.segments = segments;
+            }
+        }
+    }
+}
+
+fn freeSegments(alloc: Allocator, segments: ?[]const Element.Segment) void {
+    const segs = segments orelse return;
+    for (segs) |s| {
+        alloc.free(s.text);
+    }
+    alloc.free(segs);
 }
 
 fn applyStylePatch(elem: *Element, patch: cmdpkg.StylePatch) void {

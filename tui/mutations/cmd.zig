@@ -89,12 +89,23 @@ pub const StylePatch = struct {
     gap: ?GapValues = null,
 };
 
+pub const SegmentData = struct {
+    text: []const u8,
+    fg: ?Color = null,
+    bg: ?Color = null,
+    bold: bool = false,
+    italic: bool = false,
+    underline: bool = false,
+    strikethrough: bool = false,
+};
+
 pub const BoxProps = struct {
     opacity: ?f32 = null,
     text_align: ?TextAlign = null,
     rounded: ?f32 = null,
     bg: ?Color = null,
     fg: ?Color = null,
+    segments: ?[]const SegmentData = null,
 };
 
 pub const Props = struct {

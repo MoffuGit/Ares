@@ -13,6 +13,7 @@ const StylePatch = cmdpkg.StylePatch;
 const EdgeValues = cmdpkg.EdgeValues;
 const BorderEdgeValues = cmdpkg.BorderEdgeValues;
 const GapValues = cmdpkg.GapValues;
+const SegmentData = cmdpkg.SegmentData;
 const Color = vaxis.Color;
 
 const Style = @import("../window/element/Style.zig").Style;
@@ -33,6 +34,7 @@ parsed: json.Parsed(json.Value),
 
 pub const Iterator = struct {
     items: []const json.Value,
+    alloc: Allocator,
     index: usize = 0,
 
     pub fn next(self: *Iterator) ?Error!Command {
@@ -57,7 +59,7 @@ pub const Iterator = struct {
                         return error.missing_element_type;
                     break :blk .{ .create = .{ .id = id, .element_type = elem_type } };
                 },
-                .set_props => .{ .set_props = .{ .id = id, .props = parseProps(obj) } },
+                .set_props => .{ .set_props = .{ .id = id, .props = parseProps(self.alloc, obj) } },
                 .append_child => blk: {
                     const child_id = parseU64(obj.get("child_id")) orelse
                         return error.missing_child_id;
@@ -92,19 +94,19 @@ pub fn parse(alloc: Allocator, data: []const u8) !Parser {
     return .{ .parsed = parsed };
 }
 
-pub fn iter(self: *Parser) !Iterator {
+pub fn iter(self: *Parser, alloc: Allocator) !Iterator {
     const items = switch (self.parsed.value) {
         .array => |arr| arr.items,
         else => return error.not_array,
     };
-    return .{ .index = 0, .items = items };
+    return .{ .index = 0, .items = items, .alloc = alloc };
 }
 
 pub fn deinit(self: *Parser) void {
     self.parsed.deinit();
 }
 
-fn parseProps(obj: json.ObjectMap) Props {
+fn parseProps(alloc: Allocator, obj: json.ObjectMap) Props {
     var result = Props{};
 
     const props = switch (obj.get("props") orelse return result) {
@@ -123,12 +125,12 @@ fn parseProps(obj: json.ObjectMap) Props {
         }
     }
 
-    result.box = parseBoxProps(props);
+    result.box = parseBoxProps(alloc, props);
 
     return result;
 }
 
-fn parseBoxProps(props: json.ObjectMap) ?BoxProps {
+fn parseBoxProps(alloc: Allocator, props: json.ObjectMap) ?BoxProps {
     var bp = BoxProps{};
     var has_any = false;
 
@@ -155,7 +157,65 @@ fn parseBoxProps(props: json.ObjectMap) ?BoxProps {
         if (bp.fg != null) has_any = true;
     }
 
+    if (props.get("segments")) |v| {
+        switch (v) {
+            .array => |arr| {
+                bp.segments = parseSegments(alloc, arr.items);
+                if (bp.segments != null) has_any = true;
+            },
+            else => {},
+        }
+    }
+
     return if (has_any) bp else null;
+}
+
+fn parseSegments(alloc: Allocator, items: []const json.Value) ?[]const SegmentData {
+    var segments = alloc.alloc(SegmentData, items.len) catch return null;
+    for (items, 0..) |item, i| {
+        const obj = switch (item) {
+            .object => |o| o,
+            else => {
+                alloc.free(segments);
+                return null;
+            },
+        };
+        const text = switch (obj.get("text") orelse {
+            alloc.free(segments);
+            return null;
+        }) {
+            .string => |s| s,
+            else => {
+                alloc.free(segments);
+                return null;
+            },
+        };
+        var seg = SegmentData{ .text = text };
+
+        if (obj.get("style")) |style_val| {
+            switch (style_val) {
+                .object => |style_obj| {
+                    if (style_obj.get("fg")) |fg| seg.fg = parseColor(fg);
+                    if (style_obj.get("bg")) |bg| seg.bg = parseColor(bg);
+                    if (style_obj.get("bold")) |b| seg.bold = parseBool(b);
+                    if (style_obj.get("italic")) |b| seg.italic = parseBool(b);
+                    if (style_obj.get("underline")) |b| seg.underline = parseBool(b);
+                    if (style_obj.get("strikethrough")) |b| seg.strikethrough = parseBool(b);
+                },
+                else => {},
+            }
+        }
+
+        segments[i] = seg;
+    }
+    return segments;
+}
+
+fn parseBool(val: json.Value) bool {
+    return switch (val) {
+        .bool => |b| b,
+        else => false,
+    };
 }
 
 fn parseU8(val: ?json.Value) ?u8 {
@@ -372,14 +432,14 @@ const testing = std.testing;
 fn expectCmd(data: []const u8) Parser.Command {
     var parser = Parser.parse(testing.allocator, data) catch unreachable;
     defer parser.deinit();
-    var _iter = parser.iter() catch unreachable;
+    var _iter = parser.iter(testing.allocator) catch unreachable;
     return (_iter.next() orelse unreachable) catch unreachable;
 }
 
 fn expectErr(data: []const u8) Parser.Error {
     var parser = Parser.parse(testing.allocator, data) catch unreachable;
     defer parser.deinit();
-    var _iter = parser.iter() catch unreachable;
+    var _iter = parser.iter(testing.allocator) catch unreachable;
     if (_iter.next()) |v| {
         _ = v catch |e| return e;
         unreachable;
@@ -490,7 +550,7 @@ test "error: not a json array" {
         \\{"cmd": 0}
     ) catch unreachable;
     defer parser.deinit();
-    const result = parser.iter();
+    const result = parser.iter(testing.allocator);
     try testing.expectError(error.not_array, result);
 }
 
@@ -547,7 +607,7 @@ test "iterate multiple commands" {
     ;
     var parser = Parser.parse(testing.allocator, data) catch return error.ParseFailed;
     defer parser.deinit();
-    var _iter = parser.iter() catch return error.ParseFailed;
+    var _iter = parser.iter(testing.allocator) catch return error.ParseFailed;
 
     // First: create
     const c1 = try (_iter.next() orelse return error.UnexpectedEnd);

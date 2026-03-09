@@ -26,7 +26,6 @@ export const KeyEvent = defineStruct([
     ["codepoint", "u32"],
     ["mods", "u8"],
     ["text_len", "u8"],
-    ["_pad", "u16"],
     ["text_0", "u32"],
     ["text_1", "u32"],
     ["text_2", "u32"],

@@ -5,7 +5,7 @@ import { EventType, Events } from "./events";
 
 function getTuiLib() {
     const symbols = dlopen(
-        resolve(import.meta.dir, "../../../zig-out/lib/libtui.dylib"),
+        resolve(import.meta.dir, "../../../../zig-out/lib/libtui.dylib"),
         {
             initState: {
                 args: [FFIType.pointer],
@@ -151,10 +151,6 @@ export class TuiLib {
 
     destroyApp(app: Pointer) {
         this.lib.symbols.destroyApp(app)
-    }
-
-    drainEvents() {
-        this.lib.symbols.drainEvents()
     }
 
     getWindow(app: Pointer): Pointer | null {

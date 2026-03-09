@@ -4,18 +4,18 @@
     "target": "ESNext",
     "module": "Preserve",
     "moduleDetection": "force",
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
 
-    // Best practices
     "strict": true,
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
 
-    // Some stricter flags (disabled by default)
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false

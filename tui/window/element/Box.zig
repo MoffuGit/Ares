@@ -225,6 +225,10 @@ pub fn init(alloc: Allocator, opts: Options) !*Box {
 }
 
 pub fn deinit(self: *Box, alloc: Allocator) void {
+    if (self.segments) |segs| {
+        for (segs) |s| alloc.free(s.text);
+        alloc.free(segs);
+    }
     self.element.deinit();
     alloc.destroy(self);
 }

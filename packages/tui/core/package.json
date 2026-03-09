@@ -1,5 +1,5 @@
 {
-  "name": "@ares/tui",
+  "name": "@ares/tui-core",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -8,7 +8,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./app": "./src/app.ts",
-    "./elements": "./src/elements.ts"
+    "./elements": "./src/elements.ts",
+    "./events": "./src/events.ts",
+    "./structs": "./src/structs.ts"
   },
   "scripts": {
     "test": "bun test"
