@@ -10,10 +10,10 @@ const app = new WebviewApp();
 export const electroview = new Electroview({ rpc: app.electroview });
 app.loadSettings().then(() => {
     createRoot(document.getElementById("root")!).render(
-    <StrictMode>
-        <AppProvider app={app}>
-            <App />
-        </AppProvider>
-    </StrictMode>,
+        <StrictMode>
+            <AppProvider app={app}>
+                <App />
+            </AppProvider>
+        </StrictMode>,
     );
 });
