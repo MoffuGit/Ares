@@ -24,6 +24,7 @@ src/old_core/
 old_tui/
 node_modules/
 bun.lock
+trash/
 
 glad.zip
 /Box_test.ppm
