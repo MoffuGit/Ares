@@ -34,7 +34,7 @@ export const Route = createFileRoute('/_editor')({
                             <SidebarTrigger size="icon-xs" variant="ghost" />
                         </div>
                     </div>
-                    <div className='flex-1 flex flex-row overflow-hidden px-2 bg-sidebar'>
+                    <div className='flex-1 flex flex-row overflow-hidden px-4 bg-sidebar'>
                         <AppSidebar />
                         <SidebarInset className='rounded-xl'>
                             <div className="flex flex-col gap-4 p-4">
