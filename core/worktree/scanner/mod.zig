@@ -96,20 +96,10 @@ pub fn initial_scan(self: *Scanner) !void {
         const watcher_id = try self.monitor.watchPath(self.abs_root, Scanner, self, monitorCallback);
         try self.watcher_to_entry.put(watcher_id, id);
     }
-
-    //NOTE: notify scan
-    // const result = try self.alloc.create(UpdatedEntriesSet);
-    // result.* = UpdatedEntriesSet.init(self.alloc);
-    // if (!self.worktree.notifyUpdatedEntries(result)) {
-    //     result.destroy();
-    // }
 }
 
 pub fn process_scan_by_id(self: *Scanner, dir_id: u64) !void {
     try self.scanRecursive(dir_id);
-
-    //NOTE:
-    //notify we finish our scan
 }
 
 fn scanRecursive(self: *Scanner, dir_id: u64) !void {

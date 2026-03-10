@@ -40,6 +40,7 @@ const rpc = BrowserView.defineRPC<AppRPC>({
 });
 
 const mainWindow = new BrowserWindow({
+    titleBarStyle: "hiddenInset",
     title: "Ares",
     url,
     frame: {
