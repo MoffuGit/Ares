@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.mutations);
 
@@ -30,6 +31,10 @@ pub fn destroy(self: *Mutations) void {
 }
 
 pub fn processMutations(self: *Mutations, data: []const u8) void {
+    if (comptime builtin.mode == .Debug) {
+        dumpMutations(data);
+    }
+
     var parser = Parser.parse(self.alloc, data) catch |err| {
         log.err("parse mutations: {}", .{err});
         return;
@@ -54,6 +59,14 @@ pub fn processMutations(self: *Mutations, data: []const u8) void {
             .set_focus => |d| self.window.setFocus(d.id),
         }
     }
+}
+
+fn dumpMutations(data: []const u8) void {
+    const file = std.fs.cwd().createFile("mutations_debug.log", .{ .truncate = false }) catch return;
+    defer file.close();
+    file.seekFromEnd(0) catch return;
+    file.writeAll(data) catch return;
+    file.writeAll("\n") catch return;
 }
 
 fn createCmd(self: *Mutations, cmd: Command) void {

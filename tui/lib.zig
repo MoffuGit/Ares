@@ -29,7 +29,6 @@ export fn getWindow(app: *App) *Window {
     return &app.window;
 }
 
-/// Create a headless window for testing (no TTY required).
 export fn createTestWindow() ?*Window {
     const alloc = global.state.alloc;
     const screen = alloc.create(Screen) catch return null;
@@ -79,8 +78,6 @@ export fn processMutations(mutations: *Mutations, ptr: [*]const u8, len: u64) vo
 
 var dump_buf: std.ArrayList(u8) = .{};
 
-/// Serializes the element tree as JSON into an internal buffer.
-/// Returns the byte length; use `getDumpPtr` to read the data.
 export fn dumpTree(window: *Window) u64 {
     const alloc = global.state.alloc;
     dump_buf.clearRetainingCapacity();
@@ -92,17 +89,12 @@ export fn dumpTree(window: *Window) u64 {
     return dump_buf.items.len;
 }
 
-/// Returns a pointer to the internal dump buffer populated by `dumpTree`.
 export fn getDumpPtr() [*]const u8 {
     return dump_buf.items.ptr;
 }
 
 export fn freeDumpTree() void {
     dump_buf.clearAndFree(global.state.alloc);
-}
-
-export fn requestDraw(app: *App) void {
-    app.requestDraw();
 }
 
 export fn drawWindow(app: *App) void {

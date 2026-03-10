@@ -102,7 +102,6 @@ export class TuiApp {
 
     flush(): void {
         this.lib.processMutations(this.mutationsPtr);
-        this.lib.requestDraw(this.appPtr);
         this.lib.drawWindow(this.appPtr);
     }
 

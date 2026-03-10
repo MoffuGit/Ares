@@ -1,9 +1,19 @@
-import { createSignal } from "solid-js";
+import { createSignal, For, onMount, onCleanup } from "solid-js";
 import { render } from "../src/index";
 import type { BoxElement } from "@ares/tui-core/elements";
 
+const COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f1c40f", "#9b59b6", "#1abc9c", "#e67e22", "#00d9ff"];
+
 function Counter() {
-    const [count, setCount] = createSignal(0);
+    const [count, setCount] = createSignal(1);
+
+    onMount(() => {
+        const timer = setInterval(() => {
+            setCount((c) => c + 1);
+            console.log("[timer] count set to", count());
+        }, 5000);
+        onCleanup(() => clearInterval(timer));
+    });
 
     return (
         <box
@@ -30,6 +40,19 @@ function Counter() {
                 }}
             >
                 Count: {count()}
+            </box>
+            <box flexDirection="row" flexWrap="wrap" style={{ width: { point: 100 } }}>
+                <For each={Array.from({ length: count() }, (_, i) => i)}>
+                    {(i) => (
+                        <box
+                            bg={COLORS[i % COLORS.length]}
+                            fg="#ffffff"
+                            style={{ width: { point: 3 }, height: { point: 1 } }}
+                        >
+                            {` ${i + 1} `}
+                        </box>
+                    )}
+                </For>
             </box>
             <box
                 ref={(el: BoxElement) => el.focus()}

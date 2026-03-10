@@ -59,10 +59,6 @@ function getTuiLib() {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
-            requestDraw: {
-                args: [FFIType.pointer],
-                returns: FFIType.void,
-            },
             drainMailbox: {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
@@ -87,6 +83,7 @@ const mutationQueue: WireCommand[] = [];
 
 export function enqueue(cmd: WireCommand): void {
     mutationQueue.push(cmd);
+    console.log("[enqueue]", JSON.stringify(cmd));
 }
 
 export type WireCommand = Record<string, unknown>;
@@ -193,10 +190,6 @@ export class TuiLib {
         const jsonStr = new TextDecoder().decode(buf);
         this.lib.symbols.freeDumpTree();
         return JSON.parse(jsonStr);
-    }
-
-    requestDraw(app: Pointer) {
-        this.lib.symbols.requestDraw(app);
     }
 
     drainMailbox(app: Pointer) {

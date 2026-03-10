@@ -44,7 +44,6 @@ renderer_thread: RendererThread,
 renderer_thr: std.Thread,
 
 window: Window,
-draw: std.atomic.Value(bool) = .init(true),
 mailbox: *Mailbox,
 
 pub fn create(alloc: Allocator) !*App {
@@ -70,8 +69,7 @@ pub fn create(alloc: Allocator) !*App {
     );
     errdefer window.deinit();
 
-    var tty_thread = TtyThread.init(alloc, &app.shared_context, mailbox);
-    _ = &tty_thread;
+    const tty_thread = TtyThread.init(alloc, &app.shared_context, mailbox);
 
     var renderer = try Renderer.init(alloc, &app.shared_context, &app.screen);
     errdefer renderer.deinit();
@@ -126,22 +124,7 @@ pub fn destroy(self: *App) void {
     self.alloc.destroy(self);
 }
 
-pub fn needsDraw(self: *App) bool {
-    return self.draw.load(.acquire);
-}
-
-pub fn markDrawn(self: *App) void {
-    self.draw.store(false, .release);
-}
-
-pub fn requestDraw(self: *App) void {
-    self.draw.store(true, .release);
-}
-
 pub fn drawWindow(self: *App) !void {
-    if (!self.needsDraw()) return;
-    defer self.markDrawn();
-
     try self.window.draw();
 
     try self.renderer_thread.wakeup.notify();
