@@ -14,6 +14,31 @@ mutedFg: Color,
 scrollThumb: Color,
 scrollTrack: Color,
 border: Color,
+card: Color,
+cardFg: Color,
+popover: Color,
+popoverFg: Color,
+secondary: Color,
+secondaryFg: Color,
+accent: Color,
+accentFg: Color,
+destructive: Color,
+destructiveFg: Color,
+input: Color,
+ring: Color,
+chart1: Color,
+chart2: Color,
+chart3: Color,
+chart4: Color,
+chart5: Color,
+sidebar: Color,
+sidebarFg: Color,
+sidebarPrimary: Color,
+sidebarPrimaryFg: Color,
+sidebarAccent: Color,
+sidebarAccentFg: Color,
+sidebarBorder: Color,
+sidebarRing: Color,
 fileType: std.StringHashMapUnmanaged(Color) = .{},
 
 pub const fallback = Theme{
@@ -27,6 +52,31 @@ pub const fallback = Theme{
     .scrollThumb = Color{ 100, 100, 100, 255 },
     .scrollTrack = Color{ 50, 50, 50, 255 },
     .border = Color{ 0, 255, 0, 255 },
+    .card = Color{ 255, 30, 30, 255 },
+    .cardFg = Color{ 220, 220, 220, 255 },
+    .popover = Color{ 255, 30, 30, 255 },
+    .popoverFg = Color{ 220, 220, 220, 255 },
+    .secondary = Color{ 60, 60, 60, 255 },
+    .secondaryFg = Color{ 160, 160, 160, 255 },
+    .accent = Color{ 60, 60, 60, 255 },
+    .accentFg = Color{ 160, 160, 160, 255 },
+    .destructive = Color{ 220, 38, 38, 255 },
+    .destructiveFg = Color{ 255, 255, 255, 255 },
+    .input = Color{ 50, 50, 50, 255 },
+    .ring = Color{ 40, 40, 40, 255 },
+    .chart1 = Color{ 231, 111, 81, 255 },
+    .chart2 = Color{ 42, 157, 143, 255 },
+    .chart3 = Color{ 233, 196, 106, 255 },
+    .chart4 = Color{ 167, 139, 250, 255 },
+    .chart5 = Color{ 244, 132, 95, 255 },
+    .sidebar = Color{ 60, 60, 60, 255 },
+    .sidebarFg = Color{ 220, 220, 220, 255 },
+    .sidebarPrimary = Color{ 40, 40, 40, 255 },
+    .sidebarPrimaryFg = Color{ 200, 200, 200, 255 },
+    .sidebarAccent = Color{ 60, 60, 60, 255 },
+    .sidebarAccentFg = Color{ 160, 160, 160, 255 },
+    .sidebarBorder = Color{ 50, 50, 50, 255 },
+    .sidebarRing = Color{ 40, 40, 40, 255 },
 };
 
 pub fn getFileTypeColor(self: Theme, key: []const u8) Color {
@@ -62,6 +112,31 @@ const JsonTheme = struct {
         scrollThumb: []const u8,
         scrollTrack: []const u8,
         border: []const u8,
+        card: []const u8,
+        cardFg: []const u8,
+        popover: []const u8,
+        popoverFg: []const u8,
+        secondary: []const u8,
+        secondaryFg: []const u8,
+        accent: []const u8,
+        accentFg: []const u8,
+        destructive: []const u8,
+        destructiveFg: []const u8,
+        input: []const u8,
+        ring: []const u8,
+        chart1: []const u8,
+        chart2: []const u8,
+        chart3: []const u8,
+        chart4: []const u8,
+        chart5: []const u8,
+        sidebar: []const u8,
+        sidebarFg: []const u8,
+        sidebarPrimary: []const u8,
+        sidebarPrimaryFg: []const u8,
+        sidebarAccent: []const u8,
+        sidebarAccentFg: []const u8,
+        sidebarBorder: []const u8,
+        sidebarRing: []const u8,
         fileType: ?std.json.ArrayHashMap([]const u8) = null,
     },
 };
@@ -91,6 +166,31 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
     const scrollThumb = colors.get(json_theme.theme.scrollThumb) orelse return ParseError.ColorNotFound;
     const scrollTrack = colors.get(json_theme.theme.scrollTrack) orelse return ParseError.ColorNotFound;
     const border = colors.get(json_theme.theme.border) orelse return ParseError.ColorNotFound;
+    const card = colors.get(json_theme.theme.card) orelse return ParseError.ColorNotFound;
+    const cardFg = colors.get(json_theme.theme.cardFg) orelse return ParseError.ColorNotFound;
+    const popover = colors.get(json_theme.theme.popover) orelse return ParseError.ColorNotFound;
+    const popoverFg = colors.get(json_theme.theme.popoverFg) orelse return ParseError.ColorNotFound;
+    const secondary = colors.get(json_theme.theme.secondary) orelse return ParseError.ColorNotFound;
+    const secondaryFg = colors.get(json_theme.theme.secondaryFg) orelse return ParseError.ColorNotFound;
+    const accent = colors.get(json_theme.theme.accent) orelse return ParseError.ColorNotFound;
+    const accentFg = colors.get(json_theme.theme.accentFg) orelse return ParseError.ColorNotFound;
+    const destructive = colors.get(json_theme.theme.destructive) orelse return ParseError.ColorNotFound;
+    const destructiveFg = colors.get(json_theme.theme.destructiveFg) orelse return ParseError.ColorNotFound;
+    const input = colors.get(json_theme.theme.input) orelse return ParseError.ColorNotFound;
+    const ring = colors.get(json_theme.theme.ring) orelse return ParseError.ColorNotFound;
+    const chart1 = colors.get(json_theme.theme.chart1) orelse return ParseError.ColorNotFound;
+    const chart2 = colors.get(json_theme.theme.chart2) orelse return ParseError.ColorNotFound;
+    const chart3 = colors.get(json_theme.theme.chart3) orelse return ParseError.ColorNotFound;
+    const chart4 = colors.get(json_theme.theme.chart4) orelse return ParseError.ColorNotFound;
+    const chart5 = colors.get(json_theme.theme.chart5) orelse return ParseError.ColorNotFound;
+    const sidebar = colors.get(json_theme.theme.sidebar) orelse return ParseError.ColorNotFound;
+    const sidebarFg = colors.get(json_theme.theme.sidebarFg) orelse return ParseError.ColorNotFound;
+    const sidebarPrimary = colors.get(json_theme.theme.sidebarPrimary) orelse return ParseError.ColorNotFound;
+    const sidebarPrimaryFg = colors.get(json_theme.theme.sidebarPrimaryFg) orelse return ParseError.ColorNotFound;
+    const sidebarAccent = colors.get(json_theme.theme.sidebarAccent) orelse return ParseError.ColorNotFound;
+    const sidebarAccentFg = colors.get(json_theme.theme.sidebarAccentFg) orelse return ParseError.ColorNotFound;
+    const sidebarBorder = colors.get(json_theme.theme.sidebarBorder) orelse return ParseError.ColorNotFound;
+    const sidebarRing = colors.get(json_theme.theme.sidebarRing) orelse return ParseError.ColorNotFound;
 
     var file_type_colors = std.StringHashMapUnmanaged(Color){};
     errdefer {
@@ -123,6 +223,31 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
         .scrollThumb = scrollThumb,
         .scrollTrack = scrollTrack,
         .border = border,
+        .card = card,
+        .cardFg = cardFg,
+        .popover = popover,
+        .popoverFg = popoverFg,
+        .secondary = secondary,
+        .secondaryFg = secondaryFg,
+        .accent = accent,
+        .accentFg = accentFg,
+        .destructive = destructive,
+        .destructiveFg = destructiveFg,
+        .input = input,
+        .ring = ring,
+        .chart1 = chart1,
+        .chart2 = chart2,
+        .chart3 = chart3,
+        .chart4 = chart4,
+        .chart5 = chart5,
+        .sidebar = sidebar,
+        .sidebarFg = sidebarFg,
+        .sidebarPrimary = sidebarPrimary,
+        .sidebarPrimaryFg = sidebarPrimaryFg,
+        .sidebarAccent = sidebarAccent,
+        .sidebarAccentFg = sidebarAccentFg,
+        .sidebarBorder = sidebarBorder,
+        .sidebarRing = sidebarRing,
         .fileType = file_type_colors,
     };
 }
@@ -158,7 +283,14 @@ test "parse theme" {
         \\    "primaryBg": "#1a1a1a",
         \\    "primaryFg": "#ffffff",
         \\    "mutedBg": "#2a2a2a",
-        \\    "mutedFg": "#888888"
+        \\    "mutedFg": "#888888",
+        \\    "destructive": "#dc2626",
+        \\    "destructiveFg": "#ffffff",
+        \\    "chart1": "#e76f51",
+        \\    "chart2": "#2a9d8f",
+        \\    "chart3": "#e9c46a",
+        \\    "chart4": "#a78bfa",
+        \\    "chart5": "#f4845f"
         \\  },
         \\  "theme": {
         \\    "bg": "background",
@@ -169,7 +301,32 @@ test "parse theme" {
         \\    "mutedFg": "mutedFg",
         \\    "scrollThumb": "scrollThumb",
         \\    "scrollTrack": "scrollTrack",
-        \\    "border": "scrollTrack"
+        \\    "border": "scrollTrack",
+        \\    "card": "background",
+        \\    "cardFg": "foreground",
+        \\    "popover": "background",
+        \\    "popoverFg": "foreground",
+        \\    "secondary": "mutedBg",
+        \\    "secondaryFg": "mutedFg",
+        \\    "accent": "mutedBg",
+        \\    "accentFg": "mutedFg",
+        \\    "destructive": "destructive",
+        \\    "destructiveFg": "destructiveFg",
+        \\    "input": "scrollTrack",
+        \\    "ring": "primaryBg",
+        \\    "chart1": "chart1",
+        \\    "chart2": "chart2",
+        \\    "chart3": "chart3",
+        \\    "chart4": "chart4",
+        \\    "chart5": "chart5",
+        \\    "sidebar": "mutedBg",
+        \\    "sidebarFg": "foreground",
+        \\    "sidebarPrimary": "primaryBg",
+        \\    "sidebarPrimaryFg": "primaryFg",
+        \\    "sidebarAccent": "mutedBg",
+        \\    "sidebarAccentFg": "mutedFg",
+        \\    "sidebarBorder": "scrollTrack",
+        \\    "sidebarRing": "primaryBg"
         \\  }
         \\}
     ;
@@ -186,6 +343,31 @@ test "parse theme" {
     try std.testing.expectEqual(Color{ 136, 136, 136, 255 }, theme.mutedFg);
     try std.testing.expectEqual(Color{ 102, 102, 102, 255 }, theme.scrollThumb);
     try std.testing.expectEqual(Color{ 51, 51, 51, 255 }, theme.scrollTrack);
+    try std.testing.expectEqual(Color{ 10, 10, 10, 255 }, theme.card);
+    try std.testing.expectEqual(Color{ 238, 238, 238, 255 }, theme.cardFg);
+    try std.testing.expectEqual(Color{ 10, 10, 10, 255 }, theme.popover);
+    try std.testing.expectEqual(Color{ 238, 238, 238, 255 }, theme.popoverFg);
+    try std.testing.expectEqual(Color{ 42, 42, 42, 255 }, theme.secondary);
+    try std.testing.expectEqual(Color{ 136, 136, 136, 255 }, theme.secondaryFg);
+    try std.testing.expectEqual(Color{ 42, 42, 42, 255 }, theme.accent);
+    try std.testing.expectEqual(Color{ 136, 136, 136, 255 }, theme.accentFg);
+    try std.testing.expectEqual(Color{ 220, 38, 38, 255 }, theme.destructive);
+    try std.testing.expectEqual(Color{ 255, 255, 255, 255 }, theme.destructiveFg);
+    try std.testing.expectEqual(Color{ 51, 51, 51, 255 }, theme.input);
+    try std.testing.expectEqual(Color{ 26, 26, 26, 255 }, theme.ring);
+    try std.testing.expectEqual(Color{ 231, 111, 81, 255 }, theme.chart1);
+    try std.testing.expectEqual(Color{ 42, 157, 143, 255 }, theme.chart2);
+    try std.testing.expectEqual(Color{ 233, 196, 106, 255 }, theme.chart3);
+    try std.testing.expectEqual(Color{ 167, 139, 250, 255 }, theme.chart4);
+    try std.testing.expectEqual(Color{ 244, 132, 95, 255 }, theme.chart5);
+    try std.testing.expectEqual(Color{ 42, 42, 42, 255 }, theme.sidebar);
+    try std.testing.expectEqual(Color{ 238, 238, 238, 255 }, theme.sidebarFg);
+    try std.testing.expectEqual(Color{ 26, 26, 26, 255 }, theme.sidebarPrimary);
+    try std.testing.expectEqual(Color{ 255, 255, 255, 255 }, theme.sidebarPrimaryFg);
+    try std.testing.expectEqual(Color{ 42, 42, 42, 255 }, theme.sidebarAccent);
+    try std.testing.expectEqual(Color{ 136, 136, 136, 255 }, theme.sidebarAccentFg);
+    try std.testing.expectEqual(Color{ 51, 51, 51, 255 }, theme.sidebarBorder);
+    try std.testing.expectEqual(Color{ 26, 26, 26, 255 }, theme.sidebarRing);
 }
 
 test "parse theme with fileType" {
@@ -203,7 +385,14 @@ test "parse theme with fileType" {
         \\    "mutedFg": "#888888",
         \\    "rustColor": "#dea584",
         \\    "zigColor": "#f7a41d",
-        \\    "defaultFileColor": "#cccccc"
+        \\    "defaultFileColor": "#cccccc",
+        \\    "destructive": "#dc2626",
+        \\    "destructiveFg": "#ffffff",
+        \\    "chart1": "#e76f51",
+        \\    "chart2": "#2a9d8f",
+        \\    "chart3": "#e9c46a",
+        \\    "chart4": "#a78bfa",
+        \\    "chart5": "#f4845f"
         \\  },
         \\  "theme": {
         \\    "bg": "background",
@@ -215,6 +404,31 @@ test "parse theme with fileType" {
         \\    "scrollThumb": "scrollThumb",
         \\    "scrollTrack": "scrollTrack",
         \\    "border": "scrollTrack",
+        \\    "card": "background",
+        \\    "cardFg": "foreground",
+        \\    "popover": "background",
+        \\    "popoverFg": "foreground",
+        \\    "secondary": "mutedBg",
+        \\    "secondaryFg": "mutedFg",
+        \\    "accent": "mutedBg",
+        \\    "accentFg": "mutedFg",
+        \\    "destructive": "destructive",
+        \\    "destructiveFg": "destructiveFg",
+        \\    "input": "scrollTrack",
+        \\    "ring": "primaryBg",
+        \\    "chart1": "chart1",
+        \\    "chart2": "chart2",
+        \\    "chart3": "chart3",
+        \\    "chart4": "chart4",
+        \\    "chart5": "chart5",
+        \\    "sidebar": "mutedBg",
+        \\    "sidebarFg": "foreground",
+        \\    "sidebarPrimary": "primaryBg",
+        \\    "sidebarPrimaryFg": "primaryFg",
+        \\    "sidebarAccent": "mutedBg",
+        \\    "sidebarAccentFg": "mutedFg",
+        \\    "sidebarBorder": "scrollTrack",
+        \\    "sidebarRing": "primaryBg",
         \\    "fileType": {
         \\      "default": "defaultFileColor",
         \\      "rust": "rustColor",
@@ -245,7 +459,14 @@ test "parse theme fileType missing fallback" {
         \\    "primaryFg": "#ffffff",
         \\    "mutedBg": "#2a2a2a",
         \\    "mutedFg": "#888888",
-        \\    "rustColor": "#dea584"
+        \\    "rustColor": "#dea584",
+        \\    "destructive": "#dc2626",
+        \\    "destructiveFg": "#ffffff",
+        \\    "chart1": "#e76f51",
+        \\    "chart2": "#2a9d8f",
+        \\    "chart3": "#e9c46a",
+        \\    "chart4": "#a78bfa",
+        \\    "chart5": "#f4845f"
         \\  },
         \\  "theme": {
         \\    "bg": "background",
@@ -257,6 +478,31 @@ test "parse theme fileType missing fallback" {
         \\    "scrollThumb": "scrollThumb",
         \\    "scrollTrack": "scrollTrack",
         \\    "border": "scrollTrack",
+        \\    "card": "background",
+        \\    "cardFg": "foreground",
+        \\    "popover": "background",
+        \\    "popoverFg": "foreground",
+        \\    "secondary": "mutedBg",
+        \\    "secondaryFg": "mutedFg",
+        \\    "accent": "mutedBg",
+        \\    "accentFg": "mutedFg",
+        \\    "destructive": "destructive",
+        \\    "destructiveFg": "destructiveFg",
+        \\    "input": "scrollTrack",
+        \\    "ring": "primaryBg",
+        \\    "chart1": "chart1",
+        \\    "chart2": "chart2",
+        \\    "chart3": "chart3",
+        \\    "chart4": "chart4",
+        \\    "chart5": "chart5",
+        \\    "sidebar": "mutedBg",
+        \\    "sidebarFg": "foreground",
+        \\    "sidebarPrimary": "primaryBg",
+        \\    "sidebarPrimaryFg": "primaryFg",
+        \\    "sidebarAccent": "mutedBg",
+        \\    "sidebarAccentFg": "mutedFg",
+        \\    "sidebarBorder": "scrollTrack",
+        \\    "sidebarRing": "primaryBg",
         \\    "fileType": {
         \\      "rust": "rustColor"
         \\    }

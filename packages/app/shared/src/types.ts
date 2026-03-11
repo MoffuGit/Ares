@@ -17,6 +17,31 @@ export type Theme = {
     scrollThumb: number[];
     scrollTrack: number[];
     border: number[];
+    card: number[];
+    cardFg: number[];
+    popover: number[];
+    popoverFg: number[];
+    secondary: number[];
+    secondaryFg: number[];
+    accent: number[];
+    accentFg: number[];
+    destructive: number[];
+    destructiveFg: number[];
+    input: number[];
+    ring: number[];
+    chart1: number[];
+    chart2: number[];
+    chart3: number[];
+    chart4: number[];
+    chart5: number[];
+    sidebar: number[];
+    sidebarFg: number[];
+    sidebarPrimary: number[];
+    sidebarPrimaryFg: number[];
+    sidebarAccent: number[];
+    sidebarAccentFg: number[];
+    sidebarBorder: number[];
+    sidebarRing: number[];
 }
 
 export type WorktreeEntry = {
