@@ -36,12 +36,12 @@ export const Route = createFileRoute('/_editor')({
                     </div>
                     <div className='flex-1 flex flex-row overflow-hidden px-4 bg-sidebar'>
                         <AppSidebar />
-                        <SidebarInset className='rounded-xl bg-card'>
+                        <SidebarInset className='rounded-md bg-card'>
                             <div className="flex flex-col gap-4 p-4">
                                 <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                                    <div className="aspect-video rounded-xl bg-muted/50" />
-                                    <div className="aspect-video rounded-xl bg-muted/50" />
-                                    <div className="aspect-video rounded-xl bg-muted/50" />
+                                    <div className="aspect-video rounded-sm bg-muted/50" />
+                                    <div className="aspect-video rounded-sm bg-muted/50" />
+                                    <div className="aspect-video rounded-sm bg-muted/50" />
                                 </div>
                                 <div className="min-h-[100vh] flex-1 rounded-xl bg-muted/50 md:min-h-min" />
                             </div>
@@ -199,7 +199,7 @@ function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             <SidebarMenu>
                                 {item.items.map((item) => (
                                     <SidebarMenuItem key={item.title}>
-                                        <SidebarMenuButton isActive={item.isActive}>
+                                        <SidebarMenuButton size="sm" isActive={item.isActive}>
                                             <div >{item.title}</div>
                                         </SidebarMenuButton>
                                     </SidebarMenuItem>
