@@ -1,0 +1,30 @@
+{
+  "name": "@ares/tui-solid",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./preload": "./scripts/preload.ts",
+    "./bun-plugin": "./scripts/solid-plugin.ts",
+    "./jsx-runtime": "./jsx-runtime.d.ts",
+    "./jsx-dev-runtime": "./jsx-runtime.d.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@babel/core": "7.28.0",
+    "@babel/preset-typescript": "7.27.1",
+    "@ares/tui-core": "workspace:*",
+    "babel-preset-solid": "1.9.9"
+  },
+  "peerDependencies": {
+    "solid-js": "1.9.9"
+  },
+  "devDependencies": {
+    "@types/babel__core": "7.20.5",
+    "@types/bun": "latest"
+  }
+}

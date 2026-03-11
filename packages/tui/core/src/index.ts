@@ -83,7 +83,6 @@ const mutationQueue: WireCommand[] = [];
 
 export function enqueue(cmd: WireCommand): void {
     mutationQueue.push(cmd);
-    console.log("[enqueue]", JSON.stringify(cmd));
 }
 
 export type WireCommand = Record<string, unknown>;
