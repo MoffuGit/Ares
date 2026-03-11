@@ -49,7 +49,9 @@ export fn destroySettings(settings: *Settings) void {
 }
 
 export fn loadSettings(settings: *Settings, path: [*]const u8, len: u64, monitor: *Monitor, appe: ?*Appearance) void {
-    settings.load(path[0..len], monitor, appe) catch {};
+    settings.load(path[0..len], monitor, appe) catch |err| {
+        std.log.err("error while loading the settings: {}", .{err});
+    };
 }
 
 pub const ExternSettings = extern struct {

@@ -182,6 +182,8 @@ fn loadThemes(self: *Settings, dir: std.fs.Dir) LoadError!void {
 
         const theme = Theme.parse(self.alloc, theme_content) catch continue;
 
+        std.log.debug("theme {s}: {}", .{ name, theme });
+
         self.themes.put(self.alloc, theme.name, theme) catch continue;
     }
 
@@ -235,6 +237,7 @@ pub fn applyTheme(self: *Settings) void {
 
 fn applyThemeLocked(self: *Settings) void {
     const source = self.getThemeLocked();
+    std.log.debug("selected theme: {s}", .{source.name});
     self.active_theme = source.*;
     self.theme = &self.active_theme;
 }
