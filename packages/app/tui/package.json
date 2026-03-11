@@ -15,8 +15,8 @@
   "dependencies": {
     "@ares/core": "workspace:*",
     "@ares/shared": "workspace:*",
-    "@opentui/core": "^0.1.81",
-    "@opentui/solid": "^0.1.81",
+    "@ares/tui-core": "workspace:*",
+    "@ares/tui-solid": "workspace:*",
     "solid-js": "1.9.9"
   }
 }

@@ -1,1 +1,1 @@
-preload = ["@opentui/solid/preload"]
+preload = ["@ares/tui-solid/preload"]
