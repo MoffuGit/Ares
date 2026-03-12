@@ -246,7 +246,7 @@ export function resolveCoreLib(libPath?: string): CoreLib {
             coreLib = new CoreLib(libPath)
         } catch (error) {
             throw new Error(
-                `Failed to initialize the core lib`,
+                `Failed to initialize the core lib, path:`, libPath
             )
         }
     }

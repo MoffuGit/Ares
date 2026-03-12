@@ -18,7 +18,8 @@ import {
 } from "./components/sidebar.tsx";
 
 const settingsPath = resolve(import.meta.dir, "../../../../settings");
-const bizApp = new TuiApp(settingsPath);
+const projectPath = "/Volumes/Home_SSD/Users/home/Documents/projects/ares";
+const bizApp = new TuiApp(settingsPath, projectPath);
 bizApp.start();
 
 function Line(props: { children: any }) {

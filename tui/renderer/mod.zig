@@ -25,8 +25,6 @@ pub fn init(alloc: Allocator, shared: *SharedContext, screen: *Screen) !Renderer
 
 pub fn deinit(self: *Renderer) void {
     _ = self;
-    // TODO: migrate vx and tty fields from old_src
-    // self.vx.deinit(self.alloc, self.tty.writer());
 }
 
 pub fn threadEnter(self: *Renderer) !void {
