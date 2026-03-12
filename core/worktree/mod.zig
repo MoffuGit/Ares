@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 const Monitor = @import("../monitor/mod.zig");
 const Scanner = @import("scanner/mod.zig");
 const ScannerThread = @import("scanner/Thread.zig");
+pub const Entry = Snapshot.Entry;
 
 const Snapshot = @import("Snapshot.zig");
 

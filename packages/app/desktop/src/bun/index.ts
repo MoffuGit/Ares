@@ -39,7 +39,6 @@ const rpc = BrowserView.defineRPC<AppRPC>({
     },
 });
 
-app.start();
 
 const mainWindow = new BrowserWindow({
     titleBarStyle: "hiddenInset",
@@ -74,6 +73,9 @@ app.events.on("worktreeUpdate", () => {
     mainWindow.webview.rpc?.send.worktreeUpdate(app._state.worktree);
 });
 
+mainWindow.webview.on("dom-ready", () => {
+    app.start();
+});
 
 mainWindow.on("close", () => {
     app.stop();

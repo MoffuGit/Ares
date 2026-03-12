@@ -24,6 +24,4 @@ export class DesktopApp extends CoreApp {
         if (this.appearance) this.core.destroyAppearance(this.appearance);
         super.stop();
     }
-
-
 }

@@ -128,15 +128,13 @@ fn processDirtyEntries(self: *Thread) void {
 
     if (entries.items.len == 0) return;
 
-    const result = self.scanner.process_events(entries.items) catch |err| {
+    var update = self.scanner.process_events(entries.items) catch |err| {
         log.err("error processing dirty entries: {}", .{err});
         return;
     };
-    defer result.destroy();
+    defer update.deinit();
 
-    if (result.updates.items.len > 0) {
-        _ = global.state.mailbox.push(.worktree_update, .instant);
-    }
+    global.state.emitGlobal(.{ .worktreeUpdate = update });
 }
 
 fn wakeupCallback(

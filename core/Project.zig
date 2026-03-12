@@ -5,10 +5,12 @@ const Buffer = @import("buffer/Buffer.zig");
 const Io = @import("./io/mod.zig");
 const Monitor = @import("./monitor/mod.zig");
 const Worktree = @import("./worktree/mod.zig").Worktree;
+const FileTree = @import("filetree/mod.zig");
 
 const Project = @This();
 
 worktree: *Worktree,
+filetree: *FileTree,
 buffer_store: BufferStore,
 
 pub fn create(alloc: std.mem.Allocator, monitor: *Monitor, io: *Io, abs_path: []const u8) !*Project {
@@ -18,8 +20,12 @@ pub fn create(alloc: std.mem.Allocator, monitor: *Monitor, io: *Io, abs_path: []
     const worktree = try Worktree.create(abs_path, monitor, alloc);
     errdefer worktree.destroy();
 
+    const filetree = try FileTree.create(alloc, worktree);
+    errdefer filetree.destroy();
+
     project.* = .{
         .worktree = worktree,
+        .filetree = filetree,
         .buffer_store = BufferStore.init(alloc, io, worktree),
     };
 
@@ -32,6 +38,7 @@ pub fn openBuffer(self: *Project, entry_id: u64) ?*Buffer {
 
 pub fn destroy(self: *Project, alloc: std.mem.Allocator) void {
     self.buffer_store.deinit();
+    self.filetree.destroy();
     self.worktree.destroy();
     alloc.destroy(self);
 }

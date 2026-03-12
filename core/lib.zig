@@ -25,7 +25,9 @@ export fn drainMailbox() void {
 
     while (it.next()) |ev| {
         const bytes: []const u8 = switch (ev) {
-            .settings_update, .theme_update, .worktree_update => &.{},
+            .settingsUpdate,
+            .themeUpdate,
+            => &.{},
         };
         const ptr: ?[*]const u8 = if (bytes.len > 0) bytes.ptr else null;
         cb(@intFromEnum(ev), ptr, bytes.len);

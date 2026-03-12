@@ -98,13 +98,14 @@ pub fn initial_scan(self: *Scanner) !void {
         try self.watcher_to_entry.put(watcher_id, id);
     }
 
-    _ = global.state.mailbox.push(.worktree_update, .instant);
+    var update = UpdatedEntriesSet.init(self.alloc);
+    defer update.deinit();
+
+    global.state.emitGlobal(.{ .worktreeUpdate = update });
 }
 
-pub fn process_scan_by_id(self: *Scanner, dir_id: u64) !void {
-    try self.scanRecursive(dir_id);
-
-    _ = global.state.mailbox.push(.worktree_update, .instant);
+pub fn process_scan_by_id(_: *Scanner, _: u64) !void {
+    unreachable;
 }
 
 fn scanRecursive(self: *Scanner, dir_id: u64) !void {
@@ -182,10 +183,8 @@ const ChildInfo = struct {
     entry: Entry,
 };
 
-pub fn process_events(self: *Scanner, dirty_ids: []const u64) !*UpdatedEntriesSet {
-    const result = try self.alloc.create(UpdatedEntriesSet);
-    result.* = UpdatedEntriesSet.init(self.alloc);
-    errdefer result.destroy();
+pub fn process_events(self: *Scanner, dirty_ids: []const u64) !UpdatedEntriesSet {
+    var result = UpdatedEntriesSet.init(self.alloc);
 
     for (dirty_ids) |id| {
         const dir_path = blk: {
@@ -200,7 +199,7 @@ pub fn process_events(self: *Scanner, dirty_ids: []const u64) !*UpdatedEntriesSe
             break :blk self.snapshot.getAbsPathById(id) orelse continue;
         };
 
-        try self.update_entries(dir_path, abs_dir_path, result);
+        try self.update_entries(dir_path, abs_dir_path, &result);
     }
 
     return result;

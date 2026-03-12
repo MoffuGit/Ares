@@ -104,7 +104,7 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor, appe: ?*Appear
 
     try settings_result;
 
-    _ = global.state.mailbox.push(.settings_update, .instant);
+    global.state.emit(.settingsUpdate, .instant);
 
     if (appe) |a| {
         self.appearance = a;
@@ -129,7 +129,7 @@ fn appearanceChanged(ctx: *anyopaque) void {
     self.system_scheme = if (a.isDark()) .dark else .light;
     self.applyThemeLocked();
 
-    _ = global.state.mailbox.push(.settings_update, .instant);
+    global.state.emit(.settingsUpdate, .instant);
 }
 
 fn settingsCallback(self: ?*Settings, _: u64, _: u32) void {
@@ -144,7 +144,7 @@ fn settingsCallback(self: ?*Settings, _: u64, _: u32) void {
     s.loadSettings(dir) catch {};
     s.loadThemes(dir) catch {};
 
-    _ = global.state.mailbox.push(.settings_update, .instant);
+    global.state.emit(.settingsUpdate, .instant);
 }
 fn themeCallback(self: ?*Settings, _: u64, _: u32) void {
     const s = self orelse return;
@@ -157,7 +157,7 @@ fn themeCallback(self: ?*Settings, _: u64, _: u32) void {
 
     s.loadThemes(dir) catch {};
 
-    _ = global.state.mailbox.push(.theme_update, .instant);
+    global.state.emit(.themeUpdate, .instant);
 }
 
 fn loadThemes(self: *Settings, dir: std.fs.Dir) LoadError!void {
