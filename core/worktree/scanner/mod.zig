@@ -3,6 +3,7 @@ const fs = std.fs;
 const builtin = @import("builtin");
 const fmt = std.fmt;
 const worktreepkg = @import("../mod.zig");
+const global = @import("../../global.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -96,10 +97,14 @@ pub fn initial_scan(self: *Scanner) !void {
         const watcher_id = try self.monitor.watchPath(self.abs_root, Scanner, self, monitorCallback);
         try self.watcher_to_entry.put(watcher_id, id);
     }
+
+    _ = global.state.mailbox.push(.worktree_update, .instant);
 }
 
 pub fn process_scan_by_id(self: *Scanner, dir_id: u64) !void {
     try self.scanRecursive(dir_id);
+
+    _ = global.state.mailbox.push(.worktree_update, .instant);
 }
 
 fn scanRecursive(self: *Scanner, dir_id: u64) !void {

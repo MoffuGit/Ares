@@ -160,20 +160,14 @@ fn wakeupCallback(
 }
 
 fn drainMailbox(self: *Thread) !void {
-    var changed = false;
     while (self.mailbox.pop()) |message| {
         switch (message) {
             .scan_dir => |dir_id| {
                 try self.scanner.process_scan_by_id(dir_id);
-                changed = true;
             },
             .initialScan => {
                 try self.scanner.initial_scan();
-                changed = true;
             },
         }
-    }
-    if (changed) {
-        _ = global.state.mailbox.push(.worktree_update, .instant);
     }
 }
