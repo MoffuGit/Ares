@@ -4,7 +4,10 @@ import type { AppState, Settings, Theme, WorktreeEntry } from "@ares/shared";
 export type AppRPC = {
     bun: RPCSchema<{
         requests: {
+            getSettings: { params: {}; response: Settings },
+            getTheme: { params: {}; response: Theme },
             getState: { params: {}; response: AppState };
+            gitFileTree: { params: {}; response: WorktreeEntry[] }
         };
         messages: {};
     }>;
@@ -13,6 +16,7 @@ export type AppRPC = {
         messages: {
             settingsUpdate: Settings;
             themeUpdate: Theme;
+            filetreeUpdate: WorktreeEntry[]
         };
     }>;
 };

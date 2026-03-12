@@ -45,6 +45,7 @@ fn worktreeUpdateCallback(ctx: *anyopaque) void {
     defer self.mutex.unlock();
 
     self.rebuildVisibleEntries();
+    global.state.emit(.filetreeUpdate, .instant);
 }
 
 pub fn destroy(self: *FileTree) void {

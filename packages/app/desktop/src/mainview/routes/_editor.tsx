@@ -16,6 +16,7 @@ import {
     SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { useFiletree } from '@ares/shared/react';
 
 function FileIcon({ entry }: { entry: WorktreeEntry }) {
     if (entry.kind === "dir") return <span>📁</span>;
@@ -53,15 +54,9 @@ export const Route = createFileRoute('/_editor')({
     ),
 })
 
-// {worktree.slice(0,10).map((item) => (
-//     <SidebarMenuItem key={item.id}>
-//         <SidebarMenuButton size="sm">
-//             <div >{item.name}</div>
-//         </SidebarMenuButton>
-//     </SidebarMenuItem>
-// ))}
 
 function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+    const filetree = useFiletree();
 
     return (
         <Sidebar {...props}>
@@ -71,6 +66,13 @@ function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <SidebarGroup >
                     <SidebarGroupContent>
                         <SidebarMenu>
+                            {filetree && filetree.map((item) => (
+                                <SidebarMenuItem key={item.id}>
+                                    <SidebarMenuButton size="sm">
+                                        <div >{item.name}</div>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            ))}
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>

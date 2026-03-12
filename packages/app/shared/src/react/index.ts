@@ -41,3 +41,14 @@ export function useTheme(): Theme | null {
     );
 }
 
+export function useFiletree(): WorktreeEntry[] | null {
+    const app = useApp();
+    return useSyncExternalStore(
+        (cb) => {
+            app.events.on("filetreeUpdate", cb);
+            return () => app.events.off("filetreeUpdate", cb);
+        },
+        () => app._state.filetree,
+    );
+}
+

@@ -16,7 +16,7 @@ export class CoreApp extends EventEmitter implements BaseApp {
     protected io: Pointer;
     protected project: Pointer | null = null;
 
-    _state: AppState = { settings: null, theme: null }
+    _state: AppState = { settings: null, theme: null, filetree: null };
     events = new Emitter<AppEvents>;
 
     constructor(libPath?: string) {
@@ -57,12 +57,12 @@ export class CoreApp extends EventEmitter implements BaseApp {
     start() {
         this.core.on("SettingsUpdate", this.onSettingsUpdate);
         this.core.on("ThemeUpdate", this.onThemeUpdate);
-        // this.core.events.on("FiletreeUpdate", this.onWorktreeUpdate);
+        this.core.on("FiletreeUpdate", this.onFiletreeUpdate);
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme() };
     }
 
     stop() {
-        // this.core.events.off(String(EventType.WorktreeUpdate), this.onWorktreeUpdate);
+        this.core.off("FiletreeUpdate", this.onFiletreeUpdate);
         this.core.off(String(EventType.SettingsUpdate), this.onSettingsUpdate);
         this.core.off(String(EventType.ThemeUpdate), this.onThemeUpdate);
 
@@ -76,29 +76,29 @@ export class CoreApp extends EventEmitter implements BaseApp {
         this.core.deinitState();
     }
 
-    // protected onWorktreeUpdate = () => {
-    //     this.refreshWorktree();
-    // };
+    protected onFiletreeUpdate = () => {
+        this.readFiletree();
+    };
 
-    // refreshWorktree() {
-    //     if (!this.project) return;
-    //     const raw = this.core.readWorktreeEntries(this.project);
-    //     const entries: WorktreeEntry[] = raw.map((e) => {
-    //         const path = e.path ?? "";
-    //         const parts = path.split("/");
-    //         return {
-    //             id: Number(e.id),
-    //             name: parts[parts.length - 1] ?? path,
-    //             path,
-    //             kind: e.kind === 1 ? "dir" : "file",
-    //             fileType: FileType[e.file_type] ?? "unknown",
-    //             depth: e.depth,
-    //         };
-    //     });
-    //     console.log("refreshWorktree: count=", raw.length, "entries=", JSON.stringify(entries.slice(0, 5)));
-    //     this._state = { ...this._state, worktree: entries };
-    //     this.events.emit("worktreeUpdate");
-    // }
+    readFiletree() {
+        if (!this.project) return;
+        const raw = this.core.readFileTree(this.project);
+        const entries: WorktreeEntry[] = raw.map((e) => {
+            const path = e.path ?? "";
+            const parts = path.split("/");
+            return {
+                id: Number(e.id),
+                name: parts[parts.length - 1] ?? path,
+                path,
+                kind: e.kind === 1 ? "dir" : "file",
+                fileType: FileType[e.file_type] ?? "unknown",
+                depth: e.depth,
+            };
+        });
+        console.log("refreshWorktree: count=", raw.length, "entries=", JSON.stringify(entries.slice(0, 5)));
+        this._state = { ...this._state, filetree: entries };
+        this.emit("filetreeUpdate");
+    }
 
     protected onSettingsUpdate = () => {
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme() };

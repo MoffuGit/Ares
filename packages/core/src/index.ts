@@ -78,11 +78,11 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
-            getWorktreeEntryCount: {
+            getFiletreeCount: {
                 args: [FFIType.pointer],
                 returns: FFIType.u64,
             },
-            readWorktreeEntries: {
+            readFiletree: {
                 args: [FFIType.pointer, FFIType.pointer, FFIType.u64],
                 returns: FFIType.u64,
             },
@@ -216,13 +216,13 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.destroyProject(handle);
     }
 
-    readWorktreeEntries(project: Pointer) {
-        const count = Number(this.lib.symbols.getWorktreeEntryCount(project));
+    readFileTree(project: Pointer) {
+        const count = Number(this.lib.symbols.getFiletreeCount(project));
         if (count === 0) return [];
 
         const entrySize = WorktreeEntry.size;
         const buf = new ArrayBuffer(count * entrySize);
-        const actual = Number(this.lib.symbols.readWorktreeEntries(project, ptr(buf), count));
+        const actual = Number(this.lib.symbols.readFiletree(project, ptr(buf), count));
 
         const entries: ReturnType<typeof WorktreeEntry.unpack>[] = [];
         for (let i = 0; i < actual; i++) {
@@ -246,7 +246,7 @@ export function resolveCoreLib(libPath?: string): CoreLib {
             coreLib = new CoreLib(libPath)
         } catch (error) {
             throw new Error(
-                `Failed to initialize the core lib, path:`, libPath
+                `Failed to initialize the core lib, path`
             )
         }
     }

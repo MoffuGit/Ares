@@ -1,6 +1,6 @@
 import { createContext, useContext, createSignal, onCleanup, type Accessor } from "solid-js";
 import type { BaseApp, AppState } from "../app.ts";
-import type { Settings, Theme } from "../types.ts";
+import type { Settings, Theme, WorktreeEntry } from "../types.ts";
 
 export const AppContext = createContext<BaseApp>();
 
@@ -30,5 +30,14 @@ export function useTheme(): Accessor<Theme | null> {
     const handler = () => setTheme(() => app._state.theme);
     app.events.on("themeUpdate", handler);
     onCleanup(() => app.events.off("themeUpdate", handler));
+    return theme;
+}
+
+export function useFiletree(): Accessor<WorktreeEntry[] | null> {
+    const app = useApp();
+    const [theme, setTheme] = createSignal<WorktreeEntry[] | null>(app._state.filetree);
+    const handler = () => setTheme(() => app._state.filetree);
+    app.events.on("filetreeUpdate", handler);
+    onCleanup(() => app.events.off("filetreeUpdate", handler));
     return theme;
 }

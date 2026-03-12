@@ -71,6 +71,12 @@ app.on("themeUpdate", () => {
     }
 });
 
+app.on("filetreeUpdate", () => {
+    if (app._state.filetree) {
+        mainWindow.webview.rpc?.send.filetreeUpdate(app._state.filetree);
+    }
+});
+
 mainWindow.webview.on("dom-ready", () => {
     setInterval(() => {
         app.drainMailbox()

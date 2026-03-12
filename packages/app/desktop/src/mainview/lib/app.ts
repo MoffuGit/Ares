@@ -3,7 +3,7 @@ import { AppEvents, AppState, BaseApp, Emitter } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 
 export class WebviewApp implements BaseApp {
-    _state: AppState = { settings: null, theme: null }
+    _state: AppState = { settings: null, theme: null, filetree: null }
     events = new Emitter<AppEvents>;
 
     electroview =
@@ -20,6 +20,10 @@ export class WebviewApp implements BaseApp {
                         this._state = { ...this._state, theme };
                         this.events.emit("themeUpdate");
                     },
+                    filetreeUpdate: (filetree) => {
+                        this._state = { ...this._state, filetree };
+                        this.events.emit("filetreeUpdate");
+                    }
                 },
             },
         })

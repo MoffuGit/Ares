@@ -197,29 +197,33 @@ pub const ExternWorktreeEntry = extern struct {
     path_len: usize,
 };
 
-export fn getWorktreeEntryCount(project: *Project) usize {
-    return project.worktree.count();
+export fn getFiletreeCount(project: *Project) usize {
+    return project.filetree.visible_entries.items.len;
 }
 
-export fn readWorktreeEntries(project: *Project, out: [*]ExternWorktreeEntry, max_count: u64) u64 {
+export fn readFiletree(project: *Project, out: [*]ExternWorktreeEntry, max_count: u64) u64 {
     project.worktree.snapshot.mutex.lock();
     defer project.worktree.snapshot.mutex.unlock();
 
-    var it = project.worktree.snapshot.entries.iter();
+    project.filetree.mutex.lock();
+    defer project.filetree.mutex.unlock();
+
+    const ids = project.filetree.visible_entries.items;
     var i: u64 = 0;
-    while (it.next()) |entry| {
-        if (i >= max_count) break;
-        const path = entry.key;
+    while (i < max_count) : (i += 1) {
+        const id = ids[i];
+        const path = project.worktree.snapshot.getPathById(id) orelse continue;
+        const entry = project.worktree.snapshot.entries.get(path) catch continue;
+
         const depth = countDepth(path);
         out[i] = .{
-            .id = entry.value.id,
-            .kind = @intFromEnum(entry.value.kind),
-            .file_type = @intFromEnum(entry.value.file_type),
+            .id = entry.id,
+            .kind = @intFromEnum(entry.kind),
+            .file_type = @intFromEnum(entry.file_type),
             .depth = depth,
             .path_ptr = @intFromPtr(path.ptr),
             .path_len = path.len,
         };
-        i += 1;
     }
     return i;
 }
