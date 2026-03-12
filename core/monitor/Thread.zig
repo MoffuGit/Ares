@@ -11,7 +11,7 @@ pub const Thread = @This();
 
 pub const Mailbox = BlockingQueue(messagepkg.Message, 1024);
 
-const FLUSH_INTERVAL_MS = 100;
+const FLUSH_INTERVAL_MS = 150;
 
 alloc: Allocator,
 loop: xev.Loop,
