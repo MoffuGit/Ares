@@ -53,6 +53,8 @@ const mainWindow = new BrowserWindow({
     rpc: rpc,
 });
 
+app.start();
+
 app.events.on("settingsUpdate", () => {
     if (app._state.settings) {
         console.log("sending new settings:", app._state.settings);
@@ -74,7 +76,9 @@ app.events.on("worktreeUpdate", () => {
 });
 
 mainWindow.webview.on("dom-ready", () => {
-    app.start();
+    setInterval(() => {
+        app.drainMailbox()
+    }, 100);
 });
 
 mainWindow.on("close", () => {

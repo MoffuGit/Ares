@@ -28,6 +28,10 @@ export class CoreApp extends BaseApp {
         this.settings = settings;
     }
 
+    drainMailbox() {
+        this.core.drainMailbox();
+    }
+
     loadSettings(settingsPath: string, appearance: Pointer | null) {
         this.core.loadSettings(this.settings, settingsPath, this.monitor, appearance);
     }

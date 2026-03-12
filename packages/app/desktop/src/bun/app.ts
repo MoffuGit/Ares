@@ -12,14 +12,6 @@ export class DesktopApp extends CoreApp {
         this.openProject(projectPath);
     }
 
-    start() {
-        super.start();
-
-        setInterval(() => {
-            this.core.drainMailbox()
-        }, 100);
-    }
-
     stop() {
         if (this.appearance) this.core.destroyAppearance(this.appearance);
         super.stop();
