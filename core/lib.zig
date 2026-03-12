@@ -27,6 +27,7 @@ export fn drainMailbox() void {
         const bytes: []const u8 = switch (ev) {
             .settingsUpdate,
             .themeUpdate,
+            .filetreeUpdate,
             => &.{},
         };
         const ptr: ?[*]const u8 = if (bytes.len > 0) bytes.ptr else null;

@@ -1,8 +1,11 @@
 import { Electroview } from "electrobun/view";
-import { BaseApp } from "@ares/shared";
+import { AppEvents, AppState, BaseApp, Emitter } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 
-export class WebviewApp extends BaseApp {
+export class WebviewApp implements BaseApp {
+    _state: AppState = { settings: null, theme: null }
+    events = new Emitter<AppEvents>;
+
     electroview =
         Electroview.defineRPC<AppRPC>({
             handlers: {
@@ -16,11 +19,6 @@ export class WebviewApp extends BaseApp {
                     themeUpdate: (theme) => {
                         this._state = { ...this._state, theme };
                         this.events.emit("themeUpdate");
-                    },
-                    worktreeUpdate: (worktree) => {
-                        console.log("worktree update");
-                        this._state = { ...this._state, worktree };
-                        this.events.emit("worktreeUpdate");
                     },
                 },
             },

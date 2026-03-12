@@ -17,6 +17,7 @@ pub const GlobalEvents = union(enum) {
 };
 
 pub const Events = union(enum) {
+    filetreeUpdate: void,
     settingsUpdate: void,
     themeUpdate: void,
 };

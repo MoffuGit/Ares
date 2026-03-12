@@ -16,7 +16,6 @@
     "@types/bun": "latest"
   },
   "dependencies": {
-    "@ares/shared": "workspace:*",
     "bun-ffi-structs": "^0.1.2"
   }
 }

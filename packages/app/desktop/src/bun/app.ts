@@ -1,4 +1,4 @@
-import { CoreApp } from "@ares/core/app";
+import { CoreApp } from "@ares/shared/core";
 import type { Pointer } from "bun:ffi";
 
 export class DesktopApp extends CoreApp {

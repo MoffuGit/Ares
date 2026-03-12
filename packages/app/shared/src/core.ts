@@ -1,20 +1,26 @@
-import { BaseApp, SchemeMap, type Settings, type Theme, type WorktreeEntry, FileType } from "@ares/shared";
 import type { Pointer } from "bun:ffi";
-import { EventType } from "./events";
-import { resolveCoreLib, type CoreLib } from "./index";
+import { resolveCoreLib, type CoreLib } from "@ares/core";
+import { EventEmitter } from "events"
+import { EventType, } from "@ares/core/events";
+import { SchemeMap, FileType } from "./index.ts";
+import { Emitter } from "./emitter.ts";
+import type { Settings, Theme, WorktreeEntry } from "./types.ts";
+import type { AppState, AppEvents, BaseApp } from "./app.ts";
 
 const toRgba = (v: number): number[] => [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
 
-export class CoreApp extends BaseApp {
-    protected core: CoreLib;
+export class CoreApp extends EventEmitter implements BaseApp {
+    readonly core: CoreLib;
     protected monitor: Pointer;
     protected settings: Pointer;
     protected io: Pointer;
     protected project: Pointer | null = null;
 
+    _state: AppState = { settings: null, theme: null }
+    events = new Emitter<AppEvents>;
+
     constructor(libPath?: string) {
         super();
-
         this.core = resolveCoreLib(libPath);
 
         const monitor = this.core.createMonitor();
@@ -49,23 +55,24 @@ export class CoreApp extends BaseApp {
     }
 
     start() {
-        this.core.events.on("SettingsUpdate", this.onSettingsUpdate);
-        this.core.events.on("ThemeUpdate", this.onThemeUpdate);
+        this.core.on("SettingsUpdate", this.onSettingsUpdate);
+        this.core.on("ThemeUpdate", this.onThemeUpdate);
         // this.core.events.on("FiletreeUpdate", this.onWorktreeUpdate);
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme() };
     }
 
     stop() {
         // this.core.events.off(String(EventType.WorktreeUpdate), this.onWorktreeUpdate);
-        this.core.events.off(String(EventType.SettingsUpdate), this.onSettingsUpdate);
-        this.core.events.off(String(EventType.ThemeUpdate), this.onThemeUpdate);
-        this.core.destroySettings(this.settings);
-        this.core.destroyMonitor(this.monitor);
-        this.core.destroyIo(this.io);
+        this.core.off(String(EventType.SettingsUpdate), this.onSettingsUpdate);
+        this.core.off(String(EventType.ThemeUpdate), this.onThemeUpdate);
+
         if (this.project) {
             this.core.destroyProject(this.project);
             this.project = null;
         }
+        this.core.destroySettings(this.settings);
+        this.core.destroyMonitor(this.monitor);
+        this.core.destroyIo(this.io);
         this.core.deinitState();
     }
 
@@ -95,13 +102,13 @@ export class CoreApp extends BaseApp {
 
     protected onSettingsUpdate = () => {
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme() };
-        this.events.emit("settingsUpdate");
-        this.events.emit("themeUpdate");
+        this.emit("settingsUpdate");
+        this.emit("themeUpdate");
     };
 
     protected onThemeUpdate = () => {
         this._state = { ...this._state, theme: this.readTheme() };
-        this.events.emit("themeUpdate");
+        this.emit("themeUpdate");
     };
 
     protected readSettings(): Settings {

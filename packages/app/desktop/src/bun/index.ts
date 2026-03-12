@@ -55,7 +55,7 @@ const mainWindow = new BrowserWindow({
 
 app.start();
 
-app.events.on("settingsUpdate", () => {
+app.on("settingsUpdate", () => {
     if (app._state.settings) {
         console.log("sending new settings:", app._state.settings);
         mainWindow.webview.rpc?.send.settingsUpdate(app._state.settings)
@@ -65,7 +65,7 @@ app.events.on("settingsUpdate", () => {
     }
 });
 
-app.events.on("themeUpdate", () => {
+app.on("themeUpdate", () => {
     if (app._state.theme) {
         mainWindow.webview.rpc?.send.themeUpdate(app._state.theme)
     }

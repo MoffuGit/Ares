@@ -4,8 +4,7 @@ const global = @import("../global.zig");
 const worktreepkg = @import("../worktree/mod.zig");
 const Worktree = worktreepkg.Worktree;
 const Entry = worktreepkg.Entry;
-// const Kind = worktreepkg.Kind;
-//
+
 const Allocator = std.mem.Allocator;
 
 pub const FileTree = @This();

@@ -1,10 +1,10 @@
 import { createContext, useContext, createSignal, onCleanup, type Accessor } from "solid-js";
-import type { App, AppState } from "../app.ts";
+import type { BaseApp, AppState } from "../app.ts";
 import type { Settings, Theme } from "../types.ts";
 
-export const AppContext = createContext<App>();
+export const AppContext = createContext<BaseApp>();
 
-export function useApp(): App {
+export function useApp(): BaseApp {
     const app = useContext(AppContext);
     if (!app) throw new Error("useApp must be used within AppContext.Provider");
     return app;
@@ -12,13 +12,13 @@ export function useApp(): App {
 
 export function useAppState(): AppState {
     const app = useApp();
-    return app.state;
+    return app._state;
 }
 
 export function useSettings(): Accessor<Settings | null> {
     const app = useApp();
-    const [settings, setSettings] = createSignal<Settings | null>(app.state.settings);
-    const handler = () => setSettings(() => app.state.settings);
+    const [settings, setSettings] = createSignal<Settings | null>(app._state.settings);
+    const handler = () => setSettings(() => app._state.settings);
     app.events.on("settingsUpdate", handler);
     onCleanup(() => app.events.off("settingsUpdate", handler));
     return settings;
@@ -26,8 +26,8 @@ export function useSettings(): Accessor<Settings | null> {
 
 export function useTheme(): Accessor<Theme | null> {
     const app = useApp();
-    const [theme, setTheme] = createSignal<Theme | null>(app.state.theme);
-    const handler = () => setTheme(() => app.state.theme);
+    const [theme, setTheme] = createSignal<Theme | null>(app._state.theme);
+    const handler = () => setTheme(() => app._state.theme);
     app.events.on("themeUpdate", handler);
     onCleanup(() => app.events.off("themeUpdate", handler));
     return theme;

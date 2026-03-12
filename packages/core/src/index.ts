@@ -96,24 +96,20 @@ function getCoreLib(libPath: string) {
     return symbols;
 }
 
-export class CoreLib {
+export class CoreLib extends EventEmitter {
     private lib: ReturnType<typeof getCoreLib>;
     private jsCallback: JSCallback | null = null;
-    private _events: EventEmitter = new EventEmitter();
 
-    get events(): EventEmitter {
-        return this._events;
-    }
 
     constructor(libPath?: string) {
+        super();
         this.lib = getCoreLib(libPath ?? DEFAULT_LIB_PATH);
         this.initState();
     }
 
     initState(): void {
-        const emitter = this._events;
         this.jsCallback = new JSCallback(
-            function handleEvent(event: number, ptr: Pointer | null, len: number | bigint): void {
+            (event: number, ptr: Pointer | null, len: number | bigint): void => {
                 const _len = typeof len === "bigint" ? Number(len) : len;
                 const _type = event as EventType;
                 const data_type = Events[_type];
@@ -122,14 +118,14 @@ export class CoreLib {
                     const event = EventsName[_type];
                     queueMicrotask(() => {
                         console.log("event received", event);
-                        emitter.emit(event);
+                        this.emit(event);
                     })
                 } else if (data_type != null && ptr != null && _len != 0) {
                     const data = data_type.unpack(toArrayBuffer(ptr, 0, _len));
                     const event = EventsName[_type];
                     queueMicrotask(() => {
                         console.log("event received", event);
-                        emitter.emit(event, data);
+                        this.emit(event, data);
                     })
 
                 }
