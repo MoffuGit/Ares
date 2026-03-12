@@ -1,6 +1,6 @@
 import { dlopen, FFIType, JSCallback, ptr, toArrayBuffer, type Pointer } from "bun:ffi";
-import { EventEmitter } from "node:events";
-import { resolve } from "node:path";
+import { EventEmitter } from "events";
+import { resolve } from "path";
 import { EventType, Events, EventsName } from "./events";
 import { Settings, Theme, WorktreeEntry } from "./structs";
 

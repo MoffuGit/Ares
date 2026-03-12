@@ -4,13 +4,11 @@ import type { Settings, Theme, WorktreeEntry } from "./types.ts";
 export type AppState = {
     settings: Settings | null;
     theme: Theme | null;
-    worktree: WorktreeEntry[];
 };
 
 export type AppEvents = {
     settingsUpdate: [];
     themeUpdate: [];
-    worktreeUpdate: [];
 };
 
 export interface App {
@@ -22,7 +20,7 @@ export interface App {
 
 export class BaseApp implements App {
     readonly events = new Emitter<AppEvents>();
-    _state: AppState = { settings: null, theme: null, worktree: [] };
+    _state: AppState = { settings: null, theme: null };
 
     get state(): AppState {
         return this._state;

@@ -1,5 +1,5 @@
 import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
-import { resolve } from "node:path";
+import { resolve } from "path";
 import { DesktopApp } from "./app.ts";
 import { AppRPC } from "src/rpc.ts";
 
@@ -69,10 +69,6 @@ app.events.on("themeUpdate", () => {
     if (app._state.theme) {
         mainWindow.webview.rpc?.send.themeUpdate(app._state.theme)
     }
-});
-
-app.events.on("worktreeUpdate", () => {
-    mainWindow.webview.rpc?.send.worktreeUpdate(app._state.worktree);
 });
 
 mainWindow.webview.on("dom-ready", () => {

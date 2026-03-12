@@ -13,7 +13,6 @@ export type AppRPC = {
         messages: {
             settingsUpdate: Settings;
             themeUpdate: Theme;
-            worktreeUpdate: WorktreeEntry[];
         };
     }>;
 };

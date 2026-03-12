@@ -1,5 +1,4 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
-import { useWorktree } from "@ares/shared/react"
 import type { WorktreeEntry } from "@ares/shared"
 import {
     SidebarProvider,
@@ -54,9 +53,15 @@ export const Route = createFileRoute('/_editor')({
     ),
 })
 
+// {worktree.slice(0,10).map((item) => (
+//     <SidebarMenuItem key={item.id}>
+//         <SidebarMenuButton size="sm">
+//             <div >{item.name}</div>
+//         </SidebarMenuButton>
+//     </SidebarMenuItem>
+// ))}
 
 function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-    const worktree = useWorktree();
 
     return (
         <Sidebar {...props}>
@@ -66,13 +71,6 @@ function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <SidebarGroup >
                     <SidebarGroupContent>
                         <SidebarMenu>
-                            {worktree.slice(0,10).map((item) => (
-                                <SidebarMenuItem key={item.id}>
-                                    <SidebarMenuButton size="sm">
-                                        <div >{item.name}</div>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>

@@ -1,7 +1,7 @@
 import { render, useKeydown } from "@ares/tui-solid";
 import { AppContext, useSettings, useTheme } from "@ares/shared/solid";
 import { TuiApp } from "./app.ts";
-import { resolve } from "node:path";
+import { resolve } from "path";
 import {
     Sidebar,
     SidebarContent,

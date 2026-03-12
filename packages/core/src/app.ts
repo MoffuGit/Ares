@@ -51,12 +51,12 @@ export class CoreApp extends BaseApp {
     start() {
         this.core.events.on("SettingsUpdate", this.onSettingsUpdate);
         this.core.events.on("ThemeUpdate", this.onThemeUpdate);
-        this.core.events.on("WorktreeUpdate", this.onWorktreeUpdate);
+        // this.core.events.on("FiletreeUpdate", this.onWorktreeUpdate);
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme() };
     }
 
     stop() {
-        this.core.events.off(String(EventType.WorktreeUpdate), this.onWorktreeUpdate);
+        // this.core.events.off(String(EventType.WorktreeUpdate), this.onWorktreeUpdate);
         this.core.events.off(String(EventType.SettingsUpdate), this.onSettingsUpdate);
         this.core.events.off(String(EventType.ThemeUpdate), this.onThemeUpdate);
         this.core.destroySettings(this.settings);
@@ -69,29 +69,29 @@ export class CoreApp extends BaseApp {
         this.core.deinitState();
     }
 
-    protected onWorktreeUpdate = () => {
-        this.refreshWorktree();
-    };
+    // protected onWorktreeUpdate = () => {
+    //     this.refreshWorktree();
+    // };
 
-    refreshWorktree() {
-        if (!this.project) return;
-        const raw = this.core.readWorktreeEntries(this.project);
-        const entries: WorktreeEntry[] = raw.map((e) => {
-            const path = e.path ?? "";
-            const parts = path.split("/");
-            return {
-                id: Number(e.id),
-                name: parts[parts.length - 1] ?? path,
-                path,
-                kind: e.kind === 1 ? "dir" : "file",
-                fileType: FileType[e.file_type] ?? "unknown",
-                depth: e.depth,
-            };
-        });
-        console.log("refreshWorktree: count=", raw.length, "entries=", JSON.stringify(entries.slice(0, 5)));
-        this._state = { ...this._state, worktree: entries };
-        this.events.emit("worktreeUpdate");
-    }
+    // refreshWorktree() {
+    //     if (!this.project) return;
+    //     const raw = this.core.readWorktreeEntries(this.project);
+    //     const entries: WorktreeEntry[] = raw.map((e) => {
+    //         const path = e.path ?? "";
+    //         const parts = path.split("/");
+    //         return {
+    //             id: Number(e.id),
+    //             name: parts[parts.length - 1] ?? path,
+    //             path,
+    //             kind: e.kind === 1 ? "dir" : "file",
+    //             fileType: FileType[e.file_type] ?? "unknown",
+    //             depth: e.depth,
+    //         };
+    //     });
+    //     console.log("refreshWorktree: count=", raw.length, "entries=", JSON.stringify(entries.slice(0, 5)));
+    //     this._state = { ...this._state, worktree: entries };
+    //     this.events.emit("worktreeUpdate");
+    // }
 
     protected onSettingsUpdate = () => {
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme() };

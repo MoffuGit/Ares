@@ -41,13 +41,3 @@ export function useTheme(): Theme | null {
     );
 }
 
-export function useWorktree(): WorktreeEntry[] {
-    const app = useApp();
-    return useSyncExternalStore(
-        (cb) => {
-            app.events.on("worktreeUpdate", cb);
-            return () => app.events.off("worktreeUpdate", cb);
-        },
-        () => app.state.worktree,
-    );
-}

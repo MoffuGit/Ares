@@ -3,11 +3,11 @@ import { type StructDef } from "bun-ffi-structs";
 export enum EventType {
     SettingsUpdate,
     ThemeUpdate,
-    WorktreeUpdate,
+    FiletreeUpdate,
 }
 
 export const EventsName: Record<EventType, string> = {
-    [EventType.WorktreeUpdate]: "WorktreeUpdate",
+    [EventType.FiletreeUpdate]: "FiletreeUpdate",
     [EventType.SettingsUpdate]: "SettingsUpdate",
     [EventType.ThemeUpdate]: "ThemeUpdate",
 };
@@ -15,5 +15,5 @@ export const EventsName: Record<EventType, string> = {
 export const Events: Record<EventType, StructDef<any> | null> = {
     [EventType.SettingsUpdate]: null,
     [EventType.ThemeUpdate]: null,
-    [EventType.WorktreeUpdate]: null,
+    [EventType.FiletreeUpdate]: null,
 };

@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { resolve } from "node:path";
+import { resolve } from "path";
 import { CoreLib } from "./index";
 
 const settingsPath = resolve(import.meta.dir, "../../../settings");
