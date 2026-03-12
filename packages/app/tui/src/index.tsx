@@ -49,7 +49,7 @@ function App() {
     );
 }
 
-const { dispose } = render(() => (
+render(() => (
     <AppContext.Provider value={bizApp}>
         <App />
     </AppContext.Provider>
