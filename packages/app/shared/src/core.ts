@@ -95,7 +95,7 @@ export class CoreApp extends EventEmitter implements BaseApp {
                 depth: e.depth,
             };
         });
-        console.log("refreshWorktree: count=", raw.length, "entries=", JSON.stringify(entries.slice(0, 5)));
+        console.log("refresh filetree: count=", raw.length, "entries=", JSON.stringify(entries.slice(0, 5)));
         this._state = { ...this._state, filetree: entries };
         this.emit("filetreeUpdate");
     }
