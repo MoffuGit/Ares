@@ -2,6 +2,7 @@ import type { ColorScheme } from "./types.ts";
 
 export type * from "./types.ts";
 export type * from "./app.ts";
+export { BaseApp } from "./app.ts";
 export * from "./emitter.ts";
 
 export const SchemeMap: Record<number, ColorScheme> = {

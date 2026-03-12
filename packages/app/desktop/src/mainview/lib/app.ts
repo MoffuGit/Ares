@@ -1,10 +1,8 @@
 import { Electroview } from "electrobun/view";
-import { Emitter, type App, type AppEvents, type AppState } from "@ares/shared";
+import { BaseApp } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 
-export class WebviewApp implements App {
-    readonly events = new Emitter<AppEvents>();
-
+export class WebviewApp extends BaseApp {
     electroview =
         Electroview.defineRPC<AppRPC>({
             handlers: {
@@ -28,12 +26,6 @@ export class WebviewApp implements App {
             },
         })
         ;
-    private _state: AppState = { settings: null, theme: null, worktree: [] };
-
-    get state(): AppState {
-        return this._state;
-    }
-
     async loadSettings() {
         this._state = await this.electroview.request.getState({})
     }
