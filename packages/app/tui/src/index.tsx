@@ -2,6 +2,20 @@ import { render, useKeydown } from "@ares/tui-solid";
 import { AppContext, useSettings, useTheme } from "@ares/shared/solid";
 import { TuiApp } from "./app.ts";
 import { resolve } from "node:path";
+import {
+    Sidebar,
+    SidebarContent,
+    SidebarGroup,
+    SidebarGroupContent,
+    SidebarGroupLabel,
+    SidebarHeader,
+    SidebarInset,
+    SidebarMenu,
+    SidebarMenuButton,
+    SidebarMenuItem,
+    SidebarProvider,
+    SidebarTrigger,
+} from "./components/sidebar.tsx";
 
 const settingsPath = resolve(import.meta.dir, "../../../../settings");
 const bizApp = new TuiApp(settingsPath);
@@ -9,7 +23,7 @@ bizApp.start();
 
 function Line(props: { children: any }) {
     return (
-        <box width={{ percent: 40 }} height={{ point: 1 }} bg="#1a1a2e" fg="#e0e0e0">
+        <box width={{ percent: 100 }} height={{ point: 1 }}>
             {props.children}
         </box>
     );
@@ -28,24 +42,67 @@ function App() {
     });
 
     return (
-        <box bg="#1a1a2e" fg="#e0e0e0" alignItems="center" justifyContent="center" flexGrow={1}>
-            <box flexDirection="column" alignItems="center" width={{ percent: 100 }} bg="#1a1a2e" fg="#e0e0e0">
-                <Line>Ares</Line>
-                <Line>scheme: {settings()?.scheme ?? "loading..."}</Line>
-                <Line>light: {settings()?.light_theme ?? "—"}</Line>
-                <Line>dark: {settings()?.dark_theme ?? "—"}</Line>
-                <Line>theme: {theme()?.name ?? "—"}</Line>
-                <Line>fg: {theme()?.fg?.join(", ") ?? "—"}</Line>
-                <Line>bg: {theme()?.bg?.join(", ") ?? "—"}</Line>
-                <Line>primaryFg: {theme()?.primaryFg?.join(", ") ?? "—"}</Line>
-                <Line>primaryBg: {theme()?.primaryBg?.join(", ") ?? "—"}</Line>
-                <Line>mutedFg: {theme()?.mutedFg?.join(", ") ?? "—"}</Line>
-                <Line>mutedBg: {theme()?.mutedBg?.join(", ") ?? "—"}</Line>
-                <Line>scrollThumb: {theme()?.scrollThumb?.join(", ") ?? "—"}</Line>
-                <Line>scrollTrack: {theme()?.scrollTrack?.join(", ") ?? "—"}</Line>
-                <Line>border: {theme()?.border?.join(", ") ?? "—"}</Line>
-            </box>
-        </box>
+        <SidebarProvider>
+            <Sidebar>
+                <SidebarHeader>
+                    <box height={{ point: 1 }}>Ares</box>
+                </SidebarHeader>
+                <SidebarContent>
+                    <SidebarGroup>
+                        <SidebarGroupLabel>Theme</SidebarGroupLabel>
+                        <SidebarGroupContent>
+                            <SidebarMenu>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton>scheme: {settings()?.scheme ?? "loading..."}</SidebarMenuButton>
+                                </SidebarMenuItem>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton>light: {settings()?.light_theme ?? "—"}</SidebarMenuButton>
+                                </SidebarMenuItem>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton>dark: {settings()?.dark_theme ?? "—"}</SidebarMenuButton>
+                                </SidebarMenuItem>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton>theme: {theme()?.name ?? "—"}</SidebarMenuButton>
+                                </SidebarMenuItem>
+                            </SidebarMenu>
+                        </SidebarGroupContent>
+                    </SidebarGroup>
+                    <SidebarGroup>
+                        <SidebarGroupLabel>Colors</SidebarGroupLabel>
+                        <SidebarGroupContent>
+                            <SidebarMenu>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton>fg: {theme()?.fg?.join(", ") ?? "—"}</SidebarMenuButton>
+                                </SidebarMenuItem>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton>bg: {theme()?.bg?.join(", ") ?? "—"}</SidebarMenuButton>
+                                </SidebarMenuItem>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton>primaryFg: {theme()?.primaryFg?.join(", ") ?? "—"}</SidebarMenuButton>
+                                </SidebarMenuItem>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton>primaryBg: {theme()?.primaryBg?.join(", ") ?? "—"}</SidebarMenuButton>
+                                </SidebarMenuItem>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton>mutedFg: {theme()?.mutedFg?.join(", ") ?? "—"}</SidebarMenuButton>
+                                </SidebarMenuItem>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton>mutedBg: {theme()?.mutedBg?.join(", ") ?? "—"}</SidebarMenuButton>
+                                </SidebarMenuItem>
+                            </SidebarMenu>
+                        </SidebarGroupContent>
+                    </SidebarGroup>
+                </SidebarContent>
+            </Sidebar>
+            <SidebarInset>
+                <box flexDirection="row" height={{ point: 1 }}>
+                    <SidebarTrigger />
+                </box>
+                <box flexDirection="column" flexGrow={1} padding={{ all: { point: 1 } }}>
+                    <Line>Main content area</Line>
+                </box>
+            </SidebarInset>
+        </SidebarProvider>
     );
 }
 
