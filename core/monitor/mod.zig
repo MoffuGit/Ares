@@ -98,12 +98,18 @@ pub fn watchPath(
     self.next_id += 1;
 
     const path = try self.alloc.dupe(u8, abs_path);
-    const req = try self.alloc.create(WatchRequest);
 
-    req.* = .{
-        .id = id,
+    const entry = self.alloc.create(WatcherEntry) catch {
+        log.err("failed to allocate watcher entry", .{});
+        self.alloc.free(path);
+        return error.OutOfMemory;
+    };
+
+    entry.* = .{
+        .watcher = .{},
         .path = path,
-        .alloc = self.alloc,
+        .id = id,
+        .monitor = self,
         .userdata = userdata,
         .callback = (struct {
             fn cb(inner_userdata: ?*anyopaque, inner_id: u64, inner_events: u32) void {
@@ -112,16 +118,37 @@ pub fn watchPath(
         }.cb),
     };
 
-    if (self.thread.mailbox.push(.{ .add = req }, .instant) != 0) {
-        self.thread.wakeup.notify() catch |err| {
-            log.err("error notifying monitor thread to wakeup: {}", .{err});
-        };
-    } else {
+    self.thread.fs.watch(path, &entry.watcher, WatcherEntry, entry, fsEventsCallback) catch |err| {
+        log.err("failed to start watcher for '{s}': {}", .{ path, err });
         self.alloc.free(path);
-        self.alloc.destroy(req);
-    }
+        self.alloc.destroy(entry);
+        return error.OutOfMemory;
+    };
+
+    self.watchers.put(id, entry) catch {
+        log.err("failed to track watcher id={}", .{id});
+        self.thread.fs.cancel(&entry.watcher);
+        self.alloc.free(entry.path);
+        self.alloc.destroy(entry);
+        return error.OutOfMemory;
+    };
 
     return id;
+}
+
+fn fsEventsCallback(
+    entry: ?*Monitor.WatcherEntry,
+    _: *xev.FileSystem.Watcher,
+    _: []const u8,
+    events: u32,
+) xev.CallbackAction {
+    const e = entry orelse return .rearm;
+    e.pending_events |= events;
+    if (!e.dirty) {
+        e.dirty = true;
+        e.monitor.dirty_queue.append(e.monitor.alloc, e) catch {};
+    }
+    return .rearm;
 }
 
 pub fn unwatch(self: *Monitor, id: u64) void {

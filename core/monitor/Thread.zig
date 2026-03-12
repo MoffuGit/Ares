@@ -174,7 +174,10 @@ fn wakeupCallback(
 }
 
 fn drainMailbox(self: *Thread) void {
-    while (self.mailbox.pop()) |message| {
+    var iter = self.mailbox.drain();
+    defer iter.deinit();
+
+    while (iter.next()) |message| {
         switch (message) {
             .add => |req| {
                 self.monitor.addWatcher(&self.fs, req, fsEventsCallback);
@@ -184,4 +187,6 @@ fn drainMailbox(self: *Thread) void {
             },
         }
     }
+
+    std.debug.assert(self.mailbox.len == 0);
 }
