@@ -66,7 +66,7 @@ function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <SidebarGroup >
                     <SidebarGroupContent>
                         <SidebarMenu>
-                            {worktree.map((item) => (
+                            {worktree.slice(0,10).map((item) => (
                                 <SidebarMenuItem key={item.id}>
                                     <SidebarMenuButton size="sm">
                                         <div >{item.name}</div>
