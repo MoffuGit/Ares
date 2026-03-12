@@ -9,21 +9,14 @@ const log = std.log.scoped(.monitor);
 
 pub const Thread = @This();
 
-pub const Mailbox = BlockingQueue(messagepkg.Message, 1024);
-
 const FLUSH_INTERVAL_MS = 150;
 
 alloc: Allocator,
 loop: xev.Loop,
 
-mailbox: *Mailbox,
-
 fs: xev.FileSystem,
 
 monitor: *Monitor,
-
-wakeup: xev.Async,
-wakeup_c: xev.Completion = .{},
 
 stop: xev.Async,
 stop_c: xev.Completion = .{},
@@ -34,12 +27,6 @@ flush_timer_c: xev.Completion = .{},
 pub fn init(alloc: Allocator, monitor: *Monitor) !Thread {
     var loop = try xev.Loop.init(.{});
     errdefer loop.deinit();
-
-    var mailbox = try Mailbox.create(alloc);
-    errdefer mailbox.destroy(alloc);
-
-    var wakeup_h = try xev.Async.init();
-    errdefer wakeup_h.deinit();
 
     var stop_h = try xev.Async.init();
     errdefer stop_h.deinit();
@@ -54,8 +41,6 @@ pub fn init(alloc: Allocator, monitor: *Monitor) !Thread {
         .monitor = monitor,
         .alloc = alloc,
         .loop = loop,
-        .mailbox = mailbox,
-        .wakeup = wakeup_h,
         .stop = stop_h,
         .fs = fs_h,
         .flush_timer = flush_timer,
@@ -63,22 +48,10 @@ pub fn init(alloc: Allocator, monitor: *Monitor) !Thread {
 }
 
 pub fn deinit(self: *Thread) void {
-    while (self.mailbox.pop()) |message| {
-        switch (message) {
-            .add => |req| {
-                req.alloc.free(req.path);
-                req.alloc.destroy(req);
-            },
-            .remove => {},
-        }
-    }
-
     self.flush_timer.deinit();
     self.fs.deinit();
-    self.wakeup.deinit();
     self.stop.deinit();
     self.loop.deinit();
-    self.mailbox.destroy(self.alloc);
 }
 
 pub fn threadMain(self: *Thread) void {
@@ -91,7 +64,6 @@ fn threadMain_(self: *Thread) !void {
     defer log.debug("monitor thread exited", .{});
 
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
-    self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
     self.scheduleFlushTimer();
     try self.fs.start(&self.loop);
 
@@ -153,40 +125,4 @@ fn fsEventsCallback(
         e.monitor.dirty_queue.append(e.monitor.alloc, e) catch {};
     }
     return .rearm;
-}
-
-fn wakeupCallback(
-    self_: ?*Thread,
-    _: *xev.Loop,
-    _: *xev.Completion,
-    r: xev.Async.WaitError!void,
-) xev.CallbackAction {
-    _ = r catch |err| {
-        log.err("error in monitor wakeup err={}", .{err});
-        return .rearm;
-    };
-
-    const s = self_.?;
-
-    s.drainMailbox();
-
-    return .rearm;
-}
-
-fn drainMailbox(self: *Thread) void {
-    var iter = self.mailbox.drain();
-    defer iter.deinit();
-
-    while (iter.next()) |message| {
-        switch (message) {
-            .add => |req| {
-                self.monitor.addWatcher(&self.fs, req, fsEventsCallback);
-            },
-            .remove => |id| {
-                self.monitor.removeWatcher(&self.fs, id);
-            },
-        }
-    }
-
-    std.debug.assert(self.mailbox.len == 0);
 }
