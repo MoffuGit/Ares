@@ -20,6 +20,7 @@ next_id: std.atomic.Value(u64) = .{ .raw = 1 },
 entries: Entries,
 id_to_path: std.AutoHashMap(u64, []const u8),
 id_to_abs_path: std.AutoHashMap(u64, []const u8),
+file_type_cache: std.StringHashMap([]const u8),
 
 pub fn init(alloc: Allocator) !Snapshot {
     const entries = try Entries.init(alloc);
@@ -31,6 +32,7 @@ pub fn init(alloc: Allocator) !Snapshot {
         .entries = entries,
         .id_to_path = std.AutoHashMap(u64, []const u8).init(alloc),
         .id_to_abs_path = std.AutoHashMap(u64, []const u8).init(alloc),
+        .file_type_cache = std.StringHashMap([]const u8).init(alloc),
     };
 }
 
@@ -38,6 +40,7 @@ pub fn deinit(self: *Snapshot) void {
     self.entries.deinit();
     self.id_to_path.deinit();
     self.id_to_abs_path.deinit();
+    self.file_type_cache.deinit();
     self.arena.deinit();
 }
 
@@ -65,8 +68,16 @@ pub fn internPathSingle(self: *Snapshot, path: []const u8) ![]const u8 {
     return try self.arena.allocator().dupe(u8, path);
 }
 
+pub fn internFileType(self: *Snapshot, file_type: []const u8) ![]const u8 {
+    if (self.file_type_cache.get(file_type)) |cached| return cached;
+    const interned = try self.arena.allocator().dupe(u8, file_type);
+    try self.file_type_cache.put(interned, interned);
+    return interned;
+}
+
 pub fn insertInterned(self: *Snapshot, id: u64, path: []const u8, abs_path: []const u8, kind: Kind, file_type: []const u8, stat: Stat) !void {
-    try self.entries.insert(path, .{ .id = id, .kind = kind, .file_type = file_type, .stat = stat });
+    const interned_ft = try self.internFileType(file_type);
+    try self.entries.insert(path, .{ .id = id, .kind = kind, .file_type = interned_ft, .stat = stat });
     try self.id_to_path.put(id, path);
     const interned_abs = try self.arena.allocator().dupe(u8, abs_path);
     try self.id_to_abs_path.put(id, interned_abs);

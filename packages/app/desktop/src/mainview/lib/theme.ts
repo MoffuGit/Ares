@@ -1,14 +1,5 @@
 import type { Theme } from "@ares/shared";
 
-function rgbaToString(rgba: number[]): string {
-    const [r, g, b] = rgba;
-    const a = rgba.length >= 4 ? rgba[3] / 255 : 1;
-    if (a < 1) {
-        return `rgba(${r}, ${g}, ${b}, ${a.toFixed(3)})`;
-    }
-    return `rgb(${r}, ${g}, ${b})`;
-}
-
 const themeVarMap: Record<string, keyof Theme> = {
     "--background": "bg",
     "--foreground": "fg",
@@ -47,9 +38,9 @@ const themeVarMap: Record<string, keyof Theme> = {
 export function applyTheme(theme: Theme) {
     const root = document.documentElement;
     for (const [cssVar, themeKey] of Object.entries(themeVarMap)) {
-        const rgba = theme[themeKey];
-        if (Array.isArray(rgba)) {
-            root.style.setProperty(cssVar, rgbaToString(rgba));
+        const color = theme[themeKey];
+        if (typeof color === "string") {
+            root.style.setProperty(cssVar, color);
         }
     }
 }

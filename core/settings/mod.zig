@@ -1,7 +1,6 @@
 const std = @import("std");
 const global = @import("../global.zig");
 const Allocator = std.mem.Allocator;
-const Theme = @import("theme/mod.zig");
 const keymapspkg = @import("../keymaps/mod.zig");
 const Keymaps = keymapspkg.Keymaps;
 const Action = keymapspkg.Action;
@@ -15,10 +14,14 @@ pub const Settings = @This();
 pub const Scheme = enum { light, dark, system };
 pub const ColorScheme = enum { light, dark };
 
-const Themes = std.StringHashMapUnmanaged(Theme);
+const Themes = std.StringHashMapUnmanaged([]const u8);
 
 const DEFAULT_DARK: []const u8 = "dark.json";
 const DEFAULT_LIGHT: []const u8 = "light.json";
+
+const FALLBACK_THEME_JSON: []const u8 =
+    \\{"name":"fallback","colors":{},"theme":{"bg":"","fg":"","primaryBg":"","primaryFg":"","mutedBg":"","mutedFg":"","scrollThumb":"","scrollTrack":"","border":"","card":"","cardFg":"","popover":"","popoverFg":"","secondary":"","secondaryFg":"","accent":"","accentFg":"","destructive":"","destructiveFg":"","input":"","ring":"","chart1":"","chart2":"","chart3":"","chart4":"","chart5":"","sidebar":"","sidebarFg":"","sidebarPrimary":"","sidebarPrimaryFg":"","sidebarAccent":"","sidebarAccentFg":"","sidebarBorder":"","sidebarRing":""}}
+;
 
 pub const LoadError = error{
     SettingsNotFound,
@@ -46,8 +49,7 @@ themes: Themes = .{},
 light_theme: []const u8 = DEFAULT_LIGHT,
 dark_theme: []const u8 = DEFAULT_DARK,
 
-active_theme: Theme = Theme.fallback,
-theme: *const Theme = &Theme.fallback,
+theme_json: []const u8 = FALLBACK_THEME_JSON,
 
 keymaps: Keymaps = .{ .tries = undefined },
 keymaps_initialized: bool = false,
@@ -67,7 +69,6 @@ pub fn create(alloc: Allocator) !*Settings {
     self.* = .{
         .alloc = alloc,
     };
-    self.theme = &self.active_theme;
 
     return self;
 }
@@ -78,7 +79,8 @@ pub fn destroy(self: *Settings) void {
     if (self.dark_theme.len > 0 and self.dark_theme.ptr != DEFAULT_DARK.ptr) self.alloc.free(self.dark_theme);
     var it = self.themes.iterator();
     while (it.next()) |entry| {
-        entry.value_ptr.deinit(self.alloc);
+        self.alloc.free(entry.key_ptr.*);
+        self.alloc.free(entry.value_ptr.*);
     }
     self.themes.deinit(self.alloc);
     if (self.keymaps_initialized) {
@@ -178,13 +180,31 @@ fn loadThemes(self: *Settings, dir: std.fs.Dir) LoadError!void {
         defer self.alloc.free(theme_with_ext);
 
         const theme_content = td.readFileAlloc(self.alloc, theme_with_ext, 1024 * 1024) catch continue;
-        defer self.alloc.free(theme_content);
+        errdefer self.alloc.free(theme_content);
 
-        const theme = Theme.parse(self.alloc, theme_content) catch continue;
+        const ThemeMeta = struct { name: []const u8 };
+        const parsed = std.json.parseFromSlice(ThemeMeta, self.alloc, theme_content, .{ .ignore_unknown_fields = true }) catch {
+            self.alloc.free(theme_content);
+            continue;
+        };
+        defer parsed.deinit();
 
-        std.log.debug("theme {s}: {}", .{ name, theme });
+        const key = self.alloc.dupe(u8, parsed.value.name) catch {
+            self.alloc.free(theme_content);
+            continue;
+        };
 
-        self.themes.put(self.alloc, theme.name, theme) catch continue;
+        if (self.themes.getPtr(key)) |existing| {
+            self.alloc.free(existing.*);
+            existing.* = theme_content;
+            self.alloc.free(key);
+        } else {
+            self.themes.put(self.alloc, key, theme_content) catch {
+                self.alloc.free(key);
+                self.alloc.free(theme_content);
+                continue;
+            };
+        }
     }
 
     self.applyThemeLocked();
@@ -215,20 +235,6 @@ fn loadSettings(self: *Settings, dir: std.fs.Dir) !void {
     }
 }
 
-pub fn getTheme(self: *Settings) *const Theme {
-    self.mutex.lock();
-    defer self.mutex.unlock();
-    return self.getThemeLocked();
-}
-
-fn getThemeLocked(self: *Settings) *const Theme {
-    const dark = self.scheme == .dark or (self.scheme == .system and self.system_scheme == .dark);
-
-    const name = if (dark) self.dark_theme else self.light_theme;
-
-    return self.themes.getPtr(name) orelse &Theme.fallback;
-}
-
 pub fn applyTheme(self: *Settings) void {
     self.mutex.lock();
     defer self.mutex.unlock();
@@ -236,10 +242,9 @@ pub fn applyTheme(self: *Settings) void {
 }
 
 fn applyThemeLocked(self: *Settings) void {
-    const source = self.getThemeLocked();
-    std.log.debug("selected theme: {s}", .{source.name});
-    self.active_theme = source.*;
-    self.theme = &self.active_theme;
+    const dark = self.scheme == .dark or (self.scheme == .system and self.system_scheme == .dark);
+    const name = if (dark) self.dark_theme else self.light_theme;
+    self.theme_json = self.themes.get(name) orelse FALLBACK_THEME_JSON;
 }
 
 pub fn setSystemScheme(self: *Settings, scheme: ColorScheme) void {
@@ -375,16 +380,11 @@ pub fn keymapBindingString(self: *Settings, action: Action) ?[]const u8 {
     return self.binding_map.get(action.key());
 }
 
-test {
-    _ = Theme;
-}
-
 test "loadSettings parses settings.json" {
     const alloc = std.testing.allocator;
     var self = Settings{
         .alloc = alloc,
     };
-    self.theme = &self.active_theme;
     defer {
         if (self.light_theme.ptr != DEFAULT_LIGHT.ptr) alloc.free(self.light_theme);
         if (self.dark_theme.ptr != DEFAULT_DARK.ptr) alloc.free(self.dark_theme);
@@ -416,7 +416,7 @@ test "loadSettings returns error for missing settings.json" {
     var self = Settings{
         .alloc = alloc,
     };
-    self.theme = &self.active_theme;
+
     defer {
         if (self.keymaps_initialized) self.keymaps.deinit();
         self.clearBindingMap();
@@ -435,7 +435,7 @@ test "loadSettings returns error for invalid json" {
     var self = Settings{
         .alloc = alloc,
     };
-    self.theme = &self.active_theme;
+
     defer {
         if (self.keymaps_initialized) self.keymaps.deinit();
         self.clearBindingMap();

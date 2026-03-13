@@ -7,7 +7,59 @@ import { Emitter } from "./emitter.ts";
 import type { Settings, Theme, WorktreeEntry } from "./types.ts";
 import type { AppState, AppEvents, BaseApp } from "./app.ts";
 
-const toRgba = (v: number): number[] => [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
+type RawThemeFile = {
+    name: string;
+    colors: Record<string, string>;
+    theme: Record<string, string> & {
+        fileType?: Record<string, string>;
+    };
+};
+
+const THEME_KEYS = [
+    "bg", "fg", "primaryBg", "primaryFg", "mutedBg", "mutedFg",
+    "scrollThumb", "scrollTrack", "border", "card", "cardFg",
+    "popover", "popoverFg", "secondary", "secondaryFg",
+    "accent", "accentFg", "destructive", "destructiveFg",
+    "input", "ring", "chart1", "chart2", "chart3", "chart4", "chart5",
+    "sidebar", "sidebarFg", "sidebarPrimary", "sidebarPrimaryFg",
+    "sidebarAccent", "sidebarAccentFg", "sidebarBorder", "sidebarRing",
+] as const;
+
+function normalizeHex(hex: string): string {
+    const h = hex.toLowerCase();
+    if (h.length === 7) return h + "ff";
+    if (h.length === 9) return h;
+    return "#000000ff";
+}
+
+function resolveColor(value: string, colors: Record<string, string>): string {
+    if (value.startsWith("#")) return normalizeHex(value);
+    const resolved = colors[value];
+    if (resolved) return normalizeHex(resolved);
+    return "#000000ff";
+}
+
+const FALLBACK_THEME: Theme = {
+    name: "fallback",
+    fg: "#dcdcdcff", bg: "#1e1e1eff",
+    primaryBg: "#282828ff", primaryFg: "#c8c8c8ff",
+    mutedBg: "#3c3c3cff", mutedFg: "#a0a0a0ff",
+    scrollThumb: "#646464ff", scrollTrack: "#323232ff",
+    border: "#00ff00ff",
+    card: "#1e1e1eff", cardFg: "#dcdcdcff",
+    popover: "#1e1e1eff", popoverFg: "#dcdcdcff",
+    secondary: "#3c3c3cff", secondaryFg: "#a0a0a0ff",
+    accent: "#3c3c3cff", accentFg: "#a0a0a0ff",
+    destructive: "#dc2626ff", destructiveFg: "#ffffffff",
+    input: "#323232ff", ring: "#282828ff",
+    chart1: "#e76f51ff", chart2: "#2a9d8fff", chart3: "#e9c46aff",
+    chart4: "#a78bfaff", chart5: "#f4845fff",
+    sidebar: "#3c3c3cff", sidebarFg: "#dcdcdcff",
+    sidebarPrimary: "#282828ff", sidebarPrimaryFg: "#c8c8c8ff",
+    sidebarAccent: "#3c3c3cff", sidebarAccentFg: "#a0a0a0ff",
+    sidebarBorder: "#323232ff", sidebarRing: "#282828ff",
+    fileType: {},
+};
 
 export class CoreApp extends EventEmitter implements BaseApp {
     readonly core: CoreLib;
@@ -127,43 +179,30 @@ export class CoreApp extends EventEmitter implements BaseApp {
     }
 
     protected readTheme(): Theme {
-        const raw = this.core.readTheme(this.settings);
-        return {
-            name: raw.name ?? "",
-            fg: toRgba(raw.fg),
-            bg: toRgba(raw.bg),
-            primaryBg: toRgba(raw.primaryBg),
-            primaryFg: toRgba(raw.primaryFg),
-            mutedBg: toRgba(raw.mutedBg),
-            mutedFg: toRgba(raw.mutedFg),
-            scrollThumb: toRgba(raw.scrollThumb),
-            scrollTrack: toRgba(raw.scrollTrack),
-            border: toRgba(raw.border),
-            card: toRgba(raw.card),
-            cardFg: toRgba(raw.cardFg),
-            popover: toRgba(raw.popover),
-            popoverFg: toRgba(raw.popoverFg),
-            secondary: toRgba(raw.secondary),
-            secondaryFg: toRgba(raw.secondaryFg),
-            accent: toRgba(raw.accent),
-            accentFg: toRgba(raw.accentFg),
-            destructive: toRgba(raw.destructive),
-            destructiveFg: toRgba(raw.destructiveFg),
-            input: toRgba(raw.input),
-            ring: toRgba(raw.ring),
-            chart1: toRgba(raw.chart1),
-            chart2: toRgba(raw.chart2),
-            chart3: toRgba(raw.chart3),
-            chart4: toRgba(raw.chart4),
-            chart5: toRgba(raw.chart5),
-            sidebar: toRgba(raw.sidebar),
-            sidebarFg: toRgba(raw.sidebarFg),
-            sidebarPrimary: toRgba(raw.sidebarPrimary),
-            sidebarPrimaryFg: toRgba(raw.sidebarPrimaryFg),
-            sidebarAccent: toRgba(raw.sidebarAccent),
-            sidebarAccentFg: toRgba(raw.sidebarAccentFg),
-            sidebarBorder: toRgba(raw.sidebarBorder),
-            sidebarRing: toRgba(raw.sidebarRing),
-        };
+        try {
+            const json = this.core.readThemeJson(this.settings);
+            const raw: RawThemeFile = JSON.parse(json);
+
+            const resolved: Record<string, string> = {};
+            for (const key of THEME_KEYS) {
+                const ref = raw.theme[key];
+                resolved[key] = ref ? resolveColor(ref, raw.colors) : "#000000ff";
+            }
+
+            const fileType: Record<string, string> = {};
+            if (raw.theme.fileType) {
+                for (const [key, value] of Object.entries(raw.theme.fileType)) {
+                    fileType[key] = resolveColor(value, raw.colors);
+                }
+            }
+
+            return {
+                name: raw.name ?? "unknown",
+                ...resolved,
+                fileType,
+            } as Theme;
+        } catch {
+            return FALLBACK_THEME;
+        }
     }
 }

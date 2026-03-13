@@ -2,7 +2,7 @@ import { dlopen, FFIType, JSCallback, ptr, toArrayBuffer, type Pointer } from "b
 import { EventEmitter } from "events";
 import { resolve } from "path";
 import { EventType, Events, EventsName } from "./events";
-import { Settings, Theme, WorktreeEntry } from "./structs";
+import { Settings, WorktreeEntry } from "./structs";
 
 const DEFAULT_LIB_PATH = resolve(import.meta.dir, "../../../zig-out/lib/libcore.dylib");
 
@@ -50,8 +50,12 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.pointer],
                 returns: FFIType.void,
             },
-            readTheme: {
-                args: [FFIType.pointer, FFIType.pointer],
+            getThemeJsonLen: {
+                args: [FFIType.pointer],
+                returns: FFIType.u64,
+            },
+            readThemeJson: {
+                args: [FFIType.pointer, FFIType.pointer, FFIType.u64],
                 returns: FFIType.void,
             },
             createIo: {
@@ -192,12 +196,14 @@ export class CoreLib extends EventEmitter {
         }
     }
 
-    readTheme(settings: Pointer) {
+    readThemeJson(settings: Pointer): string {
         this.lib.symbols.lockSettings(settings);
         try {
-            const buf = new ArrayBuffer(Theme.size);
-            this.lib.symbols.readTheme(settings, ptr(buf));
-            return Theme.unpack(buf);
+            const len = Number(this.lib.symbols.getThemeJsonLen(settings));
+            if (len === 0) return "{}";
+            const buf = new ArrayBuffer(len);
+            this.lib.symbols.readThemeJson(settings, ptr(buf), len);
+            return new TextDecoder().decode(buf);
         } finally {
             this.lib.symbols.unlockSettings(settings);
         }

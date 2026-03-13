@@ -73,22 +73,22 @@ function App() {
                         <SidebarGroupContent>
                             <SidebarMenu>
                                 <SidebarMenuItem>
-                                    <SidebarMenuButton>fg: {theme()?.fg?.join(", ") ?? "—"}</SidebarMenuButton>
+                                    <SidebarMenuButton>fg: {theme()?.fg ?? "—"}</SidebarMenuButton>
                                 </SidebarMenuItem>
                                 <SidebarMenuItem>
-                                    <SidebarMenuButton>bg: {theme()?.bg?.join(", ") ?? "—"}</SidebarMenuButton>
+                                    <SidebarMenuButton>bg: {theme()?.bg ?? "—"}</SidebarMenuButton>
                                 </SidebarMenuItem>
                                 <SidebarMenuItem>
-                                    <SidebarMenuButton>primaryFg: {theme()?.primaryFg?.join(", ") ?? "—"}</SidebarMenuButton>
+                                    <SidebarMenuButton>primaryFg: {theme()?.primaryFg ?? "—"}</SidebarMenuButton>
                                 </SidebarMenuItem>
                                 <SidebarMenuItem>
-                                    <SidebarMenuButton>primaryBg: {theme()?.primaryBg?.join(", ") ?? "—"}</SidebarMenuButton>
+                                    <SidebarMenuButton>primaryBg: {theme()?.primaryBg ?? "—"}</SidebarMenuButton>
                                 </SidebarMenuItem>
                                 <SidebarMenuItem>
-                                    <SidebarMenuButton>mutedFg: {theme()?.mutedFg?.join(", ") ?? "—"}</SidebarMenuButton>
+                                    <SidebarMenuButton>mutedFg: {theme()?.mutedFg ?? "—"}</SidebarMenuButton>
                                 </SidebarMenuItem>
                                 <SidebarMenuItem>
-                                    <SidebarMenuButton>mutedBg: {theme()?.mutedBg?.join(", ") ?? "—"}</SidebarMenuButton>
+                                    <SidebarMenuButton>mutedBg: {theme()?.mutedBg ?? "—"}</SidebarMenuButton>
                                 </SidebarMenuItem>
                             </SidebarMenu>
                         </SidebarGroupContent>

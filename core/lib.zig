@@ -83,85 +83,13 @@ export fn readSettings(settings: *Settings, @"extern": *ExternSettings) void {
     };
 }
 
-pub const ExternTheme = extern struct {
-    name: u64,
-    len: u64,
-    fg: [4]u8,
-    bg: [4]u8,
-    primaryBg: [4]u8,
-    primaryFg: [4]u8,
-    mutedBg: [4]u8,
-    mutedFg: [4]u8,
-    scrollThumb: [4]u8,
-    scrollTrack: [4]u8,
-    border: [4]u8,
-    card: [4]u8,
-    cardFg: [4]u8,
-    popover: [4]u8,
-    popoverFg: [4]u8,
-    secondary: [4]u8,
-    secondaryFg: [4]u8,
-    accent: [4]u8,
-    accentFg: [4]u8,
-    destructive: [4]u8,
-    destructiveFg: [4]u8,
-    input: [4]u8,
-    ring: [4]u8,
-    chart1: [4]u8,
-    chart2: [4]u8,
-    chart3: [4]u8,
-    chart4: [4]u8,
-    chart5: [4]u8,
-    sidebar: [4]u8,
-    sidebarFg: [4]u8,
-    sidebarPrimary: [4]u8,
-    sidebarPrimaryFg: [4]u8,
-    sidebarAccent: [4]u8,
-    sidebarAccentFg: [4]u8,
-    sidebarBorder: [4]u8,
-    sidebarRing: [4]u8,
-};
+export fn getThemeJsonLen(settings: *Settings) u64 {
+    return settings.theme_json.len;
+}
 
-export fn readTheme(settings: *Settings, @"extern": *ExternTheme) void {
-    const theme = settings.theme;
-    @"extern".* = .{
-        .name = @intFromPtr(theme.name.ptr),
-        .len = theme.name.len,
-        .bg = theme.bg,
-        .fg = theme.fg,
-        .border = theme.border,
-        .mutedBg = theme.mutedBg,
-        .mutedFg = theme.mutedFg,
-        .primaryBg = theme.primaryBg,
-        .primaryFg = theme.primaryFg,
-        .scrollThumb = theme.scrollThumb,
-        .scrollTrack = theme.scrollTrack,
-        .card = theme.card,
-        .cardFg = theme.cardFg,
-        .popover = theme.popover,
-        .popoverFg = theme.popoverFg,
-        .secondary = theme.secondary,
-        .secondaryFg = theme.secondaryFg,
-        .accent = theme.accent,
-        .accentFg = theme.accentFg,
-        .destructive = theme.destructive,
-        .destructiveFg = theme.destructiveFg,
-        .input = theme.input,
-        .ring = theme.ring,
-        .chart1 = theme.chart1,
-        .chart2 = theme.chart2,
-        .chart3 = theme.chart3,
-        .chart4 = theme.chart4,
-        .chart5 = theme.chart5,
-        .sidebar = theme.sidebar,
-        .sidebarFg = theme.sidebarFg,
-        .sidebarPrimary = theme.sidebarPrimary,
-        .sidebarPrimaryFg = theme.sidebarPrimaryFg,
-        .sidebarAccent = theme.sidebarAccent,
-        .sidebarAccentFg = theme.sidebarAccentFg,
-        .sidebarBorder = theme.sidebarBorder,
-        .sidebarRing = theme.sidebarRing,
-    };
+export fn readThemeJson(settings: *Settings, out_buf: [*]u8, buf_len: u64) void {
+    const len = @min(settings.theme_json.len, buf_len);
+    @memcpy(out_buf[0..len], settings.theme_json[0..len]);
 }
 
 export fn createIo() ?*Io {
