@@ -36,7 +36,7 @@ export const Route = createFileRoute('/_editor')({
                     </div>
                     <div className='flex-1 flex flex-row overflow-hidden px-4 bg-sidebar'>
                         <AppSidebar />
-                        <SidebarInset className='rounded-md bg-muted'>
+                        <SidebarInset className='rounded-xl bg-muted'>
                             <div className="flex flex-col gap-4 p-4">
                                 <div className="grid auto-rows-min gap-4 md:grid-cols-3">
                                     <div className="aspect-video rounded-sm bg-muted" />
