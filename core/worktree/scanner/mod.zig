@@ -94,8 +94,10 @@ pub fn initial_scan(self: *Scanner) !void {
     try self.scanRecursive(id);
 
     if (!builtin.is_test) {
-        const watcher_id = try self.monitor.watchPath(self.abs_root, Scanner, self, monitorCallback);
-        try self.watcher_to_entry.put(watcher_id, id);
+        const watcher_id = self.monitor.watchPath(self.abs_root, Scanner, self, monitorCallback) catch null;
+        if (watcher_id) |_id| {
+            try self.watcher_to_entry.put(_id, id);
+        }
     }
 
     var update = UpdatedEntriesSet.init(self.alloc);
@@ -155,8 +157,10 @@ fn scanRecursive(self: *Scanner, dir_id: u64) !void {
                     break :blk self.snapshot.getAbsPathById(child_id) orelse continue;
                 };
                 if (!builtin.is_test) {
-                    const watcher_id = try self.monitor.watchPath(child_abs, Scanner, self, monitorCallback);
-                    try self.watcher_to_entry.put(watcher_id, child_id);
+                    const watcher_id = self.monitor.watchPath(child_abs, Scanner, self, monitorCallback) catch null;
+                    if (watcher_id) |id| {
+                        try self.watcher_to_entry.put(id, child_id);
+                    }
                 }
             }
         }
