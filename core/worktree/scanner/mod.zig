@@ -91,7 +91,9 @@ pub fn initial_scan(self: *Scanner) !void {
         try self.snapshot.insertInterned(id, root_path, root_abs, .dir, .unknown, root_stat);
     }
 
-    try self.scanRecursive(id);
+    var count: usize = 0;
+
+    try self.scanRecursive(id, &count);
 
     if (!builtin.is_test) {
         const watcher_id = self.monitor.watchPath(self.abs_root, Scanner, self, monitorCallback) catch null;
@@ -110,7 +112,7 @@ pub fn process_scan_by_id(_: *Scanner, _: u64) !void {
     unreachable;
 }
 
-fn scanRecursive(self: *Scanner, dir_id: u64) !void {
+fn scanRecursive(self: *Scanner, dir_id: u64, count: *usize) !void {
     const rel_path = blk: {
         self.snapshot.mutex.lock();
         defer self.snapshot.mutex.unlock();
@@ -166,8 +168,18 @@ fn scanRecursive(self: *Scanner, dir_id: u64) !void {
         }
     }
 
+    if (count.* > 1000) {
+        count.* = 0;
+        var update = UpdatedEntriesSet.init(self.alloc);
+        defer update.deinit();
+
+        global.state.emitGlobal(.{ .worktreeUpdate = update });
+    } else {
+        count.* += 1;
+    }
+
     for (child_dirs.items) |child_id| {
-        try self.scanRecursive(child_id);
+        try self.scanRecursive(child_id, count);
     }
 }
 
@@ -322,7 +334,10 @@ fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8
                     const watcher_id = try self.monitor.watchPath(child_abs, Scanner, self, monitorCallback);
                     try self.watcher_to_entry.put(watcher_id, id);
                 }
-                try self.scanRecursive(id);
+
+                var count: usize = 0;
+
+                try self.scanRecursive(id, &count);
             }
         }
     }

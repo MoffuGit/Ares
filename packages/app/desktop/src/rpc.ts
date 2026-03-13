@@ -8,9 +8,10 @@ export type AppRPC = {
             getTheme: { params: {}; response: Theme },
             getState: { params: {}; response: AppState };
             gitFileTree: { params: {}; response: WorktreeEntry[] }
-            selectEntry: { params: { id: number }; response: {} };
         };
-        messages: {};
+        messages: {
+            selectEntry: number;
+        };
     }>;
     webview: RPCSchema<{
         requests: {};
