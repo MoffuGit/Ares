@@ -18,7 +18,7 @@ export function FileTree() {
                 <SidebarMenu>
                     {filetree && filetree.map((item) => (
                         <SidebarMenuItem key={item.id}>
-                            <SidebarMenuButton onClick={() => app.selectEntry(item.id)} size="xs">
+                            <SidebarMenuButton onClick={() => app.selectEntry(item.id)} size="xs" style={{ paddingLeft: `${12 * (item.depth) + 8}px` }} >
                                 <FileIcon item={item} />
                                 <div>{item.name}</div>
                             </SidebarMenuButton>
@@ -29,3 +29,4 @@ export function FileTree() {
         </SidebarGroup>
     )
 }
+// className="pl-[calc(2px*data-[])]"
