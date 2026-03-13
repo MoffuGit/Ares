@@ -228,6 +228,10 @@ export fn readFiletree(project: *Project, out: [*]ExternWorktreeEntry, max_count
     return i;
 }
 
+export fn selectEntry(project: *Project, id: u64) void {
+    project.filetree.selectEntry(id);
+}
+
 fn countDepth(path: []const u8) u16 {
     var depth: u16 = 0;
     for (path) |c| {

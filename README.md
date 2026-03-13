@@ -1,3 +1,3 @@
-The zig library its going to provide a FileTree structure
-this will listen for worktree updates, when they change, it
-going to check if the visibiles entries changed, if not, then the ui don't need to update,
+the kqueue impl for a watcher consume all the fd,
+for mac the other option is using fsevents, that mean using zig-objc bindings
+

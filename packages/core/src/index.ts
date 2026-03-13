@@ -86,6 +86,10 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.pointer, FFIType.u64],
                 returns: FFIType.u64,
             },
+            selectEntry: {
+                args: [FFIType.pointer, FFIType.u64],
+                returns: FFIType.void,
+            },
             drainMailbox: {
                 args: [],
                 return: FFIType.void,
@@ -230,6 +234,10 @@ export class CoreLib extends EventEmitter {
             entries.push(WorktreeEntry.unpack(slice));
         }
         return entries;
+    }
+
+    selectEntry(project: Pointer, id: number): void {
+        this.lib.symbols.selectEntry(project, id);
     }
 
     drainMailbox() {

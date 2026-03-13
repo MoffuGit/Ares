@@ -45,7 +45,6 @@ fn worktreeUpdateCallback(ctx: *anyopaque) void {
     defer self.mutex.unlock();
 
     self.rebuildVisibleEntries();
-    global.state.emit(.filetreeUpdate, .instant);
 }
 
 pub fn destroy(self: *FileTree) void {
@@ -55,7 +54,15 @@ pub fn destroy(self: *FileTree) void {
     self.alloc.destroy(self);
 }
 
-pub fn clickEntry(self: *FileTree, entry: Entry) void {
+pub fn selectEntry(self: *FileTree, id: u64) void {
+    const entry = entry: {
+        self.worktree.snapshot.mutex.lock();
+        defer self.worktree.snapshot.mutex.unlock();
+
+        const path = self.worktree.snapshot.getPathById(id) orelse return;
+        break :entry self.worktree.snapshot.entries.get(path) catch return;
+    };
+
     if (entry.kind == .dir) {
         if (self.expanded_entries.contains(entry.id)) {
             _ = self.expanded_entries.remove(entry.id);
@@ -82,6 +89,8 @@ fn rebuildVisibleEntries(self: *FileTree) void {
             self.appendDirectChildren(entry.key);
         }
     }
+
+    global.state.emit(.filetreeUpdate, .instant);
 }
 
 fn appendDirectChildren(self: *FileTree, dir_path: []const u8) void {
@@ -110,67 +119,3 @@ fn appendDirectChildren(self: *FileTree, dir_path: []const u8) void {
         self.visible_entries.append(self.alloc, entry.value.id) catch continue;
     }
 }
-//
-// fn draw(element: *Element, buffer: *Buffer) void {
-//     const self: *FileTree = @ptrCast(@alignCast(element.userdata));
-//
-//     const span = self.scrollable.visibleRowSpan(element);
-//     const outer_top = self.scrollable.outer.layout.top;
-//     const print_base: u16 = outer_top -| element.layout.top;
-//
-//     self.project.worktree.snapshot.mutex.lock();
-//     defer self.project.worktree.snapshot.mutex.unlock();
-//
-//     const all = self.visible_entries.items;
-//     const end = @min(span.end, all.len);
-//     for (span.start..end) |abs_i| {
-//         const id = all[abs_i];
-//         const path = self.project.worktree.snapshot.getPathById(id) orelse continue;
-//         const entry = self.project.worktree.snapshot.entries.get(path) catch continue;
-//         const vp_row: u16 = @intCast(abs_i - span.start);
-//         const print_row = print_base + vp_row;
-//
-//         const is_selected = self.project.selected_entry != null and self.project.selected_entry.? == id;
-//
-//         const icon: []const u8 = switch (entry.kind) {
-//             .dir => if (self.expanded_entries.contains(entry.id)) " " else "󰉋 ",
-//             .file => global.file_icons.get(entry.file_type),
-//         };
-//
-//         if (is_selected) {
-//             const screen_y = element.layout.top + print_row;
-//             buffer.fillRect(self.scrollable.outer.layout.left, screen_y, element.layout.width, 1, .{ .style = .{ .bg = global.settings.theme.mutedBg } });
-//         }
-//
-//         const display_name = if (std.mem.lastIndexOfScalar(u8, path, '/')) |sep| path[sep + 1 ..] else path;
-//         const depth: u16 = @intCast(std.mem.count(u8, path, "/"));
-//
-//         const guide_fg = global.settings.theme.fg.setAlpha(0.27);
-//         const guide_style: vaxis.Cell.Style = .{ .fg = guide_fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } };
-//         var d: u16 = 0;
-//         while (d < depth) : (d += 1) {
-//             const guide = "⡇";
-//             _ = element.print(
-//                 buffer,
-//                 &.{.{ .text = guide, .style = guide_style }},
-//                 .{ .row_offset = print_row, .col_offset = d * 2 },
-//             );
-//         }
-//
-//         const indent: u16 = depth * 2;
-//         _ = element.print(
-//             buffer,
-//             &.{
-//                 .{
-//                     .text = icon,
-//                     .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } },
-//                 },
-//                 .{
-//                     .text = display_name,
-//                     .style = .{ .fg = global.settings.theme.fg, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } },
-//                 },
-//             },
-//             .{ .row_offset = print_row, .col_offset = indent, .wrap = .none },
-//         );
-//     }
-// }

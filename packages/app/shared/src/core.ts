@@ -100,6 +100,12 @@ export class CoreApp extends EventEmitter implements BaseApp {
         this.emit("filetreeUpdate");
     }
 
+    selectEntry(id: number) {
+        if (this.project) {
+            this.core.selectEntry(this.project, id);
+        }
+    }
+
     protected onSettingsUpdate = () => {
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme() };
         this.emit("settingsUpdate");

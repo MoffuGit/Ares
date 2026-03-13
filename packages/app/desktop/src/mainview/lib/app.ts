@@ -31,4 +31,8 @@ export class WebviewApp implements BaseApp {
     async loadSettings() {
         this._state = await this.electroview.request.getState({})
     }
+
+    selectEntry(id: number) {
+        this.electroview.send("selectEntry", id)
+    };
 }

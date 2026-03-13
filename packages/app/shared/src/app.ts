@@ -16,4 +16,5 @@ export type AppEvents = {
 export interface BaseApp {
     _state: AppState
     events: Emitter<AppEvents>
+    selectEntry: (id: number) => void,
 }
