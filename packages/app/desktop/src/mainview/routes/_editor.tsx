@@ -69,7 +69,7 @@ function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <SidebarMenu>
                             {filetree && filetree.map((item) => (
                                 <SidebarMenuItem key={item.id}>
-                                    <SidebarMenuButton onClick={() => app.selectEntry(item.id)} size="sm">
+                                    <SidebarMenuButton onClick={() => app.selectEntry(item.id)} size="xs">
                                         <div >{item.name}</div>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
