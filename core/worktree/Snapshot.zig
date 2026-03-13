@@ -144,14 +144,16 @@ pub fn fileTypeFromName(name: []const u8) []const u8 {
     if (ext.len == 0) return "unknown";
     const e = ext[1..];
 
-    if (std.mem.eql(u8, e, "cc") or std.mem.eql(u8, e, "cxx")) return "cpp";
-    if (std.mem.eql(u8, e, "hpp") or std.mem.eql(u8, e, "hxx")) return "h";
-    if (std.mem.eql(u8, e, "mjs") or std.mem.eql(u8, e, "cjs")) return "js";
-    if (std.mem.eql(u8, e, "mts") or std.mem.eql(u8, e, "cts")) return "ts";
-    if (std.mem.eql(u8, e, "yml")) return "yaml";
-    if (std.mem.eql(u8, e, "markdown")) return "md";
-    if (std.mem.eql(u8, e, "htm")) return "html";
-    if (std.mem.eql(u8, e, "bash") or std.mem.eql(u8, e, "zsh")) return "sh";
+    //INFO:
+    //lets try without this first
+    // if (std.mem.eql(u8, e, "cc") or std.mem.eql(u8, e, "cxx")) return "cpp";
+    // if (std.mem.eql(u8, e, "hpp") or std.mem.eql(u8, e, "hxx")) return "h";
+    // if (std.mem.eql(u8, e, "mjs") or std.mem.eql(u8, e, "cjs")) return "js";
+    // if (std.mem.eql(u8, e, "mts") or std.mem.eql(u8, e, "cts")) return "ts";
+    // if (std.mem.eql(u8, e, "yml")) return "yaml";
+    // if (std.mem.eql(u8, e, "markdown")) return "md";
+    // if (std.mem.eql(u8, e, "htm")) return "html";
+    // if (std.mem.eql(u8, e, "bash") or std.mem.eql(u8, e, "zsh")) return "sh";
 
     return e;
 }
