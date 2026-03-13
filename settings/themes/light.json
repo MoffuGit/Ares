@@ -20,7 +20,9 @@
     "chart2": "#2a9d8f",
     "chart3": "#e9c46a",
     "chart4": "#7c3aed",
-    "chart5": "#f4845f"
+    "chart5": "#f4845f",
+    "sidebar": "#E6E3E1",
+    "sidebarFg": "#3F3F3F"
   },
   "theme": {
     "bg": "background",
@@ -49,8 +51,8 @@
     "chart3": "chart3",
     "chart4": "chart4",
     "chart5": "chart5",
-    "sidebar": "background",
-    "sidebarFg": "foreground",
+    "sidebar": "sidebar",
+    "sidebarFg": "sidebarFg",
     "sidebarPrimary": "primaryBg",
     "sidebarPrimaryFg": "primaryFg",
     "sidebarAccent": "accentBg",

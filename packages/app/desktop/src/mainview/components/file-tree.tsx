@@ -1,4 +1,3 @@
-import type { WorktreeEntry } from "@ares/shared"
 import {
     SidebarGroup,
     SidebarGroupContent,

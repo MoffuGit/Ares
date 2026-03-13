@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import {
     SidebarProvider,
     SidebarInset,
@@ -6,12 +6,6 @@ import {
 } from "@/components/ui/sidebar"
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppSidebar } from '@/components/app-sidebar';
-
-function FileIcon({ entry }: { entry: WorktreeEntry }) {
-    if (entry.kind === "dir") return <span>📁</span>;
-    return <span>📄</span>;
-}
-
 
 export const Route = createFileRoute('/_editor')({
     component: () => (
