@@ -108,8 +108,9 @@ pub fn initial_scan(self: *Scanner) !void {
     global.state.emitGlobal(.{ .worktreeUpdate = update });
 }
 
-pub fn process_scan_by_id(_: *Scanner, _: u64) !void {
-    unreachable;
+pub fn process_scan_by_id(self: *Scanner, id: u64) !void {
+    var count: usize = 0;
+    try self.scanRecursive(id, &count);
 }
 
 fn scanRecursive(self: *Scanner, dir_id: u64, count: *usize) !void {
@@ -619,8 +620,8 @@ test "process_events detects new files" {
     // Add a new file after initial scan
     (try tmp.dir.createFile("added.rs", .{})).close();
 
-    const result = try scanner.process_events(&.{root_id});
-    defer result.destroy();
+    var result = try scanner.process_events(&.{root_id});
+    defer result.deinit();
 
     var found_add = false;
     for (result.updates.items) |update| {
@@ -667,8 +668,8 @@ test "process_events detects deleted files" {
     // Delete the file
     try tmp.dir.deleteFile("remove.txt");
 
-    const result = try scanner.process_events(&.{root.id});
-    defer result.destroy();
+    var result = try scanner.process_events(&.{root.id});
+    defer result.deinit();
 
     var found_delete = false;
     for (result.updates.items) |update| {
@@ -721,8 +722,8 @@ test "process_events detects modified files" {
         f.close();
     }
 
-    const result = try scanner.process_events(&.{root.id});
-    defer result.destroy();
+    var result = try scanner.process_events(&.{root.id});
+    defer result.deinit();
 
     var found_update = false;
     for (result.updates.items) |update| {

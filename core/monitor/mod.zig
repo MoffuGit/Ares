@@ -151,12 +151,8 @@ fn fsEventsCallback(
     return .rearm;
 }
 
-pub fn unwatch(self: *Monitor, id: u64) void {
-    if (self.thread.mailbox.push(.{ .remove = id }, .instant) != 0) {
-        self.thread.wakeup.notify() catch |err| {
-            log.err("error notifying monitor thread to wakeup: {}", .{err});
-        };
-    }
+pub fn unwatchPath(self: *Monitor, id: u64) void {
+    self.removeWatcher(&self.thread.fs, id);
 }
 
 pub fn addWatcher(
@@ -349,7 +345,7 @@ test "unwatch stops receiving events" {
     const count_before = state.callback_count.load(.acquire);
     try testing.expect(count_before > 0);
 
-    monitor.unwatch(id);
+    monitor.unwatchPath(id);
 
     sleep(200);
 
