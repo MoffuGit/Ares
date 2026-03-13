@@ -2,7 +2,7 @@ import type { Pointer } from "bun:ffi";
 import { resolveCoreLib, type CoreLib } from "@ares/core";
 import { EventEmitter } from "events"
 import { EventType, } from "@ares/core/events";
-import { SchemeMap, FileType } from "./index.ts";
+import { SchemeMap } from "./index.ts";
 import { Emitter } from "./emitter.ts";
 import type { Settings, Theme, WorktreeEntry } from "./types.ts";
 import type { AppState, AppEvents, BaseApp } from "./app.ts";
@@ -91,7 +91,7 @@ export class CoreApp extends EventEmitter implements BaseApp {
                 name: parts[parts.length - 1] ?? path,
                 path,
                 kind: e.kind === 1 ? "dir" : "file",
-                fileType: FileType[e.file_type] ?? "unknown",
+                fileType: e.file_type ?? "unknown",
                 depth: e.depth,
             };
         });

@@ -11,7 +11,7 @@ const Monitor = @import("../../monitor/mod.zig");
 const Snapshot = @import("../Snapshot.zig");
 const Entry = Snapshot.Entry;
 const Kind = Snapshot.Kind;
-const FileType = Snapshot.FileType;
+const fileTypeFromName = Snapshot.fileTypeFromName;
 const Stat = Snapshot.Stat;
 
 pub const Scanner = @This();
@@ -74,7 +74,7 @@ pub fn initial_scan(self: *Scanner) !void {
 
             const root_path = try self.snapshot.internPathSingle(self.root_name);
             const root_abs = try self.snapshot.internPathSingle(self.abs_root);
-            try self.snapshot.insertInterned(id, root_path, root_abs, .file, FileType.fromName(self.root_name), root_stat);
+            try self.snapshot.insertInterned(id, root_path, root_abs, .file, fileTypeFromName(self.root_name), root_stat);
             return;
         }
         return err;
@@ -88,7 +88,7 @@ pub fn initial_scan(self: *Scanner) !void {
 
         const root_path = try self.snapshot.internPathSingle(self.root_name);
         const root_abs = try self.snapshot.internPathSingle(self.abs_root);
-        try self.snapshot.insertInterned(id, root_path, root_abs, .dir, .unknown, root_stat);
+        try self.snapshot.insertInterned(id, root_path, root_abs, .dir, "unknown", root_stat);
     }
 
     var count: usize = 0;
@@ -139,7 +139,7 @@ fn scanRecursive(self: *Scanner, dir_id: u64, count: *usize) !void {
             };
 
             const stat = self.getEntryStat(d, entry.name) catch Stat{};
-            const file_type: FileType = if (kind == .file) FileType.fromName(entry.name) else .unknown;
+            const file_type = if (kind == .file) fileTypeFromName(entry.name) else "unknown";
             const child_id = self.snapshot.newId();
 
             {
@@ -312,7 +312,7 @@ fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8
             }
         } else {
             const stat = self.getEntryStat(dir, entry.name) catch Stat{};
-            const file_type: FileType = if (kind == .file) FileType.fromName(entry.name) else .unknown;
+            const file_type = if (kind == .file) fileTypeFromName(entry.name) else "unknown";
 
             const id = self.snapshot.newId();
             {
@@ -441,7 +441,7 @@ test "initial_scan single file" {
     try testing.expectEqual(@as(usize, 1), snapshot.id_to_path.count());
     const entry = try snapshot.entries.get("test.zig");
     try testing.expectEqual(Kind.file, entry.kind);
-    try testing.expectEqual(FileType.zig, entry.file_type);
+    try testing.expectEqualStrings("zig", entry.file_type);
 }
 
 test "initial_scan directory contents" {
@@ -473,13 +473,13 @@ test "initial_scan directory contents" {
     const zig_path = try fmt.bufPrint(&buf1, "{s}/hello.zig", .{root_name});
     const zig_entry = try snapshot.entries.get(zig_path);
     try testing.expectEqual(Kind.file, zig_entry.kind);
-    try testing.expectEqual(FileType.zig, zig_entry.file_type);
+    try testing.expectEqualStrings("zig", zig_entry.file_type);
 
     var buf2: [fs.max_path_bytes]u8 = undefined;
     const txt_path = try fmt.bufPrint(&buf2, "{s}/world.txt", .{root_name});
     const txt_entry = try snapshot.entries.get(txt_path);
     try testing.expectEqual(Kind.file, txt_entry.kind);
-    try testing.expectEqual(FileType.txt, txt_entry.file_type);
+    try testing.expectEqualStrings("txt", txt_entry.file_type);
 
     try testing.expectEqual(@as(usize, 3), snapshot.id_to_path.count());
 }
@@ -512,13 +512,13 @@ test "initial_scan nested directories" {
     const nested_path = try fmt.bufPrint(&buf1, "{s}/sub/nested.go", .{root_name});
     const nested = try snapshot.entries.get(nested_path);
     try testing.expectEqual(Kind.file, nested.kind);
-    try testing.expectEqual(FileType.go, nested.file_type);
+    try testing.expectEqualStrings("go", nested.file_type);
 
     var buf2: [fs.max_path_bytes]u8 = undefined;
     const deep_path = try fmt.bufPrint(&buf2, "{s}/sub/deep/leaf.py", .{root_name});
     const deep = try snapshot.entries.get(deep_path);
     try testing.expectEqual(Kind.file, deep.kind);
-    try testing.expectEqual(FileType.py, deep.file_type);
+    try testing.expectEqualStrings("py", deep.file_type);
 
     // root + sub + sub/deep + nested.go + leaf.py = 5
     try testing.expectEqual(@as(usize, 5), snapshot.id_to_path.count());
@@ -582,7 +582,7 @@ test "process_scan_by_id scans specific directory" {
         const dir_rel = try snapshot.internPath(root_name, "target");
         var abs_buf: [fs.max_path_bytes]u8 = undefined;
         const dir_abs = try snapshot.internPathSingle(try fmt.bufPrint(&abs_buf, "{s}/target", .{abs_path}));
-        try snapshot.insertInterned(dir_id, dir_rel, dir_abs, .dir, .unknown, .{});
+        try snapshot.insertInterned(dir_id, dir_rel, dir_abs, .dir, "unknown", .{});
     }
 
     try scanner.process_scan_by_id(dir_id);
@@ -591,7 +591,7 @@ test "process_scan_by_id scans specific directory" {
     const child_path = try fmt.bufPrint(&buf, "{s}/target/file.lua", .{root_name});
     const child = try snapshot.entries.get(child_path);
     try testing.expectEqual(Kind.file, child.kind);
-    try testing.expectEqual(FileType.lua, child.file_type);
+    try testing.expectEqualStrings("lua", child.file_type);
 }
 
 test "process_events detects new files" {
@@ -639,7 +639,7 @@ test "process_events detects new files" {
     const added_path = try fmt.bufPrint(&buf, "{s}/added.rs", .{root_name});
     const added = try snapshot.entries.get(added_path);
     try testing.expectEqual(Kind.file, added.kind);
-    try testing.expectEqual(FileType.rs, added.file_type);
+    try testing.expectEqualStrings("rs", added.file_type);
 }
 
 test "process_events detects deleted files" {

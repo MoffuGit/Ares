@@ -52,9 +52,9 @@ export const Theme = defineStruct([
 export const WorktreeEntry = defineStruct([
     ["id", "u64"],
     ["kind", "u8"],
-    ["file_type", "u8"],
     ["depth", "u16"],
-    ["_pad", "u32"],
     ["path", "char*"],
     ["path_len", "u64", { lengthOf: "path" }],
+    ["file_type", "char*"],
+    ["file_type_len", "u64", { lengthOf: "file_type" }],
 ] as const);

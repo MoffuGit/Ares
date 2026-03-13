@@ -191,10 +191,11 @@ export fn destroyProject(project: *Project) void {
 pub const ExternWorktreeEntry = extern struct {
     id: u64,
     kind: u8,
-    file_type: u8,
     depth: u16,
     path_ptr: usize,
     path_len: usize,
+    file_type_ptr: usize,
+    file_type_len: usize,
 };
 
 export fn getFiletreeCount(project: *Project) usize {
@@ -219,10 +220,11 @@ export fn readFiletree(project: *Project, out: [*]ExternWorktreeEntry, max_count
         out[i] = .{
             .id = entry.id,
             .kind = @intFromEnum(entry.kind),
-            .file_type = @intFromEnum(entry.file_type),
             .depth = depth,
             .path_ptr = @intFromPtr(path.ptr),
             .path_len = path.len,
+            .file_type_ptr = @intFromPtr(entry.file_type.ptr),
+            .file_type_len = entry.file_type.len,
         };
     }
     return i;
