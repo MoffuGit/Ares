@@ -22,6 +22,7 @@ const projectPath = "/Volumes/Home_SSD/Users/home/Documents/projects/ares";
 const bizApp = new TuiApp(settingsPath, projectPath);
 bizApp.start();
 
+
 function Line(props: { children: any }) {
     return (
         <box width={{ percent: 100 }} height={{ point: 1 }}>
@@ -37,7 +38,7 @@ function App() {
     useKeydown((event) => {
         const data = event.data as { codepoint: number; mods: number };
         if (data.codepoint === 99 && (data.mods & 4) !== 0) {
-            bizApp.stop();
+            shutdown();
             process.exit(0);
         }
     });
@@ -107,8 +108,26 @@ function App() {
     );
 }
 
-render(() => (
+const { dispose } = render(() => (
     <AppContext.Provider value={bizApp}>
         <App />
     </AppContext.Provider>
 ));
+
+let stopped = false;
+function shutdown() {
+    if (stopped) return;
+    stopped = true;
+    bizApp.stop();
+    dispose();
+}
+
+process.on("beforeExit", shutdown);
+process.on("SIGINT", () => {
+    shutdown();
+    process.exit(0);
+});
+process.on("SIGTERM", () => {
+    shutdown();
+    process.exit(0);
+});
