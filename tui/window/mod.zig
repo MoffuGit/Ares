@@ -97,6 +97,7 @@ pub fn draw(self: *Window) !void {
     const size = self.size;
 
     const hit_grid = &self.hit_grid;
+    hit_grid.clear();
 
     if (hit_grid.width != size.cols or hit_grid.height != size.rows) {
         try hit_grid.resize(size.cols, size.rows);

@@ -2,7 +2,6 @@ import { createContext, createSignal, createMemo, useContext, type JSX, type Acc
 
 const SIDEBAR_WIDTH = 28;
 const SIDEBAR_WIDTH_ICON = 6;
-const SIDEBAR_KEYBOARD_SHORTCUT = 98; // 'b'
 
 type SidebarContextProps = {
     state: Accessor<"expanded" | "collapsed">;
@@ -207,9 +206,11 @@ function SidebarMenuItem(props: {
 function SidebarMenuButton(props: {
     isActive?: boolean;
     children?: JSX.Element;
+    onClick: () => void;
 }) {
     return (
         <box
+            on:click={props.onClick}
             flexDirection="row"
             width={{ percent: 100 }}
             height={{ point: 1 }}

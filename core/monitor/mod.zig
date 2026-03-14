@@ -118,8 +118,8 @@ pub fn watchPath(
         }.cb),
     };
 
-    self.thread.fs.watch(path, &entry.watcher, WatcherEntry, entry, fsEventsCallback) catch |err| {
-        log.err("failed to start watcher for '{s}': {}", .{ path, err });
+    self.thread.fs.watch(path, &entry.watcher, WatcherEntry, entry, fsEventsCallback) catch {
+        // log.err("failed to start watcher for '{s}': {}", .{ path, err });
         self.alloc.free(path);
         self.alloc.destroy(entry);
         return error.OutOfMemory;
@@ -179,8 +179,8 @@ pub fn addWatcher(
         .callback = req.callback,
     };
 
-    fs.watch(req.path, &entry.watcher, WatcherEntry, entry, callback) catch |err| {
-        log.err("failed to start watcher for '{s}': {}", .{ req.path, err });
+    fs.watch(req.path, &entry.watcher, WatcherEntry, entry, callback) catch {
+        // log.err("failed to start watcher for '{s}': {}", .{ req.path, err });
         self.alloc.free(req.path);
         self.alloc.destroy(entry);
         self.alloc.destroy(req);

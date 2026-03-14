@@ -1,21 +1,13 @@
 import { render, useKeydown } from "@ares/tui-solid";
-import { AppContext, useSettings, useTheme } from "@ares/shared/solid";
+import { AppContext } from "@ares/shared/solid";
 import { TuiApp } from "./app.ts";
 import { resolve } from "path";
 import {
-    Sidebar,
-    SidebarContent,
-    SidebarGroup,
-    SidebarGroupContent,
-    SidebarGroupLabel,
-    SidebarHeader,
     SidebarInset,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
     SidebarProvider,
     SidebarTrigger,
 } from "./components/sidebar.tsx";
+import { AppSidebar } from "./components/app-sidebar.tsx";
 
 const settingsPath = resolve(import.meta.dir, "../../../../settings");
 const projectPath = "/Volumes/Home_SSD/Users/home/Documents/projects/ares";
@@ -32,9 +24,6 @@ function Line(props: { children: any }) {
 }
 
 function App() {
-    const settings = useSettings();
-    const theme = useTheme();
-
     useKeydown((event) => {
         const data = event.data as { codepoint: number; mods: number };
         if (data.codepoint === 99 && (data.mods & 4) !== 0) {
@@ -45,57 +34,7 @@ function App() {
 
     return (
         <SidebarProvider>
-            <Sidebar>
-                <SidebarHeader>
-                    <box height={{ point: 1 }}>Ares</box>
-                </SidebarHeader>
-                <SidebarContent>
-                    <SidebarGroup>
-                        <SidebarGroupLabel>Theme</SidebarGroupLabel>
-                        <SidebarGroupContent>
-                            <SidebarMenu>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton>scheme: {settings()?.scheme ?? "loading..."}</SidebarMenuButton>
-                                </SidebarMenuItem>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton>light: {settings()?.light_theme ?? "—"}</SidebarMenuButton>
-                                </SidebarMenuItem>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton>dark: {settings()?.dark_theme ?? "—"}</SidebarMenuButton>
-                                </SidebarMenuItem>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton>theme: {theme()?.name ?? "—"}</SidebarMenuButton>
-                                </SidebarMenuItem>
-                            </SidebarMenu>
-                        </SidebarGroupContent>
-                    </SidebarGroup>
-                    <SidebarGroup>
-                        <SidebarGroupLabel>Colors</SidebarGroupLabel>
-                        <SidebarGroupContent>
-                            <SidebarMenu>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton>fg: {theme()?.fg ?? "—"}</SidebarMenuButton>
-                                </SidebarMenuItem>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton>bg: {theme()?.bg ?? "—"}</SidebarMenuButton>
-                                </SidebarMenuItem>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton>primaryFg: {theme()?.primaryFg ?? "—"}</SidebarMenuButton>
-                                </SidebarMenuItem>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton>primaryBg: {theme()?.primaryBg ?? "—"}</SidebarMenuButton>
-                                </SidebarMenuItem>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton>mutedFg: {theme()?.mutedFg ?? "—"}</SidebarMenuButton>
-                                </SidebarMenuItem>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton>mutedBg: {theme()?.mutedBg ?? "—"}</SidebarMenuButton>
-                                </SidebarMenuItem>
-                            </SidebarMenu>
-                        </SidebarGroupContent>
-                    </SidebarGroup>
-                </SidebarContent>
-            </Sidebar>
+            <AppSidebar />
             <SidebarInset>
                 <box flexDirection="row" height={{ point: 1 }}>
                     <SidebarTrigger />
