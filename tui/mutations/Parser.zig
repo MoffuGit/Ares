@@ -167,6 +167,16 @@ fn parseBoxProps(alloc: Allocator, props: json.ObjectMap) ?BoxProps {
         }
     }
 
+    if (props.get("interactive")) |v| {
+        switch (v) {
+            .bool => |b| {
+                bp.interactive = b;
+                has_any = true;
+            },
+            else => {},
+        }
+    }
+
     return if (has_any) bp else null;
 }
 

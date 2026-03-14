@@ -106,6 +106,7 @@ pub const BoxProps = struct {
     bg: ?Color = null,
     fg: ?Color = null,
     segments: ?[]const SegmentData = null,
+    interactive: ?bool = null,
 };
 
 pub const Props = struct {

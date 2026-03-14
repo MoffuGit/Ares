@@ -65,6 +65,7 @@ function findNativeAnchor(children: TuiNode[], afterIndex: number): BoxElement |
 }
 
 const BOX_PROPS = new Set(["bg", "fg", "opacity", "segments", "text_align", "rounded", "border", "shadow"])
+const MOUSE_EVENTS = new Set(["click", "mousedown", "mouseup", "mousemove", "mouseenter", "mouseleave", "wheel"])
 
 export const {
     render: _render,
@@ -126,14 +127,24 @@ export const {
         if (name.startsWith("on:")) {
             const event = name.slice(3)
             if (prev) node.off(event, prev as any)
-            if (value) node.on(event, value as any)
+            if (value) {
+                node.on(event, value as any)
+                if (MOUSE_EVENTS.has(event)) {
+                    node.setProps({ interactive: true })
+                }
+            }
             return
         }
 
         if (name.length > 2 && name.startsWith("on") && name[2]! >= "A" && name[2]! <= "Z") {
             const event = name.slice(2).toLowerCase()
             if (prev) node.off(event, prev as any)
-            if (value) node.on(event, value as any)
+            if (value) {
+                node.on(event, value as any)
+                if (MOUSE_EVENTS.has(event)) {
+                    node.setProps({ interactive: true })
+                }
+            }
             return
         }
 

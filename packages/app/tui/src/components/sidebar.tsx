@@ -77,6 +77,7 @@ function Sidebar(props: {
             flexDirection="column"
             width={{ point: width() }}
             height={{ percent: 100 }}
+            display={open() ? "flex" : "none"}
         >
             {props.children}
         </box>

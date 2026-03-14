@@ -1,4 +1,4 @@
-import { allocId, enqueue } from ".";
+import { allocId, enqueue, registerElement, unregisterElement } from ".";
 
 export type StyleValue =
     | "undefined"
@@ -140,6 +140,7 @@ export class Element {
         this.id = allocId();
         this.elementType = elementType;
 
+        registerElement(this.id, this);
         enqueue({ cmd: "create", id: this.id, element_type: elementType });
     }
 
@@ -181,6 +182,7 @@ export class Element {
 
     delete(): void {
         this.parent?.removeChild(this);
+        unregisterElement(this.id);
         enqueue({ cmd: "delete", id: this.id });
     }
 
@@ -318,6 +320,7 @@ export interface BoxProps {
     rounded?: number;
     border?: BoxBorder;
     shadow?: BoxShadow;
+    interactive?: boolean;
 }
 
 export class BoxElement extends Element {

@@ -202,6 +202,9 @@ fn applyBoxProps(alloc: Allocator, elem: *Element, props: cmdpkg.BoxProps) void 
     if (props.rounded) |r| box.rounded = r;
     if (props.bg) |bg| box.bg = bg;
     if (props.fg) |fg| box.fg = fg;
+    if (props.interactive) |interactive| {
+        elem.hitFn = if (interactive) Element.hitSelf else null;
+    }
 
     if (props.segments) |parsed_segments| {
         // Free old segments

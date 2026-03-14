@@ -1,5 +1,5 @@
 import type { Pointer } from "bun:ffi";
-import { resolveTuiLib, type TuiLib } from ".";
+import { resolveTuiLib, getElementById, type TuiLib } from ".";
 import { Element, createEvent } from "./elements";
 import { EventType } from "./events";
 
@@ -10,7 +10,6 @@ export class TuiApp {
     private mutationsPtr: Pointer;
     private timer: Timer | null = null;
 
-    private elementMap: Map<number, Element> = new Map();
     root: Element | null = null;
 
     constructor() {
@@ -82,21 +81,12 @@ export class TuiApp {
     }
 
     private resolveTarget(targetId: number): Element | null {
-        if (targetId !== 0) return this.elementMap.get(targetId) ?? this.root;
+        if (targetId !== 0) return (getElementById(targetId) as Element | undefined) ?? this.root;
         return this.root;
-    }
-
-    registerElement(element: Element): void {
-        this.elementMap.set(element.id, element);
-    }
-
-    unregisterElement(element: Element): void {
-        this.elementMap.delete(element.id);
     }
 
     setRoot(element: Element): void {
         this.root = element;
-        this.registerElement(element);
         element.setAsRoot();
     }
 
@@ -127,7 +117,6 @@ export class TuiApp {
         this.lib.destroyMutations(this.mutationsPtr);
         this.lib.destroyApp(this.appPtr);
         this.lib.deinitState();
-        this.elementMap.clear();
         this.root = null;
     }
 }

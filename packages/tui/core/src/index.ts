@@ -79,6 +79,20 @@ export function allocId(): number {
     return nextId++;
 }
 
+const elementRegistry: Map<number, unknown> = new Map();
+
+export function registerElement(id: number, element: unknown): void {
+    elementRegistry.set(id, element);
+}
+
+export function unregisterElement(id: number): void {
+    elementRegistry.delete(id);
+}
+
+export function getElementById(id: number): unknown | undefined {
+    return elementRegistry.get(id);
+}
+
 const mutationQueue: WireCommand[] = [];
 
 export function enqueue(cmd: WireCommand): void {
