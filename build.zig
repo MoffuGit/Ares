@@ -74,10 +74,9 @@ pub fn build(b: *std.Build) void {
     tui.setCwd(b.path("packages/app/tui"));
 
     const tui_step = b.step("tui", "Build tui lib and run the opentui application");
-    tui_step.dependOn(b.getInstallStep());
-    tui_step.dependOn(&tui.step);
-    tui_step.dependOn(&tui_lib.step);
     tui_step.dependOn(&tui_install.step);
+    tui_step.dependOn(&tui_lib.step);
+    tui_step.dependOn(&tui.step);
 
     const test_filter = b.option([]const u8, "test-filter", "Filter for tests");
 
