@@ -16,11 +16,11 @@ export function FileTree() {
         <SidebarGroup>
             <SidebarGroupContent>
                 <SidebarMenu>
-                    {filetree && filetree.map((item) => (
-                        <SidebarMenuItem key={item.id}>
-                            <SidebarMenuButton onClick={() => app.selectEntry(item.id)} size="xs" style={{ paddingLeft: `${12 * (item.depth) + 8}px` }} >
-                                <FileIcon item={item} />
-                                <div>{item.name}</div>
+                    {filetree && filetree.map((entry) => (
+                        <SidebarMenuItem key={entry.id}>
+                            <SidebarMenuButton onClick={() => app.selectEntry(entry.id)} size="xs" style={{ paddingLeft: `${12 * (entry.depth) + 8}px` }} >
+                                <FileIcon entry={entry} />
+                                <div>{entry.name}</div>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                     ))}
