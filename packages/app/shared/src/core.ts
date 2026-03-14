@@ -144,6 +144,7 @@ export class CoreApp extends EventEmitter implements BaseApp {
                 path,
                 kind: e.kind === 1 ? "dir" : "file",
                 fileType: e.file_type ?? "unknown",
+                expanded: e.is_expanded,
                 depth: e.depth,
             };
         });

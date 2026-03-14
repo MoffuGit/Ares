@@ -119,6 +119,7 @@ export fn destroyProject(project: *Project) void {
 pub const ExternWorktreeEntry = extern struct {
     id: u64,
     kind: u8,
+    is_expanded: bool,
     depth: u16,
     path_ptr: usize,
     path_len: usize,
@@ -150,9 +151,11 @@ export fn readFiletree(project: *Project, out: [*]ExternWorktreeEntry, max_count
         const entry = project.worktree.snapshot.entries.get(path) catch continue;
 
         const depth = countDepth(path);
+        const is_expanded = project.filetree.expanded_entries.contains(entry.id);
         out[i] = .{
             .id = entry.id,
             .kind = @intFromEnum(entry.kind),
+            .is_expanded = is_expanded,
             .depth = depth,
             .path_ptr = @intFromPtr(path.ptr),
             .path_len = path.len,

@@ -49,6 +49,7 @@ export type WorktreeEntry = {
     id: number;
     name: string;
     path: string;
+    expanded: boolean,
     kind: "file" | "dir";
     fileType: string;
     depth: number;
