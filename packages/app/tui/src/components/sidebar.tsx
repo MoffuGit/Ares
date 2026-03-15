@@ -63,7 +63,7 @@ function Sidebar(props: {
     collapsible?: "icon" | "none";
     children?: JSX.Element;
 }) {
-    const { state, open } = useSidebar();
+    const { open } = useSidebar();
 
     const collapsible = () => props.collapsible ?? "icon";
     const width = () => {
