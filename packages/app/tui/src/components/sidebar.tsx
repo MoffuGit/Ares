@@ -73,6 +73,8 @@ function Sidebar(props: {
 
     return (
         <box
+            bg="#ff0000"
+            fg="#000000"
             flexDirection="column"
             width={{ point: width() }}
             height={{ percent: 100 }}
@@ -89,7 +91,7 @@ function SidebarTrigger(props: {
     const { toggleSidebar } = useSidebar();
 
     return (
-        <box on:click={() => toggleSidebar()} bg="#2a2a3e" width={{ point: 3 }}>
+        <box on:click={() => toggleSidebar()} bg="#00ff00" width={{ point: 3 }}>
             {props.children ?? "☰"}
         </box>
     );

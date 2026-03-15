@@ -1,5 +1,5 @@
 import { For } from "solid-js";
-import { useApp, useFiletree } from "@ares/shared/solid";
+import { useApp, useFiletree, useTheme } from "@ares/shared/solid";
 import {
     Sidebar,
     SidebarContent,
@@ -35,10 +35,11 @@ function FileTree() {
 }
 
 export function AppSidebar() {
+    const theme = useTheme();
     return (
         <Sidebar>
             <SidebarHeader>
-                <box height={{ point: 1 }}>Ares</box>
+                <box bg="#00ff00" height={{ point: 1 }}>Ares</box>
             </SidebarHeader>
             <SidebarContent>
                 <FileTree />

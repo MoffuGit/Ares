@@ -12,8 +12,8 @@ const TE = TypedElement(Box);
 
 element: TE,
 
-bg: vaxis.Color = .default,
-fg: vaxis.Color = .default,
+bg: vaxis.Color = .{ .rgba = .{ 0, 0, 0, 0 } },
+fg: vaxis.Color = .{ .rgba = .{ 0, 0, 0, 0 } },
 opacity: f32 = 1,
 segments: ?[]const Element.Segment = null,
 text_align: Element.TextAlign = .left,
@@ -171,8 +171,8 @@ pub const Options = struct {
     num: ?u64 = null,
     zIndex: usize = 0,
     style: Style = .{},
-    bg: vaxis.Color = .default,
-    fg: vaxis.Color = .default,
+    bg: vaxis.Color = .{ .rgba = .{ 0, 0, 0, 0 } },
+    fg: vaxis.Color = .{ .rgba = .{ 0, 0, 0, 0 } },
     opacity: f32 = 1,
     segments: ?[]const Element.Segment = null,
     text_align: Element.TextAlign = .left,

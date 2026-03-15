@@ -324,8 +324,8 @@ export interface BoxProps {
 }
 
 export class BoxElement extends Element {
-    bg: Color = { type: "default" };
-    fg: Color = { type: "default" };
+    bg: Color = { type: "rgba", r: 0, b: 0, g: 0, a: 0, };
+    fg: Color = { type: "rgba", r: 0, b: 0, a: 0, g: 0 };
     opacity: number = 1;
     segments: Segment[] | null = null;
     text_align: TextAlign = "left";
