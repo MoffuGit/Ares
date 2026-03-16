@@ -23,13 +23,14 @@ export class KeymapHandler {
         this.core.events.off("keymapsUpdate", this.onKeymapsUpdate);
     }
 
-    onModeUpdate(): void {
+    onModeUpdate = (): void => {
         this.reset()
     }
 
-    onKeymapsUpdate(): void {
+    onKeymapsUpdate = (): void => {
         this.reset()
     }
+
     private reset(): void {
         this.clearTimer();
         this.currentNode = null;
