@@ -58,7 +58,7 @@ const mainWindow = new BrowserWindow({
 
 app.start();
 
-app.on("settingsUpdate", () => {
+app.events.on("settingsUpdate", () => {
     if (app._state.settings) {
         console.log("sending new settings:", app._state.settings);
         mainWindow.webview.rpc?.send.settingsUpdate(app._state.settings)
@@ -68,23 +68,23 @@ app.on("settingsUpdate", () => {
     }
 });
 
-app.on("themeUpdate", () => {
+app.events.on("themeUpdate", () => {
     if (app._state.theme) {
         mainWindow.webview.rpc?.send.themeUpdate(app._state.theme)
     }
 });
 
-app.on("filetreeUpdate", () => {
+app.events.on("filetreeUpdate", () => {
     if (app._state.filetree) {
         mainWindow.webview.rpc?.send.filetreeUpdate(app._state.filetree);
     }
 });
 
-app.on("modeUpdate", () => {
+app.events.on("modeUpdate", () => {
     mainWindow.webview.rpc?.send.modeUpdate(app._state.mode);
 });
 
-app.on("keymapsUpdate", () => {
+app.events.on("keymapsUpdate", () => {
     if (app._state.keymaps) {
         mainWindow.webview.rpc?.send.keymapsUpdate(app._state.keymaps);
     }
