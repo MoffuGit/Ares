@@ -64,3 +64,14 @@ export type KeymapBinding = {
 }
 
 export type ScopedKeymaps = Record<Scope, KeymapBinding[]>;
+
+export type KeyDownMods = {
+    shift: boolean;
+    alt: boolean;
+    ctrl: boolean;
+    super: boolean;
+    hyper: boolean;
+    meta: boolean;
+    caps_lock: boolean;
+    num_lock: boolean;
+}
