@@ -1,6 +1,6 @@
 import { createContext, useContext, createSignal, onCleanup, type Accessor } from "solid-js";
 import type { BaseApp, AppState } from "../app.ts";
-import type { Settings, Theme, WorktreeEntry } from "../types.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps } from "../types.ts";
 
 export const AppContext = createContext<BaseApp>();
 
@@ -35,9 +35,32 @@ export function useTheme(): Accessor<Theme | null> {
 
 export function useFiletree(): Accessor<WorktreeEntry[] | null> {
     const app = useApp();
-    const [theme, setTheme] = createSignal<WorktreeEntry[] | null>(app._state.filetree);
-    const handler = () => setTheme(() => app._state.filetree);
+    const [filetree, setFiletree] = createSignal<WorktreeEntry[] | null>(app._state.filetree);
+    const handler = () => setFiletree(() => app._state.filetree);
     app.events.on("filetreeUpdate", handler);
     onCleanup(() => app.events.off("filetreeUpdate", handler));
-    return theme;
+    return filetree;
+}
+
+export function useMode(): Accessor<Mode> {
+    const app = useApp();
+    const [mode, setMode] = createSignal<Mode>(app._state.mode);
+    const handler = () => setMode(() => app._state.mode);
+    app.events.on("modeUpdate", handler);
+    onCleanup(() => app.events.off("modeUpdate", handler));
+    return mode;
+}
+
+export function useKeymaps(): Accessor<ScopedKeymaps | null> {
+    const app = useApp();
+    const [keymaps, setKeymaps] = createSignal<ScopedKeymaps | null>(app._state.keymaps);
+    const handler = () => setKeymaps(() => app._state.keymaps);
+    app.events.on("keymapsUpdate", handler);
+    onCleanup(() => app.events.off("keymapsUpdate", handler));
+    return keymaps;
+}
+
+export function useScopedKeymaps(scope: Scope): Accessor<KeymapBinding[]> {
+    const keymaps = useKeymaps();
+    return () => keymaps()?.[scope] ?? [];
 }

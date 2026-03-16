@@ -54,3 +54,13 @@ export type WorktreeEntry = {
     fileType: string;
     depth: number;
 }
+
+export type Mode = "normal" | "insert" | "visual";
+export type Scope = "global" | "editor" | "command_palette";
+
+export type KeymapBinding = {
+    sequence: string;
+    action: string;
+}
+
+export type ScopedKeymaps = Record<Scope, KeymapBinding[]>;

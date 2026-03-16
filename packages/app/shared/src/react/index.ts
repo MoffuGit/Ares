@@ -1,6 +1,6 @@
 import { createContext, createElement, useContext, useSyncExternalStore, type ReactNode } from "react";
 import type { BaseApp, AppState } from "../app.ts";
-import type { Settings, Theme, WorktreeEntry } from "../types.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps } from "../types.ts";
 
 const AppContext = createContext<BaseApp | null>(null);
 
@@ -50,5 +50,32 @@ export function useFiletree(): WorktreeEntry[] | null {
         },
         () => app._state.filetree,
     );
+}
+
+export function useMode(): Mode {
+    const app = useApp();
+    return useSyncExternalStore(
+        (cb) => {
+            app.events.on("modeUpdate", cb);
+            return () => app.events.off("modeUpdate", cb);
+        },
+        () => app._state.mode,
+    );
+}
+
+export function useKeymaps(): ScopedKeymaps | null {
+    const app = useApp();
+    return useSyncExternalStore(
+        (cb) => {
+            app.events.on("keymapsUpdate", cb);
+            return () => app.events.off("keymapsUpdate", cb);
+        },
+        () => app._state.keymaps,
+    );
+}
+
+export function useScopedKeymaps(scope: Scope): KeymapBinding[] {
+    const keymaps = useKeymaps();
+    return keymaps?.[scope] ?? [];
 }
 

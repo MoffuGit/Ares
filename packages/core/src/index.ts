@@ -313,7 +313,10 @@ export class CoreLib extends EventEmitter {
             const entries: Array<{ sequence: string; action: string }> = [];
             for (let i = 0; i < actual; i++) {
                 const slice = buf.slice(i * entrySize, (i + 1) * entrySize);
-                entries.push(KeymapEntry.unpack(slice));
+                const { sequence, action } = KeymapEntry.unpack(slice);
+                if (sequence && action) {
+                    entries.push({ sequence, action });
+                }
             }
             return entries;
         } finally {

@@ -60,7 +60,7 @@
     "sidebarBorder": "border-900",
     "sidebarRing": "primaryBg",
     "fileType": {
-      "default": "defaultFileColor",
+      "default": "defaultFileColor"
     }
   }
 }

@@ -4,7 +4,7 @@ import { EventEmitter } from "events"
 import { EventType, } from "@ares/core/events";
 import { SchemeMap } from "./index.ts";
 import { Emitter } from "./emitter.ts";
-import type { Settings, Theme, WorktreeEntry } from "./types.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps } from "./types.ts";
 import type { AppState, AppEvents, BaseApp } from "./app.ts";
 
 type RawThemeFile = {
@@ -39,6 +39,9 @@ function resolveColor(value: string, colors: Record<string, string>): string {
     return "#000000ff";
 }
 
+const ModeMap: Record<Mode, number> = { normal: 0, insert: 1, visual: 2 };
+const ScopeMap: Record<Scope, number> = { global: 0, editor: 1, command_palette: 2 };
+
 const FALLBACK_THEME: Theme = {
     name: "fallback",
     fg: "#dcdcdcff", bg: "#1e1e1eff",
@@ -68,7 +71,7 @@ export class CoreApp extends EventEmitter implements BaseApp {
     protected io: Pointer;
     protected project: Pointer | null = null;
 
-    _state: AppState = { settings: null, theme: null, filetree: null };
+    _state: AppState = { settings: null, theme: null, filetree: null, mode: "normal", keymaps: null };
     events = new Emitter<AppEvents>;
 
     constructor(libPath?: string) {
@@ -110,7 +113,8 @@ export class CoreApp extends EventEmitter implements BaseApp {
         this.core.on("SettingsUpdate", this.onSettingsUpdate);
         this.core.on("ThemeUpdate", this.onThemeUpdate);
         this.core.on("FiletreeUpdate", this.onFiletreeUpdate);
-        this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme() };
+        const keymaps = this.readAllKeymaps();
+        this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme(), keymaps };
     }
 
     stop() {
@@ -159,10 +163,32 @@ export class CoreApp extends EventEmitter implements BaseApp {
         }
     }
 
+    setMode(mode: Mode) {
+        if (this._state.mode === mode) return;
+        this._state = { ...this._state, mode, keymaps: this.readAllKeymaps(mode) };
+        this.emit("modeUpdate");
+        this.emit("keymapsUpdate");
+    }
+
+    readKeymaps(scope: Scope): KeymapBinding[] {
+        return this.core.readKeymapEntries(this.settings, ScopeMap[scope], ModeMap[this._state.mode]);
+    }
+
+    protected readAllKeymaps(mode?: Mode): ScopedKeymaps {
+        const m = ModeMap[mode ?? this._state.mode];
+        return {
+            global: this.core.readKeymapEntries(this.settings, ScopeMap.global, m),
+            editor: this.core.readKeymapEntries(this.settings, ScopeMap.editor, m),
+            command_palette: this.core.readKeymapEntries(this.settings, ScopeMap.command_palette, m),
+        };
+    }
+
     protected onSettingsUpdate = () => {
-        this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme() };
+        const keymaps = this.readAllKeymaps();
+        this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme(), keymaps };
         this.emit("settingsUpdate");
         this.emit("themeUpdate");
+        this.emit("keymapsUpdate");
     };
 
     protected onThemeUpdate = () => {

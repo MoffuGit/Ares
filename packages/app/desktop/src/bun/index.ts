@@ -36,7 +36,8 @@ const rpc = BrowserView.defineRPC<AppRPC>({
             getState: ({ }) => app._state,
         },
         messages: {
-            selectEntry: (id) => app.selectEntry(id)
+            selectEntry: (id) => app.selectEntry(id),
+            setMode: (mode) => app.setMode(mode),
         },
     },
 });
@@ -76,6 +77,16 @@ app.on("themeUpdate", () => {
 app.on("filetreeUpdate", () => {
     if (app._state.filetree) {
         mainWindow.webview.rpc?.send.filetreeUpdate(app._state.filetree);
+    }
+});
+
+app.on("modeUpdate", () => {
+    mainWindow.webview.rpc?.send.modeUpdate(app._state.mode);
+});
+
+app.on("keymapsUpdate", () => {
+    if (app._state.keymaps) {
+        mainWindow.webview.rpc?.send.keymapsUpdate(app._state.keymaps);
     }
 });
 

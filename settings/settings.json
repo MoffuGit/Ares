@@ -3,28 +3,34 @@
   "light_theme": "light",
   "dark_theme": "zenbones",
   "keymaps": {
-    "normal": {
-      "i": "workspace:enter_insert",
-      "v": "workspace:enter_visual",
-      "super+l": "workspace:toggle_left_dock",
-      "ctrl+t": "workspace:new_tab",
-      "tab": "workspace:next_tab",
-      "shift+tab": "workspace:prev_tab",
-      "ctrl+q": "workspace:close_active_tab",
-      "super+k": "workspace:toggle_command_palette",
-      "k": "command:up",
-      "j": "command:down",
-      "enter": "command:select",
-      "ctrl+u": "command:scroll_up",
-      "ctrl+d": "command:scroll_down",
-      "g g": "command:top",
-      "shift+g": "command:bottom"
+    "global": {
+      "normal": {
+        "i": "workspace:enter_insert",
+        "v": "workspace:enter_visual",
+        "super+l": "workspace:toggle_left_dock",
+        "ctrl+t": "workspace:new_tab",
+        "tab": "workspace:next_tab",
+        "shift+tab": "workspace:prev_tab",
+        "ctrl+q": "workspace:close_active_tab",
+        "super+k": "workspace:toggle_command_palette"
+      },
+      "insert": {
+        "escape": "workspace:enter_normal"
+      },
+      "visual": {
+        "escape": "workspace:enter_normal"
+      }
     },
-    "insert": {
-      "escape": "workspace:enter_normal"
-    },
-    "visual": {
-      "escape": "workspace:enter_normal"
+    "command_palette": {
+      "normal": {
+        "k": "command:up",
+        "j": "command:down",
+        "enter": "command:select",
+        "ctrl+u": "command:scroll_up",
+        "ctrl+d": "command:scroll_down",
+        "g g": "command:top",
+        "shift+g": "command:bottom"
+      }
     }
   }
 }
