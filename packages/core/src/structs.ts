@@ -10,6 +10,13 @@ export const Settings = defineStruct([
     ["dark_theme_len", "u64", { lengthOf: "dark_theme" }],
 ] as const);
 
+export const KeymapEntry = defineStruct([
+    ["sequence", "char*"],
+    ["sequence_len", "u64", { lengthOf: "sequence" }],
+    ["action", "char*"],
+    ["action_len", "u64", { lengthOf: "action" }],
+] as const);
+
 export const WorktreeEntry = defineStruct([
     ["id", "u64"],
     ["kind", "u8"],

@@ -2,7 +2,7 @@ import { dlopen, FFIType, JSCallback, ptr, toArrayBuffer, type Pointer } from "b
 import { EventEmitter } from "events";
 import { resolve } from "path";
 import { EventType, Events, EventsName } from "./events";
-import { Settings, WorktreeEntry } from "./structs";
+import { KeymapEntry, Settings, WorktreeEntry } from "./structs";
 
 const DEFAULT_LIB_PATH = resolve(import.meta.dir, "../../../zig-out/lib/libcore.dylib");
 
@@ -101,6 +101,30 @@ function getCoreLib(libPath: string) {
             selectEntry: {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void,
+            },
+            getTrieRoot: {
+                args: [FFIType.pointer, FFIType.u8],
+                returns: FFIType.pointer,
+            },
+            trieStep: {
+                args: [FFIType.pointer, FFIType.u32, FFIType.u8],
+                returns: FFIType.pointer,
+            },
+            trieNodeIsTerminal: {
+                args: [FFIType.pointer],
+                returns: FFIType.bool,
+            },
+            trieNodeHasChildren: {
+                args: [FFIType.pointer],
+                returns: FFIType.bool,
+            },
+            getKeymapEntryCount: {
+                args: [FFIType.pointer, FFIType.u8, FFIType.u8],
+                returns: FFIType.u64,
+            },
+            readKeymapEntries: {
+                args: [FFIType.pointer, FFIType.u8, FFIType.u8, FFIType.pointer, FFIType.u64],
+                returns: FFIType.u64,
             },
             drainMailbox: {
                 args: [],
@@ -256,6 +280,45 @@ export class CoreLib extends EventEmitter {
 
     selectEntry(project: Pointer, id: number): void {
         this.lib.symbols.selectEntry(project, id);
+    }
+
+    getTrieRoot(settings: Pointer, mode: number): Pointer | null {
+        return this.lib.symbols.getTrieRoot(settings, mode) as Pointer | null;
+    }
+
+    trieStep(node: Pointer, codepoint: number, mods: number): Pointer | null {
+        return this.lib.symbols.trieStep(node, codepoint, mods) as Pointer | null;
+    }
+
+    trieNodeIsTerminal(node: Pointer): boolean {
+        return this.lib.symbols.trieNodeIsTerminal(node) as boolean;
+    }
+
+    trieNodeHasChildren(node: Pointer): boolean {
+        return this.lib.symbols.trieNodeHasChildren(node) as boolean;
+    }
+
+    readKeymapEntries(settings: Pointer, scope: number, mode: number): Array<{ sequence: string; action: string }> {
+        this.lib.symbols.lockSettings(settings);
+        try {
+            const count = Number(this.lib.symbols.getKeymapEntryCount(settings, scope, mode));
+            if (count === 0) return [];
+
+            const entrySize = KeymapEntry.size;
+            const buf = new ArrayBuffer(count * entrySize);
+            const actual = Number(
+                this.lib.symbols.readKeymapEntries(settings, scope, mode, ptr(buf), count),
+            );
+
+            const entries: Array<{ sequence: string; action: string }> = [];
+            for (let i = 0; i < actual; i++) {
+                const slice = buf.slice(i * entrySize, (i + 1) * entrySize);
+                entries.push(KeymapEntry.unpack(slice));
+            }
+            return entries;
+        } finally {
+            this.lib.symbols.unlockSettings(settings);
+        }
     }
 
     drainMailbox() {

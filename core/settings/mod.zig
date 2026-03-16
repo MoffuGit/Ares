@@ -3,9 +3,6 @@ const global = @import("../global.zig");
 const Allocator = std.mem.Allocator;
 const keymapspkg = @import("../keymaps/mod.zig");
 const Keymaps = keymapspkg.Keymaps;
-const Action = keymapspkg.Action;
-const KeyStroke = @import("../keymaps/KeyStroke.zig").KeyStroke;
-const parseSequence = @import("../keymaps/KeyStroke.zig").parseSequence;
 const Monitor = @import("../monitor/mod.zig");
 const Appearance = @import("../native/Appearance.zig");
 
@@ -51,7 +48,7 @@ dark_theme: []const u8 = DEFAULT_DARK,
 
 theme_json: []const u8 = FALLBACK_THEME_JSON,
 
-keymaps: Keymaps = .{ .tries = undefined },
+keymaps: Keymaps = undefined,
 keymaps_initialized: bool = false,
 keymap_generation: u64 = 0,
 
@@ -61,7 +58,6 @@ settings_watcher: u64 = 0,
 theme_watcher: u64 = 0,
 
 appearance: ?*Appearance = null,
-binding_map: std.AutoHashMapUnmanaged(u32, []const u8) = .{},
 
 pub fn create(alloc: Allocator) !*Settings {
     const self = try alloc.create(Settings);
@@ -86,8 +82,6 @@ pub fn destroy(self: *Settings) void {
     if (self.keymaps_initialized) {
         self.keymaps.deinit();
     }
-    self.clearBindingMap();
-    self.binding_map.deinit(self.alloc);
     self.alloc.destroy(self);
 }
 
@@ -266,8 +260,6 @@ fn loadKeymaps(self: *Settings, km_json: std.json.Value) void {
     self.keymaps = Keymaps.init(self.alloc) catch return;
     self.keymaps_initialized = true;
 
-    self.clearBindingMap();
-
     const scope_names = [_]struct { key: []const u8, scope: keymapspkg.Scope }{
         .{ .key = "global", .scope = .global },
         .{ .key = "editor", .scope = .editor },
@@ -302,7 +294,6 @@ fn loadKeymapMode(self: *Settings, scope: keymapspkg.Scope, mode: keymapspkg.Mod
         .object => |o| o,
         else => return,
     };
-    const trie = self.keymaps.actions(scope, mode);
 
     var it = bindings.iterator();
     while (it.next()) |entry| {
@@ -312,12 +303,7 @@ fn loadKeymapMode(self: *Settings, scope: keymapspkg.Scope, mode: keymapspkg.Mod
             else => continue,
         };
 
-        const action = Action.parse(action_str) orelse continue;
-        const seq = parseSequence(self.alloc, seq_str) catch continue;
-        defer self.alloc.free(seq);
-
-        trie.insert(seq, action) catch continue;
-        self.recordBinding(action, seq_str);
+        self.keymaps.insert(scope, mode, seq_str, action_str) catch continue;
     }
 }
 
@@ -328,57 +314,40 @@ fn loadDefaultKeymaps(self: *Settings) void {
     self.keymaps = Keymaps.init(self.alloc) catch return;
     self.keymaps_initialized = true;
 
-    self.clearBindingMap();
+    const DefaultEntry = struct {
+        scope: keymapspkg.Scope,
+        mode: keymapspkg.Mode,
+        sequence: []const u8,
+        action: []const u8,
+    };
 
-    const DefaultEntry = struct { scope: keymapspkg.Scope, mode: keymapspkg.Mode, seq: []const KeyStroke, action: Action, binding: ?[]const u8 = null };
     const defaults = [_]DefaultEntry{
-        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = 'i', .mods = .{} }}, .action = .{ .workspace = .enter_insert }, .binding = "i" },
-        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = 'v', .mods = .{} }}, .action = .{ .workspace = .enter_visual }, .binding = "v" },
-        .{ .scope = .global, .mode = .insert, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .{ .workspace = .enter_normal }, .binding = "escape" },
-        .{ .scope = .global, .mode = .visual, .seq = &.{.{ .codepoint = 0x1b, .mods = .{} }}, .action = .{ .workspace = .enter_normal }, .binding = "escape" },
-        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = 'l', .mods = .{ .super = true } }}, .action = .{ .workspace = .toggle_left_dock }, .binding = "super+l" },
-        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = 't', .mods = .{ .ctrl = true } }}, .action = .{ .workspace = .new_tab }, .binding = "ctrl+t" },
-        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{} }}, .action = .{ .workspace = .next_tab }, .binding = "tab" },
-        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = '\t', .mods = .{ .shift = true } }}, .action = .{ .workspace = .prev_tab }, .binding = "shift+tab" },
-        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = 'q', .mods = .{ .ctrl = true } }}, .action = .{ .workspace = .close_active_tab }, .binding = "ctrl+q" },
-        .{ .scope = .global, .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{ .super = true } }}, .action = .{ .workspace = .toggle_command_palette }, .binding = "super+k" },
-        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'k', .mods = .{} }}, .action = .{ .command = .up } },
-        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'j', .mods = .{} }}, .action = .{ .command = .down } },
-        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = '\r', .mods = .{} }}, .action = .{ .command = .select } },
-        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'u', .mods = .{ .ctrl = true } }}, .action = .{ .command = .scroll_up } },
-        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'd', .mods = .{ .ctrl = true } }}, .action = .{ .command = .scroll_down } },
-        .{ .scope = .command_palette, .mode = .normal, .seq = &.{ .{ .codepoint = 'g', .mods = .{} }, .{ .codepoint = 'g', .mods = .{} } }, .action = .{ .command = .top } },
-        .{ .scope = .command_palette, .mode = .normal, .seq = &.{.{ .codepoint = 'G', .mods = .{ .shift = true } }}, .action = .{ .command = .bottom } },
+        .{ .scope = .global, .mode = .normal, .sequence = "i", .action = "workspace:enter_insert" },
+        .{ .scope = .global, .mode = .normal, .sequence = "v", .action = "workspace:enter_visual" },
+        .{ .scope = .global, .mode = .insert, .sequence = "escape", .action = "workspace:enter_normal" },
+        .{ .scope = .global, .mode = .visual, .sequence = "escape", .action = "workspace:enter_normal" },
+        .{ .scope = .global, .mode = .normal, .sequence = "super+l", .action = "workspace:toggle_left_dock" },
+        .{ .scope = .global, .mode = .normal, .sequence = "ctrl+t", .action = "workspace:new_tab" },
+        .{ .scope = .global, .mode = .normal, .sequence = "tab", .action = "workspace:next_tab" },
+        .{ .scope = .global, .mode = .normal, .sequence = "shift+tab", .action = "workspace:prev_tab" },
+        .{ .scope = .global, .mode = .normal, .sequence = "ctrl+q", .action = "workspace:close_active_tab" },
+        .{ .scope = .global, .mode = .normal, .sequence = "super+k", .action = "workspace:toggle_command_palette" },
+        .{ .scope = .command_palette, .mode = .normal, .sequence = "k", .action = "command:up" },
+        .{ .scope = .command_palette, .mode = .normal, .sequence = "j", .action = "command:down" },
+        .{ .scope = .command_palette, .mode = .normal, .sequence = "enter", .action = "command:select" },
+        .{ .scope = .command_palette, .mode = .normal, .sequence = "ctrl+u", .action = "command:scroll_up" },
+        .{ .scope = .command_palette, .mode = .normal, .sequence = "ctrl+d", .action = "command:scroll_down" },
+        .{ .scope = .command_palette, .mode = .normal, .sequence = "g g", .action = "command:top" },
+        .{ .scope = .command_palette, .mode = .normal, .sequence = "shift+G", .action = "command:bottom" },
     };
 
     for (defaults) |d| {
-        self.keymaps.actions(d.scope, d.mode).insert(d.seq, d.action) catch continue;
-        if (d.binding) |b| self.recordBinding(d.action, b);
+        self.keymaps.insert(d.scope, d.mode, d.sequence, d.action) catch continue;
     }
 
     self.keymap_generation +%= 1;
 }
 
-fn recordBinding(self: *Settings, action: Action, seq_str: []const u8) void {
-    const k = action.key();
-    if (self.binding_map.contains(k)) return;
-    const owned = self.alloc.dupe(u8, seq_str) catch return;
-    self.binding_map.put(self.alloc, k, owned) catch {
-        self.alloc.free(owned);
-    };
-}
-
-fn clearBindingMap(self: *Settings) void {
-    var it = self.binding_map.valueIterator();
-    while (it.next()) |v| {
-        self.alloc.free(v.*);
-    }
-    self.binding_map.clearRetainingCapacity();
-}
-
-pub fn keymapBindingString(self: *Settings, action: Action) ?[]const u8 {
-    return self.binding_map.get(action.key());
-}
 
 test "loadSettings parses settings.json" {
     const alloc = std.testing.allocator;
@@ -389,8 +358,6 @@ test "loadSettings parses settings.json" {
         if (self.light_theme.ptr != DEFAULT_LIGHT.ptr) alloc.free(self.light_theme);
         if (self.dark_theme.ptr != DEFAULT_DARK.ptr) alloc.free(self.dark_theme);
         if (self.keymaps_initialized) self.keymaps.deinit();
-        self.clearBindingMap();
-        self.binding_map.deinit(alloc);
     }
 
     var tmp = std.testing.tmpDir(.{});
@@ -419,8 +386,6 @@ test "loadSettings returns error for missing settings.json" {
 
     defer {
         if (self.keymaps_initialized) self.keymaps.deinit();
-        self.clearBindingMap();
-        self.binding_map.deinit(alloc);
     }
 
     var tmp = std.testing.tmpDir(.{});
@@ -438,8 +403,6 @@ test "loadSettings returns error for invalid json" {
 
     defer {
         if (self.keymaps_initialized) self.keymaps.deinit();
-        self.clearBindingMap();
-        self.binding_map.deinit(alloc);
     }
 
     var tmp = std.testing.tmpDir(.{});

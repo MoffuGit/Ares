@@ -178,6 +178,73 @@ fn countDepth(path: []const u8) u16 {
     return depth;
 }
 
+const keymapspkg = @import("keymaps/mod.zig");
+
+pub const ExternKeymapEntry = extern struct {
+    sequence_ptr: usize,
+    sequence_len: usize,
+    action_ptr: usize,
+    action_len: usize,
+};
+
+export fn getKeymapEntryCount(settings: *Settings, scope: u8, mode: u8) u64 {
+    if (!settings.keymaps_initialized) return 0;
+    if (scope >= @typeInfo(keymapspkg.Scope).@"enum".fields.len) return 0;
+    if (mode >= @typeInfo(keymapspkg.Mode).@"enum".fields.len) return 0;
+
+    const s: keymapspkg.Scope = @enumFromInt(scope);
+    const m: keymapspkg.Mode = @enumFromInt(mode);
+    return settings.keymaps.entries(s, m).len;
+}
+
+export fn readKeymapEntries(settings: *Settings, scope: u8, mode: u8, out: [*]ExternKeymapEntry, max_count: u64) u64 {
+    if (!settings.keymaps_initialized) return 0;
+    if (scope >= @typeInfo(keymapspkg.Scope).@"enum".fields.len) return 0;
+    if (mode >= @typeInfo(keymapspkg.Mode).@"enum".fields.len) return 0;
+
+    const s: keymapspkg.Scope = @enumFromInt(scope);
+    const m: keymapspkg.Mode = @enumFromInt(mode);
+    const entries = settings.keymaps.entries(s, m);
+
+    const count = @min(entries.len, max_count);
+    for (0..count) |i| {
+        const entry = entries[i];
+        out[i] = .{
+            .sequence_ptr = @intFromPtr(entry.sequence.ptr),
+            .sequence_len = entry.sequence.len,
+            .action_ptr = @intFromPtr(entry.action.ptr),
+            .action_len = entry.action.len,
+        };
+    }
+    return count;
+}
+
+const KeyStroke = @import("keymaps/KeyStroke.zig").KeyStroke;
+const KeyStrokeContext = @import("keymaps/KeyStroke.zig").KeyStrokeContext;
+const triepkg = @import("datastruct");
+const TrieNode = triepkg.NodeType(KeyStroke, u8, KeyStrokeContext);
+
+export fn getTrieRoot(settings: *Settings, mode: u8) ?*TrieNode {
+    if (!settings.keymaps_initialized) return null;
+    if (mode >= @typeInfo(keymapspkg.Mode).@"enum".fields.len) return null;
+
+    const m: keymapspkg.Mode = @enumFromInt(mode);
+    return settings.keymaps.trie(m).root;
+}
+
+export fn trieStep(node: *TrieNode, codepoint: u32, mods: u8) ?*TrieNode {
+    const ks = KeyStroke{ .codepoint = @truncate(codepoint), .mods = @bitCast(mods) };
+    return node.childrens.get(ks);
+}
+
+export fn trieNodeIsTerminal(node: *TrieNode) bool {
+    return node.values.items.len > 0;
+}
+
+export fn trieNodeHasChildren(node: *TrieNode) bool {
+    return node.childrens.count() > 0;
+}
+
 export fn openBuffer(project: *Project, entry_id: u64) ?*Buffer {
     return project.openBuffer(entry_id);
 }
