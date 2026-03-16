@@ -2,67 +2,15 @@ import type { Pointer } from "bun:ffi";
 import { resolveCoreLib, type CoreLib } from "@ares/core";
 import { EventEmitter } from "events"
 import { EventType, } from "@ares/core/events";
-import { SchemeMap } from "./index.ts";
-import { Emitter } from "./emitter.ts";
-import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps } from "./types.ts";
-import type { AppState, AppEvents, BaseApp } from "./app.ts";
-
-type RawThemeFile = {
-    name: string;
-    colors: Record<string, string>;
-    theme: Record<string, string> & {
-        fileType?: Record<string, string>;
-    };
-};
-
-const THEME_KEYS = [
-    "bg", "fg", "primaryBg", "primaryFg", "mutedBg", "mutedFg",
-    "scrollThumb", "scrollTrack", "border", "card", "cardFg",
-    "popover", "popoverFg", "secondary", "secondaryFg",
-    "accent", "accentFg", "destructive", "destructiveFg",
-    "input", "ring", "chart1", "chart2", "chart3", "chart4", "chart5",
-    "sidebar", "sidebarFg", "sidebarPrimary", "sidebarPrimaryFg",
-    "sidebarAccent", "sidebarAccentFg", "sidebarBorder", "sidebarRing",
-] as const;
-
-function normalizeHex(hex: string): string {
-    const h = hex.toLowerCase();
-    if (h.length === 7) return h + "ff";
-    if (h.length === 9) return h;
-    return "#000000ff";
-}
-
-function resolveColor(value: string, colors: Record<string, string>): string {
-    if (value.startsWith("#")) return normalizeHex(value);
-    const resolved = colors[value];
-    if (resolved) return normalizeHex(resolved);
-    return "#000000ff";
-}
+import { SchemeMap } from "../index.ts";
+import { Emitter } from "../emitter.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps } from "../types.ts";
+import type { AppState, AppEvents, BaseApp } from "../app.ts";
+import { resolveTheme } from "./theme.ts";
 
 const ModeMap: Record<Mode, number> = { normal: 0, insert: 1, visual: 2 };
 const ScopeMap: Record<Scope, number> = { global: 0, editor: 1, command_palette: 2 };
 
-const FALLBACK_THEME: Theme = {
-    name: "fallback",
-    fg: "#dcdcdcff", bg: "#1e1e1eff",
-    primaryBg: "#282828ff", primaryFg: "#c8c8c8ff",
-    mutedBg: "#3c3c3cff", mutedFg: "#a0a0a0ff",
-    scrollThumb: "#646464ff", scrollTrack: "#323232ff",
-    border: "#00ff00ff",
-    card: "#1e1e1eff", cardFg: "#dcdcdcff",
-    popover: "#1e1e1eff", popoverFg: "#dcdcdcff",
-    secondary: "#3c3c3cff", secondaryFg: "#a0a0a0ff",
-    accent: "#3c3c3cff", accentFg: "#a0a0a0ff",
-    destructive: "#dc2626ff", destructiveFg: "#ffffffff",
-    input: "#323232ff", ring: "#282828ff",
-    chart1: "#e76f51ff", chart2: "#2a9d8fff", chart3: "#e9c46aff",
-    chart4: "#a78bfaff", chart5: "#f4845fff",
-    sidebar: "#3c3c3cff", sidebarFg: "#dcdcdcff",
-    sidebarPrimary: "#282828ff", sidebarPrimaryFg: "#c8c8c8ff",
-    sidebarAccent: "#3c3c3cff", sidebarAccentFg: "#a0a0a0ff",
-    sidebarBorder: "#323232ff", sidebarRing: "#282828ff",
-    fileType: {},
-};
 
 export class CoreApp extends EventEmitter implements BaseApp {
     readonly core: CoreLib;
@@ -174,6 +122,22 @@ export class CoreApp extends EventEmitter implements BaseApp {
         return this.core.readKeymapEntries(this.settings, ScopeMap[scope], ModeMap[this._state.mode]);
     }
 
+    getTrieRoot(mode: Mode): Pointer | null {
+        return this.core.getTrieRoot(this.settings, ModeMap[mode]);
+    }
+
+    trieStep(node: Pointer, codepoint: number, mods: number): Pointer | null {
+        return this.core.trieStep(node, codepoint, mods);
+    }
+
+    trieNodeIsTerminal(node: Pointer): boolean {
+        return this.core.trieNodeIsTerminal(node);
+    }
+
+    trieNodeHasChildren(node: Pointer): boolean {
+        return this.core.trieNodeHasChildren(node);
+    }
+
     protected readAllKeymaps(mode?: Mode): ScopedKeymaps {
         const m = ModeMap[mode ?? this._state.mode];
         return {
@@ -206,30 +170,7 @@ export class CoreApp extends EventEmitter implements BaseApp {
     }
 
     protected readTheme(): Theme {
-        try {
-            const json = this.core.readThemeJson(this.settings);
-            const raw: RawThemeFile = JSON.parse(json);
-
-            const resolved: Record<string, string> = {};
-            for (const key of THEME_KEYS) {
-                const ref = raw.theme[key];
-                resolved[key] = ref ? resolveColor(ref, raw.colors) : "#000000ff";
-            }
-
-            const fileType: Record<string, string> = {};
-            if (raw.theme.fileType) {
-                for (const [key, value] of Object.entries(raw.theme.fileType)) {
-                    fileType[key] = resolveColor(value, raw.colors);
-                }
-            }
-
-            return {
-                name: raw.name ?? "unknown",
-                ...resolved,
-                fileType,
-            } as Theme;
-        } catch {
-            return FALLBACK_THEME;
-        }
+        const json = this.core.readThemeJson(this.settings);
+        return resolveTheme(json);
     }
 }

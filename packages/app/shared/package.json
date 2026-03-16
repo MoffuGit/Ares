@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./core": "./src/core.ts",
+    "./core": "./src/core/index.ts",
     "./react": "./src/react/index.ts",
     "./solid": "./src/solid/index.ts"
   },

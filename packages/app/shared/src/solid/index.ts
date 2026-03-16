@@ -64,3 +64,10 @@ export function useScopedKeymaps(scope: Scope): Accessor<KeymapBinding[]> {
     const keymaps = useKeymaps();
     return () => keymaps()?.[scope] ?? [];
 }
+
+// export function useKeymapHandler(scope: Scope): (e: KeyboardEvent) => boolean {
+//     const app = useApp();
+//     const handler = new KeymapHandler(app, scope);
+//     onCleanup(() => handler.destroy());
+//     return (e: KeyboardEvent) => handler.handleKeyDown(e);
+// }

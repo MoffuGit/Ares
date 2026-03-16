@@ -79,3 +79,18 @@ export function useScopedKeymaps(scope: Scope): KeymapBinding[] {
     return keymaps?.[scope] ?? [];
 }
 
+// export function useKeymapHandler(scope: Scope): (e: KeyboardEvent) => boolean {
+//     const app = useApp();
+//     const handlerRef = useRef<KeymapHandler | null>(null);
+//
+//     useEffect(() => {
+//         const handler = new KeymapHandler(app, scope);
+//         handlerRef.current = handler;
+//         return () => {
+//             handler.destroy();
+//             handlerRef.current = null;
+//         };
+//     }, [app, scope]);
+//
+//     return (e: KeyboardEvent) => handlerRef.current?.handleKeyDown(e) ?? false;
+// }
