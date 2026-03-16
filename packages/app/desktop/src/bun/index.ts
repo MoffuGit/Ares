@@ -93,6 +93,10 @@ app.events.on("keymapsUpdate", () => {
     }
 });
 
+app.events.on("keymapAction", (sequence) => {
+    console.log("We should handle the following sequence:", sequence)
+});
+
 mainWindow.webview.on("dom-ready", () => {
     setInterval(() => {
         app.drainMailbox()

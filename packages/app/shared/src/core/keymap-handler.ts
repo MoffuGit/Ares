@@ -62,7 +62,7 @@ export class KeymapHandler {
 
     handleKeyDown(char: string, mods: KeyDownMods): void {
         const codepoint = char.length === 1 ? char.codePointAt(0)! : codepointFromKey(char);
-
+        if (codepoint === 0) return;
         const pack = packMods(mods);
         const mode = this.core._state.mode;
 
