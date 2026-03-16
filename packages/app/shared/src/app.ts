@@ -1,4 +1,4 @@
-import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps } from "./types.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, KeyDownMods } from "./types.ts";
 import { Emitter } from "./emitter.ts";
 
 export type AppState = {
@@ -24,4 +24,5 @@ export interface BaseApp {
     selectEntry: (id: number) => void,
     setMode: (mode: Mode) => void,
     readKeymaps: (scope: Scope) => KeymapBinding[],
+    handleKeyDown: (char: string, mods: KeyDownMods) => void;
 }

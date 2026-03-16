@@ -3,7 +3,7 @@ import { resolveCoreLib, type CoreLib } from "@ares/core";
 import { EventType, } from "@ares/core/events";
 import { SchemeMap } from "../index.ts";
 import { Emitter } from "../emitter.ts";
-import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps } from "../types.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, KeyDownMods } from "../types.ts";
 import type { AppState, AppEvents, BaseApp } from "../app.ts";
 import { resolveTheme } from "./theme.ts";
 import { KeymapHandler } from "./keymap-handler.ts";
@@ -137,6 +137,10 @@ export class CoreApp implements BaseApp {
 
     trieNodeHasChildren(node: Pointer): boolean {
         return this.core.trieNodeHasChildren(node);
+    }
+
+    handleKeyDown(char: string, mods: KeyDownMods): void {
+        this.keymapHandler.handleKeyDown(char, mods);
     }
 
     protected readAllKeymaps(mode?: Mode): ScopedKeymaps {

@@ -1,5 +1,5 @@
 import type { RPCSchema } from "electrobun/bun";
-import type { AppState, Settings, Theme, WorktreeEntry, Mode, ScopedKeymaps } from "@ares/shared";
+import type { AppState, Settings, Theme, WorktreeEntry, Mode, ScopedKeymaps, KeyDownMods } from "@ares/shared";
 
 export type AppRPC = {
     bun: RPCSchema<{
@@ -12,6 +12,7 @@ export type AppRPC = {
         messages: {
             selectEntry: number;
             setMode: Mode;
+            keyDown: { char: string, mods: KeyDownMods }
         };
     }>;
     webview: RPCSchema<{

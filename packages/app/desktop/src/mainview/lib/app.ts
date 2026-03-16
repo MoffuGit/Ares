@@ -1,6 +1,6 @@
 import { Electroview } from "electrobun/view";
 import { AppEvents, AppState, BaseApp, Emitter } from "@ares/shared";
-import type { Mode, Scope, KeymapBinding } from "@ares/shared";
+import type { Mode, Scope, KeymapBinding, KeyDownMods } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 
 export class WebviewApp implements BaseApp {
@@ -52,5 +52,9 @@ export class WebviewApp implements BaseApp {
 
     readKeymaps(scope: Scope): KeymapBinding[] {
         return this._state.keymaps?.[scope] ?? [];
+    }
+
+    handleKeyDown(char: string, mods: KeyDownMods) {
+        this.electroview.send("keyDown", { char, mods });
     }
 }

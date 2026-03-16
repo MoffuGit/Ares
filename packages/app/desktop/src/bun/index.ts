@@ -38,6 +38,9 @@ const rpc = BrowserView.defineRPC<AppRPC>({
         messages: {
             selectEntry: (id) => app.selectEntry(id),
             setMode: (mode) => app.setMode(mode),
+            keyDown: ({ char, mods }) => {
+                app.handleKeyDown(char, mods);
+            }
         },
     },
 });
