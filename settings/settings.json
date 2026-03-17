@@ -7,7 +7,7 @@
       "normal": {
         "i": "workspace:enter_insert",
         "v": "workspace:enter_visual",
-        "super+l": "workspace:toggle_left_dock",
+        "super+b": "workspace:toggle_left_sidebar",
         "ctrl+t": "workspace:new_tab",
         "tab": "workspace:next_tab",
         "shift+tab": "workspace:prev_tab",

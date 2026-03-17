@@ -93,8 +93,10 @@ app.events.on("keymapsUpdate", () => {
     }
 });
 
-app.events.on("keymapAction", (sequence) => {
-    console.log("We should handle the following sequence:", sequence)
+app.events.on("keymapSequence", (sequence) => {
+    if (sequence) {
+        mainWindow.webview.rpc?.send.keySequence(sequence);
+    }
 });
 
 mainWindow.webview.on("dom-ready", () => {

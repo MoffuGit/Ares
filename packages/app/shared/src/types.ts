@@ -58,6 +58,35 @@ export type WorktreeEntry = {
 export type Mode = "normal" | "insert" | "visual";
 export type Scope = "global" | "editor" | "command_palette";
 
+export type GlobalAction =
+    | "workspace:enter_insert"
+    | "workspace:enter_visual"
+    | "workspace:enter_normal"
+    | "workspace:toggle_left_sidebar"
+    | "workspace:new_tab"
+    | "workspace:next_tab"
+    | "workspace:prev_tab"
+    | "workspace:close_active_tab"
+    | "workspace:toggle_command_palette";
+
+export type EditorAction =
+    | string;
+
+export type CommandPaletteAction =
+    | "command:up"
+    | "command:down"
+    | "command:select"
+    | "command:scroll_up"
+    | "command:scroll_down"
+    | "command:top"
+    | "command:bottom";
+
+export type ScopeActionMap = {
+    global: GlobalAction;
+    editor: EditorAction;
+    command_palette: CommandPaletteAction;
+};
+
 export type KeymapBinding = {
     sequence: string;
     action: string;

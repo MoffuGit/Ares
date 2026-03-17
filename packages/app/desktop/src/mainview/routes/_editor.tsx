@@ -6,11 +6,31 @@ import {
 } from "@/components/ui/sidebar"
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppSidebar } from '@/components/app-sidebar';
+import { useEffect, useState } from 'react';
+import { useApp, useScopedKeymaps } from '@ares/shared/react';
 
 export const Route = createFileRoute('/_editor')({
-    component: () => (
+    component: EditorComponent,
+})
+
+function EditorComponent() {
+    const [open, setOpen] = useState(false);
+    const app = useApp()
+    const keymaps = useScopedKeymaps("global");
+
+    useEffect(() => {
+        const handler = (sequence: string) => {
+            const action = keymaps[sequence];
+            if (action === "workspace:toggle_left_sidebar") {
+                setOpen((prev) => !prev);
+            }
+        };
+        app.events.on("keymapSequence", handler);
+        return () => app.events.off("keymapSequence", handler);
+    }, [app, keymaps]);
+    return (
         <TooltipProvider>
-            <SidebarProvider>
+            <SidebarProvider open={open} onOpenChange={setOpen}>
                 <div className='w-full h-screen overflow-hidden flex flex-col flex-1 content-stretch'>
                     <div className='w-full h-7 shrink-0  pl-18 bg-sidebar cursor-default electrobun-webkit-app-region-drag'>
                         <div className="w-auto h-full flex items-center gap-2 electrobun-webkit-app-region-no-drag">
@@ -27,5 +47,5 @@ export const Route = createFileRoute('/_editor')({
                 </div>
             </SidebarProvider>
         </TooltipProvider>
-    ),
-})
+    );
+}

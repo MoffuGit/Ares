@@ -10,23 +10,23 @@ export const Route = createFileRoute('/_editor/')({
         return (
             <div className="p-4 space-y-2">
                 <p className="text-sm font-medium">Mode: {mode}</p>
-                <p className="text-sm font-medium">Global Keymaps ({globalKeymaps.length}):</p>
+                <p className="text-sm font-medium">Global Keymaps ({Object.keys(globalKeymaps).length}):</p>
                 <ul className="text-xs font-mono space-y-1">
-                    {globalKeymaps.map((b, i) => (
-                        <li key={i}>
-                            <span className="text-muted-foreground">{b.sequence}</span>
+                    {Object.entries(globalKeymaps).map(([sequence, action]) => (
+                        <li key={sequence}>
+                            <span className="text-muted-foreground">{sequence}</span>
                             {' → '}
-                            <span>{b.action}</span>
+                            <span>{action}</span>
                         </li>
                     ))}
                 </ul>
-                <p className="text-sm font-medium">Editor Keymaps ({editorKeymaps.length}):</p>
+                <p className="text-sm font-medium">Editor Keymaps ({Object.keys(editorKeymaps).length}):</p>
                 <ul className="text-xs font-mono space-y-1">
-                    {editorKeymaps.map((b, i) => (
-                        <li key={i}>
-                            <span className="text-muted-foreground">{b.sequence}</span>
+                    {Object.entries(editorKeymaps).map(([sequence, action]) => (
+                        <li key={sequence}>
+                            <span className="text-muted-foreground">{sequence}</span>
                             {' → '}
-                            <span>{b.action}</span>
+                            <span>{action}</span>
                         </li>
                     ))}
                 </ul>

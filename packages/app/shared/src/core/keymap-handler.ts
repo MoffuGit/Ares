@@ -56,7 +56,7 @@ export class KeymapHandler {
     }
 
     private emit(sequenceStr: string): void {
-        this.core.events.emit("keymapAction", sequenceStr);
+        this.core.events.emit("keymapSequence", sequenceStr);
         this.reset();
     }
 

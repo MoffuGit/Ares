@@ -33,6 +33,9 @@ export class WebviewApp implements BaseApp {
                         this._state = { ...this._state, keymaps };
                         this.events.emit("keymapsUpdate");
                     },
+                    keySequence: (sequence) => {
+                        this.events.emit("keymapSequence", sequence);
+                    }
                 },
             },
         })

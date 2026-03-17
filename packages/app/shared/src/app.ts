@@ -15,7 +15,7 @@ export type AppEvents = {
     filetreeUpdate: [];
     modeUpdate: [];
     keymapsUpdate: [];
-    keymapAction: [sequence: string];
+    keymapSequence: [sequence: string];
 };
 
 export interface BaseApp {

@@ -23,6 +23,7 @@ export type AppRPC = {
             filetreeUpdate: WorktreeEntry[];
             modeUpdate: Mode;
             keymapsUpdate: ScopedKeymaps;
+            keySequence: string,
         };
     }>;
 };

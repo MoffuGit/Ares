@@ -1,6 +1,6 @@
 import { createContext, createElement, useContext, useSyncExternalStore, type ReactNode } from "react";
 import type { BaseApp, AppState } from "../app.ts";
-import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps } from "../types.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, ScopedKeymaps, ScopeActionMap } from "../types.ts";
 
 const AppContext = createContext<BaseApp | null>(null);
 
@@ -74,9 +74,14 @@ export function useKeymaps(): ScopedKeymaps | null {
     );
 }
 
-export function useScopedKeymaps(scope: Scope): KeymapBinding[] {
+export function useScopedKeymaps<S extends Scope>(scope: S): Record<string, ScopeActionMap[S]> {
     const keymaps = useKeymaps();
-    return keymaps?.[scope] ?? [];
+    const bindings = keymaps?.[scope] ?? [];
+    const map: Record<string, ScopeActionMap[S]> = {};
+    for (const b of bindings) {
+        map[b.sequence] = b.action as ScopeActionMap[S];
+    }
+    return map;
 }
 
 // export function useKeymapHandler(scope: Scope): (e: KeyboardEvent) => boolean {
