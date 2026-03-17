@@ -6,7 +6,7 @@ import { Emitter } from "../emitter.ts";
 import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, KeyDownMods } from "../types.ts";
 import type { AppState, AppEvents, BaseApp } from "../app.ts";
 import { resolveTheme } from "./theme.ts";
-import { KeymapHandler } from "./keymap-handler.ts";
+import { KeymapHandler } from "../keymap/handler.ts";
 
 const ModeMap: Record<Mode, number> = { normal: 0, insert: 1, visual: 2 };
 const ScopeMap: Record<Scope, number> = { global: 0, editor: 1, command_palette: 2 };
@@ -19,7 +19,7 @@ export class CoreApp implements BaseApp {
     protected settings: Pointer;
     protected io: Pointer;
     protected project: Pointer | null = null;
-    protected keymapHandler: KeymapHandler;
+    protected keymapHandler: KeymapHandler<Pointer>;
 
     _state: AppState = { settings: null, theme: null, filetree: null, mode: "normal", keymaps: null };
     events = new Emitter<AppEvents>;

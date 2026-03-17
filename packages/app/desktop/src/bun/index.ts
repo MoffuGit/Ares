@@ -34,9 +34,6 @@ const rpc = BrowserView.defineRPC<AppRPC>({
     handlers: {
         requests: {
             getState: ({ }) => app._state,
-            keyDown: ({ char, mods }) => {
-                return app.handleKeyDown(char, mods);
-            }
         },
         messages: {
             selectEntry: (id) => app.selectEntry(id),
@@ -90,12 +87,6 @@ app.events.on("modeUpdate", () => {
 app.events.on("keymapsUpdate", () => {
     if (app._state.keymaps) {
         mainWindow.webview.rpc?.send.keymapsUpdate(app._state.keymaps);
-    }
-});
-
-app.events.on("keymapSequence", (sequence) => {
-    if (sequence) {
-        mainWindow.webview.rpc?.send.keySequence(sequence);
     }
 });
 

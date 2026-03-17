@@ -1,11 +1,15 @@
 import { Electroview } from "electrobun/view";
-import { AppEvents, AppState, BaseApp, Emitter } from "@ares/shared";
-import type { Mode, Scope, KeymapBinding, KeyDownMods } from "@ares/shared";
+import { AppEvents, AppState, BaseApp, Emitter, KeymapHandler, buildKeymapTrie, edgeKey } from "@ares/shared";
+import type { Mode, Scope, KeymapBinding, KeyDownMods, ScopedKeymaps } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
+import type { TSTrieNode } from "@ares/shared";
 
 export class WebviewApp implements BaseApp {
     _state: AppState = { settings: null, theme: null, filetree: null, mode: "normal", keymaps: null }
     events = new Emitter<AppEvents>;
+
+    private trieRoot: TSTrieNode | null = null;
+    private keymapHandler = new KeymapHandler<TSTrieNode>(this);
 
     electroview =
         Electroview.defineRPC<AppRPC>({
@@ -27,21 +31,22 @@ export class WebviewApp implements BaseApp {
                     },
                     modeUpdate: (mode) => {
                         this._state = { ...this._state, mode };
+                        this.trieRoot = null;
                         this.events.emit("modeUpdate");
                     },
                     keymapsUpdate: (keymaps) => {
                         this._state = { ...this._state, keymaps };
+                        this.rebuildTrie(keymaps);
                         this.events.emit("keymapsUpdate");
                     },
-                    keySequence: (sequence) => {
-                        this.events.emit("keymapSequence", sequence);
-                    }
                 },
             },
         })
         ;
+
     async loadSettings() {
         this._state = await this.electroview.request.getState({})
+        this.rebuildTrie(this._state.keymaps);
     }
 
     selectEntry(id: number) {
@@ -57,8 +62,27 @@ export class WebviewApp implements BaseApp {
         return this._state.keymaps?.[scope] ?? [];
     }
 
+    handleKeyDown(char: string, mods: KeyDownMods): boolean {
+        return this.keymapHandler.handleKeyDown(char, mods);
+    }
 
-    handleKeyDown(char: string, mods: KeyDownMods) {
-        return this.electroview.request("keyDown", { char, mods });
+    getTrieRoot(_mode: Mode): TSTrieNode | null {
+        return this.trieRoot;
+    }
+
+    trieStep(node: TSTrieNode, codepoint: number, mods: number): TSTrieNode | null {
+        return node.children.get(edgeKey(codepoint, mods)) ?? null;
+    }
+
+    trieNodeIsTerminal(node: TSTrieNode): boolean {
+        return node.terminal;
+    }
+
+    trieNodeHasChildren(node: TSTrieNode): boolean {
+        return node.children.size > 0;
+    }
+
+    private rebuildTrie(keymaps: ScopedKeymaps | null): void {
+        this.trieRoot = buildKeymapTrie(keymaps);
     }
 }

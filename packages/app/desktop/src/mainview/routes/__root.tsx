@@ -13,9 +13,8 @@ function RootComponent() {
 
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            e.preventDefault();
 
-            app.handleKeyDown(e.key, {
+            const consumed = app.handleKeyDown(e.key, {
                 shift: e.shiftKey,
                 alt: e.altKey,
                 ctrl: e.ctrlKey,
@@ -25,6 +24,11 @@ function RootComponent() {
                 caps_lock: e.getModifierState('CapsLock'),
                 num_lock: e.getModifierState('NumLock'),
             });
+
+            if (consumed) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
