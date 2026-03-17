@@ -98,7 +98,7 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
-            selectEntry: {
+            expandEntry: {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void,
             },
@@ -278,8 +278,8 @@ export class CoreLib extends EventEmitter {
         return entries;
     }
 
-    selectEntry(project: Pointer, id: number): void {
-        this.lib.symbols.selectEntry(project, id);
+    expandEntry(project: Pointer, id: number): void {
+        this.lib.symbols.expandEntry(project, id);
     }
 
     getTrieRoot(settings: Pointer, mode: number): Pointer | null {

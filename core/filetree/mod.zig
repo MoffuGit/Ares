@@ -54,7 +54,7 @@ pub fn destroy(self: *FileTree) void {
     self.alloc.destroy(self);
 }
 
-pub fn selectEntry(self: *FileTree, id: u64) void {
+pub fn expandEntry(self: *FileTree, id: u64) void {
     const entry = entry: {
         self.worktree.snapshot.mutex.lock();
         defer self.worktree.snapshot.mutex.unlock();
@@ -70,7 +70,7 @@ pub fn selectEntry(self: *FileTree, id: u64) void {
             self.expanded_entries.put(entry.id, {}) catch {};
         }
         self.rebuildVisibleEntries();
-    } else {}
+    }
 }
 
 fn rebuildVisibleEntries(self: *FileTree) void {

@@ -166,8 +166,8 @@ export fn readFiletree(project: *Project, out: [*]ExternWorktreeEntry, max_count
     return i;
 }
 
-export fn selectEntry(project: *Project, id: u64) void {
-    project.filetree.selectEntry(id);
+export fn expandEntry(project: *Project, id: u64) void {
+    project.filetree.expandEntry(id);
 }
 
 fn countDepth(path: []const u8) u16 {

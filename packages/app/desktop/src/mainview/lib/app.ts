@@ -49,8 +49,8 @@ export class WebviewApp implements BaseApp {
         this.rebuildTrie(this._state.keymaps);
     }
 
-    selectEntry(id: number) {
-        this.electroview.send("selectEntry", id)
+    expandEntry(id: number) {
+        this.electroview.send("expandEntry", id)
     };
 
     setMode(mode: Mode) {

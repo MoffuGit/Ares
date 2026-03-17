@@ -22,7 +22,7 @@ function FileTree() {
                     <For each={filetree()}>
                         {(entry) => (
                             <SidebarMenuItem>
-                                <SidebarMenuButton onClick={() => app.selectEntry(entry.id)}>
+                                <SidebarMenuButton onClick={() => app.expandEntry(entry.id)}>
                                     {" ".repeat(entry.depth)}{entry.kind === "dir" ? (entry.expanded ? "▾ " : "▸ ") : "  "}{entry.name}
                                 </SidebarMenuButton>
                             </SidebarMenuItem>

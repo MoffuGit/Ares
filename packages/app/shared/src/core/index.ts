@@ -116,9 +116,9 @@ export class CoreApp implements BaseApp {
         this.events.emit("filetreeUpdate");
     }
 
-    selectEntry(id: number) {
+    expandEntry(id: number) {
         if (this.project) {
-            this.core.selectEntry(this.project, id);
+            this.core.expandEntry(this.project, id);
         }
     }
 

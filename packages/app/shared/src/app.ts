@@ -21,7 +21,7 @@ export type AppEvents = {
 export interface BaseApp {
     _state: AppState
     events: Emitter<AppEvents>
-    selectEntry: (id: number) => void,
+    expandEntry: (id: number) => void,
     setMode: (mode: Mode) => void,
     readKeymaps: (scope: Scope) => KeymapBinding[],
     handleKeyDown: (char: string, mods: KeyDownMods) => boolean;

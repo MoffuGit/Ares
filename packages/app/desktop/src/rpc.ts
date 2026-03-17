@@ -10,7 +10,7 @@ export type AppRPC = {
             gitFileTree: { params: {}; response: WorktreeEntry[] }
         };
         messages: {
-            selectEntry: number;
+            expandEntry: number;
             setMode: Mode;
         };
     }>;
