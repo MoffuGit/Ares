@@ -60,15 +60,15 @@ export class KeymapHandler {
         this.reset();
     }
 
-    handleKeyDown(char: string, mods: KeyDownMods): void {
+    handleKeyDown(char: string, mods: KeyDownMods): boolean {
         const codepoint = char.length === 1 ? char.codePointAt(0)! : codepointFromKey(char);
-        if (codepoint === 0) return;
+        if (codepoint === 0) return false;
         const pack = packMods(mods);
         const mode = this.core._state.mode;
 
         if (!this.currentNode) {
             const root = this.core.getTrieRoot(mode);
-            if (!root) return;
+            if (!root) return false;
             this.currentNode = root;
         }
 
@@ -77,10 +77,10 @@ export class KeymapHandler {
         if (!next) {
             if (this.lastTerminalSequence) {
                 this.emit(this.lastTerminalSequence);
-                return;
+                return true;
             }
             this.reset();
-            return;
+            return false;
         }
 
         this.sequence.push(formatKeystroke(char, mods));
@@ -90,19 +90,20 @@ export class KeymapHandler {
             const seqStr = this.sequence.join(" ");
             if (!this.core.trieNodeHasChildren(next)) {
                 this.emit(seqStr);
-                return;
+                return true;
             }
             this.lastTerminalSequence = seqStr;
             this.restartTimer();
-            return;
+            return true;
         }
 
         if (this.core.trieNodeHasChildren(next)) {
             this.restartTimer();
-            return;
+            return true;
         }
 
         this.reset();
+        return false;
     }
 }
 

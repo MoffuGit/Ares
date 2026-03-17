@@ -8,11 +8,11 @@ export type AppRPC = {
             getTheme: { params: {}; response: Theme },
             getState: { params: {}; response: AppState };
             gitFileTree: { params: {}; response: WorktreeEntry[] }
+            keyDown: { params: { char: string, mods: KeyDownMods }, response: boolean }
         };
         messages: {
             selectEntry: number;
             setMode: Mode;
-            keyDown: { char: string, mods: KeyDownMods }
         };
     }>;
     webview: RPCSchema<{

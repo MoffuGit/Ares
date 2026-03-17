@@ -34,13 +34,13 @@ const rpc = BrowserView.defineRPC<AppRPC>({
     handlers: {
         requests: {
             getState: ({ }) => app._state,
+            keyDown: ({ char, mods }) => {
+                return app.handleKeyDown(char, mods);
+            }
         },
         messages: {
             selectEntry: (id) => app.selectEntry(id),
             setMode: (mode) => app.setMode(mode),
-            keyDown: ({ char, mods }) => {
-                app.handleKeyDown(char, mods);
-            }
         },
     },
 });

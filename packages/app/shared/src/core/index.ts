@@ -139,8 +139,8 @@ export class CoreApp implements BaseApp {
         return this.core.trieNodeHasChildren(node);
     }
 
-    handleKeyDown(char: string, mods: KeyDownMods): void {
-        this.keymapHandler.handleKeyDown(char, mods);
+    handleKeyDown(char: string, mods: KeyDownMods): boolean {
+        return this.keymapHandler.handleKeyDown(char, mods);
     }
 
     protected readAllKeymaps(mode?: Mode): ScopedKeymaps {

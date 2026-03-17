@@ -57,7 +57,10 @@ export class WebviewApp implements BaseApp {
         return this._state.keymaps?.[scope] ?? [];
     }
 
+
     handleKeyDown(char: string, mods: KeyDownMods) {
-        this.electroview.send("keyDown", { char, mods });
+        let consumed = false;
+        this.electroview.request("keyDown", { char, mods }).then((c) => consumed = c);
+        return consumed;
     }
 }
