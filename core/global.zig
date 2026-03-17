@@ -14,12 +14,14 @@ pub var state: GlobalState = undefined;
 
 pub const GlobalEvents = union(enum) {
     worktreeUpdate: UpdatedEntriesSet,
+    bufferUpdate: u64,
 };
 
 pub const Events = union(enum) {
     settingsUpdate: void,
     themeUpdate: void,
     filetreeUpdate: void,
+    // bufferUpdate: u64,
 };
 
 pub const GlobalState = struct {

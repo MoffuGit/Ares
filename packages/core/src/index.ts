@@ -2,7 +2,7 @@ import { dlopen, FFIType, JSCallback, ptr, toArrayBuffer, type Pointer } from "b
 import { EventEmitter } from "events";
 import { resolve } from "path";
 import { EventType, Events, EventsName } from "./events";
-import { KeymapEntry, Settings, WorktreeEntry } from "./structs";
+import { BufferData, KeymapEntry, Settings, WorktreeEntry } from "./structs";
 
 const DEFAULT_LIB_PATH = resolve(import.meta.dir, "../../../zig-out/lib/libcore.dylib");
 
@@ -125,6 +125,18 @@ function getCoreLib(libPath: string) {
             readKeymapEntries: {
                 args: [FFIType.pointer, FFIType.u8, FFIType.u8, FFIType.pointer, FFIType.u64],
                 returns: FFIType.u64,
+            },
+            openBuffer: {
+                args: [FFIType.pointer, FFIType.u64],
+                returns: FFIType.pointer
+            },
+            closeBuffer: {
+                args: [FFIType.pointer, FFIType.u64],
+                returns: FFIType.void
+            },
+            readBuffer: {
+                args: [FFIType.pointer, FFIType.pointer],
+                returns: FFIType.void
             },
             drainMailbox: {
                 args: [],
@@ -322,6 +334,20 @@ export class CoreLib extends EventEmitter {
         } finally {
             this.lib.symbols.unlockSettings(settings);
         }
+    }
+
+    openBuffer(project: Pointer, entryId: number): Pointer | null {
+        return this.lib.symbols.openBuffer(project, entryId) as Pointer | null;
+    }
+
+    closeBuffer(project: Pointer, entryId: number): void {
+        this.lib.symbols.closeBuffer(project, entryId);
+    }
+
+    readBuffer(buffer: Pointer): ReturnType<typeof BufferData.unpack> {
+        const buf = new ArrayBuffer(BufferData.size);
+        this.lib.symbols.readBuffer(buffer, ptr(buf));
+        return BufferData.unpack(buf);
     }
 
     drainMailbox() {

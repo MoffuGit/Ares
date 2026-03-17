@@ -245,8 +245,27 @@ export fn trieNodeHasChildren(node: *TrieNode) bool {
     return node.childrens.count() > 0;
 }
 
+pub const ExternBuffer = extern struct {
+    state: u8,
+    bytes_ptr: usize,
+    bytes_len: usize,
+};
+
 export fn openBuffer(project: *Project, entry_id: u64) ?*Buffer {
     return project.openBuffer(entry_id);
+}
+
+export fn closeBuffer(project: *Project, entry_id: u64) void {
+    project.buffer_store.close(entry_id);
+}
+
+export fn readBuffer(buf: *Buffer, out: *ExternBuffer) void {
+    const bytes = buf.bytes();
+    out.* = .{
+        .state = @intFromEnum(buf.state),
+        .bytes_ptr = if (bytes) |b| @intFromPtr(b.ptr) else 0,
+        .bytes_len = if (bytes) |b| b.len else 0,
+    };
 }
 
 test {
