@@ -59,8 +59,6 @@ export class WebviewApp implements BaseApp {
 
 
     handleKeyDown(char: string, mods: KeyDownMods) {
-        let consumed = false;
-        this.electroview.request("keyDown", { char, mods }).then((c) => consumed = c);
-        return consumed;
+        return this.electroview.request("keyDown", { char, mods });
     }
 }

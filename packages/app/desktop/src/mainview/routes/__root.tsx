@@ -12,7 +12,7 @@ function RootComponent() {
     }, [theme]);
 
     useEffect(() => {
-        const onKeyDown = (e: KeyboardEvent) => {
+        const onKeyDown = async (e: KeyboardEvent) => {
             const consumed = app.handleKeyDown(e.key, {
                 shift: e.shiftKey,
                 alt: e.altKey,
@@ -24,7 +24,7 @@ function RootComponent() {
                 num_lock: e.getModifierState('NumLock'),
             });
 
-            if (consumed) {
+            if (await consumed) {
                 e.preventDefault();
                 e.stopPropagation();
             }
