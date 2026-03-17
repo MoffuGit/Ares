@@ -39,7 +39,7 @@ export function AppSidebar() {
     return (
         <Sidebar>
             <SidebarHeader>
-                <box bg="#00ff00" height={{ point: 1 }}>Ares</box>
+                <box bg={theme()?.sidebar ?? "#1e1e2e"} fg={theme()?.sidebarFg ?? "#cdd6f4"} height={{ point: 1 }}>Ares</box>
             </SidebarHeader>
             <SidebarContent>
                 <FileTree />

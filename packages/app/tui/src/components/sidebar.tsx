@@ -1,4 +1,5 @@
 import { createContext, createSignal, createMemo, useContext, type JSX, type Accessor } from "solid-js";
+import { useTheme } from "@ares/shared/solid";
 
 const SIDEBAR_WIDTH = 28;
 const SIDEBAR_WIDTH_ICON = 6;
@@ -23,18 +24,18 @@ function useSidebar() {
 function SidebarProvider(props: {
     defaultOpen?: boolean;
     open?: boolean;
-    onOpenChange?: (open: boolean) => void;
+    onOpenChange?: (open: boolean | ((prev: boolean) => boolean)) => void;
     children?: JSX.Element;
 }) {
     const [_open, _setOpen] = createSignal(props.defaultOpen ?? true);
 
-    const open = () => props.open ?? _open();
+    const open = () => props.open !== undefined ? props.open : _open();
 
-    const setOpen = (value: boolean) => {
+    const setOpen = (value: boolean | ((prev: boolean) => boolean)) => {
         if (props.onOpenChange) {
             props.onOpenChange(value);
         } else {
-            _setOpen(value);
+            _setOpen(value as any);
         }
     };
 
@@ -49,9 +50,11 @@ function SidebarProvider(props: {
         toggleSidebar,
     };
 
+    const theme = useTheme();
+
     return (
         <SidebarContext.Provider value={contextValue}>
-            <box flexDirection="row" flexGrow={1} width={{ percent: 100 }} height={{ percent: 100 }}>
+            <box bg={theme()?.bg ?? "#1e1e2e"} fg={theme()?.fg ?? "#cdd6f4"} flexDirection="row" flexGrow={1} width={{ percent: 100 }} height={{ percent: 100 }}>
                 {props.children}
             </box>
         </SidebarContext.Provider>
@@ -64,6 +67,7 @@ function Sidebar(props: {
     children?: JSX.Element;
 }) {
     const { open } = useSidebar();
+    const theme = useTheme();
 
     const collapsible = () => props.collapsible ?? "icon";
     const width = () => {
@@ -73,8 +77,8 @@ function Sidebar(props: {
 
     return (
         <box
-            bg="#ff0000"
-            fg="#000000"
+            bg={theme()?.sidebar ?? "#1e1e2e"}
+            fg={theme()?.sidebarFg ?? "#cdd6f4"}
             flexDirection="column"
             width={{ point: width() }}
             height={{ percent: 100 }}
@@ -89,9 +93,10 @@ function SidebarTrigger(props: {
     children?: JSX.Element;
 }) {
     const { toggleSidebar } = useSidebar();
+    const theme = useTheme();
 
     return (
-        <box on:click={() => toggleSidebar()} bg="#00ff00" width={{ point: 3 }}>
+        <box on:click={() => toggleSidebar()} bg={theme()?.sidebarAccent ?? "#313244"} fg={theme()?.sidebarAccentFg ?? "#cdd6f4"} width={{ point: 3 }}>
             {props.children ?? "☰"}
         </box>
     );
@@ -100,8 +105,10 @@ function SidebarTrigger(props: {
 function SidebarInset(props: {
     children?: JSX.Element;
 }) {
+    const theme = useTheme();
+
     return (
-        <box flexDirection="column" flexGrow={1}>
+        <box bg={theme()?.mutedBg ?? "#181825"} fg={theme()?.fg ?? "#cdd6f4"} flexDirection="column" flexGrow={1}>
             {props.children}
         </box>
     );

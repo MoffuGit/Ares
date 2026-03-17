@@ -31,11 +31,10 @@ export function parseColor(value: unknown): Color {
 
         if (hex.length === 8) {
             return {
-                type: "rgba",
+                type: "rgb",
                 r: parseInt(hex.slice(0, 2), 16),
                 g: parseInt(hex.slice(2, 4), 16),
                 b: parseInt(hex.slice(4, 6), 16),
-                a: parseInt(hex.slice(6, 8), 16) / 255,
             }
         }
     }

@@ -1,5 +1,6 @@
 import { render, useKeydown } from "@ares/tui-solid";
-import { AppContext } from "@ares/shared/solid";
+import { createSignal, createEffect, onCleanup, For } from "solid-js";
+import { AppContext, useApp, useMode, useScopedKeymaps } from "@ares/shared/solid";
 import { resolve } from "path";
 import {
     SidebarInset,
@@ -23,25 +24,76 @@ function Line(props: { children: any }) {
     );
 }
 
+function EditorContent() {
+    const mode = useMode();
+    const globalKeymaps = useScopedKeymaps("global");
+    const editorKeymaps = useScopedKeymaps("editor");
+
+    return (
+        <box flexDirection="column" flexGrow={1} padding={{ all: { point: 1 } }}>
+            <Line>Mode: {mode()}</Line>
+            <Line>Global Keymaps ({globalKeymaps().length}):</Line>
+            <For each={globalKeymaps()}>
+                {(binding) => (
+                    <Line>  {binding.sequence} → {binding.action}</Line>
+                )}
+            </For>
+            <Line>Editor Keymaps ({editorKeymaps().length}):</Line>
+            <For each={editorKeymaps()}>
+                {(binding) => (
+                    <Line>  {binding.sequence} → {binding.action}</Line>
+                )}
+            </For>
+        </box>
+    );
+}
+
 function App() {
+    const [sidebarOpen, setSidebarOpen] = createSignal(true);
+
     useKeydown((event) => {
         const data = event.data as { codepoint: number; mods: number };
         if (data.codepoint === 99 && (data.mods & 4) !== 0) {
             shutdown();
             process.exit(0);
         }
+
+        bizApp.handleKeyDown(
+            String.fromCodePoint(data.codepoint),
+            {
+                shift: (data.mods & 1) !== 0,
+                alt: (data.mods & 2) !== 0,
+                ctrl: (data.mods & 4) !== 0,
+                super: (data.mods & 8) !== 0,
+                hyper: false,
+                meta: false,
+                caps_lock: false,
+                num_lock: false,
+            },
+        );
+    });
+
+    createEffect(() => {
+        const handler = (sequence: string) => {
+            const keymaps = bizApp._state.keymaps;
+            const globalBindings = keymaps?.global ?? [];
+            const action = globalBindings.find(b => b.sequence === sequence)?.action;
+            if (action === "workspace:toggle_left_sidebar") {
+                setSidebarOpen((prev) => !prev);
+            }
+        };
+        bizApp.events.on("keymapSequence", handler);
+        onCleanup(() => bizApp.events.off("keymapSequence", handler));
     });
 
     return (
-        <SidebarProvider>
+        <SidebarProvider open={sidebarOpen()} onOpenChange={setSidebarOpen}>
             <AppSidebar />
             <SidebarInset>
                 <box flexDirection="row" height={{ point: 1 }}>
                     <SidebarTrigger />
                 </box>
-                <box flexDirection="column" flexGrow={1} padding={{ all: { point: 1 } }}>
-                    <Line>Main content area</Line>
-                </box>
+                <EditorContent />
             </SidebarInset>
         </SidebarProvider>
     );
