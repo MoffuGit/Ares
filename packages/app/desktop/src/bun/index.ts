@@ -1,6 +1,6 @@
+import { CoreApp } from "@ares/shared/core";
 import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
 import { resolve } from "path";
-import { DesktopApp } from "./app.ts";
 import { AppRPC } from "src/rpc.ts";
 
 const DEV_SERVER_PORT = 5173;
@@ -25,7 +25,7 @@ async function getMainViewUrl(): Promise<string> {
 const settingsPath = resolve(import.meta.dir, "../../../../../../../../../../settings/");
 const libPath = resolve(import.meta.dir, "../lib/libcore.dylib");
 const projectPath = "/Volumes/Home_SSD/Users/home/Documents/projects/ares";
-const app = new DesktopApp(settingsPath, projectPath, libPath);
+const app = new CoreApp(settingsPath, projectPath, true, libPath);
 
 const url = await getMainViewUrl();
 

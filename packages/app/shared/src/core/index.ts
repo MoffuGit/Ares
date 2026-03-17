@@ -14,6 +14,7 @@ const ScopeMap: Record<Scope, number> = { global: 0, editor: 1, command_palette:
 
 export class CoreApp implements BaseApp {
     readonly core: CoreLib;
+    protected appearance: Pointer | null = null;
     protected monitor: Pointer;
     protected settings: Pointer;
     protected io: Pointer;
@@ -23,7 +24,7 @@ export class CoreApp implements BaseApp {
     _state: AppState = { settings: null, theme: null, filetree: null, mode: "normal", keymaps: null };
     events = new Emitter<AppEvents>;
 
-    constructor(libPath?: string) {
+    constructor(settingsPath: string, projectPath: string, appearance: boolean, libPath?: string,) {
         this.core = resolveCoreLib(libPath);
 
         const monitor = this.core.createMonitor();
@@ -36,6 +37,13 @@ export class CoreApp implements BaseApp {
         this.io = io;
         this.settings = settings;
         this.keymapHandler = new KeymapHandler(this);
+
+        if (appearance) {
+            this.appearance = this.core.createAppearance()
+        }
+
+        this.loadSettings(settingsPath, this.appearance);
+        this.openProject(projectPath);
     }
 
     drainMailbox() {
@@ -70,6 +78,8 @@ export class CoreApp implements BaseApp {
         this.core.off("FiletreeUpdate", this.onFiletreeUpdate);
         this.core.off(String(EventType.SettingsUpdate), this.onSettingsUpdate);
         this.core.off(String(EventType.ThemeUpdate), this.onThemeUpdate);
+
+        if (this.appearance) this.core.destroyAppearance(this.appearance);
 
         if (this.project) {
             this.core.destroyProject(this.project);

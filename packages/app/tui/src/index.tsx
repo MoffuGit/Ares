@@ -1,6 +1,5 @@
 import { render, useKeydown } from "@ares/tui-solid";
 import { AppContext } from "@ares/shared/solid";
-import { TuiApp } from "./app.ts";
 import { resolve } from "path";
 import {
     SidebarInset,
@@ -8,10 +7,11 @@ import {
     SidebarTrigger,
 } from "./components/sidebar.tsx";
 import { AppSidebar } from "./components/app-sidebar.tsx";
+import { CoreApp } from "@ares/shared/core";
 
 const settingsPath = resolve(import.meta.dir, "../../../../settings");
 const projectPath = "/Volumes/Home_SSD/Users/home/Documents/projects/ares";
-const bizApp = new TuiApp(settingsPath, projectPath);
+const bizApp = new CoreApp(settingsPath, projectPath, false);
 bizApp.start();
 
 
