@@ -24,14 +24,16 @@ export fn drainMailbox() void {
     defer it.deinit();
 
     while (it.next()) |ev| {
-        const bytes: []const u8 = switch (ev) {
+        switch (ev) {
             .settingsUpdate,
             .themeUpdate,
             .filetreeUpdate,
-            => &.{},
-        };
-        const ptr: ?[*]const u8 = if (bytes.len > 0) bytes.ptr else null;
-        cb(@intFromEnum(ev), ptr, bytes.len);
+            => cb(@intFromEnum(ev), null, 0),
+            .bufferUpdate => |entry_id| {
+                const bytes = std.mem.asBytes(&entry_id);
+                cb(@intFromEnum(ev), bytes.ptr, bytes.len);
+            },
+        }
     }
 }
 
