@@ -85,6 +85,12 @@ export fn readSettings(settings: *Settings, @"extern": *ExternSettings) void {
     };
 }
 
+export fn setSystemScheme(settings: *Settings, scheme: u8) void {
+    if (scheme >= @typeInfo(@import("settings/mod.zig").ColorScheme).@"enum".fields.len) return;
+    settings.setSystemScheme(@enumFromInt(scheme));
+    global.state.emit(.themeUpdate, .instant);
+}
+
 export fn getThemeJsonLen(settings: *Settings) u64 {
     return settings.theme_json.len;
 }

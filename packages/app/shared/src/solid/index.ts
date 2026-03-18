@@ -1,6 +1,6 @@
 import { createContext, useContext, createSignal, onCleanup, type Accessor } from "solid-js";
 import type { BaseApp, AppState } from "../app.ts";
-import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps } from "../types.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, ScopeActionMap } from "../types.ts";
 
 export const AppContext = createContext<BaseApp>();
 
@@ -60,9 +60,17 @@ export function useKeymaps(): Accessor<ScopedKeymaps | null> {
     return keymaps;
 }
 
-export function useScopedKeymaps(scope: Scope): Accessor<KeymapBinding[]> {
+export function useScopedKeymaps<S extends Scope>(scope: Scope): Accessor<Record<string, ScopeActionMap[S]>> {
     const keymaps = useKeymaps();
-    return () => keymaps()?.[scope] ?? [];
+    return () => {
+        const bindings = keymaps()?.[scope] ?? [];
+        const map: Record<string, ScopeActionMap[S]> = {};
+        for (const b of bindings) {
+            map[b.sequence] = b.action as ScopeActionMap[S];
+        }
+        return map;
+
+    };
 }
 
 // export function useKeymapHandler(scope: Scope): (e: KeyboardEvent) => boolean {

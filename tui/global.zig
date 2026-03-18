@@ -33,8 +33,9 @@ pub const GlobalState = struct {
     pub fn notify(self: *Self, evt: Events, target: u64) void {
         const cb = self.callback orelse return;
 
+        var key_buf: [8]u8 = undefined;
         const bytes: []const u8 = switch (evt) {
-            .key_down, .key_up => |data| std.mem.asBytes(&data),
+            .key_down, .key_up => |data| data.pack(&key_buf),
             .mouse_down, .mouse_up, .mouse_move, .click, .mouse_enter, .mouse_leave, .wheel => |data| std.mem.asBytes(&data),
             .resize => |data| std.mem.asBytes(&data),
             .scheme => |data| std.mem.asBytes(&data),
@@ -49,19 +50,27 @@ pub const GlobalState = struct {
 pub const KeyEvent = struct {
     codepoint: u21,
     mods: u8,
-    text_len: u8 = 0,
-    text: [32]u8 = undefined,
+
+    pub fn pack(self: *const KeyEvent, buf: *[8]u8) []const u8 {
+        const cp: u32 = @intCast(self.codepoint);
+
+        buf[0..4].* = std.mem.toBytes(cp);
+
+        buf[4] = self.mods;
+
+        // padding to make the struct 8 bytes
+        buf[5] = 0;
+        buf[6] = 0;
+        buf[7] = 0;
+
+        return buf[0..8];
+    }
 
     pub fn fromVaxis(key: vaxis.Key) KeyEvent {
-        var data = KeyEvent{
+        const data = KeyEvent{
             .codepoint = key.codepoint,
             .mods = @bitCast(key.mods),
         };
-        if (key.text) |t| {
-            const len: u8 = @intCast(@min(t.len, 32));
-            @memcpy(data.text[0..len], t[0..len]);
-            data.text_len = len;
-        }
         return data;
     }
 };

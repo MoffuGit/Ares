@@ -41,6 +41,6 @@ export function render(App: () => any): { app: TuiApp; dispose: DisposeFn } {
 
 export { _render, createComponent, createElement, createTextNode, insertNode, insert, spread, setProp, mergeProps, effect, memo, use } from "./src/reconciler"
 export { TextNode, SlotNode, type TuiNode } from "./src/reconciler"
-export { AppContext, useApp, useKeydown, useKeyup, useResize } from "./src/hooks"
+export { AppContext, useApp, useKeydown, useKeyup, useResize, useScheme } from "./src/hooks"
 export { parseColor } from "./src/utils"
 export type { JSX } from "./jsx-runtime"

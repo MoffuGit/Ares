@@ -24,5 +24,5 @@ export interface BaseApp {
     expandEntry: (id: number) => void,
     setMode: (mode: Mode) => void,
     readKeymaps: (scope: Scope) => KeymapBinding[],
-    handleKeyDown: (char: string, mods: KeyDownMods) => boolean;
+    handleKeyDown: (char: string | number, mods: KeyDownMods) => boolean;
 }

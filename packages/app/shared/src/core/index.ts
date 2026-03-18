@@ -129,6 +129,10 @@ export class CoreApp implements BaseApp {
         this.events.emit("keymapsUpdate");
     }
 
+    setSystemScheme(scheme: number) {
+        this.core.setSystemScheme(this.settings, scheme);
+    }
+
     readKeymaps(scope: Scope): KeymapBinding[] {
         return this.core.readKeymapEntries(this.settings, ScopeMap[scope], ModeMap[this._state.mode]);
     }
@@ -149,7 +153,7 @@ export class CoreApp implements BaseApp {
         return this.core.trieNodeHasChildren(node);
     }
 
-    handleKeyDown(char: string, mods: KeyDownMods): boolean {
+    handleKeyDown(char: string | number, mods: KeyDownMods): boolean {
         return this.keymapHandler.handleKeyDown(char, mods);
     }
 

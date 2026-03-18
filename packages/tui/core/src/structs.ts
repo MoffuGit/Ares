@@ -25,33 +25,7 @@ const MouseType = defineEnum({
 export const KeyEvent = defineStruct([
     ["codepoint", "u32"],
     ["mods", "u8"],
-    ["text_len", "u8"],
-    ["text_0", "u32"],
-    ["text_1", "u32"],
-    ["text_2", "u32"],
-    ["text_3", "u32"],
-    ["text_4", "u32"],
-    ["text_5", "u32"],
-    ["text_6", "u32"],
-    ["text_7", "u32"],
-] as const, {
-    reduceValue: (v: any) => ({
-        codepoint: v.codepoint,
-        mods: v.mods,
-        text: extractText(v),
-    }),
-});
-
-function extractText(v: any): string | null {
-    const len: number = v.text_len;
-    if (len === 0) return null;
-    const buf = new Uint8Array(32);
-    const dv = new DataView(buf.buffer);
-    for (let i = 0; i < 8; i++) {
-        dv.setUint32(i * 4, v[`text_${i}`], true);
-    }
-    return new TextDecoder().decode(buf.subarray(0, len));
-}
+] as const);
 
 export const MouseEvent = defineStruct([
     ["col", "u16"],

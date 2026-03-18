@@ -72,8 +72,16 @@ export class KeymapHandler<Node> {
         this.reset();
     }
 
-    handleKeyDown(char: string, mods: KeyDownMods): boolean {
-        const codepoint = char.length === 1 ? char.codePointAt(0)! : codepointFromKey(char);
+    handleKeyDown(i: string | number, mods: KeyDownMods): boolean {
+        let codepoint: number
+
+        if (typeof i === "number") {
+            codepoint = i
+
+        } else {
+            codepoint = i.length === 1 ? i.codePointAt(0)! : codepointFromKey(i);
+        }
+
         if (codepoint === 0) return false;
         const pack = packMods(mods);
         const mode = this.host._state.mode;
@@ -93,6 +101,14 @@ export class KeymapHandler<Node> {
             }
             this.reset();
             return false;
+        }
+
+        let char: string
+
+        if (typeof i === "number") {
+            char = String.fromCodePoint(i)
+        } else {
+            char = i;
         }
 
         this.sequence.push(formatKeystroke(char, mods));

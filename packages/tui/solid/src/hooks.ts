@@ -47,3 +47,15 @@ export const useResize = (callback: EventHandler) => {
         app.root?.off("resize", callback)
     })
 }
+
+export const useScheme = (callback: EventHandler) => {
+    const app = useApp()
+
+    onMount(() => {
+        app.root?.on("scheme", callback)
+    })
+
+    onCleanup(() => {
+        app.root?.off("scheme", callback)
+    })
+}

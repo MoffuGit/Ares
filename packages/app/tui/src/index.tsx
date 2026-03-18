@@ -1,4 +1,4 @@
-import { render, useKeydown } from "@ares/tui-solid";
+import { render, useKeydown, useScheme } from "@ares/tui-solid";
 import { createSignal, createEffect, onCleanup, For } from "solid-js";
 import { AppContext, useApp, useMode, useScopedKeymaps } from "@ares/shared/solid";
 import { resolve } from "path";
@@ -33,17 +33,6 @@ function EditorContent() {
         <box flexDirection="column" flexGrow={1} padding={{ all: { point: 1 } }}>
             <Line>Mode: {mode()}</Line>
             <Line>Global Keymaps ({globalKeymaps().length}):</Line>
-            <For each={globalKeymaps()}>
-                {(binding) => (
-                    <Line>  {binding.sequence} → {binding.action}</Line>
-                )}
-            </For>
-            <Line>Editor Keymaps ({editorKeymaps().length}):</Line>
-            <For each={editorKeymaps()}>
-                {(binding) => (
-                    <Line>  {binding.sequence} → {binding.action}</Line>
-                )}
-            </For>
         </box>
     );
 }
@@ -59,7 +48,7 @@ function App() {
         }
 
         bizApp.handleKeyDown(
-            String.fromCodePoint(data.codepoint),
+            data.codepoint,
             {
                 shift: (data.mods & 1) !== 0,
                 alt: (data.mods & 2) !== 0,
@@ -73,11 +62,11 @@ function App() {
         );
     });
 
+    const keymaps = useScopedKeymaps("global");
+
     createEffect(() => {
         const handler = (sequence: string) => {
-            const keymaps = bizApp._state.keymaps;
-            const globalBindings = keymaps?.global ?? [];
-            const action = globalBindings.find(b => b.sequence === sequence)?.action;
+            const action = keymaps()[sequence];
             if (action === "workspace:toggle_left_sidebar") {
                 setSidebarOpen((prev) => !prev);
             }

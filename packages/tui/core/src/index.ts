@@ -128,15 +128,20 @@ export class TuiLib {
                 const _len = typeof len === "bigint" ? Number(len) : len;
                 const _type = event as EventType;
                 const targetId = typeof target === "bigint" ? Number(target) : target;
-                const structDef = Events[_type];
+                const dataType = Events[_type];
 
-                if (structDef == null) {
+                if (dataType == null) {
                     const event = _type.toString();
                     queueMicrotask(() => {
                         emitter.emit(event, null, targetId);
                     });
-                } else if (ptr != null && _len !== 0) {
-                    const data = structDef.unpack(toArrayBuffer(ptr, 0, _len));
+                }
+                else if (ptr != null && _len != 0) {
+                    if (dataType.size != _len) {
+                        console.log("expected size: ", dataType.size, "got: ", _len);
+                        return
+                    };
+                    const data = dataType.unpack(toArrayBuffer(ptr, 0, _len));
                     const event = _type.toString();
                     queueMicrotask(() => {
                         emitter.emit(event, data, targetId);

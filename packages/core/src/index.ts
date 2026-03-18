@@ -138,6 +138,10 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.pointer],
                 returns: FFIType.void
             },
+            setSystemScheme: {
+                args: [FFIType.pointer, FFIType.u8],
+                returns: FFIType.void,
+            },
             drainMailbox: {
                 args: [],
                 return: FFIType.void,
@@ -164,16 +168,20 @@ export class CoreLib extends EventEmitter {
             (event: number, ptr: Pointer | null, len: number | bigint): void => {
                 const _len = typeof len === "bigint" ? Number(len) : len;
                 const _type = event as EventType;
-                const data_type = Events[_type];
+                const dataType = Events[_type];
 
-                if (data_type == null) {
+                if (dataType == null) {
                     const event = EventsName[_type];
                     queueMicrotask(() => {
                         console.log("event received", event);
                         this.emit(event);
                     })
-                } else if (data_type != null && ptr != null && _len != 0) {
-                    const data = data_type.unpack(toArrayBuffer(ptr, 0, _len));
+                } else if (dataType != null && ptr != null && _len != 0) {
+                    if (dataType.size != _len) {
+                        console.log("expected size: ", dataType.size, "got: ", _len);
+                        return
+                    };
+                    const data = dataType.unpack(toArrayBuffer(ptr, 0, _len));
                     const event = EventsName[_type];
                     queueMicrotask(() => {
                         console.log("event received", event);
@@ -348,6 +356,10 @@ export class CoreLib extends EventEmitter {
         const buf = new ArrayBuffer(BufferData.size);
         this.lib.symbols.readBuffer(buffer, ptr(buf));
         return BufferData.unpack(buf);
+    }
+
+    setSystemScheme(settings: Pointer, scheme: number): void {
+        this.lib.symbols.setSystemScheme(settings, scheme);
     }
 
     drainMailbox() {
