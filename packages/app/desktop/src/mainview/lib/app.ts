@@ -62,7 +62,7 @@ export class WebviewApp implements BaseApp {
         return this._state.keymaps?.[scope] ?? [];
     }
 
-    handleKeyDown(char: string, mods: KeyDownMods): boolean {
+    handleKeyDown(char: string | number, mods: KeyDownMods): boolean {
         return this.keymapHandler.handleKeyDown(char, mods);
     }
 
