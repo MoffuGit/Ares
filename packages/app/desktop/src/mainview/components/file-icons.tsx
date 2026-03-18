@@ -8,7 +8,7 @@ export function FileIcon({ entry }: { entry: WorktreeEntry }) {
     const color = theme?.fileType[entry.fileType] ?? theme?.fg
 
     return (
-        <div className="size-4 flex items-center align-middle [&_svg:not([class*='size-'])]:size-4" style={{ color }}>
+        <div className="size-3.5 flex items-center align-middle [&_svg:not([class*='size-'])]:size-3.5" style={{ color }}>
             {
                 entry.kind == "dir" ? (entry.expanded ? <FolderOpen /> : <Folder />) : <File />
             }

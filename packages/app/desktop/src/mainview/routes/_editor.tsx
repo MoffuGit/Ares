@@ -37,16 +37,14 @@ function EditorComponent() {
                             <SidebarTrigger size="icon-xs" />
                         </div>
                     </div>
-                    <div className='flex-1 flex flex-row px-2 bg-sidebar'>
+                    <div className='flex-1 flex flex-row px-2 pb-2 bg-sidebar'>
                         <AppSidebar />
                         <SidebarInset className='rounded-xl bg-muted shadow-inset'>
                             <Outlet />
                         </SidebarInset>
                     </div>
-                    <div className='bg-sidebar h-4 w-full' />
                 </div>
             </SidebarProvider>
         </TooltipProvider>
     );
 }
-// shadow-[lch(0_0_0/_0.02)_0px_3px_6px_-2px\,_lch(0_0_0/_0.04)_0px_1px_1px]
