@@ -1,6 +1,8 @@
 import {
+    SidebarContent,
     SidebarGroup,
     SidebarGroupContent,
+    SidebarHeader,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
@@ -13,20 +15,43 @@ export function FileTree() {
     const app = useApp();
 
     return (
-        <SidebarGroup>
-            <SidebarGroupContent>
+        <>
+            <SidebarHeader>
                 <SidebarMenu>
-                    {filetree && filetree.map((entry) => (
-                        <SidebarMenuItem key={entry.id}>
-                            <SidebarMenuButton onClick={() => app.expandEntry(entry.id)} size="xs" style={{ paddingLeft: `${16 * (entry.depth) + 8}px` }} >
-                                <FileIcon entry={entry} />
-                                <div className="text-clip text-nowrap">{entry.name}</div>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                    ))}
+                    <SidebarMenuItem>
+                        {
+                            filetree && filetree.slice(0, 1).map((entry) => {
+                                return (
+                                    <SidebarMenuItem key={entry.id}>
+                                        <SidebarMenuButton onClick={() => app.expandEntry(entry.id)} size="xs" style={{ paddingLeft: `${16 * (entry.depth) + 8}px` }} >
+                                            <FileIcon entry={entry} />
+                                            <div className="text-clip text-nowrap">{entry.name}</div>
+                                        </SidebarMenuButton>
+                                    </SidebarMenuItem>
+
+                                )
+                            })
+                        }
+                    </SidebarMenuItem>
                 </SidebarMenu>
-            </SidebarGroupContent>
-        </SidebarGroup>
+            </SidebarHeader>
+            <SidebarContent>
+                <SidebarGroup>
+                    <SidebarGroupContent>
+                        <SidebarMenu>
+                            {filetree && filetree.slice(1).map((entry) => (
+                                <SidebarMenuItem key={entry.id}>
+                                    <SidebarMenuButton onClick={() => app.expandEntry(entry.id)} size="xs" style={{ paddingLeft: `${16 * (entry.depth) + 8}px` }} >
+                                        <FileIcon entry={entry} />
+                                        <div className="text-clip text-nowrap">{entry.name}</div>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            ))}
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+            </SidebarContent>
+        </>
     )
 }
 // className="pl-[calc(2px*data-[])]"
