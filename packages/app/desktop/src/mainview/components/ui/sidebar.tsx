@@ -23,8 +23,6 @@ import {
 } from "@/components/ui/tooltip"
 import { PanelLeftIcon } from "lucide-react"
 
-const SIDEBAR_COOKIE_NAME = "sidebar_state"
-const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH_DEFAULT = 192 // 12rem in px
 const SIDEBAR_WIDTH_MIN = 144 // 9rem in px
 const SIDEBAR_WIDTH_MAX = 384 // 24rem in px
@@ -86,9 +84,6 @@ function SidebarProvider({
             } else {
                 _setOpen(openState)
             }
-
-            // This sets the cookie to keep the sidebar state.
-            document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
         },
         [setOpenProp, open]
     )
@@ -774,3 +769,4 @@ export {
     SidebarTrigger,
     useSidebar,
 }
+
