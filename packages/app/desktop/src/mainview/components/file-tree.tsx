@@ -41,7 +41,7 @@ export function FileTree() {
                         <SidebarMenu>
                             {filetree && filetree.slice(1).map((entry) => (
                                 <SidebarMenuItem key={entry.id}>
-                                    <SidebarMenuButton onClick={() => app.expandEntry(entry.id)} size="xs" style={{ paddingLeft: `${16 * (entry.depth) + 8}px` }} >
+                                    <SidebarMenuButton onClick={() => app.expandEntry(entry.id)} size="xs" style={{ paddingLeft: `${18 * (entry.depth) + 8}px` }} >
                                         <FileIcon entry={entry} />
                                         <div className="text-clip text-nowrap">{entry.name}</div>
                                     </SidebarMenuButton>
