@@ -1,16 +1,9 @@
-debug(events_thread): starting read thread
-                                          FATAL ERROR: Buffer size (6) is smaller than struct size (16) for unpacking.
-                                                                                                                      1 | // src/structs_ffi.ts
-             2 | import { ptr, toArrayBuffer } from "bun:ffi";
-                                                              3 | function fatalError(...args) {
-                                                                                                4 |   const message = args.join(" ");
-   5 |   console.error("FATAL ERROR:", message);
-                                                6 |   throw new Error(message);
-                                                                                                            ^
-                                                                                                             error: Buffer size (6) is smaller than struct size (16) for unpacking.
-                                                       at fatalError (/Volumes/Home_SSD/Users/home/Documents/projects/Ares/node_modules/.bun/bun-ffi-structs@0.1.2+1fb4c65d43e298b9/node_modules/bun-ffi-structs/index.js:6:26)
-                                                                                                   at unpack (/Volumes/Home_SSD/Users/home/Documents/projects/Ares/node_modules/.bun/bun-ffi-structs@0.1.2+1fb4c65d43e298b9/node_modules/bun-ffi-structs/index.js:551:9)
-          at handleEvent (/Volumes/Home_SSD/Users/home/Documents/projects/Ares/packages/tui/core/src/index.ts:139:43)
-                                                                                                                           at drainMailbox (libtui.dylib) (builtin://bun/ffi:3:15)
-                                                      at drainMailbox (/Volumes/Home_SSD/Users/home/Documents/projects/Ares/packages/tui/core/src/index.ts:209:26)
-                                      at tick (/Volumes/Home_SSD/Users/home/Documents/projects/Ares/packages/tui/core/src/app.ts:99:18)
+i already start this but i didn't get to finish it
+i need to read a buffer, for that, after a click into a file entry
+i would send a message to the core app, the core app woudl then call the lib openBuffer function,
+once you open it, you try to read from it, if is the first time you tried to open it, its going to be empty,
+the core lib will send an evnet called updateBuffer or something like that, with the entry id of the buffer that got updated,
+when this happens the coreApp should tried to read again the info of the buffer, if this happens correctly we can send to the webview a
+messge with all the info of the buffer and show it in the view,
+
+lets start impl this and latter we can try adding tabs, splits and views
