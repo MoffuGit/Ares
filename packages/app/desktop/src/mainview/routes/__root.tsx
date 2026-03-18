@@ -1,15 +1,22 @@
 import { useEffect } from 'react'
 import { createRootRoute, Outlet } from '@tanstack/react-router'
-import { useApp, useTheme } from '@ares/shared/react'
+import { useApp, useSettings, useTheme } from '@ares/shared/react'
 import { applyTheme } from '../lib/theme'
 
 function RootComponent() {
     const app = useApp();
     const theme = useTheme();
+    const settings = useSettings()
 
     useEffect(() => {
-        if (theme) applyTheme(theme);
-    }, [theme]);
+        if (theme && settings) {
+            const effectiveScheme = settings.scheme == 'system'
+                ? (settings.system_scheme as 'light' | 'dark')
+                : settings.scheme;
+            console.log(effectiveScheme);
+            applyTheme(theme, effectiveScheme);
+        }
+    }, [theme, settings]);
 
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {

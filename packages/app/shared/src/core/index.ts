@@ -1,7 +1,6 @@
 import type { Pointer } from "bun:ffi";
 import { resolveCoreLib, type CoreLib } from "@ares/core";
 import { EventType, } from "@ares/core/events";
-import { SchemeMap } from "../index.ts";
 import { Emitter } from "../emitter.ts";
 import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, KeyDownMods } from "../types.ts";
 import type { AppState, AppEvents, BaseApp } from "../app.ts";
@@ -181,8 +180,10 @@ export class CoreApp implements BaseApp {
 
     protected readSettings(): Settings {
         const raw = this.core.readSettings(this.settings);
+        console.log("raw system scheme", raw.system_scheme);
         return {
-            scheme: SchemeMap[Number(raw.scheme)] ?? "system",
+            scheme: raw.scheme,
+            system_scheme: raw.system_scheme,
             light_theme: raw.light_theme ?? "",
             dark_theme: raw.dark_theme ?? "",
         };

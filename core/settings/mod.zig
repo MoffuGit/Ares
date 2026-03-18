@@ -125,7 +125,9 @@ fn appearanceChanged(ctx: *anyopaque) void {
     self.system_scheme = if (a.isDark()) .dark else .light;
     self.applyThemeLocked();
 
-    global.state.emit(.themeUpdate, .instant);
+    std.log.debug("scheme: {}", .{self.system_scheme});
+
+    global.state.emit(.settingsUpdate, .instant);
 }
 
 fn settingsCallback(self: ?*Settings, _: u64, _: u32) void {

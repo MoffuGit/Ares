@@ -61,6 +61,7 @@ export fn loadSettings(settings: *Settings, path: [*]const u8, len: u64, monitor
 
 pub const ExternSettings = extern struct {
     scheme: u64,
+    system_scheme: u64,
     light_theme_ptr: usize,
     light_theme_len: usize,
     dark_theme_ptr: usize,
@@ -78,6 +79,7 @@ export fn unlockSettings(settings: *Settings) void {
 export fn readSettings(settings: *Settings, @"extern": *ExternSettings) void {
     @"extern".* = .{
         .scheme = @intFromEnum(settings.scheme),
+        .system_scheme = @intFromEnum(settings.system_scheme),
         .light_theme_ptr = @intFromPtr(settings.light_theme.ptr),
         .light_theme_len = settings.light_theme.len,
         .dark_theme_ptr = @intFromPtr(settings.dark_theme.ptr),

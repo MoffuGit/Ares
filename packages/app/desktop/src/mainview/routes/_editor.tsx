@@ -31,15 +31,15 @@ function EditorComponent() {
     return (
         <TooltipProvider>
             <SidebarProvider open={open} onOpenChange={setOpen}>
-                <div className='w-full h-screen overflow-hidden flex flex-col flex-1 content-stretch'>
+                <div className='w-full h-screen flex flex-col flex-1 content-stretch'>
                     <div className='w-full h-7 shrink-0  pl-18 bg-sidebar cursor-default electrobun-webkit-app-region-drag'>
                         <div className="w-auto h-full flex items-center gap-2 electrobun-webkit-app-region-no-drag">
                             <SidebarTrigger size="icon-xs" />
                         </div>
                     </div>
-                    <div className='flex-1 flex flex-row overflow-hidden px-4 bg-sidebar'>
+                    <div className='flex-1 flex flex-row px-4 bg-sidebar z-100'>
                         <AppSidebar />
-                        <SidebarInset className='rounded-xl bg-muted'>
+                        <SidebarInset className='rounded-xl bg-muted shadow-[lch(0_0_0/_0.04)_0px_4px_4px_-1px\,_lch(0_0_0/_0.08)_0px_1px_1px_0px]'>
                             <Outlet />
                         </SidebarInset>
                     </div>
@@ -49,3 +49,4 @@ function EditorComponent() {
         </TooltipProvider>
     );
 }
+// shadow-[lch(0_0_0/_0.02)_0px_3px_6px_-2px\,_lch(0_0_0/_0.04)_0px_1px_1px]

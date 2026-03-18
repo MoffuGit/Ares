@@ -35,8 +35,10 @@ const themeVarMap: Record<string, keyof Theme> = {
     "--sidebar-ring": "sidebarRing",
 };
 
-export function applyTheme(theme: Theme) {
+export function applyTheme(theme: Theme, scheme: "light" | "dark") {
     const root = document.documentElement;
+    root.classList.remove("light", "dark");
+    root.classList.add(scheme);
     for (const [cssVar, themeKey] of Object.entries(themeVarMap)) {
         const color = theme[themeKey];
         if (typeof color === "string") {
