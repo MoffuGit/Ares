@@ -37,9 +37,9 @@ function EditorComponent() {
                             <SidebarTrigger size="icon-xs" />
                         </div>
                     </div>
-                    <div className='flex-1 flex flex-row px-4 bg-sidebar'>
+                    <div className='flex-1 flex flex-row px-2 bg-sidebar'>
                         <AppSidebar />
-                        <SidebarInset className='rounded-xl bg-muted shadow-inset z-20'>
+                        <SidebarInset className='rounded-xl bg-muted shadow-inset'>
                             <Outlet />
                         </SidebarInset>
                     </div>
