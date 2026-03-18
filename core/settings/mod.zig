@@ -125,7 +125,7 @@ fn appearanceChanged(ctx: *anyopaque) void {
     self.system_scheme = if (a.isDark()) .dark else .light;
     self.applyThemeLocked();
 
-    global.state.emit(.settingsUpdate, .instant);
+    global.state.emit(.themeUpdate, .instant);
 }
 
 fn settingsCallback(self: ?*Settings, _: u64, _: u32) void {
@@ -358,7 +358,6 @@ fn loadDefaultKeymaps(self: *Settings) void {
 
     self.keymap_generation +%= 1;
 }
-
 
 test "loadSettings parses settings.json" {
     const alloc = std.testing.allocator;

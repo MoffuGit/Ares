@@ -138,7 +138,7 @@ pub fn drainMailbox(self: *App) void {
     while (it.next()) |evt| {
         switch (evt) {
             .scheme => |scheme| {
-                state.notify(.{ .scheme = @intFromEnum(scheme) }, 0);
+                state.notify(.{ .scheme = @intFromEnum(scheme) ^ 1 }, 0);
             },
             .resize => |size| {
                 self.window.resize(size);

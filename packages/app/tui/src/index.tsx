@@ -15,6 +15,10 @@ const projectPath = "/Volumes/Home_SSD/Users/home/Documents/projects/ares";
 const bizApp = new CoreApp(settingsPath, projectPath, false);
 bizApp.start();
 
+setInterval(() => {
+    bizApp.drainMailbox()
+}, 100)
+
 
 function Line(props: { children: any }) {
     return (
@@ -39,6 +43,11 @@ function EditorContent() {
 
 function App() {
     const [sidebarOpen, setSidebarOpen] = createSignal(true);
+
+    useScheme((evt) => {
+        const scheme = evt.data as { value: number };
+        bizApp.setSystemScheme(scheme.value);
+    });
 
     useKeydown((event) => {
         const data = event.data as { codepoint: number; mods: number };
