@@ -57,16 +57,16 @@ function EditorComponent() {
     return (
         <TooltipProvider>
             <SidebarProvider open={open} onOpenChange={setOpen}>
-                <div className='w-full h-screen flex flex-col flex-1 content-stretch rounded-3xl'>
-                    <div className='w-full h-7 shrink-0 pl-18 bg-sidebar cursor-default electrobun-webkit-app-region-drag'>
-                        <div className="w-auto h-full flex items-center gap-2 electrobun-webkit-app-region-no-drag">
+                <div className='w-full h-full flex flex-col flex-1 content-stretch rounded-3xl'>
+                    <div className='w-full h-7 shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag mb-2'>
+                        <div className="w-auto h-full flex items-center gap-1 electrobun-webkit-app-region-no-drag">
                             <SidebarTrigger size="icon-xs" />
                             {tabs.length > 0 && (
                                 <Tabs
                                     value={activeTabId ?? undefined}
                                     onValueChange={(val) => setActiveTab(val)}
                                 >
-                                    <TabsList className="h-7 bg-sidebar">
+                                    <TabsList className="h-7 bg-sidebar gap-1">
                                         {tabs.map((tab) => (
                                             <TabsTrigger
                                                 key={tab.id}
@@ -80,7 +80,7 @@ function EditorComponent() {
                             )}
                         </div>
                     </div>
-                    <div className='flex-1 flex flex-row px-2 pb-2 bg-sidebar'>
+                    <div className='flex-1 flex flex-row bg-sidebar'>
                         <AppSidebar />
                         <SidebarInset className='rounded-xl bg-muted shadow-inset'>
                             <Outlet />

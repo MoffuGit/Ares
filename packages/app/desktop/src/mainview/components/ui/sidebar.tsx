@@ -126,7 +126,7 @@ function SidebarProvider({
                     } as React.CSSProperties
                 }
                 className={cn(
-                    "group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar",
+                    "group/sidebar-wrapper flex w-full has-data-[variant=inset]:bg-sidebar",
                     className
                 )}
                 {...props}
@@ -219,7 +219,7 @@ function Sidebar({
                 data-slot="sidebar-container"
                 data-side={side}
                 className={cn(
-                    "absolute inset-y-0 z-10 hidden h-full w-(--sidebar-width) data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
+                    "absolute inset-y-0 z-10 hidden pb-1.5 h-full w-(--sidebar-width) data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
                     !isResizing && "transition-[left,right,width] duration-100 ease-in-out-quint",
                     // Adjust the padding for floating and inset variants.
                     variant === "floating" || variant === "inset"
@@ -261,7 +261,7 @@ function SidebarTrigger({
             }}
             {...props}
         >
-            <PanelLeftIcon className="stroke-muted-foreground" />
+            <PanelLeftIcon className="stroke-sidebar-foreground/80" />
             <span className="sr-only">Toggle Sidebar</span>
         </Button>
     )

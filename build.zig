@@ -38,7 +38,7 @@ pub fn build(b: *std.Build) void {
     core_step.dependOn(&core_lib.step);
     core_step.dependOn(&lib_install.step);
 
-    const desktop_bun = b.addSystemCommand(&.{ "bun", "run", "dev:hmr" });
+    const desktop_bun = b.addSystemCommand(&.{ "bun", "run", "start" });
     desktop_bun.setCwd(b.path("packages/app/desktop"));
 
     const desktop_step = b.step("desktop", "Build desktop lib and run the Electrobun application");
