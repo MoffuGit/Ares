@@ -6,7 +6,19 @@ import {
 } from "@/components/ui/sidebar"
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppSidebar } from '@/components/app-sidebar';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAppStore, onKeymapSequence } from '@/lib/app';
+import type { Scope, ScopeActionMap } from '@ares/shared';
+
+function useScopedKeymaps<S extends Scope>(scope: S): Record<string, ScopeActionMap[S]> {
+    const keymaps = useAppStore((s) => s.keymaps);
+    const bindings = keymaps?.[scope] ?? [];
+    const map: Record<string, ScopeActionMap[S]> = {};
+    for (const b of bindings) {
+        map[b.sequence] = b.action as ScopeActionMap[S];
+    }
+    return map;
+}
 
 export const Route = createFileRoute('/_editor')({
     component: EditorComponent,
@@ -14,19 +26,16 @@ export const Route = createFileRoute('/_editor')({
 
 function EditorComponent() {
     const [open, setOpen] = useState(false);
-    // const app = useApp()
-    // const keymaps = useScopedKeymaps("global");
-    //
-    // useEffect(() => {
-    //     const handler = (sequence: string) => {
-    //         const action = keymaps[sequence];
-    //         if (action === "workspace:toggle_left_sidebar") {
-    //             setOpen((prev) => !prev);
-    //         }
-    //     };
-    //     app.events.on("keymapSequence", handler);
-    //     return () => app.events.off("keymapSequence", handler);
-    // }, [app, keymaps]);
+    const globalKeymaps = useScopedKeymaps("global");
+
+    useEffect(() => {
+        return onKeymapSequence((sequence) => {
+            const action = globalKeymaps[sequence];
+            if (action === "workspace:toggle_left_sidebar") {
+                setOpen((prev) => !prev);
+            }
+        });
+    }, [globalKeymaps]);
     return (
         <TooltipProvider>
             <SidebarProvider open={open} onOpenChange={setOpen}>

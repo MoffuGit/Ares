@@ -1,46 +1,47 @@
 import type { Mode, KeyDownMods } from "../types.ts";
-import type { AppEvents } from "../app.ts";
-import type { Emitter } from "../emitter.ts";
 import { packMods, codepointFromKey, formatKeystroke } from "./encoding.ts";
 
 const SEQUENCE_TIMEOUT_MS = 500;
 
-export interface KeymapTrieHost<Node> {
-    _state: { mode: Mode };
-    events: Emitter<AppEvents>;
-
+export interface TrieOps<Node> {
     getTrieRoot(mode: Mode): Node | null;
     trieStep(node: Node, codepoint: number, mods: number): Node | null;
     trieNodeIsTerminal(node: Node): boolean;
     trieNodeHasChildren(node: Node): boolean;
 }
 
+export type KeymapHandlerOptions<Node> = {
+    trie: TrieOps<Node>;
+    onSequence: (sequence: string) => void;
+};
+
 export class KeymapHandler<Node> {
-    private host: KeymapTrieHost<Node>;
+    private trie: TrieOps<Node>;
+    private onSequence: (sequence: string) => void;
+    private mode: Mode = "normal";
     private currentNode: Node | null = null;
     private timer: ReturnType<typeof setTimeout> | null = null;
     private sequence: string[] = [];
     private lastTerminalSequence: string | null = null;
 
-    constructor(host: KeymapTrieHost<Node>) {
-        this.host = host;
-        this.host.events.on("modeUpdate", this.onModeUpdate);
-        this.host.events.on("keymapsUpdate", this.onKeymapsUpdate);
+    constructor(opts: KeymapHandlerOptions<Node>) {
+        this.trie = opts.trie;
+        this.onSequence = opts.onSequence;
     }
 
     destroy(): void {
         this.clearTimer();
-        this.host.events.off("modeUpdate", this.onModeUpdate);
-        this.host.events.off("keymapsUpdate", this.onKeymapsUpdate);
     }
 
-    onModeUpdate = (): void => {
+    setMode(mode: Mode): void {
+        if (this.mode === mode) return;
+        this.mode = mode;
         this.reset();
-    };
+    }
 
-    onKeymapsUpdate = (): void => {
+    resetTrie(): void {
         this.reset();
-    };
+    }
 
     private reset(): void {
         this.clearTimer();
@@ -68,31 +69,29 @@ export class KeymapHandler<Node> {
     }
 
     private emit(sequenceStr: string): void {
-        this.host.events.emit("keymapSequence", sequenceStr);
+        this.onSequence(sequenceStr);
         this.reset();
     }
 
     handleKeyDown(i: string | number, mods: KeyDownMods): boolean {
-        let codepoint: number
+        let codepoint: number;
 
         if (typeof i === "number") {
-            codepoint = i
-
+            codepoint = i;
         } else {
             codepoint = i.length === 1 ? i.codePointAt(0)! : codepointFromKey(i);
         }
 
         if (codepoint === 0) return false;
         const pack = packMods(mods);
-        const mode = this.host._state.mode;
 
         if (!this.currentNode) {
-            const root = this.host.getTrieRoot(mode);
+            const root = this.trie.getTrieRoot(this.mode);
             if (!root) return false;
             this.currentNode = root;
         }
 
-        const next = this.host.trieStep(this.currentNode, codepoint, pack);
+        const next = this.trie.trieStep(this.currentNode, codepoint, pack);
 
         if (!next) {
             if (this.lastTerminalSequence) {
@@ -103,10 +102,10 @@ export class KeymapHandler<Node> {
             return false;
         }
 
-        let char: string
+        let char: string;
 
         if (typeof i === "number") {
-            char = String.fromCodePoint(i)
+            char = String.fromCodePoint(i);
         } else {
             char = i;
         }
@@ -114,9 +113,9 @@ export class KeymapHandler<Node> {
         this.sequence.push(formatKeystroke(char, mods));
         this.currentNode = next;
 
-        if (this.host.trieNodeIsTerminal(next)) {
+        if (this.trie.trieNodeIsTerminal(next)) {
             const seqStr = this.sequence.join(" ");
-            if (!this.host.trieNodeHasChildren(next)) {
+            if (!this.trie.trieNodeHasChildren(next)) {
                 this.emit(seqStr);
                 return true;
             }
@@ -125,7 +124,7 @@ export class KeymapHandler<Node> {
             return true;
         }
 
-        if (this.host.trieNodeHasChildren(next)) {
+        if (this.trie.trieNodeHasChildren(next)) {
             this.restartTimer();
             return true;
         }

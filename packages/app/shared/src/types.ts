@@ -6,6 +6,8 @@ export type AppState = {
     filetree: WorktreeEntry[] | null;
     mode: Mode;
     keymaps: ScopedKeymaps | null;
+    tabs: Tab[];
+    activeTabId: number | null;
 };
 
 export type AppEvents = {
@@ -130,4 +132,10 @@ export type Buffer = {
     id: number;
     state: BufferState;
     content: string;
+};
+
+export type Tab = {
+    id: number;
+    name: string;
+    bufferId: number | null;
 };
