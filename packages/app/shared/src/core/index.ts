@@ -76,20 +76,24 @@ export class CoreApp extends EventEmitter {
 
         const rawBuffer = this.core.readBuffer(bufferPointer);
         return {
-            state: rawBuffer.state
-        } as Buffer;
+            id,
+            state: rawBuffer.state,
+            content: rawBuffer.bytes ?? "",
+        };
     }
 
     start() {
         this.core.on("SettingsUpdate", this.onSettingsUpdate);
         this.core.on("ThemeUpdate", this.onThemeUpdate);
         this.core.on("FiletreeUpdate", this.onFiletreeUpdate);
+        this.core.on("BufferUpdate", this.onBufferUpdate);
         const keymaps = this.readAllKeymaps();
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme(), keymaps };
     }
 
     stop() {
         this.core.off("FiletreeUpdate", this.onFiletreeUpdate);
+        this.core.off("BufferUpdate", this.onBufferUpdate);
         this.core.off(String(EventType.SettingsUpdate), this.onSettingsUpdate);
         this.core.off(String(EventType.ThemeUpdate), this.onThemeUpdate);
 
@@ -107,6 +111,14 @@ export class CoreApp extends EventEmitter {
 
     protected onFiletreeUpdate = () => {
         this.readFiletree();
+    };
+
+    protected onBufferUpdate = (data: { entry_id: number }) => {
+        const id = Number(data.entry_id);
+        const buffer = this.readBuffer(id);
+        if (buffer) {
+            this.emit("bufferUpdate", buffer);
+        }
     };
 
     readFiletree() {

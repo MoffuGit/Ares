@@ -21,6 +21,7 @@ export type AppRPC = {
             themeUpdate: Theme;
             filetreeUpdate: WorktreeEntry[];
             keymapsUpdate: ScopedKeymaps;
+            bufferUpdate: Buffer;
         };
     }>;
 };

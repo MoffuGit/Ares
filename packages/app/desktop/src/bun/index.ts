@@ -86,6 +86,10 @@ app.on("keymapsUpdate", () => {
     }
 });
 
+app.on("bufferUpdate", (buffer) => {
+    mainWindow.webview.rpc?.send.bufferUpdate(buffer);
+});
+
 mainWindow.webview.on("dom-ready", () => {
     setInterval(() => {
         app.drainMailbox()

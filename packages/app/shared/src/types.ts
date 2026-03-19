@@ -12,6 +12,7 @@ export type AppEvents = {
     settingsUpdate: [];
     themeUpdate: [];
     filetreeUpdate: [];
+    bufferUpdate: [buffer: Buffer];
     modeUpdate: [];
     keymapsUpdate: [];
     keymapSequence: [sequence: string];
@@ -126,5 +127,7 @@ export type KeyDownMods = {
 export type BufferState = "empty" | "loading" | "ready" | "err"
 
 export type Buffer = {
-    state: BufferState
+    id: number;
+    state: BufferState;
+    content: string;
 };

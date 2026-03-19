@@ -1,15 +1,17 @@
 import { Electroview } from "electrobun/view";
-import type { Mode, Scope, KeymapBinding, AppState, WorktreeEntry } from "@ares/shared";
+import type { Mode, Scope, KeymapBinding, AppState, WorktreeEntry, Buffer } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import { create } from "zustand";
 import { applyTheme } from "./theme.ts";
 
 
 interface AppStore extends AppState {
+    buffers: Map<number, Buffer>;
     setMode: (mode: Mode) => void;
     readKeymaps: (scope: Scope) => KeymapBinding[];
     loadSettings: () => Promise<void>;
-    clickEntry: (entry: WorktreeEntry) => void;
+    expandEntry: (entry: WorktreeEntry) => void;
+    getBuffer: (id: number) => Buffer;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -18,6 +20,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     filetree: null,
     mode: "normal",
     keymaps: null,
+    buffers: new Map(),
 
     setMode: (mode) => {
         if (get().mode === mode) return;
@@ -28,10 +31,30 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return get().keymaps?.[scope] ?? [];
     },
 
-    clickEntry: (entry) => {
+    expandEntry: (entry) => {
         if (entry.kind == "dir") {
             rpc.send("expandEntry", entry.id);
         }
+    },
+
+    getBuffer: (id) => {
+        const cached = get().buffers.get(id);
+        if (cached) return cached;
+
+        const empty: Buffer = { id, state: "empty", content: "" };
+        const buffers = new Map(get().buffers);
+        buffers.set(id, empty);
+        set({ buffers });
+
+        rpc.request.readBuffer({ id }).then((buffer) => {
+            if (buffer) {
+                const buffers = new Map(get().buffers);
+                buffers.set(id, buffer);
+                set({ buffers });
+            }
+        });
+
+        return empty;
     },
 
     loadSettings: async () => {
@@ -61,6 +84,11 @@ const rpc = Electroview.defineRPC<AppRPC>({
             },
             keymapsUpdate: (keymaps) => {
                 useAppStore.setState({ keymaps });
+            },
+            bufferUpdate: (buffer) => {
+                const buffers = new Map(useAppStore.getState().buffers);
+                buffers.set(buffer.id, buffer);
+                useAppStore.setState({ buffers });
             },
         },
     },

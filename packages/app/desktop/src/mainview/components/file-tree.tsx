@@ -53,11 +53,15 @@ export function FileTree() {
 }
 
 function FileTreeItem({ entry }: { entry: WorktreeEntry }) {
-    const clickEntry = useAppStore((state) => state.clickEntry);
+    const clickEntry = useAppStore((state) => state.expandEntry);
     return (
         <SidebarMenuItem key={entry.id}>
             <SidebarMenuButton
-                onClick={() => clickEntry(entry)}
+                onClick={() => {
+                    if (entry.kind == "dir") {
+                        clickEntry(entry)
+                    }
+                }}
                 size="xs" style={{ paddingLeft: `${18 * (entry.depth) + 8}px` }} >
                 <FileIcon entry={entry} />
                 <div className="text-clip text-nowrap">{entry.name}</div>
