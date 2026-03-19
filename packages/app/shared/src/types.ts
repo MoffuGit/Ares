@@ -6,8 +6,6 @@ export type AppState = {
     filetree: WorktreeEntry[] | null;
     mode: Mode;
     keymaps: ScopedKeymaps | null;
-    tabs: Tab[];
-    activeTabId: number | null;
 };
 
 export type AppEvents = {

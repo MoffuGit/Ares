@@ -40,6 +40,9 @@ interface AppStore extends AppState {
     setActiveTab: (tabId: number) => void;
     nextTab: () => void;
     prevTab: () => void;
+
+    tabs: Tab[];
+    activeTabId: number | null;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -134,8 +137,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
             filetree: state.filetree,
             mode: state.mode,
             keymaps: state.keymaps,
-            tabs: state.tabs,
-            activeTabId: state.activeTabId,
+            tabs: [],
+            activeTabId: null,
         });
     },
 }));
