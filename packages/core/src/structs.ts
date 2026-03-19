@@ -29,8 +29,10 @@ export const WorktreeEntry = defineStruct([
     ["file_type_len", "u64", { lengthOf: "file_type" }],
 ] as const);
 
+const State = defineEnum({ empty: 0, loading: 1, ready: 2, err: 3 }, "u8");
+
 export const BufferData = defineStruct([
-    ["state", "u8"],
+    ["state", State],
     ["bytes", "char*"],
     ["bytes_len", "u64", { lengthOf: "bytes" }],
 ] as const);
