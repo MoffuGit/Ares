@@ -10,6 +10,7 @@ import { AppSidebar } from '@/components/app-sidebar';
 import { useState, useEffect } from 'react';
 import { useAppStore, onKeymapSequence } from '@/lib/app';
 import type { Scope, ScopeActionMap } from '@ares/shared';
+import { Maximize2, Minus, X } from 'lucide-react';
 
 function useScopedKeymaps<S extends Scope>(scope: S): Record<string, ScopeActionMap[S]> {
     const keymaps = useAppStore((s) => s.keymaps);
@@ -59,7 +60,24 @@ function EditorComponent() {
             <SidebarProvider open={open} onOpenChange={setOpen}>
                 <div className='w-full h-full flex flex-col flex-1 content-stretch rounded-3xl'>
                     <div className='w-full h-7 shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag mb-2'>
-                        <div className="w-auto h-full flex items-center gap-1 electrobun-webkit-app-region-no-drag">
+                        <div className="w-auto h-full flex items-center gap-1 electrobun-webkit-app-region-no-drag px-2">
+                            <div className="flex gap-2 group">
+                                <button
+                                    className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-black/0 hover:text-black/50 transition-all"
+                                >
+                                    <X size={8} />
+                                </button>
+                                <button
+                                    className="w-3 h-3 rounded-full bg-yellow-500 hover:bg-yellow-600 flex items-center justify-center text-black/0 hover:text-black/50 transition-all"
+                                >
+                                    <Minus size={8} />
+                                </button>
+                                <button
+                                    className="w-3 h-3 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center text-black/0 hover:text-black/50 transition-all"
+                                >
+                                    <Maximize2 size={8} />
+                                </button>
+                            </div>
                             <SidebarTrigger size="icon-xs" />
                             {tabs.length > 0 && (
                                 <Tabs
