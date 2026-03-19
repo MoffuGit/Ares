@@ -83,6 +83,6 @@
       @apply bg-transparent rounded-2xl;
   }
   body {
-    @apply bg-background p-2 flex w-full h-screen content-stretch text-foreground font-geist;
+    @apply bg-background p-2 pt-0 flex w-full h-screen content-stretch text-foreground font-geist;
   }
 }

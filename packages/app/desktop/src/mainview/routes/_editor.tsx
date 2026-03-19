@@ -59,8 +59,8 @@ function EditorComponent() {
         <TooltipProvider>
             <SidebarProvider open={open} onOpenChange={setOpen}>
                 <div className='w-full h-full flex flex-col flex-1 content-stretch rounded-3xl'>
-                    <div className='w-full h-7 shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag mb-2'>
-                        <div className="w-auto h-full flex items-center gap-1 electrobun-webkit-app-region-no-drag px-2">
+                    <div className=' h-7 shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag mb-2 pt-2 mx-2'>
+                        <div className="w-fit h-full flex items-center gap-1 electrobun-webkit-app-region-no-drag">
                             <div className="flex gap-2 group">
                                 <button
                                     className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-black/0 hover:text-black/50 transition-all"
