@@ -38,7 +38,6 @@ const rpc = BrowserView.defineRPC<AppRPC>({
         },
         messages: {
             expandEntry: (id) => app.expandEntry(id),
-            setMode: (mode) => app.setMode(mode),
         },
     },
 });
@@ -59,7 +58,7 @@ const mainWindow = new BrowserWindow({
 
 app.start();
 
-app.events.on("settingsUpdate", () => {
+app.on("settingsUpdate", () => {
     if (app._state.settings) {
         console.log("sending new settings:", app._state.settings);
         mainWindow.webview.rpc?.send.settingsUpdate(app._state.settings)
@@ -69,23 +68,19 @@ app.events.on("settingsUpdate", () => {
     }
 });
 
-app.events.on("themeUpdate", () => {
+app.on("themeUpdate", () => {
     if (app._state.theme) {
         mainWindow.webview.rpc?.send.themeUpdate(app._state.theme)
     }
 });
 
-app.events.on("filetreeUpdate", () => {
+app.on("filetreeUpdate", () => {
     if (app._state.filetree) {
         mainWindow.webview.rpc?.send.filetreeUpdate(app._state.filetree);
     }
 });
 
-app.events.on("modeUpdate", () => {
-    mainWindow.webview.rpc?.send.modeUpdate(app._state.mode);
-});
-
-app.events.on("keymapsUpdate", () => {
+app.on("keymapsUpdate", () => {
     if (app._state.keymaps) {
         mainWindow.webview.rpc?.send.keymapsUpdate(app._state.keymaps);
     }

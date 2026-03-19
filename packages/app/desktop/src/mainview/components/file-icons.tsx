@@ -1,8 +1,8 @@
 import { WorktreeEntry } from "@ares/shared";
-import { useTheme } from "@ares/shared/react";
 import type { ComponentType, SVGProps } from "react";
 import { Folder, FolderOpen } from "lucide-react";
 import * as Icons from "./ui/icons";
+import { useAppStore } from "@/lib/app";
 
 const fileTypeIconMap: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
     // Special filenames
@@ -136,7 +136,7 @@ const fileTypeIconMap: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = 
 };
 
 export function FileIcon({ entry }: { entry: WorktreeEntry }) {
-    const theme = useTheme()
+    const theme = useAppStore((state) => state.theme);
 
     const color = theme?.fileType[entry.fileType] ?? theme?.fg
 

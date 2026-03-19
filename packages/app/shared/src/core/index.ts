@@ -1,29 +1,29 @@
 import type { Pointer } from "bun:ffi";
 import { resolveCoreLib, type CoreLib } from "@ares/core";
 import { EventType, } from "@ares/core/events";
-import { Emitter } from "../emitter.ts";
-import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, KeyDownMods, Buffer } from "../types.ts";
-import type { AppState, AppEvents, BaseApp } from "../app.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, KeyDownMods, Buffer, AppState } from "../types.ts";
 import { resolveTheme } from "./theme.ts";
 import { KeymapHandler } from "../keymap/handler.ts";
+
+import { EventEmitter } from "events";
 
 const ModeMap: Record<Mode, number> = { normal: 0, insert: 1, visual: 2 };
 const ScopeMap: Record<Scope, number> = { global: 0, editor: 1, command_palette: 2 };
 
 
-export class CoreApp implements BaseApp {
+export class CoreApp extends EventEmitter {
     readonly core: CoreLib;
     protected appearance: Pointer | null = null;
     protected monitor: Pointer;
     protected settings: Pointer;
     protected io: Pointer;
     protected project: Pointer | null = null;
-    protected keymapHandler: KeymapHandler<Pointer>;
+    // protected keymapHandler: KeymapHandler<Pointer>;
 
     _state: AppState = { settings: null, theme: null, filetree: null, mode: "normal", keymaps: null };
-    events = new Emitter<AppEvents>;
 
     constructor(settingsPath: string, projectPath: string, appearance: boolean, libPath?: string,) {
+        super();
         this.core = resolveCoreLib(libPath);
 
         const monitor = this.core.createMonitor();
@@ -35,7 +35,7 @@ export class CoreApp implements BaseApp {
         this.monitor = monitor;
         this.io = io;
         this.settings = settings;
-        this.keymapHandler = new KeymapHandler(this);
+        // this.keymapHandler = new KeymapHandler(this);
 
         if (appearance) {
             this.appearance = this.core.createAppearance()
@@ -127,7 +127,7 @@ export class CoreApp implements BaseApp {
         });
         console.log("refresh filetree: count=", raw.length, "entries=", JSON.stringify(entries.slice(0, 5)));
         this._state = { ...this._state, filetree: entries };
-        this.events.emit("filetreeUpdate");
+        this.emit("filetreeUpdate");
     }
 
     expandEntry(id: number) {
@@ -139,8 +139,8 @@ export class CoreApp implements BaseApp {
     setMode(mode: Mode) {
         if (this._state.mode === mode) return;
         this._state = { ...this._state, mode, keymaps: this.readAllKeymaps(mode) };
-        this.events.emit("modeUpdate");
-        this.events.emit("keymapsUpdate");
+        this.emit("modeUpdate");
+        this.emit("keymapsUpdate");
     }
 
     setSystemScheme(scheme: number) {
@@ -167,9 +167,9 @@ export class CoreApp implements BaseApp {
         return this.core.trieNodeHasChildren(node);
     }
 
-    handleKeyDown(char: string | number, mods: KeyDownMods): boolean {
-        return this.keymapHandler.handleKeyDown(char, mods);
-    }
+    // handleKeyDown(char: string | number, mods: KeyDownMods): boolean {
+    //     return this.keymapHandler.handleKeyDown(char, mods);
+    // }
 
     protected readAllKeymaps(mode?: Mode): ScopedKeymaps {
         const m = ModeMap[mode ?? this._state.mode];
@@ -183,14 +183,14 @@ export class CoreApp implements BaseApp {
     protected onSettingsUpdate = () => {
         const keymaps = this.readAllKeymaps();
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme(), keymaps };
-        this.events.emit("settingsUpdate");
-        this.events.emit("themeUpdate");
-        this.events.emit("keymapsUpdate");
+        this.emit("settingsUpdate");
+        this.emit("themeUpdate");
+        this.emit("keymapsUpdate");
     };
 
     protected onThemeUpdate = () => {
         this._state = { ...this._state, theme: this.readTheme() };
-        this.events.emit("themeUpdate");
+        this.emit("themeUpdate");
     };
 
     protected readSettings(): Settings {

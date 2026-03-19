@@ -6,8 +6,7 @@ import {
 } from "@/components/ui/sidebar"
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppSidebar } from '@/components/app-sidebar';
-import { useEffect, useState } from 'react';
-import { useApp, useScopedKeymaps } from '@ares/shared/react';
+import { useState } from 'react';
 
 export const Route = createFileRoute('/_editor')({
     component: EditorComponent,
@@ -15,19 +14,19 @@ export const Route = createFileRoute('/_editor')({
 
 function EditorComponent() {
     const [open, setOpen] = useState(false);
-    const app = useApp()
-    const keymaps = useScopedKeymaps("global");
-
-    useEffect(() => {
-        const handler = (sequence: string) => {
-            const action = keymaps[sequence];
-            if (action === "workspace:toggle_left_sidebar") {
-                setOpen((prev) => !prev);
-            }
-        };
-        app.events.on("keymapSequence", handler);
-        return () => app.events.off("keymapSequence", handler);
-    }, [app, keymaps]);
+    // const app = useApp()
+    // const keymaps = useScopedKeymaps("global");
+    //
+    // useEffect(() => {
+    //     const handler = (sequence: string) => {
+    //         const action = keymaps[sequence];
+    //         if (action === "workspace:toggle_left_sidebar") {
+    //             setOpen((prev) => !prev);
+    //         }
+    //     };
+    //     app.events.on("keymapSequence", handler);
+    //     return () => app.events.off("keymapSequence", handler);
+    // }, [app, keymaps]);
     return (
         <TooltipProvider>
             <SidebarProvider open={open} onOpenChange={setOpen}>

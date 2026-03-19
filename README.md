@@ -1,9 +1,9 @@
-i already start this but i didn't get to finish it
-i need to read a buffer, for that, after a click into a file entry
-i would send a message to the core app, the core app woudl then call the lib openBuffer function,
-once you open it, you try to read from it, if is the first time you tried to open it, its going to be empty,
-the core lib will send an evnet called updateBuffer or something like that, with the entry id of the buffer that got updated,
-when this happens the coreApp should tried to read again the info of the buffer, if this happens correctly we can send to the webview a
-messge with all the info of the buffer and show it in the view,
+i think using zustand will help a lot for the desktop app,
+lets follow the next approach,
+CoreApp becomes a EventEmitter, we revome the event emitter form the webview
+and we add zustand, the desktop app parts consume our zustand store,
+the tui solid parts uses our solid bindings
+the desktop side can send batched events to the webview
 
-lets start impl this and latter we can try adding tabs, splits and views
+the BaseApp is not doing that much for me, either way need to defien my rpc fucntions
+and the zustand functions and yeah, i will remove that part

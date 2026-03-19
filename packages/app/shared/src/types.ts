@@ -1,5 +1,22 @@
 export type ColorScheme = "light" | "dark" | "system";
 
+export type AppState = {
+    settings: Settings | null;
+    theme: Theme | null;
+    filetree: WorktreeEntry[] | null;
+    mode: Mode;
+    keymaps: ScopedKeymaps | null;
+};
+
+export type AppEvents = {
+    settingsUpdate: [];
+    themeUpdate: [];
+    filetreeUpdate: [];
+    modeUpdate: [];
+    keymapsUpdate: [];
+    keymapSequence: [sequence: string];
+};
+
 export type Settings = {
     scheme: ColorScheme;
     system_scheme: ColorScheme;

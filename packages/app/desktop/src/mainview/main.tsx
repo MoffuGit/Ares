@@ -1,20 +1,16 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { AppProvider } from "@ares/shared/react";
-import { WebviewApp } from "./lib/app.ts";
 import { Electroview } from "electrobun/view";
+import { useAppStore, rpc } from "./lib/app.ts";
 import "./index.css";
 import App from "./App";
 
-const app = new WebviewApp();
+export const electroview = new Electroview({ rpc });
 
-export const electroview = new Electroview({ rpc: app.electroview });
-app.loadSettings().then(() => {
-    createRoot(document.getElementById("root")!).render(
-        <StrictMode>
-            <AppProvider app={app}>
-                <App />
-            </AppProvider>
-        </StrictMode>,
-    );
-});
+useAppStore.getState().loadSettings();
+
+createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+        <App />
+    </StrictMode>,
+);

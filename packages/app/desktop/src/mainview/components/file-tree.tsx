@@ -7,13 +7,12 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { useApp, useFiletree } from '@ares/shared/react';
 import { FileIcon } from "./file-icons";
 import { VirtualizedList } from "./virtual-list";
+import { useAppStore } from "@/lib/app";
 
 export function FileTree() {
-    const filetree = useFiletree();
-    const app = useApp();
+    const filetree = useAppStore((state) => state.filetree);
 
     if (!filetree) return null;
 
@@ -25,7 +24,7 @@ export function FileTree() {
                         filetree.slice(0, 1).map((entry) => {
                             return (
                                 <SidebarMenuItem key={entry.id}>
-                                    <SidebarMenuButton onClick={() => app.expandEntry(entry.id)} size="xs" style={{ paddingLeft: `${16 * (entry.depth) + 8}px` }} >
+                                    <SidebarMenuButton size="xs" style={{ paddingLeft: `${16 * (entry.depth) + 8}px` }} >
                                         <FileIcon entry={entry} />
                                         <div className="text-clip text-nowrap">{entry.name}</div>
                                     </SidebarMenuButton>
@@ -47,16 +46,7 @@ export function FileTree() {
 
                                     return (
                                         <SidebarMenuItem key={entry.id}>
-                                            <SidebarMenuButton onClick={() => {
-                                                if (entry.kind == "dir") {
-                                                    app.expandEntry(entry.id)
-                                                } else {
-                                                    const buffer = app.readBuffer(entry.id);
-                                                    if (buffer) {
-                                                        console.log(buffer);
-                                                    }
-                                                }
-                                            }} size="xs" style={{ paddingLeft: `${18 * (entry.depth) + 8}px` }} >
+                                            <SidebarMenuButton size="xs" style={{ paddingLeft: `${18 * (entry.depth) + 8}px` }} >
                                                 <FileIcon entry={entry} />
                                                 <div className="text-clip text-nowrap">{entry.name}</div>
                                             </SidebarMenuButton>
@@ -71,3 +61,14 @@ export function FileTree() {
         </>
     )
 }
+// onClick={() => app.expandEntry(entry.id)}
+// onClick={() => {
+//                                                 if (entry.kind == "dir") {
+//                                                     app.expandEntry(entry.id)
+//                                                 } else {
+//                                                     const buffer = app.readBuffer(entry.id);
+//                                                     if (buffer) {
+//                                                         console.log(buffer);
+//                                                     }
+//                                                 }
+//                                             }}

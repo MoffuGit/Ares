@@ -1,10 +1,10 @@
 import { createContext, useContext, createSignal, onCleanup, type Accessor } from "solid-js";
-import type { BaseApp, AppState } from "../app.ts";
-import type { Settings, Theme, WorktreeEntry, Mode, Scope, ScopedKeymaps, ScopeActionMap } from "../types.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, ScopedKeymaps, ScopeActionMap, AppState } from "../types.ts";
+import type { CoreApp } from "../core/index.ts";
 
-export const AppContext = createContext<BaseApp>();
+export const AppContext = createContext<CoreApp>();
 
-export function useApp(): BaseApp {
+export function useApp(): CoreApp {
     const app = useContext(AppContext);
     if (!app) throw new Error("useApp must be used within AppContext.Provider");
     return app;
@@ -19,8 +19,8 @@ export function useSettings(): Accessor<Settings | null> {
     const app = useApp();
     const [settings, setSettings] = createSignal<Settings | null>(app._state.settings);
     const handler = () => setSettings(() => app._state.settings);
-    app.events.on("settingsUpdate", handler);
-    onCleanup(() => app.events.off("settingsUpdate", handler));
+    app.on("settingsUpdate", handler);
+    onCleanup(() => app.off("settingsUpdate", handler));
     return settings;
 }
 
@@ -28,8 +28,8 @@ export function useTheme(): Accessor<Theme | null> {
     const app = useApp();
     const [theme, setTheme] = createSignal<Theme | null>(app._state.theme);
     const handler = () => setTheme(() => app._state.theme);
-    app.events.on("themeUpdate", handler);
-    onCleanup(() => app.events.off("themeUpdate", handler));
+    app.on("themeUpdate", handler);
+    onCleanup(() => app.off("themeUpdate", handler));
     return theme;
 }
 
@@ -37,8 +37,8 @@ export function useFiletree(): Accessor<WorktreeEntry[] | null> {
     const app = useApp();
     const [filetree, setFiletree] = createSignal<WorktreeEntry[] | null>(app._state.filetree);
     const handler = () => setFiletree(() => app._state.filetree);
-    app.events.on("filetreeUpdate", handler);
-    onCleanup(() => app.events.off("filetreeUpdate", handler));
+    app.on("filetreeUpdate", handler);
+    onCleanup(() => app.off("filetreeUpdate", handler));
     return filetree;
 }
 
@@ -46,8 +46,8 @@ export function useMode(): Accessor<Mode> {
     const app = useApp();
     const [mode, setMode] = createSignal<Mode>(app._state.mode);
     const handler = () => setMode(() => app._state.mode);
-    app.events.on("modeUpdate", handler);
-    onCleanup(() => app.events.off("modeUpdate", handler));
+    app.on("modeUpdate", handler);
+    onCleanup(() => app.off("modeUpdate", handler));
     return mode;
 }
 
@@ -55,8 +55,8 @@ export function useKeymaps(): Accessor<ScopedKeymaps | null> {
     const app = useApp();
     const [keymaps, setKeymaps] = createSignal<ScopedKeymaps | null>(app._state.keymaps);
     const handler = () => setKeymaps(() => app._state.keymaps);
-    app.events.on("keymapsUpdate", handler);
-    onCleanup(() => app.events.off("keymapsUpdate", handler));
+    app.on("keymapsUpdate", handler);
+    onCleanup(() => app.off("keymapsUpdate", handler));
     return keymaps;
 }
 

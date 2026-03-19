@@ -1,6 +1,6 @@
 import { render, useKeydown, useScheme } from "@ares/tui-solid";
-import { createSignal, createEffect, onCleanup, For } from "solid-js";
-import { AppContext, useApp, useMode, useScopedKeymaps } from "@ares/shared/solid";
+import { createSignal, createEffect, onCleanup } from "solid-js";
+import { AppContext, useMode, useScopedKeymaps } from "@ares/shared/solid";
 import { resolve } from "path";
 import {
     SidebarInset,
@@ -31,7 +31,6 @@ function Line(props: { children: any }) {
 function EditorContent() {
     const mode = useMode();
     const globalKeymaps = useScopedKeymaps("global");
-    const editorKeymaps = useScopedKeymaps("editor");
 
     return (
         <box flexDirection="column" flexGrow={1} padding={{ all: { point: 1 } }}>
@@ -56,19 +55,19 @@ function App() {
             process.exit(0);
         }
 
-        bizApp.handleKeyDown(
-            data.codepoint,
-            {
-                shift: (data.mods & 1) !== 0,
-                alt: (data.mods & 2) !== 0,
-                ctrl: (data.mods & 4) !== 0,
-                super: (data.mods & 8) !== 0,
-                hyper: false,
-                meta: false,
-                caps_lock: false,
-                num_lock: false,
-            },
-        );
+        // bizApp.handleKeyDown(
+        //     data.codepoint,
+        //     {
+        //         shift: (data.mods & 1) !== 0,
+        //         alt: (data.mods & 2) !== 0,
+        //         ctrl: (data.mods & 4) !== 0,
+        //         super: (data.mods & 8) !== 0,
+        //         hyper: false,
+        //         meta: false,
+        //         caps_lock: false,
+        //         num_lock: false,
+        //     },
+        // );
     });
 
     const keymaps = useScopedKeymaps("global");
@@ -80,8 +79,8 @@ function App() {
                 setSidebarOpen((prev) => !prev);
             }
         };
-        bizApp.events.on("keymapSequence", handler);
-        onCleanup(() => bizApp.events.off("keymapSequence", handler));
+        bizApp.on("keymapSequence", handler);
+        onCleanup(() => bizApp.off("keymapSequence", handler));
     });
 
     return (
