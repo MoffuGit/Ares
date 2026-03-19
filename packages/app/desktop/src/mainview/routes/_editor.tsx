@@ -10,7 +10,6 @@ import { AppSidebar } from '@/components/app-sidebar';
 import { useState, useEffect } from 'react';
 import { useAppStore, onKeymapSequence } from '@/lib/app';
 import type { Scope, ScopeActionMap } from '@ares/shared';
-import { X } from 'lucide-react';
 
 function useScopedKeymaps<S extends Scope>(scope: S): Record<string, ScopeActionMap[S]> {
     const keymaps = useAppStore((s) => s.keymaps);
@@ -58,7 +57,7 @@ function EditorComponent() {
     return (
         <TooltipProvider>
             <SidebarProvider open={open} onOpenChange={setOpen}>
-                <div className='w-full h-screen flex flex-col flex-1 content-stretch'>
+                <div className='w-full h-screen flex flex-col flex-1 content-stretch rounded-3xl'>
                     <div className='w-full h-7 shrink-0 pl-18 bg-sidebar cursor-default electrobun-webkit-app-region-drag'>
                         <div className="w-auto h-full flex items-center gap-2 electrobun-webkit-app-region-no-drag">
                             <SidebarTrigger size="icon-xs" />
@@ -67,21 +66,13 @@ function EditorComponent() {
                                     value={activeTabId ?? undefined}
                                     onValueChange={(val) => setActiveTab(val)}
                                 >
-                                    <TabsList variant="line" className="h-7 gap-0">
+                                    <TabsList className="h-7 bg-sidebar">
                                         {tabs.map((tab) => (
                                             <TabsTrigger
                                                 key={tab.id}
                                                 value={tab.id}
-                                                className="h-6 px-2 text-xs gap-1"
                                             >
                                                 {tab.name}
-                                                <X
-                                                    className="size-3 opacity-50 hover:opacity-100"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        closeTab(tab.id);
-                                                    }}
-                                                />
                                             </TabsTrigger>
                                         ))}
                                     </TabsList>
