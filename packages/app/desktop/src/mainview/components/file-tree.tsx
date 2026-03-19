@@ -24,7 +24,7 @@ export function FileTree() {
                     {
                         filetree.slice(0, 1).map((entry) => {
                             return (
-                                <FileTreeItem entry={entry} />
+                                <FileTreeItem entry={entry} key={entry.id} />
                             )
                         })
                     }
@@ -55,7 +55,7 @@ export function FileTree() {
 function FileTreeItem({ entry }: { entry: WorktreeEntry }) {
     const clickEntry = useAppStore((state) => state.expandEntry);
     return (
-        <SidebarMenuItem>
+        <SidebarMenuItem key={entry.id}>
             <SidebarMenuButton
                 onClick={() => {
                     if (entry.kind == "dir") {
