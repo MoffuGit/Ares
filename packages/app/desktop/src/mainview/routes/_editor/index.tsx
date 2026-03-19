@@ -4,7 +4,7 @@ export const Route = createFileRoute('/_editor/')({
     component: () => {
 
         return (
-            <div className="border min-w-fit h-full m-4">
+            <div className="min-w-fit h-full">
             </div>
         )
     },
