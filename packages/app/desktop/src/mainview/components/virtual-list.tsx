@@ -359,20 +359,3 @@ export function VirtualizedList({
         </div>
     );
 }
-
-// the list
-// position: relative;
-//    min-height: 100%;
-//    width: 100%;
-//    overflow-anchor: none;
-//
-//    &[data-is-scrolling] {
-//      pointer-events: none;
-//    }
-
-//the sticky window
-// position: sticky;
-//    width: 100%;
-//    display: flex;
-//    flex-direction: column;
-//    isolation: isolate;
