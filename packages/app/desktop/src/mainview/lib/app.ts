@@ -1,5 +1,5 @@
 import { Electroview } from "electrobun/view";
-import type { Mode, Scope, KeymapBinding, AppState } from "@ares/shared";
+import type { Mode, Scope, KeymapBinding, AppState, WorktreeEntry } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import { create } from "zustand";
 import { applyTheme } from "./theme.ts";
@@ -9,6 +9,7 @@ interface AppStore extends AppState {
     setMode: (mode: Mode) => void;
     readKeymaps: (scope: Scope) => KeymapBinding[];
     loadSettings: () => Promise<void>;
+    clickEntry: (entry: WorktreeEntry) => void;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -25,6 +26,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     readKeymaps: (scope) => {
         return get().keymaps?.[scope] ?? [];
+    },
+
+    clickEntry: (entry) => {
+        if (entry.kind == "dir") {
+            rpc.send("expandEntry", entry.id);
+        }
     },
 
     loadSettings: async () => {

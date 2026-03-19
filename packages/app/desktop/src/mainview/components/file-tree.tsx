@@ -10,6 +10,7 @@ import {
 import { FileIcon } from "./file-icons";
 import { VirtualizedList } from "./virtual-list";
 import { useAppStore } from "@/lib/app";
+import { WorktreeEntry } from "@ares/shared";
 
 export function FileTree() {
     const filetree = useAppStore((state) => state.filetree);
@@ -23,13 +24,7 @@ export function FileTree() {
                     {
                         filetree.slice(0, 1).map((entry) => {
                             return (
-                                <SidebarMenuItem key={entry.id}>
-                                    <SidebarMenuButton size="xs" style={{ paddingLeft: `${16 * (entry.depth) + 8}px` }} >
-                                        <FileIcon entry={entry} />
-                                        <div className="text-clip text-nowrap">{entry.name}</div>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-
+                                <FileTreeItem entry={entry} />
                             )
                         })
                     }
@@ -45,12 +40,7 @@ export function FileTree() {
                                     if (!entry) return null;
 
                                     return (
-                                        <SidebarMenuItem key={entry.id}>
-                                            <SidebarMenuButton size="xs" style={{ paddingLeft: `${18 * (entry.depth) + 8}px` }} >
-                                                <FileIcon entry={entry} />
-                                                <div className="text-clip text-nowrap">{entry.name}</div>
-                                            </SidebarMenuButton>
-                                        </SidebarMenuItem>
+                                        <FileTreeItem entry={entry} />
                                     )
                                 }} />
                             }
@@ -61,14 +51,17 @@ export function FileTree() {
         </>
     )
 }
-// onClick={() => app.expandEntry(entry.id)}
-// onClick={() => {
-//                                                 if (entry.kind == "dir") {
-//                                                     app.expandEntry(entry.id)
-//                                                 } else {
-//                                                     const buffer = app.readBuffer(entry.id);
-//                                                     if (buffer) {
-//                                                         console.log(buffer);
-//                                                     }
-//                                                 }
-//                                             }}
+
+function FileTreeItem({ entry }: { entry: WorktreeEntry }) {
+    const clickEntry = useAppStore((state) => state.clickEntry);
+    return (
+        <SidebarMenuItem key={entry.id}>
+            <SidebarMenuButton
+                onClick={() => clickEntry(entry)}
+                size="xs" style={{ paddingLeft: `${18 * (entry.depth) + 8}px` }} >
+                <FileIcon entry={entry} />
+                <div className="text-clip text-nowrap">{entry.name}</div>
+            </SidebarMenuButton>
+        </SidebarMenuItem>
+    )
+}
