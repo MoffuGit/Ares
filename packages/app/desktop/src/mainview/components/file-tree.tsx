@@ -17,7 +17,6 @@ export function FileTree() {
 
     if (!filetree) return null;
 
-
     return (
         <>
             <SidebarHeader>
@@ -48,7 +47,16 @@ export function FileTree() {
 
                                     return (
                                         <SidebarMenuItem key={entry.id}>
-                                            <SidebarMenuButton onClick={() => app.expandEntry(entry.id)} size="xs" style={{ paddingLeft: `${18 * (entry.depth) + 8}px` }} >
+                                            <SidebarMenuButton onClick={() => {
+                                                if (entry.kind == "dir") {
+                                                    app.expandEntry(entry.id)
+                                                } else {
+                                                    const buffer = app.readBuffer(entry.id);
+                                                    if (buffer) {
+                                                        console.log(buffer);
+                                                    }
+                                                }
+                                            }} size="xs" style={{ paddingLeft: `${18 * (entry.depth) + 8}px` }} >
                                                 <FileIcon entry={entry} />
                                                 <div className="text-clip text-nowrap">{entry.name}</div>
                                             </SidebarMenuButton>

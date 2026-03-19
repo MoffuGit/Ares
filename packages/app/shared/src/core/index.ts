@@ -2,7 +2,7 @@ import type { Pointer } from "bun:ffi";
 import { resolveCoreLib, type CoreLib } from "@ares/core";
 import { EventType, } from "@ares/core/events";
 import { Emitter } from "../emitter.ts";
-import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, KeyDownMods } from "../types.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, KeyDownMods, Buffer } from "../types.ts";
 import type { AppState, AppEvents, BaseApp } from "../app.ts";
 import { resolveTheme } from "./theme.ts";
 import { KeymapHandler } from "../keymap/handler.ts";
@@ -63,6 +63,21 @@ export class CoreApp implements BaseApp {
             console.error("Failed to create project for path:", path);
             return;
         }
+    }
+
+    openBuffer(id: number): Pointer | null {
+        if (!this.project) return null;
+        return this.core.openBuffer(this.project, id);
+    }
+
+    readBuffer(id: number): Buffer | null {
+        const bufferPointer = this.openBuffer(id);
+        if (!bufferPointer) return null;
+
+        const rawBuffer = this.core.readBuffer(bufferPointer);
+        return {
+            state: rawBuffer.state
+        } as Buffer;
     }
 
     start() {

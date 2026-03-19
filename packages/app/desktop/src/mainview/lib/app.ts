@@ -1,6 +1,6 @@
 import { Electroview } from "electrobun/view";
 import { AppEvents, AppState, BaseApp, Emitter, KeymapHandler, buildKeymapTrie, edgeKey } from "@ares/shared";
-import type { Mode, Scope, KeymapBinding, KeyDownMods, ScopedKeymaps } from "@ares/shared";
+import type { Mode, Scope, KeymapBinding, KeyDownMods, ScopedKeymaps, Buffer } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import type { TSTrieNode } from "@ares/shared";
 
@@ -68,6 +68,17 @@ export class WebviewApp implements BaseApp {
 
     getTrieRoot(_mode: Mode): TSTrieNode | null {
         return this.trieRoot;
+    }
+
+    readBuffer(id: number): Buffer | null {
+        this.electroview.request("readBuffer", { id }).then((buffer) => {
+            if (buffer) {
+                console.log(buffer.state);
+            }
+        });
+        return {
+            state: "empty"
+        }
     }
 
     trieStep(node: TSTrieNode, codepoint: number, mods: number): TSTrieNode | null {

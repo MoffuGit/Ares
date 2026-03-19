@@ -105,3 +105,9 @@ export type KeyDownMods = {
     caps_lock: boolean;
     num_lock: boolean;
 }
+
+export type BufferState = "empty" | "loading" | "ready" | "err"
+
+export type Buffer = {
+    state: BufferState
+};

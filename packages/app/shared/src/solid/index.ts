@@ -1,6 +1,6 @@
 import { createContext, useContext, createSignal, onCleanup, type Accessor } from "solid-js";
 import type { BaseApp, AppState } from "../app.ts";
-import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, ScopeActionMap } from "../types.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, ScopedKeymaps, ScopeActionMap } from "../types.ts";
 
 export const AppContext = createContext<BaseApp>();
 

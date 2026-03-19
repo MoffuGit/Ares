@@ -34,6 +34,7 @@ const rpc = BrowserView.defineRPC<AppRPC>({
     handlers: {
         requests: {
             getState: ({ }) => app._state,
+            readBuffer: (({ id }) => app.readBuffer(id))
         },
         messages: {
             expandEntry: (id) => app.expandEntry(id),
