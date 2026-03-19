@@ -1,9 +1,8 @@
 import type { Pointer } from "bun:ffi";
 import { resolveCoreLib, type CoreLib } from "@ares/core";
 import { EventType, } from "@ares/core/events";
-import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, KeyDownMods, Buffer, AppState } from "../types.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, Buffer, AppState } from "../types.ts";
 import { resolveTheme } from "./theme.ts";
-import { KeymapHandler } from "../keymap/handler.ts";
 
 import { EventEmitter } from "events";
 
@@ -18,7 +17,6 @@ export class CoreApp extends EventEmitter {
     protected settings: Pointer;
     protected io: Pointer;
     protected project: Pointer | null = null;
-    // protected keymapHandler: KeymapHandler<Pointer>;
 
     _state: AppState = { settings: null, theme: null, filetree: null, mode: "normal", keymaps: null };
 
