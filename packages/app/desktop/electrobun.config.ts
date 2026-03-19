@@ -8,13 +8,14 @@ export default {
     },
     build: {
         // Vite builds to dist/, we copy from there
+        watchIgnore: ["dist/**"],
         copy: {
             "dist/index.html": "views/mainview/index.html",
             "dist/assets": "views/mainview/assets",
             "../../../zig-out/lib/libcore.dylib": "lib/libcore.dylib",
         },
         mac: {
-            bundleCEF: false,
+        	bundleCEF: true,
         },
         linux: {
             bundleCEF: true,
