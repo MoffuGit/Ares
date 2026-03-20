@@ -100,6 +100,10 @@ function EditorComponent() {
                                                 value={tab.id}
                                             >
                                                 {tab.name}
+                                                <X
+                                                    onClick={() => { closeTab(tab.id) }}
+                                                    className="ml-auto mr-0 group-hover/tab-trigger:opacity-100 opacity-0 pointer-events-auto"
+                                                />
                                             </TabsTrigger>
                                         ))}
                                     </TabsList>
