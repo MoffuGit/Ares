@@ -207,7 +207,7 @@ function Sidebar({
                 data-slot="sidebar-gap"
                 className={cn(
                     "relative w-(--sidebar-width) bg-transparent",
-                    !isResizing && "transition-[width] duration-100 ease-in-out-quint",
+                    !isResizing && "transition-[width] duration-150 ease-in-out-quint",
                     "group-data-[collapsible=offcanvas]:w-0",
                     "group-data-[side=right]:rotate-180",
                     variant === "floating" || variant === "inset"
@@ -220,7 +220,7 @@ function Sidebar({
                 data-side={side}
                 className={cn(
                     "absolute inset-y-0 z-10 hidden pb-1.5 h-full w-(--sidebar-width) data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
-                    !isResizing && "transition-[left,right,width] duration-100 ease-in-out-quint",
+                    !isResizing && "transition-[left,right,width] duration-150 ease-in-out-quint",
                     // Adjust the padding for floating and inset variants.
                     variant === "floating" || variant === "inset"
                         ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
@@ -336,7 +336,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
             onPointerDown={handlePointerDown}
             title="Toggle Sidebar"
             className={cn(
-                "absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear group-data-[side=left]:-right-3.5 group-data-[side=right]:left-0 after:absolute after:my-3 after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
+                "absolute inset-y-0 z-20 hidden w-2 transition-all ease-linear group-data-[side=left]:-right-2 group-data-[side=right]:left-0 after:absolute after:my-3 after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
                 "in-data-[side=left]:cursor-col-resize in-data-[side=right]:cursor-col-resize",
                 "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
                 "group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full hover:group-data-[collapsible=offcanvas]:bg-sidebar",
