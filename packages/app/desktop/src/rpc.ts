@@ -1,5 +1,5 @@
 import type { RPCSchema } from "electrobun/bun";
-import type { AppState, Settings, Theme, WorktreeEntry, ScopedKeymaps, Buffer } from "@ares/shared";
+import type { AppState, Settings, Theme, WorktreeEntry, ScopedKeymaps, Buffer, Mode } from "@ares/shared";
 
 export type AppRPC = {
     bun: RPCSchema<{
@@ -11,6 +11,7 @@ export type AppRPC = {
             readBuffer: { params: { id: number }, response: Buffer | null }
         };
         messages: {
+            setMode: Mode;
             expandEntry: number;
         };
     }>;

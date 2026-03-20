@@ -31,7 +31,7 @@ function EditorComponent() {
     const globalKeymaps = useScopedKeymaps("global");
     const tabs = useAppStore((s) => s.tabs);
     const activeTabId = useAppStore((s) => s.activeTabId);
-    const { newTab, closeTab, setActiveTab, nextTab, prevTab } = useAppStore.getState();
+    const { newTab, closeTab, setActiveTab, nextTab, prevTab, setMode } = useAppStore.getState();
 
     useEffect(() => {
         return onKeymapSequence((sequence) => {
@@ -51,6 +51,15 @@ function EditorComponent() {
                     break;
                 case "workspace:close_active_tab":
                     if (activeTabId != null) closeTab(activeTabId);
+                    break;
+                case "workspace:enter_insert":
+                    setMode("insert")
+                    break;
+                case "workspace:enter_visual":
+                    setMode("visual")
+                    break;
+                case "workspace:enter_normal":
+                    setMode("normal")
                     break;
             }
         });

@@ -38,6 +38,7 @@ const rpc = BrowserView.defineRPC<AppRPC>({
         },
         messages: {
             expandEntry: (id) => app.expandEntry(id),
+            setMode: (mode) => app.setMode(mode),
         },
     },
 });

@@ -58,6 +58,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     setMode: (mode) => {
         if (get().mode === mode) return;
         set({ mode: mode });
+        rpc.send("setMode", mode);
     },
 
     readKeymaps: (scope) => {
