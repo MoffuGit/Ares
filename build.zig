@@ -32,6 +32,8 @@ pub fn build(b: *std.Build) void {
         .root_module = core_mod,
         .linkage = .dynamic,
     });
+    core_lib.linkFramework("Metal");
+    core_lib.linkFramework("QuartzCore");
     const lib_install = b.addInstallArtifact(core_lib, .{});
 
     const core_step = b.step("core", "Build Core Lib");

@@ -145,6 +145,22 @@ function getCoreLib(libPath: string) {
             drainMailbox: {
                 args: [],
                 return: FFIType.void,
+            },
+            gpuInit: {
+                args: [FFIType.pointer],
+                returns: FFIType.pointer,
+            },
+            gpuStartRenderLoop: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
+            gpuResize: {
+                args: [FFIType.pointer, FFIType.u32, FFIType.u32],
+                returns: FFIType.void,
+            },
+            gpuDestroy: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
             }
         },
     );
@@ -364,6 +380,22 @@ export class CoreLib extends EventEmitter {
 
     drainMailbox() {
         this.lib.symbols.drainMailbox();
+    }
+
+    gpuInit(metalLayerPtr: Pointer): Pointer | null {
+        return this.lib.symbols.gpuInit(metalLayerPtr) as Pointer | null;
+    }
+
+    gpuStartRenderLoop(ctx: Pointer): void {
+        this.lib.symbols.gpuStartRenderLoop(ctx);
+    }
+
+    gpuResize(ctx: Pointer, width: number, height: number): void {
+        this.lib.symbols.gpuResize(ctx, width, height);
+    }
+
+    gpuDestroy(ctx: Pointer): void {
+        this.lib.symbols.gpuDestroy(ctx);
     }
 
 }

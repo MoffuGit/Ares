@@ -9,6 +9,7 @@ const Snapshot = @import("worktree/Snapshot.zig");
 const Buffer = @import("buffer/Buffer.zig");
 const Appearance = @import("native/Appearance.zig");
 const native = @import("native/mod.zig");
+const GpuContext = native.gpu.GpuContext;
 
 export fn initState(callback: ?global.Callback) void {
     global.state.init(callback) catch {};
@@ -276,6 +277,22 @@ export fn readBuffer(buf: *Buffer, out: *ExternBuffer) void {
         .bytes_ptr = if (bytes) |b| @intFromPtr(b.ptr) else 0,
         .bytes_len = if (bytes) |b| b.len else 0,
     };
+}
+
+export fn gpuInit(metal_layer_ptr: *anyopaque) ?*GpuContext {
+    return GpuContext.init(global.state.alloc, metal_layer_ptr) catch null;
+}
+
+export fn gpuStartRenderLoop(ctx: *GpuContext) void {
+    ctx.startRenderLoop() catch {};
+}
+
+export fn gpuResize(ctx: *GpuContext, width: u32, height: u32) void {
+    ctx.resize(width, height);
+}
+
+export fn gpuDestroy(ctx: *GpuContext) void {
+    ctx.destroy();
 }
 
 test {
