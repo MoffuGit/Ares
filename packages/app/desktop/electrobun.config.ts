@@ -13,6 +13,7 @@ export default {
             "dist/index.html": "views/mainview/index.html",
             "dist/assets": "views/mainview/assets",
             "../../../zig-out/lib/libcore.dylib": "lib/libcore.dylib",
+            "src/bun/libMacWindowEffects.dylib": "bun/libMacWindowEffects.dylib",
         },
         mac: {
         	bundleCEF: false,
