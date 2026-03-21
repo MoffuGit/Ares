@@ -69,24 +69,7 @@ function EditorComponent() {
             <SidebarProvider open={open} onOpenChange={setOpen}>
                 <div className='w-full h-full flex flex-col flex-1 content-stretch rounded-3xl'>
                     <div className='shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag mb-2 pt-2 mx-2'>
-                        <div className="h-6 max-w-full w-fit flex items-center gap-1 overflow-hidden electrobun-webkit-app-region-no-drag">
-                            <div className="flex gap-2 group">
-                                <button
-                                    className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-black/0 hover:text-black/50 transition-all"
-                                >
-                                    <X size={8} />
-                                </button>
-                                <button
-                                    className="w-3 h-3 rounded-full bg-yellow-500 hover:bg-yellow-600 flex items-center justify-center text-black/0 hover:text-black/50 transition-all"
-                                >
-                                    <Minus size={8} />
-                                </button>
-                                <button
-                                    className="w-3 h-3 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center text-black/0 hover:text-black/50 transition-all"
-                                >
-                                    <Maximize2 size={8} />
-                                </button>
-                            </div>
+                        <div className="h-6 max-w-full w-fit flex items-center gap-1 overflow-hidden electrobun-webkit-app-region-no-drag pl-14">
                             <SidebarTrigger size="icon-xs" />
                             {tabs.length > 0 && (
                                 <Tabs
