@@ -15,7 +15,7 @@ export default {
             "../../../zig-out/lib/libcore.dylib": "lib/libcore.dylib",
         },
         mac: {
-        	bundleCEF: true,
+        	bundleCEF: false,
         },
         linux: {
             bundleCEF: true,
