@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { resolve } from "path";
 import { AppRPC } from "src/rpc.ts";
+import { MetalRenderer } from "./metalRenderer.ts";
 
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
@@ -34,6 +35,7 @@ const projectPath = "/Volumes/Home_SSD/Users/home/Documents/projects/ares";
 const app = new CoreApp(settingsPath, projectPath, true, libPath);
 
 const url = await getMainViewUrl();
+const metalRenderer = new MetalRenderer(app.core);
 
 function applyTrafficLightsPosition(mainWindow: BrowserWindow) {
     const dylibPath = join(import.meta.dir, "libMacWindowEffects.dylib");
@@ -71,11 +73,23 @@ const rpc = BrowserView.defineRPC<AppRPC>({
     handlers: {
         requests: {
             getState: ({ }) => app._state,
-            readBuffer: (({ id }) => app.readBuffer(id))
+            readBuffer: (({ id }) => app.readBuffer(id)),
+            wgpuTagReady: ({ id, rect }) => {
+                try {
+                    metalRenderer.start(id, mainWindow, rect);
+                    return { success: true };
+                } catch (err: any) {
+                    console.error(`Metal renderer start failed: ${String(err?.message ?? err)}`);
+                    return { success: false };
+                }
+            },
         },
         messages: {
             expandEntry: (id) => app.expandEntry(id),
             setMode: (mode) => app.setMode(mode),
+            wgpuTagRect: ({ id, rect }) => {
+                metalRenderer.updateRect(id, rect);
+            },
         },
     },
 });
@@ -140,6 +154,7 @@ mainWindow.webview.on("dom-ready", () => {
 });
 
 mainWindow.on("close", () => {
+    metalRenderer.stopAll();
     app.stop();
     Utils.quit();
 });
