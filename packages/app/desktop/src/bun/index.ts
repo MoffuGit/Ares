@@ -26,8 +26,8 @@ async function getMainViewUrl(): Promise<string> {
 const settingsPath = resolve(import.meta.dir, "../../../../../../../../../../settings/");
 const libPath = resolve(import.meta.dir, "../lib/libcore.dylib");
 const projectPath = "/Volumes/Home_SSD/Users/home/Documents/projects/ares";
-const app = new App(settingsPath, libPath);
 
+const app = new App(settingsPath, libPath);
 app.openProject(projectPath);
 
 const url = await getMainViewUrl();
