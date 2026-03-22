@@ -259,16 +259,16 @@ export fn trieNodeHasChildren(node: *TrieNode) bool {
     return node.childrens.count() > 0;
 }
 
-export fn viewCreate(kind: u8, metal_layer_ptr: *anyopaque) ?*GpuView {
+export fn createView(kind: u8, metal_layer_ptr: *anyopaque) ?*GpuView {
     if (kind >= @typeInfo(GpuView.Kind).@"enum".fields.len) return null;
     return GpuView.create(global.state.alloc, @enumFromInt(kind), metal_layer_ptr) catch null;
 }
 
-export fn viewResize(view: *GpuView, width: u32, height: u32) void {
+export fn resizeView(view: *GpuView, width: u32, height: u32) void {
     view.resize(width, height);
 }
 
-export fn viewDestroy(view: *GpuView) void {
+export fn destroyView(view: *GpuView) void {
     view.destroy();
 }
 

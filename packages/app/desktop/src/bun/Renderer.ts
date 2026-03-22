@@ -40,7 +40,7 @@ export class Renderer {
             throw new Error(`Failed to get Metal layer pointer for view ${viewId}`);
         }
 
-        const gpuView = this.core.viewCreate(ViewKindMap[view.kind], metalLayerPtr);
+        const gpuView = this.core.createView(ViewKindMap[view.kind], metalLayerPtr);
         if (!gpuView) {
             throw new Error(`Failed to create view (kind=${view.kind}) for id ${viewId}`);
         }
@@ -48,7 +48,7 @@ export class Renderer {
         const width = Math.max(1, Math.floor(rect.width));
         const height = Math.max(1, Math.floor(rect.height));
 
-        this.core.viewResize(gpuView, width * 2, height * 2);
+        this.core.resizeView(gpuView, width * 2, height * 2);
 
         this.states.set(viewId, {
             viewId,
@@ -69,7 +69,7 @@ export class Renderer {
         const height = Math.max(1, Math.floor(rect.height));
 
         if (width !== state.lastWidth || height !== state.lastHeight) {
-            this.core.viewResize(state.gpuView, width * 2, height * 2);
+            this.core.resizeView(state.gpuView, width * 2, height * 2);
             state.lastWidth = width;
             state.lastHeight = height;
         }
@@ -79,7 +79,7 @@ export class Renderer {
         const state = this.states.get(viewId);
         if (!state) return;
 
-        this.core.viewDestroy(state.gpuView);
+        this.core.destroyView(state.gpuView);
         this.states.delete(viewId);
     }
 

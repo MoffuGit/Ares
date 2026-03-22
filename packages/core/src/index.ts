@@ -114,15 +114,15 @@ function getCoreLib(libPath: string) {
                 args: [],
                 return: FFIType.void,
             },
-            viewCreate: {
+            createView: {
                 args: [FFIType.u8, FFIType.pointer],
                 returns: FFIType.pointer,
             },
-            viewResize: {
+            resizeView: {
                 args: [FFIType.pointer, FFIType.u32, FFIType.u32],
                 returns: FFIType.void,
             },
-            viewDestroy: {
+            destroyView: {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
@@ -312,16 +312,16 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.drainMailbox();
     }
 
-    viewCreate(kind: number, metalLayerPtr: Pointer): Pointer | null {
-        return this.lib.symbols.viewCreate(kind, metalLayerPtr) as Pointer | null;
+    createView(kind: number, metalLayerPtr: Pointer): Pointer | null {
+        return this.lib.symbols.createView(kind, metalLayerPtr) as Pointer | null;
     }
 
-    viewResize(view: Pointer, width: number, height: number): void {
-        this.lib.symbols.viewResize(view, width, height);
+    resizeView(view: Pointer, width: number, height: number): void {
+        this.lib.symbols.resizeView(view, width, height);
     }
 
-    viewDestroy(view: Pointer): void {
-        this.lib.symbols.viewDestroy(view);
+    destroyView(view: Pointer): void {
+        this.lib.symbols.destroyView(view);
     }
 
 }
