@@ -1,20 +1,195 @@
-import { RouterProvider, createRouter, createMemoryHistory } from '@tanstack/react-router'
-import { routeTree } from './routeTree.gen'
+import { useEffect, useRef, useState } from 'react'
+import { keymapHandler, rpc, useAppStore, onKeymapSequence } from '@/lib/app'
+import {
+    SidebarProvider,
+    SidebarInset,
+    SidebarTrigger,
+} from "@/components/ui/sidebar"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { AppSidebar } from '@/components/app-sidebar'
+import type { Scope, ScopeActionMap } from '@ares/shared'
+import { X } from 'lucide-react'
 
-const memoryHistory = createMemoryHistory({
-    initialEntries: ['/'],
-})
-
-const router = createRouter({ routeTree, history: memoryHistory })
-
-declare module '@tanstack/react-router' {
-    interface Register {
-        router: typeof router
+function useScopedKeymaps<S extends Scope>(scope: S): Record<string, ScopeActionMap[S]> {
+    const keymaps = useAppStore((s) => s.keymaps);
+    const bindings = keymaps?.[scope] ?? [];
+    const map: Record<string, ScopeActionMap[S]> = {};
+    for (const b of bindings) {
+        map[b.sequence] = b.action as ScopeActionMap[S];
     }
+    return map;
+}
+
+function WgpuView() {
+    const wgpuRef = useRef<HTMLElement | null>(null)
+
+    useEffect(() => {
+        const el = wgpuRef.current as any
+        if (!el?.on) return
+
+        const onReady = async (e: CustomEvent) => {
+            const rect = el.getBoundingClientRect()
+            try {
+                await rpc.request.wgpuTagReady({
+                    id: e.detail.id,
+                    rect: {
+                        x: rect.x,
+                        y: rect.y,
+                        width: rect.width,
+                        height: rect.height,
+                    },
+                })
+            } catch (err) {
+                console.error('[wgpuTag] wgpuTagReady failed:', err)
+            }
+        }
+
+        el.on('ready', onReady)
+
+        const sendRect = () => {
+            if (!el?.wgpuViewId) return
+            const rect = el.getBoundingClientRect()
+            rpc.send('wgpuTagRect', {
+                id: el.wgpuViewId,
+                rect: {
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height,
+                },
+            })
+        }
+
+        let observer: ResizeObserver | undefined
+        if ('ResizeObserver' in window) {
+            observer = new ResizeObserver(() => sendRect())
+            observer.observe(el)
+        }
+
+        const onResize = () => sendRect()
+        window.addEventListener('resize', onResize)
+
+        return () => {
+            window.removeEventListener('resize', onResize)
+            observer?.disconnect()
+        }
+    }, [])
+
+    return (
+        <div className="min-w-fit h-full flex flex-col">
+            <div className='w-full grow relative'>
+                {/* @ts-expect-error electrobun-wgpu is a custom element */}
+                <electrobun-wgpu
+                    ref={wgpuRef}
+                    style={{ width: '100%', height: '100%' }}
+                />
+            </div>
+        </div>
+    )
 }
 
 function App() {
-    return <RouterProvider router={router} />
+    const [open, setOpen] = useState(false);
+    const globalKeymaps = useScopedKeymaps("global");
+    const tabs = useAppStore((s) => s.tabs);
+    const activeTabId = useAppStore((s) => s.activeTabId);
+    const { newTab, closeTab, setActiveTab, nextTab, prevTab, setMode } = useAppStore.getState();
+
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            const consumed = keymapHandler.handleKeyDown(e.key, {
+                shift: e.shiftKey,
+                alt: e.altKey,
+                ctrl: e.ctrlKey,
+                super: e.metaKey,
+                hyper: false,
+                meta: false,
+                caps_lock: e.getModifierState('CapsLock'),
+                num_lock: e.getModifierState('NumLock'),
+            });
+
+            if (consumed) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, []);
+
+    useEffect(() => {
+        return onKeymapSequence((sequence) => {
+            const action = globalKeymaps[sequence];
+            switch (action) {
+                case "workspace:toggle_left_sidebar":
+                    setOpen((prev) => !prev);
+                    break;
+                case "workspace:new_tab":
+                    newTab();
+                    break;
+                case "workspace:next_tab":
+                    nextTab();
+                    break;
+                case "workspace:prev_tab":
+                    prevTab();
+                    break;
+                case "workspace:close_active_tab":
+                    if (activeTabId != null) closeTab(activeTabId);
+                    break;
+                case "workspace:enter_insert":
+                    setMode("insert")
+                    break;
+                case "workspace:enter_visual":
+                    setMode("visual")
+                    break;
+                case "workspace:enter_normal":
+                    setMode("normal")
+                    break;
+            }
+        });
+    }, [globalKeymaps, activeTabId]);
+
+    return (
+        <TooltipProvider>
+            <SidebarProvider open={open} onOpenChange={setOpen}>
+                <div className='w-full h-full flex flex-col flex-1 content-stretch rounded-3xl'>
+                    <div className='shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag mb-2 pt-2 mx-2'>
+                        <div className="h-6 max-w-full w-fit flex items-center gap-1 overflow-hidden electrobun-webkit-app-region-no-drag pl-14">
+                            <SidebarTrigger size="icon-xs" />
+                            {tabs.length > 0 && (
+                                <Tabs
+                                    value={activeTabId ?? undefined}
+                                    onValueChange={(val) => setActiveTab(val)}
+                                >
+                                    <TabsList className="h-7 bg-sidebar gap-1">
+                                        {tabs.map((tab) => (
+                                            <TabsTrigger
+                                                key={tab.id}
+                                                value={tab.id}
+                                            >
+                                                {tab.name}
+                                                <X
+                                                    onClick={() => { closeTab(tab.id) }}
+                                                    className="ml-auto mr-0 group-hover/tab-trigger:opacity-100 opacity-0 pointer-events-auto"
+                                                />
+                                            </TabsTrigger>
+                                        ))}
+                                    </TabsList>
+                                </Tabs>
+                            )}
+                        </div>
+                    </div>
+                    <div className='flex-1 flex flex-row bg-sidebar'>
+                        <AppSidebar />
+                        <SidebarInset className='rounded-xl bg-muted shadow-inset'>
+                            <WgpuView />
+                        </SidebarInset>
+                    </div>
+                </div>
+            </SidebarProvider>
+        </TooltipProvider>
+    );
 }
 
 export default App
