@@ -3,18 +3,10 @@ import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"
 
-import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetHeader,
-    SheetTitle,
-} from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
     Tooltip,
@@ -26,16 +18,12 @@ import { PanelLeftIcon } from "lucide-react"
 const SIDEBAR_WIDTH_DEFAULT = 192 // 12rem in px
 const SIDEBAR_WIDTH_MIN = 144 // 9rem in px
 const SIDEBAR_WIDTH_MAX = 384 // 24rem in px
-const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 
 type SidebarContextProps = {
     state: "expanded" | "collapsed"
     open: boolean
     setOpen: (open: boolean) => void
-    openMobile: boolean
-    setOpenMobile: (open: boolean) => void
-    isMobile: boolean
     toggleSidebar: () => void
     width: number
     setWidth: (width: number) => void
@@ -67,8 +55,6 @@ function SidebarProvider({
     open?: boolean
     onOpenChange?: (open: boolean) => void
 }) {
-    const isMobile = useIsMobile()
-    const [openMobile, setOpenMobile] = React.useState(false)
     const [width, setWidth] = React.useState(SIDEBAR_WIDTH_DEFAULT)
     const [isResizing, setIsResizing] = React.useState(false)
 
@@ -90,8 +76,8 @@ function SidebarProvider({
 
     // Helper to toggle the sidebar.
     const toggleSidebar = React.useCallback(() => {
-        return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
-    }, [isMobile, setOpen, setOpenMobile])
+        setOpen((open) => !open)
+    }, [setOpen])
 
     // We add a state so that we can do data-state="expanded" or "collapsed".
     // This makes it easier to style the sidebar with Tailwind classes.
@@ -102,16 +88,13 @@ function SidebarProvider({
             state,
             open,
             setOpen,
-            isMobile,
-            openMobile,
-            setOpenMobile,
             toggleSidebar,
             width,
             setWidth,
             isResizing,
             setIsResizing,
         }),
-        [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, width, isResizing]
+        [state, open, setOpen, toggleSidebar, width, isResizing]
     )
 
     return (
@@ -150,7 +133,7 @@ function Sidebar({
     variant?: "sidebar" | "floating" | "inset"
     collapsible?: "offcanvas" | "icon" | "none"
 }) {
-    const { isMobile, state, openMobile, setOpenMobile, isResizing } = useSidebar()
+    const { state, isResizing } = useSidebar()
 
     if (collapsible === "none") {
         return (
@@ -167,35 +150,10 @@ function Sidebar({
         )
     }
 
-    if (isMobile) {
-        return (
-            <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
-                <SheetContent
-                    dir={dir}
-                    data-sidebar="sidebar"
-                    data-slot="sidebar"
-                    data-mobile="true"
-                    className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
-                    style={
-                        {
-                            "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
-                        } as React.CSSProperties
-                    }
-                    side={side}
-                >
-                    <SheetHeader className="sr-only">
-                        <SheetTitle>Sidebar</SheetTitle>
-                        <SheetDescription>Displays the mobile sidebar.</SheetDescription>
-                    </SheetHeader>
-                    <div className="flex h-full w-full flex-col">{children}</div>
-                </SheetContent>
-            </Sheet>
-        )
-    }
 
     return (
         <div
-            className="group peer relative hidden text-sidebar-foreground md:block"
+            className="group peer relative text-sidebar-foreground block"
             data-state={state}
             data-collapsible={state === "collapsed" ? collapsible : ""}
             data-variant={variant}
@@ -219,7 +177,7 @@ function Sidebar({
                 data-slot="sidebar-container"
                 data-side={side}
                 className={cn(
-                    "absolute inset-y-0 z-10 hidden pb-1.5 h-full w-(--sidebar-width) data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
+                    "absolute inset-y-0 z-10 pb-1.5 h-full w-(--sidebar-width) data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] flex",
                     !isResizing && "transition-[left,right,width] duration-150 ease-in-out-quint",
                     // Adjust the padding for floating and inset variants.
                     variant === "floating" || variant === "inset"
@@ -557,7 +515,7 @@ function SidebarMenuButton({
         isActive?: boolean
         tooltip?: string | React.ComponentProps<typeof TooltipContent>
     } & VariantProps<typeof sidebarMenuButtonVariants>) {
-    const { isMobile, state } = useSidebar()
+    const { state } = useSidebar()
     const comp = useRender({
         defaultTagName: "button",
         props: mergeProps<"button">(
@@ -591,7 +549,7 @@ function SidebarMenuButton({
             <TooltipContent
                 side="right"
                 align="center"
-                hidden={state !== "collapsed" || isMobile}
+                hidden={state !== "collapsed"}
                 {...tooltip}
             />
         </Tooltip>
