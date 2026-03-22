@@ -2,6 +2,9 @@ const objc = @import("objc");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const EventEmitter = @import("../../EventEmitter.zig").EventEmitter(ObserverEvents);
+const c = @cImport({
+    @cInclude("dispatch/dispatch.h");
+});
 
 const Appearance = @This();
 
@@ -125,6 +128,89 @@ pub const Observer = struct {
         self.alloc.destroy(self);
     }
 };
+
+const NSPoint = extern struct {
+    x: f64,
+    y: f64,
+};
+
+const NSSize = extern struct {
+    width: f64,
+    height: f64,
+};
+
+const NSRect = extern struct {
+    origin: NSPoint,
+    size: NSSize,
+};
+
+const TrafficLightsContext = struct {
+    window_ptr: *anyopaque,
+    x: f64,
+    y_from_top: f64,
+    success: bool,
+};
+
+fn trafficLightsWork(ctx_ptr: ?*anyopaque) callconv(.c) void {
+    const ctx: *TrafficLightsContext = @ptrCast(@alignCast(ctx_ptr));
+
+    const pool = objc.AutoreleasePool.init();
+    defer pool.deinit();
+
+    const window: objc.Object = .{ .value = @ptrCast(@alignCast(ctx.window_ptr)) };
+
+    const NSWindow = objc.getClass("NSWindow") orelse return;
+    if (!window.msgSend(bool, "isKindOfClass:", .{NSWindow})) return;
+
+    const close_button = window.msgSend(objc.Object, "standardWindowButton:", .{@as(u64, 0)});
+    const minimize_button = window.msgSend(objc.Object, "standardWindowButton:", .{@as(u64, 1)});
+    const zoom_button = window.msgSend(objc.Object, "standardWindowButton:", .{@as(u64, 2)});
+
+    if (close_button.value == null or minimize_button.value == null or zoom_button.value == null) return;
+
+    const button_container = close_button.msgSend(objc.Object, "superview", .{});
+    if (button_container.value == null) return;
+
+    const close_frame = close_button.msgSend(NSRect, "frame", .{});
+    const minimize_frame = minimize_button.msgSend(NSRect, "frame", .{});
+
+    var spacing = minimize_frame.origin.x - close_frame.origin.x;
+    if (spacing <= 0) {
+        spacing = close_frame.size.width + 6.0;
+    }
+
+    const flipped = button_container.msgSend(bool, "isFlipped", .{});
+    const container_frame = button_container.msgSend(NSRect, "frame", .{});
+
+    var target_y = ctx.y_from_top;
+    if (!flipped) {
+        target_y = container_frame.size.height - ctx.y_from_top - close_frame.size.height;
+    }
+    target_y = @max(0.0, target_y);
+
+    const buttons = [_]objc.Object{ close_button, minimize_button, zoom_button };
+    var current_x = ctx.x;
+    for (buttons) |button| {
+        button.msgSend(void, "setFrameOrigin:", .{NSPoint{ .x = current_x, .y = target_y }});
+        current_x += spacing;
+    }
+
+    button_container.msgSend(void, "setNeedsLayout:", .{@as(bool, true)});
+    button_container.msgSend(void, "layoutSubtreeIfNeeded", .{});
+
+    ctx.success = true;
+}
+
+pub fn setWindowTrafficLightsPosition(window_ptr: *anyopaque, x: f64, y_from_top: f64) bool {
+    var ctx = TrafficLightsContext{
+        .window_ptr = window_ptr,
+        .x = x,
+        .y_from_top = y_from_top,
+        .success = false,
+    };
+    c.dispatch_sync_f(c.dispatch_get_main_queue(), @ptrCast(&ctx), &trafficLightsWork);
+    return ctx.success;
+}
 
 pub fn isDark() bool {
     const pool = objc.AutoreleasePool.init();

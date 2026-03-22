@@ -6,9 +6,8 @@
 		"dev": "bun run build && electrobun dev",
 		"dev:hmr": "concurrently \"bun run hmr\" \"bun run dev\"",
 		"hmr": "vite --port 5173",
-		"build:native-effects": "bash ./scripts/build-macos-effects.sh",
-		"build": "bun run build:native-effects && vite build && electrobun build",
-		"build:prod": "bun run build:native-effects && vite build && electrobun build --channel prod",
+		"build": "vite build && electrobun build",
+		"build:prod": "vite build && electrobun build --channel prod",
 		"start": "bun run dev"
 	},
 	"dependencies": {

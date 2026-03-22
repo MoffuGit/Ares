@@ -31,6 +31,10 @@ pub fn isDark(_: *Appearance) bool {
     return MacAppearance.isDark();
 }
 
+pub fn setWindowTrafficLightsPosition(window_ptr: *anyopaque, x: f64, y_from_top: f64) bool {
+    return MacAppearance.setWindowTrafficLightsPosition(window_ptr, x, y_from_top);
+}
+
 test "blocks until appearance change" {
     const testing = std.testing;
     const alloc = testing.allocator;

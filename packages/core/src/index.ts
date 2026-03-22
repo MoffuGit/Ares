@@ -58,6 +58,10 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.pointer, FFIType.u64],
                 returns: FFIType.void,
             },
+            setWindowTrafficLightsPosition: {
+                args: [FFIType.ptr, FFIType.f64, FFIType.f64],
+                returns: FFIType.bool,
+            },
             createIo: {
                 args: [],
                 returns: FFIType.pointer,
@@ -238,6 +242,10 @@ export class CoreLib extends EventEmitter {
 
     destroyAppearance(handle: Pointer): void {
         this.lib.symbols.destroyAppearance(handle);
+    }
+
+    setWindowTrafficLightsPosition(window: Pointer, x: number, y: number) {
+        this.lib.symbols.setWindowTrafficLightsPosition(window, x, y);
     }
 
     loadSettings(settings: Pointer, path: string, monitor: Pointer, appearance?: Pointer | null): void {

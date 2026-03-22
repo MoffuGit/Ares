@@ -9,6 +9,8 @@ import { EventEmitter } from "events";
 const ModeMap: Record<Mode, number> = { normal: 0, insert: 1, visual: 2 };
 const ScopeMap: Record<Scope, number> = { global: 0, editor: 1, command_palette: 2 };
 
+const MAC_TRAFFIC_LIGHTS_X = 14;
+const MAC_TRAFFIC_LIGHTS_Y = 12;
 
 export class CoreApp extends EventEmitter {
     readonly core: CoreLib;
@@ -41,6 +43,14 @@ export class CoreApp extends EventEmitter {
 
         this.loadSettings(settingsPath, this.appearance);
         this.openProject(projectPath);
+    }
+
+    setWindowTrafficLightPosition(window: Pointer) {
+        this.core.setWindowTrafficLightsPosition(
+            window,
+            MAC_TRAFFIC_LIGHTS_X,
+            MAC_TRAFFIC_LIGHTS_Y,
+        );
     }
 
     drainMailbox() {

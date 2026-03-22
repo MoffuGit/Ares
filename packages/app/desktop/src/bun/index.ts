@@ -1,17 +1,11 @@
 import { CoreApp } from "@ares/shared/core";
 import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
-import { dlopen, FFIType } from "bun:ffi";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { resolve } from "path";
 import { AppRPC } from "src/rpc.ts";
 import { MetalRenderer } from "./metalRenderer.ts";
 
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
-const MAC_TRAFFIC_LIGHTS_X = 14;
-const MAC_TRAFFIC_LIGHTS_Y = 12;
-const isMacOS = process.platform === "darwin";
 
 async function getMainViewUrl(): Promise<string> {
     const channel = await Updater.localInfo.channel();
@@ -36,37 +30,6 @@ const app = new CoreApp(settingsPath, projectPath, true, libPath);
 
 const url = await getMainViewUrl();
 const metalRenderer = new MetalRenderer(app.core);
-
-function applyTrafficLightsPosition(mainWindow: BrowserWindow) {
-    const dylibPath = join(import.meta.dir, "libMacWindowEffects.dylib");
-
-    if (!existsSync(dylibPath)) {
-        console.warn(`Native dylib not found at ${dylibPath}.`);
-        return;
-    }
-
-    try {
-        const lib = dlopen(dylibPath, {
-            setWindowTrafficLightsPosition: {
-                args: [FFIType.ptr, FFIType.f64, FFIType.f64],
-                returns: FFIType.bool,
-            },
-        });
-
-        const alignButtons = () =>
-            lib.symbols.setWindowTrafficLightsPosition(
-                mainWindow.ptr,
-                MAC_TRAFFIC_LIGHTS_X,
-                MAC_TRAFFIC_LIGHTS_Y,
-            );
-
-        alignButtons();
-        setTimeout(alignButtons, 120);
-        mainWindow.on("resize", alignButtons);
-    } catch (error) {
-        console.warn("Failed to apply traffic lights position:", error);
-    }
-}
 
 const rpc = BrowserView.defineRPC<AppRPC>({
     maxRequestTime: 5000,
@@ -109,9 +72,14 @@ const mainWindow = new BrowserWindow({
     rpc: rpc,
 });
 
-if (isMacOS) {
-    applyTrafficLightsPosition(mainWindow);
-}
+const alignButtons = () =>
+    app.setWindowTrafficLightPosition(
+        mainWindow.ptr,
+    );
+
+
+alignButtons();
+mainWindow.on("resize", alignButtons);
 
 app.start();
 
