@@ -1,11 +1,5 @@
 fsevents -> mac specific, used for watching directories without creating way to many fd
 
-lets start by moving the traffic-lights logic to the zig, i don't want to handle the binding of another library
-
-
-
-
-
 the metal view works and i think this will be the path for the editor and terminal views,
 we need to improve the structure of the library and update the messages we send between the zig side and the bun side
 the ts side dont need the buffer updates anymore because they dont need the state nor the bytes,

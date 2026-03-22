@@ -46,6 +46,11 @@ export fn destroyAppearance(appe: *Appearance) void {
     appe.destroy();
 }
 
+//HACK:
+//This works but every time you resize the window, the buttons take their original position
+//this result on blinking and jumping buttons, this pull maybe add a fix to the native electrobun
+//api: https://github.com/blackboardsh/electrobun/pull/294,
+//i will try the fix by myself and if i see that don't works i will try to fix it myself
 export fn setWindowTrafficLightsPosition(window_ptr: *anyopaque, x: f64, y_from_top: f64) bool {
     return Appearance.setWindowTrafficLightsPosition(window_ptr, x, y_from_top);
 }
