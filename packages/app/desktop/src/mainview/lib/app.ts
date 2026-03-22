@@ -1,5 +1,5 @@
 import { Electroview } from "electrobun/view";
-import type { Mode, Scope, KeymapBinding, AppState, WorktreeEntry, Tab } from "@ares/shared";
+import type { Mode, Scope, KeymapBinding, AppState, WorktreeEntry, Tab, View } from "@ares/shared";
 import { KeymapHandler, type TrieOps, buildKeymapTrie, edgeKey, type TSTrieNode } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import { create } from "zustand";
@@ -33,14 +33,22 @@ interface AppStore extends AppState {
     readKeymaps: (scope: Scope) => KeymapBinding[];
     loadSettings: () => Promise<void>;
     expandEntry: (entry: WorktreeEntry) => void;
-    newTab: () => void;
+    newTab: (view: View) => void;
     closeTab: (tabId: number) => void;
     setActiveTab: (tabId: number) => void;
+    setGpuViewId: (tabId: number, gpuViewId: number) => void;
     nextTab: () => void;
     prevTab: () => void;
 
     tabs: Tab[];
     activeTabId: number | null;
+}
+
+function viewName(view: View): string {
+    switch (view.kind) {
+        case "editor": return view.path.split("/").pop() ?? "untitled";
+        case "terminal": return "terminal";
+    }
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -68,9 +76,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
         }
     },
 
-    newTab: () => {
+    newTab: (view) => {
         const id = Date.now();
-        const tab: Tab = { id, name: "untitled", };
+        const name = viewName(view);
+        const tab: Tab = { id, name, view };
         const tabs = [...get().tabs, tab];
         set({ tabs, activeTabId: id });
     },
@@ -91,6 +100,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     setActiveTab: (tabId) => {
         set({ activeTabId: tabId });
+    },
+
+    setGpuViewId: (tabId, gpuViewId) => {
+        const tabs = get().tabs.map((t) =>
+            t.id === tabId ? { ...t, gpuViewId } : t
+        );
+        set({ tabs });
     },
 
     nextTab: () => {

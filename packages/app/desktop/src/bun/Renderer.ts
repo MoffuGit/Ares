@@ -1,18 +1,20 @@
 import { WGPUView } from "electrobun/bun";
 import type { Pointer } from "bun:ffi";
 import type { CoreLib } from "@ares/core";
+import type { View } from "@ares/shared";
 
 type Rect = { x: number; y: number; width: number; height: number };
 
 type ViewState = {
     viewId: number;
+    view: View;
     rect: Rect;
     gpuCtx: Pointer;
     lastWidth: number;
     lastHeight: number;
 };
 
-export class MetalRenderer {
+export class Renderer {
     private core: CoreLib;
     private states = new Map<number, ViewState>();
 
@@ -20,15 +22,15 @@ export class MetalRenderer {
         this.core = core;
     }
 
-    start(viewId: number, _win: unknown, rect: Rect) {
+    start(viewId: number, _win: unknown, rect: Rect, view: View) {
         if (this.states.has(viewId)) return;
 
-        const view = WGPUView.getById(viewId);
-        if (!view?.ptr) {
+        const wgpuView = WGPUView.getById(viewId);
+        if (!wgpuView?.ptr) {
             throw new Error(`WGPUView not found for id ${viewId}`);
         }
 
-        const metalLayerPtr = view.getNativeHandle();
+        const metalLayerPtr = wgpuView.getNativeHandle();
         if (!metalLayerPtr) {
             throw new Error(`Failed to get Metal layer pointer for view ${viewId}`);
         }
@@ -46,6 +48,7 @@ export class MetalRenderer {
 
         this.states.set(viewId, {
             viewId,
+            view,
             rect,
             gpuCtx,
             lastWidth: width,

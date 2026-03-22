@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { keymapHandler, rpc, useAppStore, onKeymapSequence } from '@/lib/app'
+import { useEffect, useState } from 'react'
+import { keymapHandler, useAppStore, onKeymapSequence } from '@/lib/app'
 import {
     SidebarProvider,
     SidebarInset,
@@ -8,6 +8,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AppSidebar } from '@/components/app-sidebar'
+import { TabContent } from '@/components/tab-content'
 import type { Scope, ScopeActionMap } from '@ares/shared'
 import { X } from 'lucide-react'
 
@@ -21,79 +22,12 @@ function useScopedKeymaps<S extends Scope>(scope: S): Record<string, ScopeAction
     return map;
 }
 
-function WgpuView() {
-    const wgpuRef = useRef<HTMLElement | null>(null)
-
-    useEffect(() => {
-        const el = wgpuRef.current as any
-        if (!el?.on) return
-
-        const onReady = async (e: CustomEvent) => {
-            const rect = el.getBoundingClientRect()
-            try {
-                await rpc.request.wgpuTagReady({
-                    id: e.detail.id,
-                    rect: {
-                        x: rect.x,
-                        y: rect.y,
-                        width: rect.width,
-                        height: rect.height,
-                    },
-                })
-            } catch (err) {
-                console.error('[wgpuTag] wgpuTagReady failed:', err)
-            }
-        }
-
-        el.on('ready', onReady)
-
-        const sendRect = () => {
-            if (!el?.wgpuViewId) return
-            const rect = el.getBoundingClientRect()
-            rpc.send('wgpuTagRect', {
-                id: el.wgpuViewId,
-                rect: {
-                    x: rect.x,
-                    y: rect.y,
-                    width: rect.width,
-                    height: rect.height,
-                },
-            })
-        }
-
-        let observer: ResizeObserver | undefined
-        if ('ResizeObserver' in window) {
-            observer = new ResizeObserver(() => sendRect())
-            observer.observe(el)
-        }
-
-        const onResize = () => sendRect()
-        window.addEventListener('resize', onResize)
-
-        return () => {
-            window.removeEventListener('resize', onResize)
-            observer?.disconnect()
-        }
-    }, [])
-
-    return (
-        <div className="min-w-fit h-full flex flex-col">
-            <div className='w-full grow relative'>
-                {/* @ts-expect-error electrobun-wgpu is a custom element */}
-                <electrobun-wgpu
-                    ref={wgpuRef}
-                    style={{ width: '100%', height: '100%' }}
-                />
-            </div>
-        </div>
-    )
-}
-
 function App() {
     const [open, setOpen] = useState(false);
     const globalKeymaps = useScopedKeymaps("global");
     const tabs = useAppStore((s) => s.tabs);
     const activeTabId = useAppStore((s) => s.activeTabId);
+    const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
     const { newTab, closeTab, setActiveTab, nextTab, prevTab, setMode } = useAppStore.getState();
 
     useEffect(() => {
@@ -126,7 +60,7 @@ function App() {
                     setOpen((prev) => !prev);
                     break;
                 case "workspace:new_tab":
-                    newTab();
+                    newTab({ kind: "editor", path: "" });
                     break;
                 case "workspace:next_tab":
                     nextTab();
@@ -183,7 +117,7 @@ function App() {
                     <div className='flex-1 flex flex-row bg-sidebar'>
                         <AppSidebar />
                         <SidebarInset className='rounded-xl bg-muted shadow-inset'>
-                            <WgpuView />
+                            {activeTab && <TabContent tab={activeTab} />}
                         </SidebarInset>
                     </div>
                 </div>

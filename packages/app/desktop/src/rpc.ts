@@ -1,5 +1,5 @@
 import type { RPCSchema } from "electrobun/bun";
-import type { AppState, Settings, Theme, WorktreeEntry, ScopedKeymaps, Mode } from "@ares/shared";
+import type { AppState, Settings, Theme, WorktreeEntry, ScopedKeymaps, Mode, View } from "@ares/shared";
 
 export type GpuRect = { x: number; y: number; width: number; height: number };
 
@@ -10,7 +10,7 @@ export type AppRPC = {
             getTheme: { params: {}; response: Theme },
             getState: { params: {}; response: AppState };
             gitFileTree: { params: {}; response: WorktreeEntry[] }
-            wgpuTagReady: { params: { id: number; rect: GpuRect }; response: { success: boolean } }
+            wgpuTagReady: { params: { id: number; rect: GpuRect; view: View }; response: { success: boolean } }
         };
         messages: {
             setMode: Mode;

@@ -2,7 +2,7 @@ import { App } from "../../../shared/src/app/index.ts";
 import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
 import { resolve } from "path";
 import { AppRPC } from "src/rpc.ts";
-import { MetalRenderer } from "./metalRenderer.ts";
+import { Renderer } from "./Renderer.ts";
 
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
@@ -31,16 +31,16 @@ const app = new App(settingsPath, libPath);
 app.openProject(projectPath);
 
 const url = await getMainViewUrl();
-const metalRenderer = new MetalRenderer(app.core);
+const metalRenderer = new Renderer(app.core);
 
 const rpc = BrowserView.defineRPC<AppRPC>({
     maxRequestTime: 5000,
     handlers: {
         requests: {
             getState: ({ }) => app._state,
-            wgpuTagReady: ({ id, rect }) => {
+            wgpuTagReady: ({ id, rect, view }) => {
                 try {
-                    metalRenderer.start(id, mainWindow, rect);
+                    metalRenderer.start(id, mainWindow, rect, view);
                     return { success: true };
                 } catch (err: any) {
                     console.error(`Metal renderer start failed: ${String(err?.message ?? err)}`);

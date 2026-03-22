@@ -123,7 +123,15 @@ export type KeyDownMods = {
     num_lock: boolean;
 }
 
+export type EditorView = { kind: "editor"; path: string };
+export type TerminalView = { kind: "terminal"; cwd: string };
+export type View = EditorView | TerminalView;
+
+export type ViewKind = View["kind"];
+
 export type Tab = {
     id: number;
     name: string;
+    view: View;
+    gpuViewId?: number;
 };
