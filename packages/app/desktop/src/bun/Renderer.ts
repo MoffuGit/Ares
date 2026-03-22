@@ -1,15 +1,20 @@
 import { WGPUView } from "electrobun/bun";
 import type { Pointer } from "bun:ffi";
 import type { CoreLib } from "@ares/core";
-import type { View } from "@ares/shared";
+import type { View, ViewKind } from "@ares/shared";
 
 type Rect = { x: number; y: number; width: number; height: number };
+
+const ViewKindMap: Record<ViewKind, number> = {
+    editor: 0,
+    terminal: 1,
+};
 
 type ViewState = {
     viewId: number;
     view: View;
     rect: Rect;
-    gpuCtx: Pointer;
+    gpuView: Pointer;
     lastWidth: number;
     lastHeight: number;
 };
@@ -27,7 +32,7 @@ export class Renderer {
 
         const wgpuView = WGPUView.getById(viewId);
         if (!wgpuView?.ptr) {
-            throw new Error(`WGPUView not found for id ${viewId}`);
+            throw new Error(`GPU view not found for id ${viewId}`);
         }
 
         const metalLayerPtr = wgpuView.getNativeHandle();
@@ -35,22 +40,21 @@ export class Renderer {
             throw new Error(`Failed to get Metal layer pointer for view ${viewId}`);
         }
 
-        const gpuCtx = this.core.gpuInit(metalLayerPtr);
-        if (!gpuCtx) {
-            throw new Error(`Failed to initialize Metal GPU context for view ${viewId}`);
+        const gpuView = this.core.viewCreate(ViewKindMap[view.kind], metalLayerPtr);
+        if (!gpuView) {
+            throw new Error(`Failed to create view (kind=${view.kind}) for id ${viewId}`);
         }
 
         const width = Math.max(1, Math.floor(rect.width));
         const height = Math.max(1, Math.floor(rect.height));
 
-        this.core.gpuResize(gpuCtx, width * 2, height * 2);
-        this.core.gpuStartRenderLoop(gpuCtx);
+        this.core.viewResize(gpuView, width * 2, height * 2);
 
         this.states.set(viewId, {
             viewId,
             view,
             rect,
-            gpuCtx,
+            gpuView,
             lastWidth: width,
             lastHeight: height,
         });
@@ -65,7 +69,7 @@ export class Renderer {
         const height = Math.max(1, Math.floor(rect.height));
 
         if (width !== state.lastWidth || height !== state.lastHeight) {
-            this.core.gpuResize(state.gpuCtx, width * 2, height * 2);
+            this.core.viewResize(state.gpuView, width * 2, height * 2);
             state.lastWidth = width;
             state.lastHeight = height;
         }
@@ -75,7 +79,7 @@ export class Renderer {
         const state = this.states.get(viewId);
         if (!state) return;
 
-        this.core.gpuDestroy(state.gpuCtx);
+        this.core.viewDestroy(state.gpuView);
         this.states.delete(viewId);
     }
 

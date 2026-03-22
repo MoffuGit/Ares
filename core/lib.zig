@@ -5,7 +5,7 @@ const Project = @import("Project.zig");
 const Snapshot = @import("worktree/Snapshot.zig");
 const Appearance = @import("native/Appearance.zig");
 const native = @import("native/mod.zig");
-const GpuContext = native.gpu.GpuContext;
+const GpuView = native.GpuView;
 const App = @import("App.zig");
 
 export fn initState(callback: ?global.Callback) void {
@@ -259,20 +259,17 @@ export fn trieNodeHasChildren(node: *TrieNode) bool {
     return node.childrens.count() > 0;
 }
 
-export fn gpuInit(metal_layer_ptr: *anyopaque) ?*GpuContext {
-    return GpuContext.init(global.state.alloc, metal_layer_ptr) catch null;
+export fn viewCreate(kind: u8, metal_layer_ptr: *anyopaque) ?*GpuView {
+    if (kind >= @typeInfo(GpuView.Kind).@"enum".fields.len) return null;
+    return GpuView.create(global.state.alloc, @enumFromInt(kind), metal_layer_ptr) catch null;
 }
 
-export fn gpuStartRenderLoop(ctx: *GpuContext) void {
-    ctx.startRenderLoop() catch {};
+export fn viewResize(view: *GpuView, width: u32, height: u32) void {
+    view.resize(width, height);
 }
 
-export fn gpuResize(ctx: *GpuContext, width: u32, height: u32) void {
-    ctx.resize(width, height);
-}
-
-export fn gpuDestroy(ctx: *GpuContext) void {
-    ctx.destroy();
+export fn viewDestroy(view: *GpuView) void {
+    view.destroy();
 }
 
 test {

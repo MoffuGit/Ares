@@ -114,22 +114,18 @@ function getCoreLib(libPath: string) {
                 args: [],
                 return: FFIType.void,
             },
-            gpuInit: {
-                args: [FFIType.pointer],
+            viewCreate: {
+                args: [FFIType.u8, FFIType.pointer],
                 returns: FFIType.pointer,
             },
-            gpuStartRenderLoop: {
-                args: [FFIType.pointer],
-                returns: FFIType.void,
-            },
-            gpuResize: {
+            viewResize: {
                 args: [FFIType.pointer, FFIType.u32, FFIType.u32],
                 returns: FFIType.void,
             },
-            gpuDestroy: {
+            viewDestroy: {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
-            }
+            },
         },
     );
 
@@ -316,20 +312,16 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.drainMailbox();
     }
 
-    gpuInit(metalLayerPtr: Pointer): Pointer | null {
-        return this.lib.symbols.gpuInit(metalLayerPtr) as Pointer | null;
+    viewCreate(kind: number, metalLayerPtr: Pointer): Pointer | null {
+        return this.lib.symbols.viewCreate(kind, metalLayerPtr) as Pointer | null;
     }
 
-    gpuStartRenderLoop(ctx: Pointer): void {
-        this.lib.symbols.gpuStartRenderLoop(ctx);
+    viewResize(view: Pointer, width: number, height: number): void {
+        this.lib.symbols.viewResize(view, width, height);
     }
 
-    gpuResize(ctx: Pointer, width: number, height: number): void {
-        this.lib.symbols.gpuResize(ctx, width, height);
-    }
-
-    gpuDestroy(ctx: Pointer): void {
-        this.lib.symbols.gpuDestroy(ctx);
+    viewDestroy(view: Pointer): void {
+        this.lib.symbols.viewDestroy(view);
     }
 
 }
