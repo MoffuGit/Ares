@@ -3,10 +3,9 @@ const global = @import("global.zig");
 
 const Project = @import("Project.zig");
 const Snapshot = @import("worktree/Snapshot.zig");
-const Appearance = @import("native/Appearance.zig");
-const native = @import("native/mod.zig");
-const GpuView = native.GpuView;
+const Appearance = @import("Appearance.zig");
 const App = @import("App.zig");
+const View = @import("View.zig");
 
 export fn initState(callback: ?global.Callback) void {
     global.state.init(callback) catch {};
@@ -259,21 +258,20 @@ export fn trieNodeHasChildren(node: *TrieNode) bool {
     return node.childrens.count() > 0;
 }
 
-export fn createView(kind: u8, metal_layer_ptr: *anyopaque) ?*GpuView {
-    if (kind >= @typeInfo(GpuView.Kind).@"enum".fields.len) return null;
-    return GpuView.create(global.state.alloc, @enumFromInt(kind), metal_layer_ptr) catch null;
+export fn createView(kind: u8, metal_layer_ptr: *anyopaque) ?*View {
+    if (kind >= @typeInfo(View.Kind).@"enum".fields.len) return null;
+    return View.create(global.state.alloc, @enumFromInt(kind), metal_layer_ptr) catch null;
 }
 
-export fn resizeView(view: *GpuView, width: u32, height: u32) void {
+export fn resizeView(view: *View, width: u32, height: u32) void {
     view.resize(width, height);
 }
 
-export fn destroyView(view: *GpuView) void {
+export fn destroyView(view: *View) void {
     view.destroy();
 }
 
 test {
-    _ = native;
     _ = @import("keymaps/mod.zig");
     _ = @import("monitor/mod.zig");
     _ = @import("worktree/mod.zig");

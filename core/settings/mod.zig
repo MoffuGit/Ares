@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const keymapspkg = @import("../keymaps/mod.zig");
 const Keymaps = keymapspkg.Keymaps;
 const Monitor = @import("../monitor/mod.zig");
-const Appearance = @import("../native/Appearance.zig");
+const Appearance = @import("../Appearance.zig");
 
 pub const Settings = @This();
 

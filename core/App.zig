@@ -1,6 +1,6 @@
 const global = &@import("global.zig").state;
 const Settings = @import("settings/mod.zig");
-const Appearance = @import("native/Appearance.zig");
+const Appearance = @import("Appearance.zig");
 const Monitor = @import("monitor/mod.zig");
 const Io = @import("io/mod.zig");
 
