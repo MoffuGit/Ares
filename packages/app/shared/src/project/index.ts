@@ -1,22 +1,17 @@
 import type { CoreLib } from "@ares/core";
 import type { Pointer } from "bun:ffi";
-import { basename } from "node:path";
 import type { WorktreeEntry } from "../types";
 
 export class Project {
     protected coreProject: Pointer;
     coreLib: CoreLib;
-    abs_path: string;
-    root: string;
 
     constructor(core: CoreLib, app: Pointer, abs_path: string) {
         const coreProject = core.createProject(app, abs_path);
         if (coreProject == null) throw new Error("Failed to create project")
 
         this.coreLib = core;
-        this.abs_path = abs_path;
         this.coreProject = coreProject;
-        this.root = basename(abs_path);
     }
 
     readFiletree() {
