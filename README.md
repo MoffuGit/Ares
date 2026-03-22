@@ -13,9 +13,6 @@ i can copy parts of what i have at the swift version of my app, and update it to
 the cool part is that this changes are really simple, the CAPI was really small and the surface function where only 3 or 4
 and this surfaces where thinked to represent metal views
 
-
-first part is removing the buffer from the ts side
-
 after that we should write the representation of a View on the ts side and the zig side,
 and adding the functions that the ts side needs to call for updating the zig views,
 

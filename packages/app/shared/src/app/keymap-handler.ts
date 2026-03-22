@@ -1,9 +1,9 @@
 import type { Pointer } from "bun:ffi";
-import type { CoreApp } from "./index.ts";
+import type { App } from "./index.ts";
 import { KeymapHandler, type TrieOps } from "../keymap/index.ts";
 
 export function createCoreKeymapHandler(
-    core: CoreApp,
+    core: App,
     onSequence: (sequence: string) => void,
 ): KeymapHandler<Pointer> {
     const trie: TrieOps<Pointer> = {

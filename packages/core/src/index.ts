@@ -18,19 +18,11 @@ function getCoreLib(libPath: string) {
                 args: [],
                 returns: FFIType.void,
             },
-            createSettings: {
+            createApp: {
                 args: [],
                 returns: FFIType.pointer,
             },
-            destroySettings: {
-                args: [FFIType.pointer],
-                returns: FFIType.void,
-            },
-            createAppearance: {
-                args: [],
-                returns: FFIType.pointer,
-            },
-            destroyAppearance: {
+            destroyApp: {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
@@ -43,7 +35,7 @@ function getCoreLib(libPath: string) {
                 returns: FFIType.void,
             },
             loadSettings: {
-                args: [FFIType.pointer, FFIType.pointer, FFIType.u64, FFIType.pointer, FFIType.pointer],
+                args: [FFIType.pointer, FFIType.pointer, FFIType.u64],
                 returns: FFIType.void,
             },
             readSettings: {
@@ -62,24 +54,8 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.ptr, FFIType.f64, FFIType.f64],
                 returns: FFIType.bool,
             },
-            createIo: {
-                args: [],
-                returns: FFIType.pointer,
-            },
-            destroyIo: {
-                args: [FFIType.pointer],
-                returns: FFIType.void,
-            },
-            createMonitor: {
-                args: [],
-                returns: FFIType.pointer,
-            },
-            destroyMonitor: {
-                args: [FFIType.pointer],
-                returns: FFIType.void,
-            },
             createProject: {
-                args: [FFIType.pointer, FFIType.pointer, FFIType.pointer, FFIType.u64],
+                args: [FFIType.pointer, FFIType.pointer, FFIType.u64],
                 returns: FFIType.pointer,
             },
             destroyProject: {
@@ -216,74 +192,50 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.deinitState();
     }
 
-    createSettings(): Pointer | null {
-        return this.lib.symbols.createSettings() as Pointer | null;
+    createApp(): Pointer | null {
+        return this.lib.symbols.createApp();
     }
 
-    destroySettings(handle: Pointer): void {
-        this.lib.symbols.destroySettings(handle);
-    }
-
-    createAppearance(): Pointer | null {
-        return this.lib.symbols.createAppearance() as Pointer | null;
-    }
-
-    destroyAppearance(handle: Pointer): void {
-        this.lib.symbols.destroyAppearance(handle);
+    destroyApp(app: Pointer) {
+        this.lib.symbols.destroyApp(app);
     }
 
     setWindowTrafficLightsPosition(window: Pointer, x: number, y: number) {
         this.lib.symbols.setWindowTrafficLightsPosition(window, x, y);
     }
 
-    loadSettings(settings: Pointer, path: string, monitor: Pointer, appearance?: Pointer | null): void {
+    loadSettings(app: Pointer, path: string): void {
         const buf = new TextEncoder().encode(path);
-        this.lib.symbols.loadSettings(settings, buf, buf.byteLength, monitor, appearance ?? null);
+        this.lib.symbols.loadSettings(app, buf, buf.byteLength);
     }
 
-    readSettings(settings: Pointer) {
-        this.lib.symbols.lockSettings(settings);
+    readSettings(app: Pointer) {
+        this.lib.symbols.lockSettings(app);
         try {
             const buf = new ArrayBuffer(Settings.size);
-            this.lib.symbols.readSettings(settings, ptr(buf));
+            this.lib.symbols.readSettings(app, ptr(buf));
             return Settings.unpack(buf);
         } finally {
-            this.lib.symbols.unlockSettings(settings);
+            this.lib.symbols.unlockSettings(app);
         }
     }
 
-    readThemeJson(settings: Pointer): string {
-        this.lib.symbols.lockSettings(settings);
+    readThemeJson(app: Pointer): string {
+        this.lib.symbols.lockSettings(app);
         try {
-            const len = Number(this.lib.symbols.getThemeJsonLen(settings));
+            const len = Number(this.lib.symbols.getThemeJsonLen(app));
             if (len === 0) return "{}";
             const buf = new ArrayBuffer(len);
-            this.lib.symbols.readThemeJson(settings, ptr(buf), len);
+            this.lib.symbols.readThemeJson(app, ptr(buf), len);
             return new TextDecoder().decode(buf);
         } finally {
-            this.lib.symbols.unlockSettings(settings);
+            this.lib.symbols.unlockSettings(app);
         }
     }
 
-    createIo(): Pointer | null {
-        return this.lib.symbols.createIo();
-    }
-
-    destroyIo(handle: Pointer): void {
-        this.lib.symbols.destroyIo(handle);
-    }
-
-    createMonitor(): Pointer | null {
-        return this.lib.symbols.createMonitor();
-    }
-
-    destroyMonitor(handle: Pointer): void {
-        this.lib.symbols.destroyMonitor(handle);
-    }
-
-    createProject(monitor: Pointer, io: Pointer, path: string): Pointer | null {
+    createProject(app: Pointer, path: string): Pointer | null {
         const buf = new TextEncoder().encode(path);
-        return this.lib.symbols.createProject(monitor, io, buf, buf.byteLength) as Pointer | null;
+        return this.lib.symbols.createProject(app, buf, buf.byteLength) as Pointer | null;
     }
 
     destroyProject(handle: Pointer): void {
@@ -314,8 +266,8 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.expandEntry(project, id);
     }
 
-    getTrieRoot(settings: Pointer, mode: number): Pointer | null {
-        return this.lib.symbols.getTrieRoot(settings, mode) as Pointer | null;
+    getTrieRoot(app: Pointer, mode: number): Pointer | null {
+        return this.lib.symbols.getTrieRoot(app, mode) as Pointer | null;
     }
 
     trieStep(node: Pointer, codepoint: number, mods: number): Pointer | null {
@@ -330,16 +282,16 @@ export class CoreLib extends EventEmitter {
         return this.lib.symbols.trieNodeHasChildren(node) as boolean;
     }
 
-    readKeymapEntries(settings: Pointer, scope: number, mode: number): Array<{ sequence: string; action: string }> {
-        this.lib.symbols.lockSettings(settings);
+    readKeymapEntries(app: Pointer, scope: number, mode: number): Array<{ sequence: string; action: string }> {
+        this.lib.symbols.lockSettings(app);
         try {
-            const count = Number(this.lib.symbols.getKeymapEntryCount(settings, scope, mode));
+            const count = Number(this.lib.symbols.getKeymapEntryCount(app, scope, mode));
             if (count === 0) return [];
 
             const entrySize = KeymapEntry.size;
             const buf = new ArrayBuffer(count * entrySize);
             const actual = Number(
-                this.lib.symbols.readKeymapEntries(settings, scope, mode, ptr(buf), count),
+                this.lib.symbols.readKeymapEntries(app, scope, mode, ptr(buf), count),
             );
 
             const entries: Array<{ sequence: string; action: string }> = [];
@@ -352,12 +304,12 @@ export class CoreLib extends EventEmitter {
             }
             return entries;
         } finally {
-            this.lib.symbols.unlockSettings(settings);
+            this.lib.symbols.unlockSettings(app);
         }
     }
 
-    setSystemScheme(settings: Pointer, scheme: number): void {
-        this.lib.symbols.setSystemScheme(settings, scheme);
+    setSystemScheme(app: Pointer, scheme: number): void {
+        this.lib.symbols.setSystemScheme(app, scheme);
     }
 
     drainMailbox() {
@@ -386,13 +338,8 @@ let coreLib: CoreLib | undefined
 
 export function resolveCoreLib(libPath?: string): CoreLib {
     if (!coreLib) {
-        try {
-            coreLib = new CoreLib(libPath)
-        } catch (error) {
-            throw new Error(
-                `Failed to initialize the core lib, path`
-            )
-        }
+        const resolvedPath = libPath ?? DEFAULT_LIB_PATH;
+        coreLib = new CoreLib(resolvedPath);
     }
     return coreLib
 }

@@ -1,4 +1,4 @@
-import { CoreApp } from "@ares/shared/core";
+import { App } from "../../../shared/src/app/index.ts";
 import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
 import { resolve } from "path";
 import { AppRPC } from "src/rpc.ts";
@@ -26,7 +26,9 @@ async function getMainViewUrl(): Promise<string> {
 const settingsPath = resolve(import.meta.dir, "../../../../../../../../../../settings/");
 const libPath = resolve(import.meta.dir, "../lib/libcore.dylib");
 const projectPath = "/Volumes/Home_SSD/Users/home/Documents/projects/ares";
-const app = new CoreApp(settingsPath, projectPath, true, libPath);
+const app = new App(settingsPath, libPath);
+
+app.openProject(projectPath);
 
 const url = await getMainViewUrl();
 const metalRenderer = new MetalRenderer(app.core);
@@ -47,7 +49,7 @@ const rpc = BrowserView.defineRPC<AppRPC>({
             },
         },
         messages: {
-            expandEntry: (id) => app.expandEntry(id),
+            expandEntry: (id) => { app.expandEntry(id) },
             setMode: (mode) => app.setMode(mode),
             wgpuTagRect: ({ id, rect }) => {
                 metalRenderer.updateRect(id, rect);

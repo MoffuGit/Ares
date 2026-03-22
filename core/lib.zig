@@ -1,15 +1,12 @@
 const std = @import("std");
 const global = @import("global.zig");
 
-const Settings = @import("settings/mod.zig");
-const Io = @import("io/mod.zig");
-const Monitor = @import("monitor/mod.zig");
 const Project = @import("Project.zig");
 const Snapshot = @import("worktree/Snapshot.zig");
-const Buffer = @import("buffer/Buffer.zig");
 const Appearance = @import("native/Appearance.zig");
 const native = @import("native/mod.zig");
 const GpuContext = native.gpu.GpuContext;
+const App = @import("App.zig");
 
 export fn initState(callback: ?global.Callback) void {
     global.state.init(callback) catch {};
@@ -38,12 +35,17 @@ export fn drainMailbox() void {
     }
 }
 
-export fn createAppearance() ?*Appearance {
-    return Appearance.create(global.state.alloc) catch null;
+export fn createApp() ?*App {
+    const app = App.create() catch |err| {
+        std.log.debug("error when creating the app: {}", .{err});
+        return null;
+    };
+
+    return app;
 }
 
-export fn destroyAppearance(appe: *Appearance) void {
-    appe.destroy();
+export fn destroyApp(app: *App) void {
+    app.destroy();
 }
 
 //HACK:
@@ -55,16 +57,8 @@ export fn setWindowTrafficLightsPosition(window_ptr: *anyopaque, x: f64, y_from_
     return Appearance.setWindowTrafficLightsPosition(window_ptr, x, y_from_top);
 }
 
-export fn createSettings() ?*Settings {
-    return Settings.create(global.state.alloc) catch null;
-}
-
-export fn destroySettings(settings: *Settings) void {
-    settings.destroy();
-}
-
-export fn loadSettings(settings: *Settings, path: [*]const u8, len: u64, monitor: *Monitor, appe: ?*Appearance) void {
-    settings.load(path[0..len], monitor, appe) catch |err| {
+export fn loadSettings(app: *App, path: [*]const u8, len: u64) void {
+    app.loadSettings(path[0..len]) catch |err| {
         std.log.err("error while loading the settings: {}", .{err});
     };
 }
@@ -78,15 +72,21 @@ pub const ExternSettings = extern struct {
     dark_theme_len: usize,
 };
 
-export fn lockSettings(settings: *Settings) void {
+export fn lockSettings(app: *App) void {
+    const settings = app.settings;
+
     settings.mutex.lock();
 }
 
-export fn unlockSettings(settings: *Settings) void {
+export fn unlockSettings(app: *App) void {
+    const settings = app.settings;
+
     settings.mutex.unlock();
 }
 
-export fn readSettings(settings: *Settings, @"extern": *ExternSettings) void {
+export fn readSettings(app: *App, @"extern": *ExternSettings) void {
+    const settings = app.settings;
+
     @"extern".* = .{
         .scheme = @intFromEnum(settings.scheme),
         .system_scheme = @intFromEnum(settings.system_scheme),
@@ -97,39 +97,27 @@ export fn readSettings(settings: *Settings, @"extern": *ExternSettings) void {
     };
 }
 
-export fn setSystemScheme(settings: *Settings, scheme: u8) void {
+export fn setSystemScheme(app: *App, scheme: u8) void {
+    const settings = app.settings;
+
     if (scheme >= @typeInfo(@import("settings/mod.zig").ColorScheme).@"enum".fields.len) return;
     settings.setSystemScheme(@enumFromInt(scheme));
     global.state.emit(.themeUpdate, .instant);
 }
 
-export fn getThemeJsonLen(settings: *Settings) u64 {
-    return settings.theme_json.len;
+export fn getThemeJsonLen(app: *App) u64 {
+    return app.settings.theme_json.len;
 }
 
-export fn readThemeJson(settings: *Settings, out_buf: [*]u8, buf_len: u64) void {
+export fn readThemeJson(app: *App, out_buf: [*]u8, buf_len: u64) void {
+    const settings = app.settings;
+
     const len = @min(settings.theme_json.len, buf_len);
     @memcpy(out_buf[0..len], settings.theme_json[0..len]);
 }
 
-export fn createIo() ?*Io {
-    return Io.create(global.state.alloc) catch null;
-}
-
-export fn destroyIo(io: *Io) void {
-    io.destroy();
-}
-
-export fn createMonitor() ?*Monitor {
-    return Monitor.create(global.state.alloc) catch null;
-}
-
-export fn destroyMonitor(monitor: *Monitor) void {
-    monitor.destroy();
-}
-
-export fn createProject(monitor: *Monitor, io: *Io, path: [*]const u8, len: u64) ?*Project {
-    return Project.create(global.state.alloc, monitor, io, path[0..len]) catch null;
+export fn createProject(app: *App, path: [*]const u8, len: u64) ?*Project {
+    return Project.create(global.state.alloc, app, path[0..len]) catch null;
 }
 
 export fn destroyProject(project: *Project) void {
@@ -207,7 +195,9 @@ pub const ExternKeymapEntry = extern struct {
     action_len: usize,
 };
 
-export fn getKeymapEntryCount(settings: *Settings, scope: u8, mode: u8) u64 {
+export fn getKeymapEntryCount(app: *App, scope: u8, mode: u8) u64 {
+    const settings = app.settings;
+
     if (!settings.keymaps_initialized) return 0;
     if (scope >= @typeInfo(keymapspkg.Scope).@"enum".fields.len) return 0;
     if (mode >= @typeInfo(keymapspkg.Mode).@"enum".fields.len) return 0;
@@ -217,7 +207,9 @@ export fn getKeymapEntryCount(settings: *Settings, scope: u8, mode: u8) u64 {
     return settings.keymaps.entries(s, m).len;
 }
 
-export fn readKeymapEntries(settings: *Settings, scope: u8, mode: u8, out: [*]ExternKeymapEntry, max_count: u64) u64 {
+export fn readKeymapEntries(app: *App, scope: u8, mode: u8, out: [*]ExternKeymapEntry, max_count: u64) u64 {
+    const settings = app.settings;
+
     if (!settings.keymaps_initialized) return 0;
     if (scope >= @typeInfo(keymapspkg.Scope).@"enum".fields.len) return 0;
     if (mode >= @typeInfo(keymapspkg.Mode).@"enum".fields.len) return 0;
@@ -244,7 +236,9 @@ const KeyStrokeContext = @import("keymaps/KeyStroke.zig").KeyStrokeContext;
 const triepkg = @import("datastruct");
 const TrieNode = triepkg.NodeType(KeyStroke, u8, KeyStrokeContext);
 
-export fn getTrieRoot(settings: *Settings, mode: u8) ?*TrieNode {
+export fn getTrieRoot(app: *App, mode: u8) ?*TrieNode {
+    const settings = app.settings;
+
     if (!settings.keymaps_initialized) return null;
     if (mode >= @typeInfo(keymapspkg.Mode).@"enum".fields.len) return null;
 

@@ -1,10 +1,10 @@
 import { createContext, useContext, createSignal, onCleanup, type Accessor } from "solid-js";
 import type { Settings, Theme, WorktreeEntry, Mode, Scope, ScopedKeymaps, ScopeActionMap, AppState } from "../types.ts";
-import type { CoreApp } from "../core/index.ts";
+import type { App } from "../app/index.ts";
 
-export const AppContext = createContext<CoreApp>();
+export const AppContext = createContext<App>();
 
-export function useApp(): CoreApp {
+export function useApp(): App {
     const app = useContext(AppContext);
     if (!app) throw new Error("useApp must be used within AppContext.Provider");
     return app;
