@@ -1,10 +1,9 @@
 import type { Pointer } from "bun:ffi";
 import { resolveCoreLib, type CoreLib } from "@ares/core";
-import type { Settings, Theme, Mode, Scope, KeymapBinding, ScopedKeymaps, AppState } from "../types.ts";
+import type { Settings, Theme, Mode, Scope, KeymapBinding, ScopedKeymaps, AppState, WorktreeEntry } from "../types.ts";
 import { resolveTheme } from "./theme.ts";
 
 import { EventEmitter } from "events";
-import { Project } from "../project/index.ts";
 
 const ModeMap: Record<Mode, number> = { normal: 0, insert: 1, visual: 2 };
 const ScopeMap: Record<Scope, number> = { global: 0, editor: 1, command_palette: 2 };
@@ -15,7 +14,7 @@ const MAC_TRAFFIC_LIGHTS_Y = 12;
 export class App extends EventEmitter {
     readonly core: CoreLib;
     protected coreApp: Pointer;
-    protected project: Project | null = null;
+    protected project: Pointer | null = null;
 
     _state: AppState = { settings: null, theme: null, filetree: null, mode: "normal", keymaps: null };
 
@@ -49,10 +48,17 @@ export class App extends EventEmitter {
     }
 
     openProject(path: string) {
+        this.destroyProject()
+        const project = this.core.createProject(this.coreApp, path);
+        if (project == null) throw new Error("Failed to create project")
+        this.project = project;
+    }
+
+    destroyProject() {
         if (this.project) {
-            this.project.destroy();
+            this.core.destroyProject(this.project);
+            this.project = null;
         }
-        this.project = new Project(this.core, this.coreApp, path);
     }
 
     start() {
@@ -68,10 +74,7 @@ export class App extends EventEmitter {
         this.core.off("SettingsUpdate", this.onSettingsUpdate);
         this.core.off("ThemeUpdate", this.onThemeUpdate);
 
-        if (this.project) {
-            this.project.destroy();
-            this.project = null;
-        }
+        this.destroyProject();
         this.core.destroyApp(this.coreApp);
         this.core.deinitState();
     }
@@ -82,14 +85,27 @@ export class App extends EventEmitter {
 
     readFiletree() {
         if (!this.project) return;
-        const entries = this.project.readFiletree();
+        const raw = this.core.readFileTree(this.project);
+        const entries: WorktreeEntry[] = raw.map((e) => {
+            const path = e.path ?? "";
+            const parts = path.split("/");
+            return {
+                id: Number(e.id),
+                name: parts[parts.length - 1] ?? path,
+                path,
+                kind: e.kind === 1 ? "dir" : "file",
+                fileType: e.file_type ?? "unknown",
+                expanded: e.is_expanded,
+                depth: e.depth,
+            };
+        });
         this._state = { ...this._state, filetree: entries };
         this.emit("filetreeUpdate");
     }
 
     expandEntry(id: number) {
         if (this.project) {
-            this.project.expandEntry(id);
+            this.core.expandEntry(this.project, id);
         }
     }
 
