@@ -2,16 +2,16 @@ import { useEffect, useRef } from "react";
 import { rpc, useAppStore } from "@/lib/app";
 import type { View } from "@ares/shared";
 
-interface WgpuTagProps {
+interface GpuTagProps {
     tabId: number;
     view: View;
 }
 
-export function WgpuTag({ tabId, view }: WgpuTagProps) {
-    const wgpuRef = useRef<HTMLElement | null>(null);
+export function GpuTag({ tabId, view }: GpuTagProps) {
+    const GpuRef = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
-        const el = wgpuRef.current as any;
+        const el = GpuRef.current as any;
         if (!el?.on) return;
 
         const onReady = async (e: CustomEvent) => {
@@ -20,7 +20,7 @@ export function WgpuTag({ tabId, view }: WgpuTagProps) {
 
             const rect = el.getBoundingClientRect();
             try {
-                await rpc.request.wgpuTagReady({
+                await rpc.request.gpuTagReady({
                     id: gpuViewId,
                     rect: {
                         x: rect.x,
@@ -40,7 +40,7 @@ export function WgpuTag({ tabId, view }: WgpuTagProps) {
         const sendRect = () => {
             if (!el?.wgpuViewId) return;
             const rect = el.getBoundingClientRect();
-            rpc.send("wgpuTagRect", {
+            rpc.send("gpuTagRect", {
                 id: el.wgpuViewId,
                 rect: {
                     x: rect.x,
@@ -69,7 +69,7 @@ export function WgpuTag({ tabId, view }: WgpuTagProps) {
     return (
         // @ts-expect-error electrobun-wgpu is a custom element
         <electrobun-wgpu
-            ref={wgpuRef}
+            ref={GpuRef}
             style={{ width: "100%", height: "100%" }}
         />
     );

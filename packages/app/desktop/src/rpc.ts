@@ -10,12 +10,12 @@ export type AppRPC = {
             getTheme: { params: {}; response: Theme },
             getState: { params: {}; response: AppState };
             gitFileTree: { params: {}; response: WorktreeEntry[] }
-            wgpuTagReady: { params: { id: number; rect: GpuRect; view: View }; response: { success: boolean } }
+            gpuTagReady: { params: { id: number; rect: GpuRect; view: View }; response: { success: boolean } }
         };
         messages: {
             setMode: Mode;
             expandEntry: number;
-            wgpuTagRect: { id: number; rect: GpuRect };
+            gpuTagRect: { id: number; rect: GpuRect };
         };
     }>;
     webview: RPCSchema<{

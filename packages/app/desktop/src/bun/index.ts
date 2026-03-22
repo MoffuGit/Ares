@@ -38,7 +38,7 @@ const rpc = BrowserView.defineRPC<AppRPC>({
     handlers: {
         requests: {
             getState: ({ }) => app._state,
-            wgpuTagReady: ({ id, rect, view }) => {
+            gpuTagReady: ({ id, rect, view }) => {
                 try {
                     metalRenderer.start(id, mainWindow, rect, view);
                     return { success: true };
@@ -51,7 +51,7 @@ const rpc = BrowserView.defineRPC<AppRPC>({
         messages: {
             expandEntry: (id) => { app.expandEntry(id) },
             setMode: (mode) => app.setMode(mode),
-            wgpuTagRect: ({ id, rect }) => {
+            gpuTagRect: ({ id, rect }) => {
                 metalRenderer.updateRect(id, rect);
             },
         },
