@@ -1,7 +1,7 @@
 import type { Pointer } from "bun:ffi";
 import { resolveCoreLib, type CoreLib } from "@ares/core";
 import { EventType, } from "@ares/core/events";
-import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, Buffer, AppState } from "../types.ts";
+import type { Settings, Theme, WorktreeEntry, Mode, Scope, KeymapBinding, ScopedKeymaps, AppState } from "../types.ts";
 import { resolveTheme } from "./theme.ts";
 
 import { EventEmitter } from "events";
@@ -73,35 +73,16 @@ export class CoreApp extends EventEmitter {
         }
     }
 
-    openBuffer(id: number): Pointer | null {
-        if (!this.project) return null;
-        return this.core.openBuffer(this.project, id);
-    }
-
-    readBuffer(id: number): Buffer | null {
-        const bufferPointer = this.openBuffer(id);
-        if (!bufferPointer) return null;
-
-        const rawBuffer = this.core.readBuffer(bufferPointer);
-        return {
-            id,
-            state: rawBuffer.state,
-            content: rawBuffer.bytes ?? "",
-        };
-    }
-
     start() {
         this.core.on("SettingsUpdate", this.onSettingsUpdate);
         this.core.on("ThemeUpdate", this.onThemeUpdate);
         this.core.on("FiletreeUpdate", this.onFiletreeUpdate);
-        this.core.on("BufferUpdate", this.onBufferUpdate);
         const keymaps = this.readAllKeymaps();
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme(), keymaps };
     }
 
     stop() {
         this.core.off("FiletreeUpdate", this.onFiletreeUpdate);
-        this.core.off("BufferUpdate", this.onBufferUpdate);
         this.core.off(String(EventType.SettingsUpdate), this.onSettingsUpdate);
         this.core.off(String(EventType.ThemeUpdate), this.onThemeUpdate);
 
@@ -119,14 +100,6 @@ export class CoreApp extends EventEmitter {
 
     protected onFiletreeUpdate = () => {
         this.readFiletree();
-    };
-
-    protected onBufferUpdate = (data: { entry_id: number }) => {
-        const id = Number(data.entry_id);
-        const buffer = this.readBuffer(id);
-        if (buffer) {
-            this.emit("bufferUpdate", buffer);
-        }
     };
 
     readFiletree() {

@@ -12,7 +12,6 @@ export type AppEvents = {
     settingsUpdate: [];
     themeUpdate: [];
     filetreeUpdate: [];
-    bufferUpdate: [buffer: Buffer];
     modeUpdate: [];
     keymapsUpdate: [];
     keymapSequence: [sequence: string];
@@ -124,16 +123,7 @@ export type KeyDownMods = {
     num_lock: boolean;
 }
 
-export type BufferState = "empty" | "loading" | "ready" | "err"
-
-export type Buffer = {
-    id: number;
-    state: BufferState;
-    content: string;
-};
-
 export type Tab = {
     id: number;
     name: string;
-    bufferId: number | null;
 };

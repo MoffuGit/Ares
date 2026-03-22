@@ -36,7 +36,6 @@ const rpc = BrowserView.defineRPC<AppRPC>({
     handlers: {
         requests: {
             getState: ({ }) => app._state,
-            readBuffer: (({ id }) => app.readBuffer(id)),
             wgpuTagReady: ({ id, rect }) => {
                 try {
                     metalRenderer.start(id, mainWindow, rect);
@@ -109,10 +108,6 @@ app.on("keymapsUpdate", () => {
     if (app._state.keymaps) {
         mainWindow.webview.rpc?.send.keymapsUpdate(app._state.keymaps);
     }
-});
-
-app.on("bufferUpdate", (buffer) => {
-    mainWindow.webview.rpc?.send.bufferUpdate(buffer);
 });
 
 mainWindow.webview.on("dom-ready", () => {

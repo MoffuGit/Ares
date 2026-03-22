@@ -10,7 +10,7 @@ import { AppSidebar } from '@/components/app-sidebar';
 import { useState, useEffect } from 'react';
 import { useAppStore, onKeymapSequence } from '@/lib/app';
 import type { Scope, ScopeActionMap } from '@ares/shared';
-import { Maximize2, Minus, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 function useScopedKeymaps<S extends Scope>(scope: S): Record<string, ScopeActionMap[S]> {
     const keymaps = useAppStore((s) => s.keymaps);

@@ -1,5 +1,5 @@
 import { Electroview } from "electrobun/view";
-import type { Mode, Scope, KeymapBinding, AppState, WorktreeEntry, Buffer, Tab } from "@ares/shared";
+import type { Mode, Scope, KeymapBinding, AppState, WorktreeEntry, Tab } from "@ares/shared";
 import { KeymapHandler, type TrieOps, buildKeymapTrie, edgeKey, type TSTrieNode } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import { create } from "zustand";
@@ -29,13 +29,11 @@ export function onKeymapSequence(listener: (sequence: string) => void): () => vo
 }
 
 interface AppStore extends AppState {
-    buffers: Map<number, Buffer>;
     setMode: (mode: Mode) => void;
     readKeymaps: (scope: Scope) => KeymapBinding[];
     loadSettings: () => Promise<void>;
     expandEntry: (entry: WorktreeEntry) => void;
-    getBuffer: (id: number) => Buffer;
-    newTab: (bufferId?: number) => void;
+    newTab: () => void;
     closeTab: (tabId: number) => void;
     setActiveTab: (tabId: number) => void;
     nextTab: () => void;
@@ -51,7 +49,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
     filetree: null,
     mode: "normal",
     keymaps: null,
-    buffers: new Map(),
     tabs: [],
     activeTabId: null,
 
@@ -71,29 +68,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
         }
     },
 
-    getBuffer: (id) => {
-        const cached = get().buffers.get(id);
-        if (cached) return cached;
-
-        const empty: Buffer = { id, state: "empty", content: "" };
-        const buffers = new Map(get().buffers);
-        buffers.set(id, empty);
-        set({ buffers });
-
-        rpc.request.readBuffer({ id }).then((buffer) => {
-            if (buffer) {
-                const buffers = new Map(get().buffers);
-                buffers.set(id, buffer);
-                set({ buffers });
-            }
-        });
-
-        return empty;
-    },
-
-    newTab: (bufferId) => {
+    newTab: () => {
         const id = Date.now();
-        const tab: Tab = { id, name: "untitled", bufferId: bufferId ?? null };
+        const tab: Tab = { id, name: "untitled", };
         const tabs = [...get().tabs, tab];
         set({ tabs, activeTabId: id });
     },
@@ -159,11 +136,6 @@ const rpc = Electroview.defineRPC<AppRPC>({
             },
             keymapsUpdate: (keymaps) => {
                 useAppStore.setState({ keymaps });
-            },
-            bufferUpdate: (buffer) => {
-                const buffers = new Map(useAppStore.getState().buffers);
-                buffers.set(buffer.id, buffer);
-                useAppStore.setState({ buffers });
             },
         },
     },
