@@ -18,7 +18,7 @@ pub const Kind = enum(u8) {
 };
 
 pub const Content = union(Kind) {
-    editor: Editor,
+    editor: *Editor,
     terminal: struct {
         id: usize = 1,
     },
@@ -66,7 +66,7 @@ pub fn create(project: *Project, alloc: Allocator, kind: Kind, layer_ptr: *anyop
         .alloc = alloc,
         .shared_state = shared_state,
         .content = switch (kind) {
-            .editor => .{ .editor = try Editor.init(project, alloc, &view.shared_state) },
+            .editor => .{ .editor = try Editor.create(project, alloc, &view.shared_state) },
             .terminal => .{ .terminal = .{} },
         },
         .renderer = renderer,
@@ -81,7 +81,7 @@ pub fn create(project: *Project, alloc: Allocator, kind: Kind, layer_ptr: *anyop
 
 pub fn resize(self: *View, width: u32, height: u32) void {
     switch (self.content) {
-        .editor => |*editor| {
+        .editor => |editor| {
             editor.resize(.{ .screen = .{ .height = height, .width = width }, .cell = self.grid.cellSize() });
         },
         else => {},
@@ -103,6 +103,13 @@ pub fn destroy(self: *View) void {
     self.grid.deinit(self.alloc);
 
     self.shared_state.deinit();
+
+    switch (self.content) {
+        .editor => |editor| {
+            editor.destroy();
+        },
+        else => {},
+    }
 
     self.alloc.destroy(self);
 }

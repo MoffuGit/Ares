@@ -1,56 +1,70 @@
 const Editor = @This();
 
 const std = @import("std");
+const global = &@import("../global.zig").state;
 const Allocator = std.mem.Allocator;
 const SharedState = @import("../SharedState.zig");
 const sizepkg = @import("../size.zig");
 const Project = @import("../Project.zig");
+const Buffer = @import("../buffer/Buffer.zig");
 
 const log = std.log.scoped(.screen);
 
 alloc: Allocator,
 shared_state: *SharedState,
 project: *Project,
+buffer: ?*Buffer = null,
 
-pub fn init(project: *Project, alloc: Allocator, shared_state: *SharedState) !Editor {
-    return .{
+pub fn create(project: *Project, alloc: Allocator, shared_state: *SharedState) !*Editor {
+    const self = try alloc.create(Editor);
+    self.* = .{
         .alloc = alloc,
         .shared_state = shared_state,
         .project = project,
     };
+
+    try global.events.on(.bufferUpdate, .{ .ctx = self, .handle = onBufferUpdate });
+
+    return self;
 }
 
-pub fn deinit(self: *Editor) void {
-    _ = self;
+pub fn destroy(self: *Editor) void {
+    global.events.off(.bufferUpdate, .{ .ctx = self, .handle = onBufferUpdate });
+
+    self.alloc.destroy(self);
+}
+
+pub fn onBufferUpdate(ctx: *anyopaque) void {
+    _ = ctx;
 }
 
 pub fn resize(self: *Editor, size: sizepkg.Size) void {
-    self.shared_state.mutex.lock();
-    defer self.shared_state.mutex.unlock();
+    {
+        self.shared_state.mutex.lock();
+        defer self.shared_state.mutex.unlock();
 
-    self.shared_state.screen.resize(size);
+        self.shared_state.screen.resize(size);
+    }
+
+    self.writeScreen();
 }
 
 pub fn selectEntry(self: *Editor, id: u64) !void {
-    _ = self;
-    _ = id;
-    // const cwd = std.fs.cwd();
-    // const file = try cwd.openFile(pwd, .{});
-    // defer file.close();
-    //
-    // const buf = try self.alloc.alloc(u8, 60 * 1024 * 1024);
-    // defer self.alloc.free(buf);
-    //
-    // var reader = file.reader(buf);
-    //
-    // self.mutex.lock();
-    // defer self.mutex.unlock();
-    //
-    // self.screen.resetCells();
-    //
-    // while (reader.interface.takeDelimiterExclusive('\n')) |line| {
-    //     self.screen.addNewLine(line) catch |err| {
-    //         log.err("error when adding anew line: {}", .{err});
-    //     };
-    // } else |err| if (err != error.EndOfStream) return err;
+    if (self.buffer) |curr| {
+        if (curr.entry_id == id) return;
+    }
+
+    if (self.project.buffer_store.open(id)) |buffer| {
+        self.buffer = buffer;
+        self.writeScreen();
+    }
+}
+
+pub fn writeScreen(self: *Editor) void {
+    const buffer = self.buffer orelse return;
+
+    if (buffer.getState() == .ready) {
+        //NOTE:
+        //we should write to our screen
+    }
 }

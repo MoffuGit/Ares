@@ -271,6 +271,15 @@ export fn destroyView(view: *View) void {
     view.destroy();
 }
 
+export fn selectEntry(view: *View, id: u64) void {
+    switch (view.content) {
+        .editor => |editor| {
+            editor.selectEntry(id) catch {};
+        },
+        else => {},
+    }
+}
+
 test {
     _ = @import("keymaps/mod.zig");
     _ = @import("monitor/mod.zig");
