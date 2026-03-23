@@ -66,7 +66,7 @@ pub fn create(project: *Project, alloc: Allocator, kind: Kind, layer_ptr: *anyop
         .alloc = alloc,
         .shared_state = shared_state,
         .content = switch (kind) {
-            .editor => .{ .editor = try Editor.create(project, alloc, &view.shared_state) },
+            .editor => .{ .editor = try Editor.create(project, alloc, &view.renderer_thread, &view.shared_state) },
             .terminal => .{ .terminal = .{} },
         },
         .renderer = renderer,
