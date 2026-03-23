@@ -36,7 +36,7 @@ renderer_thr: std.Thread,
 shared_state: SharedState,
 
 pub fn create(project: *Project, alloc: Allocator, kind: Kind, layer_ptr: *anyopaque) !*View {
-    const metal_layer: objc.Object = .{ .value = @ptrCast(@alignCast(layer_ptr)) };
+    const metal_layer = objc.Object.fromId(layer_ptr);
 
     const view = try alloc.create(View);
     errdefer alloc.destroy(view);

@@ -201,7 +201,6 @@ pub fn drawFrame(
                 .instance_count = self.cells.len,
             },
         });
-        //
 
         defer render_pass.complete();
     }
