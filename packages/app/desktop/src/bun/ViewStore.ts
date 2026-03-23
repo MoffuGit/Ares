@@ -1,7 +1,7 @@
 import { WGPUView } from "electrobun/bun";
 import type { Pointer } from "bun:ffi";
-import type { CoreLib } from "@ares/core";
 import type { View, ViewKind } from "@ares/shared";
+import { App } from "node_modules/@ares/shared/src/app";
 
 type Rect = { x: number; y: number; width: number; height: number };
 
@@ -20,14 +20,10 @@ type ViewState = {
 };
 
 export class ViewStore {
-    private core: CoreLib;
     private states = new Map<number, ViewState>();
 
-    constructor(core: CoreLib) {
-        this.core = core;
-    }
 
-    start(viewId: number, _win: unknown, rect: Rect, view: View) {
+    start(app: App, viewId: number, _win: unknown, rect: Rect, view: View) {
         if (this.states.has(viewId)) return;
 
         const wgpuView = WGPUView.getById(viewId);
@@ -40,7 +36,7 @@ export class ViewStore {
             throw new Error(`Failed to get Metal layer pointer for view ${viewId}`);
         }
 
-        const coreView = this.core.createView(ViewKindMap[view.kind], metalLayerPtr);
+        const coreView = app.createView(ViewKindMap[view.kind], metalLayerPtr);
         if (!coreView) {
             throw new Error(`Failed to create view (kind=${view.kind}) for id ${viewId}`);
         }
@@ -48,7 +44,7 @@ export class ViewStore {
         const width = Math.max(1, Math.floor(rect.width));
         const height = Math.max(1, Math.floor(rect.height));
 
-        this.core.resizeView(coreView, width , height );
+        app.resizeView(coreView, width, height);
 
         this.states.set(viewId, {
             viewId,
@@ -60,7 +56,7 @@ export class ViewStore {
         });
     }
 
-    updateRect(viewId: number, rect: Rect) {
+    updateRect(app: App, viewId: number, rect: Rect) {
         const state = this.states.get(viewId);
         if (!state) return;
 
@@ -69,23 +65,23 @@ export class ViewStore {
         const height = Math.max(1, Math.floor(rect.height));
 
         if (width !== state.lastWidth || height !== state.lastHeight) {
-            this.core.resizeView(state.coreView, width * 2, height * 2);
+            app.resizeView(state.coreView, width * 2, height * 2);
             state.lastWidth = width;
             state.lastHeight = height;
         }
     }
 
-    stop(viewId: number) {
+    stop(app: App, viewId: number) {
         const state = this.states.get(viewId);
         if (!state) return;
 
-        this.core.destroyView(state.coreView);
+        app.destroyView(state.coreView);
         this.states.delete(viewId);
     }
 
-    stopAll() {
+    stopAll(app: App) {
         for (const viewId of this.states.keys()) {
-            this.stop(viewId);
+            this.stop(app, viewId);
         }
     }
 }

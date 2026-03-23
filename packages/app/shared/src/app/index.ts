@@ -177,4 +177,16 @@ export class App extends EventEmitter {
         const json = this.core.readThemeJson(this.coreApp);
         return resolveTheme(json);
     }
+
+    createView(kind: number, metalLayerPtr: Pointer): Pointer | null {
+        return this.core.createView(this.coreApp, kind, metalLayerPtr);
+    }
+
+    resizeView(view: Pointer, width: number, height: number) {
+        this.core.resizeView(view, width, height);
+    }
+
+    destroyView(view: Pointer) {
+        this.core.destroyView(view);
+    }
 }

@@ -8,6 +8,7 @@ const fontpkg = @import("font/mod.zig");
 const Grid = fontpkg.Grid;
 const SharedState = @import("SharedState.zig");
 const log = std.log.scoped(.view);
+const App = @import("App.zig");
 
 const View = @This();
 
@@ -34,7 +35,7 @@ renderer_thr: std.Thread,
 
 shared_state: SharedState,
 
-pub fn create(alloc: Allocator, kind: Kind, layer_ptr: *anyopaque) !*View {
+pub fn create(app: *App, alloc: Allocator, kind: Kind, layer_ptr: *anyopaque) !*View {
     const metal_layer: objc.Object = .{ .value = @ptrCast(@alignCast(layer_ptr)) };
 
     const view = try alloc.create(View);
@@ -65,7 +66,7 @@ pub fn create(alloc: Allocator, kind: Kind, layer_ptr: *anyopaque) !*View {
         .alloc = alloc,
         .shared_state = shared_state,
         .content = switch (kind) {
-            .editor => .{ .editor = try Editor.init(alloc, &view.shared_state) },
+            .editor => .{ .editor = try Editor.init(app, alloc, &view.shared_state) },
             .terminal => .{ .terminal = .{} },
         },
         .renderer = renderer,

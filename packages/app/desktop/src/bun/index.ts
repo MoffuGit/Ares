@@ -31,7 +31,7 @@ const app = new App(settingsPath, libPath);
 app.openProject(projectPath);
 
 const url = await getMainViewUrl();
-const metalRenderer = new ViewStore(app.core);
+const viewStore = new ViewStore();
 
 const rpc = BrowserView.defineRPC<AppRPC>({
     maxRequestTime: 5000,
@@ -40,7 +40,7 @@ const rpc = BrowserView.defineRPC<AppRPC>({
             getState: ({ }) => app._state,
             gpuTagReady: ({ id, rect, view }) => {
                 try {
-                    metalRenderer.start(id, mainWindow, rect, view);
+                    viewStore.start(app, id, mainWindow, rect, view);
                     return { success: true };
                 } catch (err: any) {
                     console.error(`Metal renderer start failed: ${String(err?.message ?? err)}`);
@@ -52,7 +52,7 @@ const rpc = BrowserView.defineRPC<AppRPC>({
             expandEntry: (id) => { app.expandEntry(id) },
             setMode: (mode) => app.setMode(mode),
             gpuTagRect: ({ id, rect }) => {
-                metalRenderer.updateRect(id, rect);
+                viewStore.updateRect(app, id, rect);
             },
         },
     },
@@ -119,7 +119,7 @@ mainWindow.webview.on("dom-ready", () => {
 });
 
 mainWindow.on("close", () => {
-    metalRenderer.stopAll();
+    viewStore.stopAll(app);
     app.stop();
     Utils.quit();
 });
