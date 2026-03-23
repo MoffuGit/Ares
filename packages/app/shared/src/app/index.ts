@@ -187,6 +187,10 @@ export class App extends EventEmitter {
         this.core.resizeView(view, width, height);
     }
 
+    selectEntry(view: Pointer, id: number) {
+        this.core.selectEntry(view, id);
+    }
+
     destroyView(view: Pointer) {
         this.core.destroyView(view);
     }

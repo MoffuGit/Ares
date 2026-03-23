@@ -65,7 +65,7 @@ export class ViewStore {
         const height = Math.max(1, Math.floor(rect.height));
 
         if (width !== state.lastWidth || height !== state.lastHeight) {
-            app.resizeView(state.coreView, width * 2, height * 2);
+            app.resizeView(state.coreView, width, height);
             state.lastWidth = width;
             state.lastHeight = height;
         }
@@ -83,5 +83,11 @@ export class ViewStore {
         for (const viewId of this.states.keys()) {
             this.stop(app, viewId);
         }
+    }
+
+    selectEntry(app: App, viewId: number, id: number) {
+        const state = this.states.get(viewId);
+        if (!state || state.view.kind != "editor") return;
+        app.selectEntry(state.coreView, id);
     }
 }

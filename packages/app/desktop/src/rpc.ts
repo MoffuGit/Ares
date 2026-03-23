@@ -15,6 +15,7 @@ export type AppRPC = {
         messages: {
             setMode: Mode;
             expandEntry: number;
+            selectEntry: {viewId: number, id: number};
             gpuTagRect: { id: number; rect: GpuRect };
         };
     }>;

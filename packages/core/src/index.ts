@@ -122,6 +122,10 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.u32, FFIType.u32],
                 returns: FFIType.void,
             },
+            selectEntry: {
+                args: [FFIType.pointer, FFIType.u64],
+                returns: FFIType.void
+            },
             destroyView: {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
@@ -318,6 +322,10 @@ export class CoreLib extends EventEmitter {
 
     resizeView(view: Pointer, width: number, height: number): void {
         this.lib.symbols.resizeView(view, width, height);
+    }
+
+    selectEntry(view: Pointer, id: number) {
+        this.lib.symbols.selectEntry(view, id);
     }
 
     destroyView(view: Pointer): void {
