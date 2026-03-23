@@ -26,10 +26,6 @@ export fn drainMailbox() void {
             .themeUpdate,
             .filetreeUpdate,
             => cb(@intFromEnum(ev), null, 0),
-            .bufferUpdate => |entry_id| {
-                const bytes = std.mem.asBytes(&entry_id);
-                cb(@intFromEnum(ev), bytes.ptr, bytes.len);
-            },
         }
     }
 }

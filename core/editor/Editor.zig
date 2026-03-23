@@ -50,6 +50,7 @@ pub fn resize(self: *Editor, size: sizepkg.Size) void {
 }
 
 pub fn selectEntry(self: *Editor, id: u64) !void {
+    log.debug("selected entry: {}", .{id});
     if (self.buffer) |curr| {
         if (curr.entry_id == id) return;
     }

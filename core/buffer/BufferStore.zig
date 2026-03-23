@@ -58,7 +58,6 @@ fn readCallback(bufffer: ?*Buffer, file: ?Io.File) void {
         buf.applyError();
     }
     global.state.emitGlobal(.{ .bufferUpdate = buf.entry_id });
-    global.state.emit(.{ .bufferUpdate = buf.entry_id }, .instant);
 }
 
 pub fn get(self: *BufferStore, entry_id: u64) ?*Buffer {

@@ -33,6 +33,7 @@ interface AppStore extends AppState {
     readKeymaps: (scope: Scope) => KeymapBinding[];
     loadSettings: () => Promise<void>;
     expandEntry: (entry: WorktreeEntry) => void;
+    selectEntry: (entry: WorktreeEntry) => void;
     newTab: (view: View) => void;
     closeTab: (tabId: number) => void;
     setActiveTab: (tabId: number) => void;
@@ -73,6 +74,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
     expandEntry: (entry) => {
         if (entry.kind == "dir") {
             rpc.send("expandEntry", entry.id);
+        }
+    },
+
+    selectEntry: (entry) => {
+        const { activeTabId, tabs } = get();
+        const activeTab = tabs.find((t) => t.id === activeTabId);
+        if (activeTab && activeTab.view.kind === "editor" && activeTab.gpuViewId) {
+            rpc.send("selectEntry", { viewId: activeTab.gpuViewId, id: entry.id });
+            set({ tabs: tabs.map((t) => t.id === activeTabId ? { ...t, name: entry.name } : t) });
         }
     },
 
