@@ -32,7 +32,7 @@ renderer: Renderer,
 renderer_thread: RendererThread,
 renderer_thr: std.Thread,
 
-shared_state: SharedState = .{},
+shared_state: SharedState,
 
 pub fn create(alloc: Allocator, kind: Kind, layer_ptr: *anyopaque) !*View {
     const metal_layer: objc.Object = .{ .value = @ptrCast(@alignCast(layer_ptr)) };
@@ -57,11 +57,15 @@ pub fn create(alloc: Allocator, kind: Kind, layer_ptr: *anyopaque) !*View {
     var renderer_thread = try RendererThread.init(alloc, &view.renderer, &view.shared_state);
     errdefer renderer_thread.deinit();
 
+    var shared_state = try SharedState.init(alloc, .{ .screen = .{ .height = 0, .width = 0 }, .cell = grid.cellSize() });
+    errdefer shared_state.deinit();
+
     view.* = .{
         .grid = grid,
         .alloc = alloc,
+        .shared_state = shared_state,
         .content = switch (kind) {
-            .editor => .{ .editor = try Editor.init(alloc) },
+            .editor => .{ .editor = try Editor.init(alloc, &view.shared_state) },
             .terminal => .{ .terminal = .{} },
         },
         .renderer = renderer,
@@ -75,6 +79,12 @@ pub fn create(alloc: Allocator, kind: Kind, layer_ptr: *anyopaque) !*View {
 }
 
 pub fn resize(self: *View, width: u32, height: u32) void {
+    switch (self.content) {
+        .editor => |*editor| {
+            editor.resize(.{ .screen = .{ .height = height, .width = width }, .cell = self.grid.cellSize() });
+        },
+        else => {},
+    }
     _ = self.renderer_thread.mailbox.push(.{ .resize = .{ .height = height, .width = width } }, .instant);
     self.renderer_thread.wakeup.notify() catch {};
 }
@@ -90,6 +100,8 @@ pub fn destroy(self: *View) void {
 
     self.renderer.deinit();
     self.grid.deinit(self.alloc);
+
+    self.shared_state.deinit();
 
     self.alloc.destroy(self);
 }
