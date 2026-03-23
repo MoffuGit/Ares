@@ -179,7 +179,8 @@ export class App extends EventEmitter {
     }
 
     createView(kind: number, metalLayerPtr: Pointer): Pointer | null {
-        return this.core.createView(this.coreApp, kind, metalLayerPtr);
+        if (!this.project) return null;
+        return this.core.createView(this.project, kind, metalLayerPtr);
     }
 
     resizeView(view: Pointer, width: number, height: number) {

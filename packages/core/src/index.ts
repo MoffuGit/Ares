@@ -312,8 +312,8 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.drainMailbox();
     }
 
-    createView(app: Poiner, kind: number, metalLayerPtr: Pointer): Pointer | null {
-        return this.lib.symbols.createView(app, kind, metalLayerPtr) as Pointer | null;
+    createView(project: Pointer, kind: number, metalLayerPtr: Pointer): Pointer | null {
+        return this.lib.symbols.createView(project, kind, metalLayerPtr) as Pointer | null;
     }
 
     resizeView(view: Pointer, width: number, height: number): void {

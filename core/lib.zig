@@ -258,9 +258,9 @@ export fn trieNodeHasChildren(node: *TrieNode) bool {
     return node.childrens.count() > 0;
 }
 
-export fn createView(app: *App, kind: u8, metal_layer_ptr: *anyopaque) ?*View {
+export fn createView(project: *Project, kind: u8, metal_layer_ptr: *anyopaque) ?*View {
     if (kind >= @typeInfo(View.Kind).@"enum".fields.len) return null;
-    return View.create(app, global.state.alloc, @enumFromInt(kind), metal_layer_ptr) catch null;
+    return View.create(project, global.state.alloc, @enumFromInt(kind), metal_layer_ptr) catch null;
 }
 
 export fn resizeView(view: *View, width: u32, height: u32) void {
