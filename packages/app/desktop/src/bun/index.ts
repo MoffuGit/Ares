@@ -2,7 +2,7 @@ import { App } from "../../../shared/src/app/index.ts";
 import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
 import { resolve } from "path";
 import { AppRPC } from "src/rpc.ts";
-import { Renderer } from "./Renderer.ts";
+import { ViewStore } from "./ViewStore.ts";
 
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
@@ -31,7 +31,7 @@ const app = new App(settingsPath, libPath);
 app.openProject(projectPath);
 
 const url = await getMainViewUrl();
-const metalRenderer = new Renderer(app.core);
+const metalRenderer = new ViewStore(app.core);
 
 const rpc = BrowserView.defineRPC<AppRPC>({
     maxRequestTime: 5000,

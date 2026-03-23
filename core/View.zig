@@ -1,6 +1,14 @@
 const std = @import("std");
+const objc = @import("objc");
 const Allocator = std.mem.Allocator;
-// const Editor = @import("editor/Editor.zig");
+const Editor = @import("editor/Editor.zig");
+const Renderer = @import("Renderer.zig");
+const RendererThread = @import("renderer/Thread.zig");
+const fontpkg = @import("font/mod.zig");
+const Grid = fontpkg.Grid;
+const SharedState = @import("SharedState.zig");
+const log = std.log.scoped(.view);
+
 const View = @This();
 
 pub const Kind = enum(u8) {
@@ -8,40 +16,80 @@ pub const Kind = enum(u8) {
     terminal = 1,
 };
 
-// pub const CoreView = union(Kind) {
-//     editor: Editor,
-// };
+pub const Content = union(Kind) {
+    editor: Editor,
+    terminal: struct {
+        id: usize = 1,
+    },
+};
 
 alloc: Allocator,
-// coreView: CoreView,
+content: Content,
+
+grid: Grid,
+
+renderer: Renderer,
+renderer_thread: RendererThread,
+renderer_thr: std.Thread,
+
+shared_state: SharedState = .{},
 
 pub fn create(alloc: Allocator, kind: Kind, layer_ptr: *anyopaque) !*View {
-    _ = layer_ptr;
-    _ = kind;
+    const metal_layer: objc.Object = .{ .value = @ptrCast(@alignCast(layer_ptr)) };
+
     const view = try alloc.create(View);
     errdefer alloc.destroy(view);
 
+    var grid = try Grid.init(alloc, .{ .size = .{
+        .points = 12,
+    } });
+    errdefer grid.deinit(alloc);
+
+    var renderer = try Renderer.init(
+        alloc,
+        .{ .grid = &view.grid, .metal_layer = metal_layer, .size = .{
+            .screen = .{ .height = 0, .width = 0 },
+            .cell = grid.cellSize(),
+        } },
+    );
+    errdefer renderer.deinit();
+
+    var renderer_thread = try RendererThread.init(alloc, &view.renderer, &view.shared_state);
+    errdefer renderer_thread.deinit();
+
     view.* = .{
+        .grid = grid,
         .alloc = alloc,
-        // .coreView = switch (kind) {
-        //     .editor => .{ .editor = Editor },
-        // },
+        .content = switch (kind) {
+            .editor => .{ .editor = try Editor.init(alloc) },
+            .terminal => .{ .terminal = .{} },
+        },
+        .renderer = renderer,
+        .renderer_thread = renderer_thread,
+        .renderer_thr = undefined,
     };
+
+    view.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&view.renderer_thread});
 
     return view;
 }
 
 pub fn resize(self: *View, width: u32, height: u32) void {
-    _ = self;
-    _ = width;
-    _ = height;
-    // self.gpu.resize(width, height);
+    _ = self.renderer_thread.mailbox.push(.{ .resize = .{ .height = height, .width = width } }, .instant);
+    self.renderer_thread.wakeup.notify() catch {};
 }
 
 pub fn destroy(self: *View) void {
-    // switch (self.renderer) {
-    //     inline else => |*r| r.deinit(),
-    // }
-    // self.gpu.destroy();
+    {
+        self.renderer_thread.stop.notify() catch |err|
+            log.err("error notifying renderer thread to stop, may stall err={}", .{err});
+        self.renderer_thr.join();
+    }
+
+    self.renderer_thread.deinit();
+
+    self.renderer.deinit();
+    self.grid.deinit(self.alloc);
+
     self.alloc.destroy(self);
 }
