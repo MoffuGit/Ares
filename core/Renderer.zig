@@ -103,7 +103,6 @@ pub fn deinit(self: *Renderer) void {
     }
     self.deinitShaders();
     self.alloc.free(self.cells);
-    self.* = undefined;
 }
 
 fn deinitShaders(self: *Renderer) void {
