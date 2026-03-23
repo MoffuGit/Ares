@@ -4,8 +4,6 @@ const sizepkg = @import("size.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const msg = "Hello world!";
-
 alloc: Allocator,
 
 rows: u16,
