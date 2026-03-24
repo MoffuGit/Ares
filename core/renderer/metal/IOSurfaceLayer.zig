@@ -6,6 +6,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const objc = @import("objc");
 const macos = @import("macos");
+const c = @cImport({
+    @cInclude("objc/runtime.h");
+});
 
 const IOSurface = macos.iosurface.IOSurface;
 
@@ -19,22 +22,15 @@ var Subclass: ?objc.Class = null;
 layer: objc.Object,
 
 pub fn init(layer: objc.Object) !IOSurfaceLayer {
-    // The layer returned by `[CALayer layer]` is autoreleased, which means
-    // that at the end of the current autorelease pool it will be deallocated
-    // if it isn't retained, so we retain it here manually an extra time.
-    // const layer = (try getSubclass()).msgSend(
-    //     objc.Object,
-    //     objc.sel("layer"),
-    //     .{},
-    // ).retain();
-    // errdefer layer.release();
-    //
+    const sub_class = try getSubclass();
+
+    _ = c.object_setClass(@ptrCast(layer.value), @ptrCast(sub_class.value));
     // // The layer gravity is set to top-left so that the contents aren't
     // // stretched during resize operations before a new frame has been drawn.
     layer.setProperty("contentsGravity", macos.animation.kCAGravityTopLeft);
 
-    layer.setInstanceVariable("display_cb", .{ .value = null });
-    layer.setInstanceVariable("display_ctx", .{ .value = null });
+    // layer.setInstanceVariable("display_cb", .{ .value = null });
+    // layer.setInstanceVariable("display_ctx", .{ .value = null });
 
     return .{ .layer = layer };
 }
@@ -136,17 +132,17 @@ pub fn setDisplayCallback(
 }
 
 fn getSubclass() error{ObjCFailed}!objc.Class {
-    if (Subclass) |c| return c;
+    if (Subclass) |class| return class;
 
     const CALayer =
-        objc.getClass("CALayer") orelse return error.ObjCFailed;
+        objc.getClass("CAMetalLayer") orelse return error.ObjCFailed;
 
     var subclass =
         objc.allocateClassPair(CALayer, "IOSurfaceLayer") orelse return error.ObjCFailed;
     errdefer objc.disposeClassPair(subclass);
 
-    if (!subclass.addIvar("display_cb")) return error.ObjCFailed;
-    if (!subclass.addIvar("display_ctx")) return error.ObjCFailed;
+    // if (!subclass.addIvar("display_cb")) return error.ObjCFailed;
+    // if (!subclass.addIvar("display_ctx")) return error.ObjCFailed;
 
     subclass.replaceMethod("display", struct {
         fn display(target: objc.c.id, sel: objc.c.SEL) callconv(.c) void {
