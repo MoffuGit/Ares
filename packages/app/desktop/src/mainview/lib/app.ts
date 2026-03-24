@@ -80,9 +80,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
     selectEntry: (entry) => {
         const { activeTabId, tabs } = get();
         const activeTab = tabs.find((t) => t.id === activeTabId);
-        if (activeTab && activeTab.view.kind === "editor" && activeTab.gpuViewId) {
+        if (!activeTab || activeTab.view.kind !== "editor") return;
+        if (activeTab.gpuViewId) {
             rpc.send("selectEntry", { viewId: activeTab.gpuViewId, id: entry.id });
-            set({ tabs: tabs.map((t) => t.id === activeTabId ? { ...t, name: entry.name } : t) });
+            set({ tabs: tabs.map((t) => t.id === activeTabId ? { ...t, name: entry.name, pendingEntryId: undefined } : t) });
+        } else {
+            set({ tabs: tabs.map((t) => t.id === activeTabId ? { ...t, name: entry.name, pendingEntryId: entry.id } : t) });
         }
     },
 

@@ -93,14 +93,14 @@ function App() {
                             <SidebarTrigger size="icon-xs" />
                             {tabs.length > 0 && (
                                 <Tabs
-                                    value={activeTabId ?? undefined}
-                                    onValueChange={(val) => setActiveTab(val)}
+                                    value={activeTabId != null ? String(activeTabId) : undefined}
+                                    onValueChange={(val) => setActiveTab(Number(val))}
                                 >
                                     <TabsList className="h-7 bg-sidebar gap-1">
                                         {tabs.map((tab) => (
                                             <TabsTrigger
                                                 key={tab.id}
-                                                value={tab.id}
+                                                value={String(tab.id)}
                                             >
                                                 {tab.name}
                                                 <X

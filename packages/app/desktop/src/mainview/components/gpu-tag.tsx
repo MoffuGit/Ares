@@ -20,7 +20,7 @@ export function GpuTag({ tabId, view }: GpuTagProps) {
 
             const rect = el.getBoundingClientRect();
             try {
-                await rpc.request.gpuTagReady({
+                const res = await rpc.request.gpuTagReady({
                     id: gpuViewId,
                     rect: {
                         x: rect.x,
@@ -30,6 +30,16 @@ export function GpuTag({ tabId, view }: GpuTagProps) {
                     },
                     view,
                 });
+                if (res.success) {
+                    const { tabs } = useAppStore.getState();
+                    const tab = tabs.find((t) => t.id === tabId);
+                    if (tab?.pendingEntryId != null) {
+                        rpc.send("selectEntry", { viewId: gpuViewId, id: tab.pendingEntryId });
+                        useAppStore.setState({
+                            tabs: tabs.map((t) => t.id === tabId ? { ...t, pendingEntryId: undefined } : t),
+                        });
+                    }
+                }
             } catch (err) {
                 console.error("[wgpuTag] wgpuTagReady failed:", err);
             }
@@ -69,6 +79,7 @@ export function GpuTag({ tabId, view }: GpuTagProps) {
     return (
         // @ts-expect-error electrobun-wgpu is a custom element
         <electrobun-wgpu
+            id={`gpu-${tabId}`}
             ref={GpuRef}
             style={{ width: "100%", height: "100%", "backgroundColor": "transparent" }}
         />
