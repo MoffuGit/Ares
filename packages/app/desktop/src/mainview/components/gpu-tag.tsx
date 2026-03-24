@@ -1,87 +1,135 @@
-import { useEffect, useRef } from "react";
-import { rpc, useAppStore } from "@/lib/app";
-import type { View } from "@ares/shared";
+import {
+    useEffect,
+    useRef,
+    useCallback,
+    useImperativeHandle,
+    forwardRef,
+    type CSSProperties,
+} from "react";
 
-interface GpuTagProps {
-    tabId: number;
-    view: View;
+type Rect = { x: number; y: number; width: number; height: number };
+
+export interface GpuTagHandle {
+    readonly viewId: number | null;
+    readonly element: HTMLElement | null;
+    toggleHidden: (value?: boolean) => void;
+    toggleTransparent: (value?: boolean) => void;
+    togglePassthrough: (value?: boolean) => void;
+    syncDimensions: (force?: boolean) => void;
+    addMaskSelector: (selector: string) => void;
+    removeMaskSelector: (selector: string) => void;
 }
 
-export function GpuTag({ tabId, view }: GpuTagProps) {
-    const GpuRef = useRef<HTMLElement | null>(null);
+export interface GpuTagProps {
+    id?: string;
+    style?: CSSProperties;
+    className?: string;
+    transparent?: boolean;
+    passthrough?: boolean;
+    hidden?: boolean;
+    masks?: string;
+    onReady?: (viewId: number) => void;
+    onResize?: (viewId: number, rect: Rect) => void;
+}
 
-    useEffect(() => {
-        const el = GpuRef.current as any;
-        if (!el?.on) return;
+export const GpuTag = forwardRef<GpuTagHandle, GpuTagProps>(
+    function GpuTag(
+        {
+            id,
+            style,
+            className,
+            transparent,
+            passthrough,
+            hidden,
+            masks,
+            onReady,
+            onResize,
+        },
+        ref,
+    ) {
+        const elRef = useRef<HTMLElement | null>(null);
+        const onReadyRef = useRef(onReady);
+        const onResizeRef = useRef(onResize);
+        onReadyRef.current = onReady;
+        onResizeRef.current = onResize;
 
-        const onReady = async (e: CustomEvent) => {
-            const gpuViewId = e.detail.id as number;
-            useAppStore.getState().setGpuViewId(tabId, gpuViewId);
+        const getEl = useCallback(() => {
+            return elRef.current as (HTMLElement & {
+                wgpuViewId: number | null;
+                toggleHidden: (v?: boolean) => void;
+                toggleTransparent: (v?: boolean) => void;
+                togglePassthrough: (v?: boolean) => void;
+                syncDimensions: (force?: boolean) => void;
+                addMaskSelector: (s: string) => void;
+                removeMaskSelector: (s: string) => void;
+                on: (event: string, listener: (e: CustomEvent) => void) => void;
+                off: (event: string, listener: (e: CustomEvent) => void) => void;
+            }) | null;
+        }, []);
 
-            const rect = el.getBoundingClientRect();
-            try {
-                const res = await rpc.request.gpuTagReady({
-                    id: gpuViewId,
-                    rect: {
-                        x: rect.x,
-                        y: rect.y,
-                        width: rect.width,
-                        height: rect.height,
-                    },
-                    view,
-                });
-                if (res.success) {
-                    const { tabs } = useAppStore.getState();
-                    const tab = tabs.find((t) => t.id === tabId);
-                    if (tab?.pendingEntryId != null) {
-                        rpc.send("selectEntry", { viewId: gpuViewId, id: tab.pendingEntryId });
-                        useAppStore.setState({
-                            tabs: tabs.map((t) => t.id === tabId ? { ...t, pendingEntryId: undefined } : t),
-                        });
-                    }
-                }
-            } catch (err) {
-                console.error("[wgpuTag] wgpuTagReady failed:", err);
-            }
-        };
+        useImperativeHandle(ref, () => ({
+            get viewId() {
+                return getEl()?.wgpuViewId ?? null;
+            },
+            get element() {
+                return elRef.current;
+            },
+            toggleHidden: (value) => getEl()?.toggleHidden(value),
+            toggleTransparent: (value) => getEl()?.toggleTransparent(value),
+            togglePassthrough: (value) => getEl()?.togglePassthrough(value),
+            syncDimensions: (force) => getEl()?.syncDimensions(force),
+            addMaskSelector: (selector) => getEl()?.addMaskSelector(selector),
+            removeMaskSelector: (selector) => getEl()?.removeMaskSelector(selector),
+        }), [getEl]);
 
-        el.on("ready", onReady);
+        useEffect(() => {
+            const el = getEl();
+            if (!el?.on) return;
 
-        const sendRect = () => {
-            if (!el?.wgpuViewId) return;
-            const rect = el.getBoundingClientRect();
-            rpc.send("gpuTagRect", {
-                id: el.wgpuViewId,
-                rect: {
+            const handleReady = (e: CustomEvent) => {
+                const viewId = e.detail.id as number;
+                onReadyRef.current?.(viewId);
+            };
+
+            el.on("ready", handleReady);
+            return () => el.off("ready", handleReady);
+        }, [getEl]);
+
+        useEffect(() => {
+            const el = getEl();
+            if (!el) return;
+
+            const observer = new ResizeObserver(() => {
+                const viewId = el.wgpuViewId;
+                if (viewId == null) return;
+                const rect = el.getBoundingClientRect();
+                onResizeRef.current?.(viewId, {
                     x: rect.x,
                     y: rect.y,
                     width: rect.width,
                     height: rect.height,
-                },
+                });
             });
-        };
-
-        let observer: ResizeObserver | undefined;
-        if ("ResizeObserver" in window) {
-            observer = new ResizeObserver(() => sendRect());
             observer.observe(el);
-        }
 
-        const onResize = () => sendRect();
-        window.addEventListener("resize", onResize);
+            return () => observer.disconnect();
+        }, [getEl]);
 
-        return () => {
-            window.removeEventListener("resize", onResize);
-            observer?.disconnect();
-        };
-    }, [tabId, view]);
+        const attrs: Record<string, string | undefined> = {};
+        if (transparent) attrs.transparent = "";
+        if (passthrough) attrs.passthrough = "";
+        if (hidden) attrs.hidden = "";
+        if (masks) attrs.masks = masks;
 
-    return (
-        // @ts-expect-error electrobun-wgpu is a custom element
-        <electrobun-wgpu
-            id={`gpu-${tabId}`}
-            ref={GpuRef}
-            style={{ width: "100%", height: "100%", "backgroundColor": "transparent" }}
-        />
-    );
-}
+        return (
+            // @ts-expect-error electrobun-wgpu is a custom element
+            <electrobun-wgpu
+                id={id}
+                ref={elRef}
+                style={style}
+                class={className}
+                {...attrs}
+            />
+        );
+    },
+);

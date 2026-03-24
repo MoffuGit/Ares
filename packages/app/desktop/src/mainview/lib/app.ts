@@ -83,10 +83,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         if (!activeTab || activeTab.view.kind !== "editor") return;
         if (activeTab.gpuViewId) {
             rpc.send("selectEntry", { viewId: activeTab.gpuViewId, id: entry.id });
-            set({ tabs: tabs.map((t) => t.id === activeTabId ? { ...t, name: entry.name, pendingEntryId: undefined } : t) });
-        } else {
-            set({ tabs: tabs.map((t) => t.id === activeTabId ? { ...t, name: entry.name, pendingEntryId: entry.id } : t) });
         }
+        set({ tabs: tabs.map((t) => t.id === activeTabId ? { ...t, name: entry.name, entryId: entry.id } : t) });
     },
 
     newTab: (view) => {
@@ -101,6 +99,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const { tabs, activeTabId } = get();
         const idx = tabs.findIndex((t) => t.id === tabId);
         if (idx === -1) return;
+        const tab = tabs[idx];
+        if (tab.gpuViewId != null) {
+            rpc.send("gpuTagStop", { id: tab.gpuViewId });
+        }
         const next = tabs.filter((t) => t.id !== tabId);
         let nextActiveId: number | null = null;
         if (next.length > 0 && activeTabId === tabId) {
@@ -113,6 +115,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     setActiveTab: (tabId) => {
         set({ activeTabId: tabId });
+        const { tabs: allTabs } = get();
+        for (const t of allTabs) {
+            if (t.gpuViewId != null) {
+                rpc.send("gpuTagVisibility", { id: t.gpuViewId, visible: t.id === tabId });
+            }
+        }
     },
 
     setGpuViewId: (tabId, gpuViewId) => {

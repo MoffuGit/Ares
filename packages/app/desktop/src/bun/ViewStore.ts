@@ -89,6 +89,12 @@ export class ViewStore {
         }
     }
 
+    setVisibility(app: App, viewId: number, visible: boolean) {
+        const state = this.states.get(viewId);
+        if (!state) return;
+        app.setViewVisibility(state.coreView, visible);
+    }
+
     selectEntry(app: App, viewId: number, id: number) {
         const state = this.states.get(viewId);
         if (!state || state.view.kind != "editor") return;

@@ -17,6 +17,8 @@ export type AppRPC = {
             expandEntry: number;
             selectEntry: {viewId: number, id: number};
             gpuTagRect: { id: number; rect: GpuRect };
+            gpuTagStop: { id: number };
+            gpuTagVisibility: { id: number; visible: boolean };
         };
     }>;
     webview: RPCSchema<{

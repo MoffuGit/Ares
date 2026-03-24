@@ -57,6 +57,12 @@ const rpc = BrowserView.defineRPC<AppRPC>({
             gpuTagRect: ({ id, rect }) => {
                 viewStore.updateRect(app, id, rect);
             },
+            gpuTagStop: ({id}) => {
+                viewStore.stop(app, id);
+            },
+            gpuTagVisibility: ({id, visible}) => {
+                // viewStore.setVisibility(app, id, visible);
+            },
         },
     },
 });

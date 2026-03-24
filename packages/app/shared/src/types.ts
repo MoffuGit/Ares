@@ -134,5 +134,5 @@ export type Tab = {
     name: string;
     view: View;
     gpuViewId?: number;
-    pendingEntryId?: number;
+    entryId?: number;
 };

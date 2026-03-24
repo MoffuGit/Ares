@@ -27,7 +27,6 @@ function App() {
     const globalKeymaps = useScopedKeymaps("global");
     const tabs = useAppStore((s) => s.tabs);
     const activeTabId = useAppStore((s) => s.activeTabId);
-    const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
     const { newTab, closeTab, setActiveTab, nextTab, prevTab, setMode } = useAppStore.getState();
 
     useEffect(() => {
@@ -116,8 +115,16 @@ function App() {
                     </div>
                     <div className='flex-1 flex flex-row bg-sidebar'>
                         <AppSidebar />
-                        <SidebarInset className='rounded-xl bg-muted shadow-inset'>
-                            {activeTab && <TabContent tab={activeTab} />}
+                        <SidebarInset className='rounded-xl bg-muted shadow-inset isolate'>
+                            {tabs.map((tab) => (
+                                <div
+                                    key={tab.id}
+                                    className="w-full h-full absolute inset-0"
+                                    data-active-tab={tab.id === activeTabId}
+                                >
+                                    <TabContent tab={tab} />
+                                </div>
+                            ))}
                         </SidebarInset>
                     </div>
                 </div>
