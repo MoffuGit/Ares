@@ -7,8 +7,6 @@ import {
     type CSSProperties,
 } from "react";
 
-type Rect = { x: number; y: number; width: number; height: number };
-
 export interface GpuTagHandle {
     readonly viewId: number | null;
     readonly element: HTMLElement | null;
@@ -29,7 +27,6 @@ export interface GpuTagProps {
     hidden?: boolean;
     masks?: string;
     onReady?: (viewId: number) => void;
-    onResize?: (viewId: number, rect: Rect) => void;
 }
 
 export const GpuTag = forwardRef<GpuTagHandle, GpuTagProps>(
@@ -43,15 +40,14 @@ export const GpuTag = forwardRef<GpuTagHandle, GpuTagProps>(
             hidden,
             masks,
             onReady,
-            onResize,
         },
         ref,
     ) {
         const elRef = useRef<HTMLElement | null>(null);
         const onReadyRef = useRef(onReady);
-        const onResizeRef = useRef(onResize);
+        const hiddenRef = useRef(hidden);
         onReadyRef.current = onReady;
-        onResizeRef.current = onResize;
+        hiddenRef.current = hidden;
 
         const getEl = useCallback(() => {
             return elRef.current as (HTMLElement & {
@@ -88,6 +84,7 @@ export const GpuTag = forwardRef<GpuTagHandle, GpuTagProps>(
 
             const handleReady = (e: CustomEvent) => {
                 const viewId = e.detail.id as number;
+                if (hiddenRef.current) el.toggleHidden(true);
                 onReadyRef.current?.(viewId);
             };
 
@@ -97,28 +94,13 @@ export const GpuTag = forwardRef<GpuTagHandle, GpuTagProps>(
 
         useEffect(() => {
             const el = getEl();
-            if (!el) return;
-
-            const observer = new ResizeObserver(() => {
-                const viewId = el.wgpuViewId;
-                if (viewId == null) return;
-                const rect = el.getBoundingClientRect();
-                onResizeRef.current?.(viewId, {
-                    x: rect.x,
-                    y: rect.y,
-                    width: rect.width,
-                    height: rect.height,
-                });
-            });
-            observer.observe(el);
-
-            return () => observer.disconnect();
-        }, [getEl]);
+            if (el?.wgpuViewId == null) return;
+            el.toggleHidden(hidden);
+        }, [hidden, getEl]);
 
         const attrs: Record<string, string | undefined> = {};
         if (transparent) attrs.transparent = "";
         if (passthrough) attrs.passthrough = "";
-        if (hidden) attrs.hidden = "";
         if (masks) attrs.masks = masks;
 
         return (

@@ -267,6 +267,10 @@ export fn destroyView(view: *View) void {
     view.destroy();
 }
 
+export fn setViewVisibility(view: *View, visible: bool) void {
+    view.setVisibility(visible) catch {};
+}
+
 export fn selectEntry(view: *View, id: u64) void {
     switch (view.content) {
         .editor => |editor| {

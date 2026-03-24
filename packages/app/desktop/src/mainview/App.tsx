@@ -122,7 +122,7 @@ function App() {
                                     className="w-full h-full absolute inset-0"
                                     data-active-tab={tab.id === activeTabId}
                                 >
-                                    <TabContent tab={tab} />
+                                    <TabContent tab={tab} active={tab.id === activeTabId} />
                                 </div>
                             ))}
                         </SidebarInset>

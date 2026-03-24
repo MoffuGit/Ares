@@ -191,6 +191,10 @@ export class App extends EventEmitter {
         this.core.selectEntry(view, id);
     }
 
+    setViewVisibility(view: Pointer, visible: boolean) {
+        this.core.setViewVisibility(view, visible);
+    }
+
     destroyView(view: Pointer) {
         this.core.destroyView(view);
     }

@@ -369,3 +369,12 @@ fn syncAtlasTexture(
 
     try texture.replaceRegion(0, 0, atlas.size, atlas.size, atlas.data);
 }
+
+pub fn setVisible(self: *Renderer, visible: bool) void {
+    const display_link = self.display_link orelse return;
+    if (visible) {
+        display_link.start() catch {};
+    } else {
+        display_link.stop() catch {};
+    }
+}

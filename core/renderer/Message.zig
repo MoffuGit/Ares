@@ -5,4 +5,5 @@ pub const SurfaceSize = struct {
 
 pub const Message = union(enum) {
     resize: SurfaceSize,
+    visible: bool,
 };

@@ -17,6 +17,12 @@ alloc: Allocator,
 
 loop: xev.Loop,
 
+flags: packed struct {
+    /// This is true when the view is visible. This is used to determine
+    /// if we should be rendering or not.
+    visible: bool = true,
+} = .{},
+
 wakeup: xev.Async,
 wakeup_c: xev.Completion = .{},
 
@@ -203,6 +209,74 @@ fn renderCallback(
     return .disarm;
 }
 
+pub const SetQosClassError = error{
+    // The thread can't have its QoS class changed usually because
+    // a different pthread API was called that makes it an invalid
+    // target.
+    ThreadIncompatible,
+};
+
+pub const QosClass = enum(c_uint) {
+    user_interactive = 0x21,
+    user_initiated = 0x19,
+    default = 0x15,
+    utility = 0x11,
+    background = 0x09,
+    unspecified = 0x00,
+};
+
+extern "c" fn pthread_set_qos_class_self_np(
+    qos_class: QosClass,
+    relative_priority: c_int,
+) c_int;
+
+/// Set the QoS class of the running thread.
+///
+/// https://developer.apple.com/documentation/apple-silicon/tuning-your-code-s-performance-for-apple-silicon?preferredLanguage=occ
+pub fn internalSetQosClass(class: QosClass) !void {
+    return switch (std.posix.errno(pthread_set_qos_class_self_np(
+        class,
+        0,
+    ))) {
+        .SUCCESS => {},
+        .PERM => error.ThreadIncompatible,
+
+        // EPERM is the only known error that can happen based on
+        // the man pages for pthread_set_qos_class_self_np. I haven't
+        // checked the XNU source code to see if there are other
+        // possible errors.
+        else => @panic("unexpected pthread_set_qos_class_self_np error"),
+    };
+}
+
+fn setQosClass(self: *const Thread) void {
+    // Thread QoS classes are only relevant on macOS.
+    const class: QosClass = class: {
+        // If we aren't visible (our view is fully occluded) then we
+        // always drop our rendering priority down because it's just
+        // mostly wasted work.
+        //
+        // The renderer itself should be doing this as well (for example
+        // Metal will stop our DisplayLink) but this also helps with
+        // general forced updates and CPU usage i.e. a rebuild cells call.
+        if (!self.flags.visible) break :class .utility;
+
+        // // If we're not focused, but we're visible, then we set a higher
+        // // than default priority because framerates still matter but it isn't
+        // // as important as when we're focused.
+        // if (!self.flags.focused) break :class .user_initiated;
+
+        // We are focused and visible, we are the definition of user interactive.
+        break :class .user_interactive;
+    };
+
+    if (internalSetQosClass(class)) {
+        log.debug("thread QoS class set class={}", .{class});
+    } else |err| {
+        log.warn("error setting QoS class err={}", .{err});
+    }
+}
+
 fn drainMailbox(self: *Thread) !void {
     // There's probably a more elegant way to do this...
     //
@@ -212,6 +286,19 @@ fn drainMailbox(self: *Thread) !void {
     defer pool.deinit();
 
     while (self.mailbox.pop()) |message| {
-        log.debug("mailbox message={}", .{message});
+        switch (message) {
+            .visible => |v| visible: {
+                if (self.flags.visible == v) break :visible;
+
+                self.flags.visible = v;
+
+                self.setQosClass();
+
+                self.drawFrame(false);
+
+                self.renderer.setVisible(v);
+            },
+            else => {},
+        }
     }
 }

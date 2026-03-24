@@ -115,12 +115,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     setActiveTab: (tabId) => {
         set({ activeTabId: tabId });
-        const { tabs: allTabs } = get();
-        for (const t of allTabs) {
-            if (t.gpuViewId != null) {
-                rpc.send("gpuTagVisibility", { id: t.gpuViewId, visible: t.id === tabId });
-            }
-        }
     },
 
     setGpuViewId: (tabId, gpuViewId) => {

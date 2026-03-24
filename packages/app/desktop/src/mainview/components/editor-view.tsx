@@ -1,18 +1,19 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { GpuTag, type GpuTagHandle } from "./gpu-tag";
 import { rpc, useAppStore } from "@/lib/app";
-import type { EditorView as EditorViewData } from "@ares/shared";
+import type { EditorView as EditorViewData, Tab } from "@ares/shared";
 
 interface EditorViewProps {
-    tabId: number;
+    tab: Tab;
     view: EditorViewData;
+    active: boolean;
 }
 
-export function EditorView({ tabId, view }: EditorViewProps) {
+export function EditorView({ tab, view, active }: EditorViewProps) {
     const gpuRef = useRef<GpuTagHandle>(null);
 
     const handleReady = useCallback(async (gpuViewId: number) => {
-        useAppStore.getState().setGpuViewId(tabId, gpuViewId);
+        useAppStore.getState().setGpuViewId(tab.id, gpuViewId);
 
         const el = gpuRef.current?.element;
         if (!el) return;
@@ -24,29 +25,31 @@ export function EditorView({ tabId, view }: EditorViewProps) {
                 view,
             });
             if (res.success) {
-                const tab = useAppStore.getState().tabs.find((t) => t.id === tabId);
-                if (tab?.entryId != null) {
+                if (tab.entryId != null) {
                     rpc.send("selectEntry", { viewId: gpuViewId, id: tab.entryId });
                 }
             }
         } catch (err) {
             console.error("[GpuTag] gpuTagReady failed:", err);
         }
-    }, [tabId, view]);
+    }, [tab.id, view]);
 
-    const handleResize = useCallback((viewId: number, rect: { x: number; y: number; width: number; height: number }) => {
-        rpc.send("gpuTagRect", { id: viewId, rect });
-    }, []);
+    useEffect(() => {
+        if (tab.gpuViewId != null) {
+            rpc.send("gpuTagVisibility", { id: tab.gpuViewId, visible: active });
+        }
+
+    }, [active]);
 
     return (
         <div className="min-w-fit h-full flex flex-col">
             <div className="w-full grow relative p-2">
                 <GpuTag
                     ref={gpuRef}
-                    id={`gpu-${tabId}`}
+                    id={`gpu-${tab.id}`}
                     style={{ width: "100%", height: "100%", backgroundColor: "transparent" }}
+                    hidden={!active}
                     onReady={handleReady}
-                    onResize={handleResize}
                 />
             </div>
         </div>

@@ -6,9 +6,10 @@ import type { TerminalView as TerminalViewData } from "@ares/shared";
 interface TerminalViewProps {
     tabId: number;
     view: TerminalViewData;
+    active: boolean;
 }
 
-export function TerminalView({ tabId, view }: TerminalViewProps) {
+export function TerminalView({ tabId, view, active }: TerminalViewProps) {
     const gpuRef = useRef<GpuTagHandle>(null);
 
     const handleReady = useCallback(async (gpuViewId: number) => {
@@ -28,10 +29,6 @@ export function TerminalView({ tabId, view }: TerminalViewProps) {
         }
     }, [tabId, view]);
 
-    const handleResize = useCallback((viewId: number, rect: { x: number; y: number; width: number; height: number }) => {
-        rpc.send("gpuTagRect", { id: viewId, rect });
-    }, []);
-
     return (
         <div className="min-w-fit h-full flex flex-col">
             <div className="w-full grow relative">
@@ -39,8 +36,8 @@ export function TerminalView({ tabId, view }: TerminalViewProps) {
                     ref={gpuRef}
                     id={`gpu-${tabId}`}
                     style={{ width: "100%", height: "100%", backgroundColor: "transparent" }}
+                    hidden={!active}
                     onReady={handleReady}
-                    onResize={handleResize}
                 />
             </div>
         </div>

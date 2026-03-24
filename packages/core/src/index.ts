@@ -126,6 +126,10 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void
             },
+            setViewVisibility: {
+                args: [FFIType.pointer, FFIType.bool],
+                returns: FFIType.void
+            },
             destroyView: {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
@@ -326,6 +330,10 @@ export class CoreLib extends EventEmitter {
 
     selectEntry(view: Pointer, id: number) {
         this.lib.symbols.selectEntry(view, id);
+    }
+
+    setViewVisibility(view: Pointer, visible: boolean) {
+        this.lib.symbols.setViewVisibility(view, visible);
     }
 
     destroyView(view: Pointer): void {
