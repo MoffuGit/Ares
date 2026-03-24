@@ -34,6 +34,11 @@ export function EditorView({ tab, view, active }: EditorViewProps) {
         }
     }, [tab.id, view]);
 
+      const handleResize = useCallback((viewId: number, rect: { x: number; y: number; width: number; height: number }) => {
+      rpc.send("gpuTagRect", { id: viewId, rect });
+  }, []);
+
+
     useEffect(() => {
         if (tab.gpuViewId != null) {
             rpc.send("gpuTagVisibility", { id: tab.gpuViewId, visible: active });
@@ -50,6 +55,7 @@ export function EditorView({ tab, view, active }: EditorViewProps) {
                     style={{ width: "100%", height: "100%", backgroundColor: "transparent" }}
                     hidden={!active}
                     onReady={handleReady}
+                    onResize={handleResize}
                 />
             </div>
         </div>

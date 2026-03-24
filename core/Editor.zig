@@ -1,13 +1,14 @@
 const Editor = @This();
 
 const std = @import("std");
-const global = &@import("../global.zig").state;
+const global = &@import("global.zig").state;
 const Allocator = std.mem.Allocator;
-const SharedState = @import("../SharedState.zig");
-const sizepkg = @import("../size.zig");
-const Project = @import("../Project.zig");
-const Buffer = @import("../buffer/Buffer.zig");
-const RendererThread = @import("../renderer/Thread.zig");
+const SharedState = @import("SharedState.zig");
+const sizepkg = @import("size.zig");
+const Project = @import("Project.zig");
+const Buffer = @import("buffer/Buffer.zig");
+const RendererThread = @import("renderer/Thread.zig");
+const EditorThread = @import("editor/Thread.zig");
 
 const log = std.log.scoped(.screen);
 
@@ -16,6 +17,7 @@ shared_state: *SharedState,
 project: *Project,
 buffer: ?*Buffer = null,
 renderer_thread: *RendererThread,
+editor_thread: ?*EditorThread = null,
 
 pub fn create(project: *Project, alloc: Allocator, renderer_thread: *RendererThread, shared_state: *SharedState) !*Editor {
     const self = try alloc.create(Editor);
@@ -37,11 +39,12 @@ pub fn destroy(self: *Editor) void {
     self.alloc.destroy(self);
 }
 
-pub fn onBufferUpdate(ctx: *anyopaque) void {
+fn onBufferUpdate(ctx: *anyopaque) void {
     const self: *Editor = @ptrCast(@alignCast(ctx));
 
-    self.writeScreen();
-    self.renderer_thread.wakeup.notify() catch {};
+    const thread = self.editor_thread orelse return;
+    _ = thread.mailbox.push(.{ .buffer_update = {} }, .instant);
+    thread.wakeup.notify() catch {};
 }
 
 pub fn resize(self: *Editor, size: sizepkg.Size) void {
@@ -55,7 +58,7 @@ pub fn resize(self: *Editor, size: sizepkg.Size) void {
     self.writeScreen();
 }
 
-pub fn selectEntry(self: *Editor, id: u64) !void {
+pub fn selectEntry(self: *Editor, id: u64) void {
     log.debug("selected entry: {}", .{id});
     if (self.buffer) |curr| {
         if (curr.entry_id == id) return;
@@ -65,7 +68,7 @@ pub fn selectEntry(self: *Editor, id: u64) !void {
         self.buffer = buffer;
         self.writeScreen();
 
-        try self.renderer_thread.wakeup.notify();
+        self.renderer_thread.wakeup.notify() catch {};
     }
 }
 
@@ -81,14 +84,16 @@ pub fn writeScreen(self: *Editor) void {
         self.shared_state.screen.resetCells();
 
         var line_it = std.mem.splitScalar(u8, content, '\n');
-            var row: u16 = 0;
-            while (line_it.next()) |line| {
-                if (row >= self.shared_state.screen.rows) break;
-                self.shared_state.screen.addNewLine(line) catch |e| {
-                    log.err("failed to add line to screen: {}", .{e});
-                    return;
-                };
-                row += 1;
-            }
+        var row: u16 = 0;
+        while (line_it.next()) |line| {
+            if (row >= self.shared_state.screen.rows) break;
+            self.shared_state.screen.addNewLine(line) catch |e| {
+                log.err("failed to add line to screen: {}", .{e});
+                return;
+            };
+            row += 1;
+        }
     }
+
+    self.renderer_thread.wakeup.notify() catch {};
 }

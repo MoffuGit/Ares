@@ -272,12 +272,7 @@ export fn setViewVisibility(view: *View, visible: bool) void {
 }
 
 export fn selectEntry(view: *View, id: u64) void {
-    switch (view.content) {
-        .editor => |editor| {
-            editor.selectEntry(id) catch {};
-        },
-        else => {},
-    }
+    view.selectEntry(id);
 }
 
 test {
