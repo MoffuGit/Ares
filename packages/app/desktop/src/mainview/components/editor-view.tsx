@@ -9,7 +9,7 @@ interface EditorViewProps {
 export function EditorView({ tabId, view }: EditorViewProps) {
     return (
         <div className="min-w-fit h-full flex flex-col">
-            <div className="w-full grow relative">
+            <div className="w-full grow relative p-2">
                 <GpuTag tabId={tabId} view={view} />
             </div>
         </div>

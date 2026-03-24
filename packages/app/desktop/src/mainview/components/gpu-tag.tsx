@@ -70,7 +70,7 @@ export function GpuTag({ tabId, view }: GpuTagProps) {
         // @ts-expect-error electrobun-wgpu is a custom element
         <electrobun-wgpu
             ref={GpuRef}
-            style={{ width: "100%", height: "100%" }}
+            style={{ width: "100%", height: "100%", "backgroundColor": "transparent" }}
         />
     );
 }
