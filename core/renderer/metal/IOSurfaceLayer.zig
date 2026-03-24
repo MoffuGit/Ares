@@ -14,6 +14,10 @@ const IOSurface = macos.iosurface.IOSurface;
 
 const log = std.log.scoped(.IOSurfaceLayer);
 
+// Unique keys for associated objects (addresses used as keys).
+var display_cb_key: u8 = 0;
+var display_ctx_key: u8 = 0;
+
 /// We subclass CALayer with a custom display handler, we only need
 /// to make the subclass once, and then we can use it as a singleton.
 var Subclass: ?objc.Class = null;
@@ -28,9 +32,6 @@ pub fn init(layer: objc.Object) !IOSurfaceLayer {
     // // The layer gravity is set to top-left so that the contents aren't
     // // stretched during resize operations before a new frame has been drawn.
     layer.setProperty("contentsGravity", macos.animation.kCAGravityTopLeft);
-
-    // layer.setInstanceVariable("display_cb", .{ .value = null });
-    // layer.setInstanceVariable("display_ctx", .{ .value = null });
 
     return .{ .layer = layer };
 }
@@ -121,13 +122,17 @@ pub fn setDisplayCallback(
     display_cb: DisplayCallback,
     display_ctx: ?*anyopaque,
 ) void {
-    self.layer.setInstanceVariable(
-        "display_cb",
-        objc.Object.fromId(@constCast(display_cb)),
+    c.objc_setAssociatedObject(
+        @ptrCast(self.layer.value),
+        &display_cb_key,
+        @ptrCast(@constCast(display_cb)),
+        c.OBJC_ASSOCIATION_ASSIGN,
     );
-    self.layer.setInstanceVariable(
-        "display_ctx",
-        objc.Object.fromId(display_ctx),
+    c.objc_setAssociatedObject(
+        @ptrCast(self.layer.value),
+        &display_ctx_key,
+        @ptrCast(@alignCast(display_ctx)),
+        c.OBJC_ASSOCIATION_ASSIGN,
     );
 }
 
@@ -141,18 +146,14 @@ fn getSubclass() error{ObjCFailed}!objc.Class {
         objc.allocateClassPair(CALayer, "IOSurfaceLayer") orelse return error.ObjCFailed;
     errdefer objc.disposeClassPair(subclass);
 
-    // if (!subclass.addIvar("display_cb")) return error.ObjCFailed;
-    // if (!subclass.addIvar("display_ctx")) return error.ObjCFailed;
-
     subclass.replaceMethod("display", struct {
         fn display(target: objc.c.id, sel: objc.c.SEL) callconv(.c) void {
             _ = sel;
-            const self = objc.Object.fromId(target);
-            const display_cb: DisplayCallback = @ptrFromInt(@intFromPtr(
-                self.getInstanceVariable("display_cb").value,
-            ));
+            const display_cb: DisplayCallback = @ptrCast(
+                c.objc_getAssociatedObject(@ptrCast(target), &display_cb_key),
+            );
             if (display_cb) |cb| cb(
-                @ptrCast(self.getInstanceVariable("display_ctx").value),
+                @ptrCast(c.objc_getAssociatedObject(@ptrCast(target), &display_ctx_key)),
             );
         }
     }.display);
