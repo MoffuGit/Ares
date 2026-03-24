@@ -81,11 +81,14 @@ pub fn writeScreen(self: *Editor) void {
         self.shared_state.screen.resetCells();
 
         var line_it = std.mem.splitScalar(u8, content, '\n');
-        while (line_it.next()) |line| {
-            self.shared_state.screen.addNewLine(line) catch |e| {
-                log.err("failed to add line to screen: {}", .{e});
-                return;
-            };
-        }
+            var row: u16 = 0;
+            while (line_it.next()) |line| {
+                if (row >= self.shared_state.screen.rows) break;
+                self.shared_state.screen.addNewLine(line) catch |e| {
+                    log.err("failed to add line to screen: {}", .{e});
+                    return;
+                };
+                row += 1;
+            }
     }
 }
