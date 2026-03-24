@@ -24,6 +24,7 @@ export class ViewStore {
 
 
     start(app: App, viewId: number, _win: unknown, rect: Rect, view: View) {
+        console.log("view", viewId, "request to start");
         if (this.states.has(viewId)) return;
 
         const wgpuView = WGPUView.getById(viewId);
@@ -43,6 +44,8 @@ export class ViewStore {
 
         const width = Math.max(1, Math.floor(rect.width));
         const height = Math.max(1, Math.floor(rect.height));
+
+        console.log("view", viewId, "started");
 
         app.resizeView(coreView, width, height);
 
@@ -72,6 +75,7 @@ export class ViewStore {
     }
 
     stop(app: App, viewId: number) {
+        console.log("view", viewId, "stopped");
         const state = this.states.get(viewId);
         if (!state) return;
 
