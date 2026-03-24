@@ -140,7 +140,7 @@ fn getSubclass() error{ObjCFailed}!objc.Class {
     if (Subclass) |class| return class;
 
     const CALayer =
-        objc.getClass("CAMetalLayer") orelse return error.ObjCFailed;
+        objc.getClass("CALayer") orelse return error.ObjCFailed;
 
     var subclass =
         objc.allocateClassPair(CALayer, "IOSurfaceLayer") orelse return error.ObjCFailed;
