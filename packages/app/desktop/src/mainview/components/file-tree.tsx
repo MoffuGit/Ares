@@ -2,7 +2,6 @@ import {
     SidebarContent,
     SidebarGroup,
     SidebarGroupContent,
-    SidebarHeader,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
@@ -18,37 +17,24 @@ export function FileTree() {
     if (!filetree) return null;
 
     return (
-        <>
-            <SidebarHeader>
-                <SidebarMenu>
-                    {
-                        filetree.slice(0, 1).map((entry) => {
-                            return (
-                                <FileTreeItem entry={entry} key={entry.id} />
-                            )
-                        })
-                    }
-                </SidebarMenu>
-            </SidebarHeader>
-            <SidebarContent>
-                <SidebarGroup>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            {
-                                filetree.length > 0 && <VirtualizedList itemCount={filetree.length - 1} itemHeight={24} renderItem={(index) => {
-                                    const entry = filetree[index + 1];
-                                    if (!entry) return null;
+        <SidebarContent>
+            <SidebarGroup className="p-1">
+                <SidebarGroupContent>
+                    <SidebarMenu>
+                        {
+                            <VirtualizedList itemCount={filetree.length} itemHeight={24} renderItem={(index) => {
+                                const entry = filetree[index];
+                                if (!entry) return null;
 
-                                    return (
-                                        <FileTreeItem entry={entry} key={entry.id} />
-                                    )
-                                }} />
-                            }
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
-            </SidebarContent>
-        </>
+                                return (
+                                    <FileTreeItem entry={entry} key={entry.id} />
+                                )
+                            }} />
+                        }
+                    </SidebarMenu>
+                </SidebarGroupContent>
+            </SidebarGroup>
+        </SidebarContent>
     )
 }
 

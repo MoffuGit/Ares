@@ -82,4 +82,21 @@
   body {
     @apply bg-background p-1.5 pt-0 flex w-full h-screen content-stretch text-foreground font-geist;
   }
+
+  [data-slot="sidebar-content"]::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  [data-slot="sidebar-content"]::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  [data-slot="sidebar-content"]::-webkit-scrollbar-thumb {
+    background: var(--sidebar-border);
+    border-radius: 3px;
+  }
+
+  [data-slot="sidebar-content"]::-webkit-scrollbar-thumb:hover {
+    background: var(--sidebar-foreground);
+  }
 }
