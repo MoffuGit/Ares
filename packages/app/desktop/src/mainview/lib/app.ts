@@ -146,8 +146,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
             filetree: state.filetree,
             mode: state.mode,
             keymaps: state.keymaps,
-            tabs: [],
-            activeTabId: null,
         });
     },
 }));
