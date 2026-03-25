@@ -25,8 +25,8 @@ export function EditorView({ tab, view, active }: EditorViewProps) {
                 view,
             });
             if (res.success) {
-                if (view.entryId != null) {
-                    rpc.send("selectEntry", { viewId: gpuViewId, id: view.entryId });
+                if (view.entry != null) {
+                    rpc.send("selectEntry", { viewId: gpuViewId, id: view.entry.id });
                 }
             }
         } catch (err) {
@@ -34,9 +34,9 @@ export function EditorView({ tab, view, active }: EditorViewProps) {
         }
     }, [tab.id, view]);
 
-      const handleResize = useCallback((viewId: number, rect: { x: number; y: number; width: number; height: number }) => {
-      rpc.send("gpuTagRect", { id: viewId, rect });
-  }, []);
+    const handleResize = useCallback((viewId: number, rect: { x: number; y: number; width: number; height: number }) => {
+        rpc.send("gpuTagRect", { id: viewId, rect });
+    }, []);
 
 
     useEffect(() => {

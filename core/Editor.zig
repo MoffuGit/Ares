@@ -56,6 +56,12 @@ pub fn resize(self: *Editor, size: sizepkg.Size) void {
     }
 
     self.writeScreen();
+
+    _ = self.renderer_thread.mailbox.push(.{ .resize = .{
+        .height = size.screen.height,
+        .width = size.screen.width,
+    } }, .instant);
+    self.renderer_thread.wakeup.notify() catch {};
 }
 
 pub fn selectEntry(self: *Editor, id: u64) void {

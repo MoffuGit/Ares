@@ -105,8 +105,6 @@ pub fn resize(self: *View, width: u32, height: u32) void {
         },
         else => {},
     }
-    _ = self.renderer_thread.mailbox.push(.{ .resize = .{ .height = height, .width = width } }, .instant);
-    self.renderer_thread.wakeup.notify() catch {};
 }
 
 pub fn setVisibility(self: *View, visible: bool) !void {
