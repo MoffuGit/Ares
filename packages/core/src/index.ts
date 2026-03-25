@@ -126,6 +126,10 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void
             },
+            scroll: {
+                args: [FFIType.pointer, FFIType.u64],
+                returns: FFIType.void
+            },
             setViewVisibility: {
                 args: [FFIType.pointer, FFIType.bool],
                 returns: FFIType.void
@@ -330,6 +334,10 @@ export class CoreLib extends EventEmitter {
 
     selectEntry(view: Pointer, id: number) {
         this.lib.symbols.selectEntry(view, id);
+    }
+
+    scroll(view: Pointer, row: number) {
+        this.lib.symbols.scroll(view, row);
     }
 
     setViewVisibility(view: Pointer, visible: boolean) {

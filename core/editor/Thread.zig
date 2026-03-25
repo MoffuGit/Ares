@@ -113,6 +113,9 @@ fn drainMailbox(self: *Thread) !void {
             .resize => |size| {
                 self.editor.resize(size);
             },
+            .scroll => |row| {
+                self.editor.scroll(row);
+            },
         }
     }
 }

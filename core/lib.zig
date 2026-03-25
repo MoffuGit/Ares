@@ -275,6 +275,10 @@ export fn selectEntry(view: *View, id: u64) void {
     view.selectEntry(id);
 }
 
+export fn scroll(view: *View, row: u64) void {
+    view.scroll(row);
+}
+
 test {
     _ = @import("keymaps/mod.zig");
     _ = @import("monitor/mod.zig");

@@ -53,6 +53,9 @@ const rpc = BrowserView.defineRPC<AppRPC>({
             selectEntry: ({ viewId, id }) => {
                 viewStore.selectEntry(app, viewId, id);
             },
+            scroll: ({ viewId, row }) => {
+                viewStore.scroll(app, viewId, row);
+            },
             setMode: (mode) => app.setMode(mode),
             gpuTagRect: ({id, rect}) => {
                 viewStore.updateRect(app, id, rect);

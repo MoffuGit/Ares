@@ -2,8 +2,35 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = @import("../io/mod.zig");
 const Stat = Io.Stat;
+const GapBuffer = @import("datastruct").GapBuffer;
 
 pub const Buffer = @This();
+
+pub const Document = struct {
+    pub const History = struct {};
+
+    content: GapBuffer(u8),
+    line_count: usize,
+    history: History = .{},
+
+    pub fn initFromBytes(alloc: Allocator, raw: []const u8) !Document {
+        var content = try GapBuffer(u8).initCapacity(alloc, raw.len);
+        content.appendSliceBeforeAssumeCapacity(raw);
+        return .{
+            .content = content,
+            .line_count = countLines(raw),
+        };
+    }
+
+    pub fn deinit(self: *Document) void {
+        self.content.deinit();
+        self.* = undefined;
+    }
+
+    fn countLines(raw: []const u8) usize {
+        return std.mem.count(u8, raw, "\n") + 1;
+    }
+};
 
 pub const State = enum(u8) {
     empty,
@@ -12,21 +39,33 @@ pub const State = enum(u8) {
     err,
 };
 
+alloc: Allocator,
 entry_id: u64,
 state: std.atomic.Value(State) = .{ .raw = .empty },
 mutex: std.Thread.Mutex = .{},
 file: ?Io.File = null,
+document: ?Document = null,
 
-pub fn initFromFile(entry_id: u64, file: Io.File) Buffer {
+pub fn initFromFile(alloc: Allocator, entry_id: u64, file: Io.File) Buffer {
+    const doc = Document.initFromBytes(alloc, file.bytes) catch return .{
+        .alloc = alloc,
+        .entry_id = entry_id,
+        .state = .{ .raw = .err },
+        .file = file,
+    };
+
     return .{
+        .alloc = alloc,
         .entry_id = entry_id,
         .state = .{ .raw = .ready },
         .file = file,
+        .document = doc,
     };
 }
 
-pub fn initLoading(entry_id: u64) Buffer {
+pub fn initLoading(alloc: Allocator, entry_id: u64) Buffer {
     return .{
+        .alloc = alloc,
         .entry_id = entry_id,
         .state = .{ .raw = .loading },
     };
@@ -35,29 +74,31 @@ pub fn initLoading(entry_id: u64) Buffer {
 pub fn deinit(self: *Buffer) void {
     self.mutex.lock();
     defer self.mutex.unlock();
-    if (self.file) |file| {
-        file.deinit();
-        self.file = null;
-    }
+    self.clearUnlocked();
 }
 
 pub fn applyFile(self: *Buffer, file: Io.File) void {
+    const new_doc = Document.initFromBytes(self.alloc, file.bytes) catch {
+        file.deinit();
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        self.clearUnlocked();
+        self.state.store(.err, .release);
+        return;
+    };
+
     self.mutex.lock();
     defer self.mutex.unlock();
-    if (self.file) |old| {
-        old.deinit();
-    }
+    self.clearUnlocked();
     self.file = file;
+    self.document = new_doc;
     self.state.store(.ready, .release);
 }
 
 pub fn applyError(self: *Buffer) void {
     self.mutex.lock();
     defer self.mutex.unlock();
-    if (self.file) |old| {
-        old.deinit();
-        self.file = null;
-    }
+    self.clearUnlocked();
     self.state.store(.err, .release);
 }
 
@@ -77,4 +118,15 @@ pub fn stat(self: *Buffer) ?Stat {
 
 pub fn getState(self: *const Buffer) State {
     return self.state.load(.acquire);
+}
+
+fn clearUnlocked(self: *Buffer) void {
+    if (self.document) |*doc| {
+        doc.deinit();
+        self.document = null;
+    }
+    if (self.file) |file| {
+        file.deinit();
+        self.file = null;
+    }
 }

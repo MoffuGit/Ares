@@ -100,4 +100,10 @@ export class ViewStore {
         if (!state || state.view.kind != "editor") return;
         app.selectEntry(state.coreView, id);
     }
+
+    scroll(app: App, viewId: number, row: number) {
+        const state = this.states.get(viewId);
+        if (!state || state.view.kind != "editor") return;
+        app.scroll(state.coreView, row);
+    }
 }

@@ -17,6 +17,7 @@ shared_state: *SharedState,
 project: *Project,
 buffer: ?*Buffer = null,
 selected_entry: ?u64 = null,
+scroll_row: u64 = 0,
 renderer_thread: *RendererThread,
 editor_thread: ?*EditorThread = null,
 
@@ -83,26 +84,88 @@ pub fn selectEntry(self: *Editor, id: u64) void {
     }
 }
 
+pub fn scroll(self: *Editor, row: u64) void {
+    self.scroll_row = row;
+    self.writeScreen();
+}
+
 pub fn writeScreen(self: *Editor) void {
     const buffer = self.buffer orelse return;
 
     if (buffer.getState() == .ready) {
-        const content = buffer.bytes() orelse return;
+        buffer.mutex.lock();
+        defer buffer.mutex.unlock();
+
+        const doc = buffer.document orelse return;
+        const first = doc.content.items;
+        const second = doc.content.secondHalf();
 
         self.shared_state.mutex.lock();
         defer self.shared_state.mutex.unlock();
 
         self.shared_state.screen.resetCells();
 
-        var line_it = std.mem.splitScalar(u8, content, '\n');
+        var line: u64 = 0;
         var row: u16 = 0;
-        while (line_it.next()) |line| {
-            if (row >= self.shared_state.screen.rows) break;
-            self.shared_state.screen.addNewLine(line) catch |e| {
-                log.err("failed to add line to screen: {}", .{e});
-                return;
-            };
-            row += 1;
+        var remainder: []const u8 = first;
+        var in_second = false;
+
+        while (true) {
+            if (std.mem.indexOfScalar(u8, remainder, '\n')) |nl| {
+                if (line >= self.scroll_row) {
+                    if (row >= self.shared_state.screen.rows) break;
+                    self.shared_state.screen.addNewLine(remainder[0..nl]) catch |e| {
+                        log.err("failed to add line to screen: {}", .{e});
+                        return;
+                    };
+                    row += 1;
+                }
+                remainder = remainder[nl + 1 ..];
+                line += 1;
+            } else if (!in_second) {
+                in_second = true;
+                if (second.len == 0) {
+                    if (line >= self.scroll_row and row < self.shared_state.screen.rows) {
+                        self.shared_state.screen.addNewLine(remainder) catch |e| {
+                            log.err("failed to add line to screen: {}", .{e});
+                            return;
+                        };
+                    }
+                    break;
+                }
+                if (std.mem.indexOfScalar(u8, second, '\n')) |nl| {
+                    if (line >= self.scroll_row) {
+                        if (row >= self.shared_state.screen.rows) break;
+                        const joined = std.mem.concat(self.alloc, u8, &.{ remainder, second[0..nl] }) catch return;
+                        defer self.alloc.free(joined);
+                        self.shared_state.screen.addNewLine(joined) catch |e| {
+                            log.err("failed to add line to screen: {}", .{e});
+                            return;
+                        };
+                        row += 1;
+                    }
+                    remainder = second[nl + 1 ..];
+                    line += 1;
+                } else {
+                    if (line >= self.scroll_row and row < self.shared_state.screen.rows) {
+                        const joined = std.mem.concat(self.alloc, u8, &.{ remainder, second }) catch return;
+                        defer self.alloc.free(joined);
+                        self.shared_state.screen.addNewLine(joined) catch |e| {
+                            log.err("failed to add line to screen: {}", .{e});
+                            return;
+                        };
+                    }
+                    break;
+                }
+            } else {
+                if (line >= self.scroll_row and row < self.shared_state.screen.rows) {
+                    self.shared_state.screen.addNewLine(remainder) catch |e| {
+                        log.err("failed to add line to screen: {}", .{e});
+                        return;
+                    };
+                }
+                break;
+            }
         }
     }
 

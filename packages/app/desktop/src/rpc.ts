@@ -16,6 +16,7 @@ export type AppRPC = {
             setMode: Mode;
             expandEntry: number;
             selectEntry: {viewId: number, id: number};
+            scroll: {viewId: number, row: number};
             gpuTagRect: { id: number; rect: GpuRect };
             gpuTagStop: { id: number };
             gpuTagVisibility: { id: number; visible: boolean };

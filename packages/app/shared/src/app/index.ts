@@ -191,6 +191,10 @@ export class App extends EventEmitter {
         this.core.selectEntry(view, id);
     }
 
+    scroll(view: Pointer, row: number) {
+        this.core.scroll(view, row);
+    }
+
     setViewVisibility(view: Pointer, visible: boolean) {
         this.core.setViewVisibility(view, visible);
     }

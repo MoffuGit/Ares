@@ -155,3 +155,13 @@ pub fn selectEntry(self: *View, id: u64) void {
         else => {},
     }
 }
+
+pub fn scroll(self: *View, row: u64) void {
+    switch (self.content) {
+        .editor => {
+            _ = self.editor_thread.mailbox.push(.{ .scroll = row }, .instant);
+            self.editor_thread.wakeup.notify() catch {};
+        },
+        else => {},
+    }
+}

@@ -40,7 +40,7 @@ pub fn open(self: *BufferStore, entry_id: u64) ?*Buffer {
     if (self.get(entry_id)) |buf| return buf;
 
     const abs_path = self.worktree.getAbsPath(entry_id) orelse return null;
-    self.buffers.put(entry_id, Buffer.initLoading(entry_id)) catch |err| {
+    self.buffers.put(entry_id, Buffer.initLoading(self.alloc, entry_id)) catch |err| {
         log.err("failed to create buffer for entry_id={}: {}", .{ entry_id, err });
         return null;
     };
