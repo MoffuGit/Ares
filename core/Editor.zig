@@ -16,6 +16,7 @@ alloc: Allocator,
 shared_state: *SharedState,
 project: *Project,
 buffer: ?*Buffer = null,
+selected_entry: ?u64 = null,
 renderer_thread: *RendererThread,
 editor_thread: ?*EditorThread = null,
 
@@ -39,8 +40,11 @@ pub fn destroy(self: *Editor) void {
     self.alloc.destroy(self);
 }
 
-fn onBufferUpdate(ctx: *anyopaque) void {
+fn onBufferUpdate(ctx: *anyopaque, event: @import("global.zig").GlobalEvents) void {
     const self: *Editor = @ptrCast(@alignCast(ctx));
+
+    const entry_id = self.selected_entry orelse return;
+    if (event.bufferUpdate != entry_id) return;
 
     const thread = self.editor_thread orelse return;
     _ = thread.mailbox.push(.{ .buffer_update = {} }, .instant);
@@ -72,6 +76,7 @@ pub fn selectEntry(self: *Editor, id: u64) void {
 
     if (self.project.buffer_store.open(id)) |buffer| {
         self.buffer = buffer;
+        self.selected_entry = id;
         self.writeScreen();
 
         self.renderer_thread.wakeup.notify() catch {};

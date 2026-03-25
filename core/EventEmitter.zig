@@ -13,7 +13,7 @@ pub fn EventEmitter(comptime Event: type) type {
 
         pub const Listener = struct {
             ctx: *anyopaque,
-            handle: *const fn (ctx: *anyopaque) void,
+            handle: *const fn (ctx: *anyopaque, event: Event) void,
         };
 
         allocator: Allocator,
@@ -61,7 +61,7 @@ pub fn EventEmitter(comptime Event: type) type {
             const list_ptr = self.listeners.getPtr(tag) orelse return;
 
             for (list_ptr.items) |listener| {
-                listener.handle(listener.ctx);
+                listener.handle(listener.ctx, event);
             }
         }
     };

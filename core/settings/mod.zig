@@ -116,7 +116,7 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor, appe: ?*Appear
     self.theme_watcher = try monitor.watchPath(themes_dir, Settings, self, themeCallback);
 }
 
-fn appearanceChanged(ctx: *anyopaque) void {
+fn appearanceChanged(ctx: *anyopaque, _: @import("../appearance/mac.zig").ObserverEvents) void {
     const self: *Settings = @ptrCast(@alignCast(ctx));
     self.mutex.lock();
     defer self.mutex.unlock();

@@ -10,7 +10,7 @@ const Appearance = @This();
 
 const ObserverBlock = objc.Block(struct { observer: *Observer }, .{}, void);
 
-const ObserverEvents = union(enum) {
+pub const ObserverEvents = union(enum) {
     Change: void,
 };
 

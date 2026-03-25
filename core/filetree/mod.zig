@@ -39,7 +39,7 @@ pub fn create(alloc: Allocator, worktree: *Worktree) !*FileTree {
     return self;
 }
 
-fn worktreeUpdateCallback(ctx: *anyopaque) void {
+fn worktreeUpdateCallback(ctx: *anyopaque, _: global.GlobalEvents) void {
     const self: *FileTree = @ptrCast(@alignCast(ctx));
     self.mutex.lock();
     defer self.mutex.unlock();
