@@ -84,8 +84,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
         if (activeTab.view.gpuViewId) {
             rpc.send("selectEntry", { viewId: activeTab.view.gpuViewId, id: entry.id });
         }
-        set({ tabs: tabs.map((t) => t.id === activeTabId && t.view.kind === "editor"
-            ? { ...t, name: entry.name, view: { ...t.view, entryId: entry.id } } : t) });
+        set({
+            tabs: tabs.map((t) => t.id === activeTabId && t.view.kind === "editor"
+                ? { ...t, name: entry.name, view: { ...t.view, entry: entry } } : t)
+        });
     },
 
     newTab: (view) => {

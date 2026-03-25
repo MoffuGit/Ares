@@ -5,12 +5,12 @@ import {
     SidebarInset,
     SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList } from "@/components/ui/tabs"
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AppSidebar } from '@/components/app-sidebar'
 import { TabContent } from '@/components/tab-content'
 import type { Scope, ScopeActionMap } from '@ares/shared'
-import { X } from 'lucide-react'
+import { TabTrigger } from './components/tab-trigger'
 
 function useScopedKeymaps<S extends Scope>(scope: S): Record<string, ScopeActionMap[S]> {
     const keymaps = useAppStore((s) => s.keymaps);
@@ -97,16 +97,10 @@ function App() {
                                 >
                                     <TabsList className="h-7 bg-sidebar gap-1">
                                         {tabs.map((tab) => (
-                                            <TabsTrigger
+                                            <TabTrigger
                                                 key={tab.id}
-                                                value={String(tab.id)}
-                                            >
-                                                {tab.name}
-                                                <X
-                                                    onClick={() => { closeTab(tab.id) }}
-                                                    className="ml-auto mr-0 group-hover/tab-trigger:opacity-100 opacity-0 pointer-events-auto"
-                                                />
-                                            </TabsTrigger>
+                                                tab={tab}
+                                            />
                                         ))}
                                     </TabsList>
                                 </Tabs>
