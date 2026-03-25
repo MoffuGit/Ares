@@ -3,6 +3,7 @@ import { TabsTrigger } from "./ui/tabs";
 import { X } from "lucide-react";
 import { useAppStore } from "@/lib/app";
 import { FileIcon } from "./file-icons";
+import { Button } from "./ui/button";
 
 interface TabContentProps {
     tab: Tab;
@@ -19,11 +20,14 @@ export function TabTrigger({ tab }: TabContentProps) {
                     <FileIcon entry={tab.view.entry} />
                 )
             }
-            {tab.name}
-            <X
-                onClick={() => { closeTab(tab.id) }}
-                className="ml-auto mr-0 group-hover/tab-trigger:opacity-100 opacity-0 pointer-events-auto"
-            />
+            <span className="truncate">{tab.name}</span>
+            <Button
+                size="icon-xs"
+                className="!pointer-events-auto absolute right-0.5 size-5 top-1/2 transition-none -translate-y-1/2 group-hover/tab-trigger:opacity-100 opacity-0 bg-muted hover:bg-background hover:text-foreground"
+                onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+            >
+                <X />
+            </Button>
         </TabsTrigger>
     );
 }

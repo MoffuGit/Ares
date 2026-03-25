@@ -87,8 +87,8 @@ function App() {
         <TooltipProvider>
             <SidebarProvider open={open} onOpenChange={setOpen}>
                 <div className='w-full h-full flex flex-col flex-1 content-stretch rounded-3xl'>
-                    <div className='shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag mb-2 pt-2 mx-2'>
-                        <div className="h-6 max-w-full w-fit flex items-center gap-1 overflow-hidden electrobun-webkit-app-region-no-drag pl-14">
+                    <div className='shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag mb-1.5 pt-1.5 mx-2'>
+                        <div className="h-6 max-w-full w-fit flex items-center gap-1.5 overflow-hidden electrobun-webkit-app-region-no-drag pl-14">
                             <SidebarTrigger size="icon-xs" />
                             {tabs.length > 0 && (
                                 <Tabs
