@@ -81,10 +81,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const { activeTabId, tabs } = get();
         const activeTab = tabs.find((t) => t.id === activeTabId);
         if (!activeTab || activeTab.view.kind !== "editor") return;
-        if (activeTab.gpuViewId) {
-            rpc.send("selectEntry", { viewId: activeTab.gpuViewId, id: entry.id });
+        if (activeTab.view.gpuViewId) {
+            rpc.send("selectEntry", { viewId: activeTab.view.gpuViewId, id: entry.id });
         }
-        set({ tabs: tabs.map((t) => t.id === activeTabId ? { ...t, name: entry.name, entryId: entry.id } : t) });
+        set({ tabs: tabs.map((t) => t.id === activeTabId && t.view.kind === "editor"
+            ? { ...t, name: entry.name, view: { ...t.view, entryId: entry.id } } : t) });
     },
 
     newTab: (view) => {
@@ -100,8 +101,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const idx = tabs.findIndex((t) => t.id === tabId);
         if (idx === -1) return;
         const tab = tabs[idx];
-        if (tab.gpuViewId != null) {
-            rpc.send("gpuTagStop", { id: tab.gpuViewId });
+        if (tab.view.gpuViewId != null) {
+            rpc.send("gpuTagStop", { id: tab.view.gpuViewId });
         }
         const next = tabs.filter((t) => t.id !== tabId);
         let nextActiveId: number | null = null;
@@ -119,7 +120,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     setGpuViewId: (tabId, gpuViewId) => {
         const tabs = get().tabs.map((t) =>
-            t.id === tabId ? { ...t, gpuViewId } : t
+            t.id === tabId ? { ...t, view: { ...t.view, gpuViewId } } : t
         );
         set({ tabs });
     },

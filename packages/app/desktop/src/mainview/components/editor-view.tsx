@@ -25,8 +25,8 @@ export function EditorView({ tab, view, active }: EditorViewProps) {
                 view,
             });
             if (res.success) {
-                if (tab.entryId != null) {
-                    rpc.send("selectEntry", { viewId: gpuViewId, id: tab.entryId });
+                if (view.entryId != null) {
+                    rpc.send("selectEntry", { viewId: gpuViewId, id: view.entryId });
                 }
             }
         } catch (err) {
@@ -40,8 +40,8 @@ export function EditorView({ tab, view, active }: EditorViewProps) {
 
 
     useEffect(() => {
-        if (tab.gpuViewId != null) {
-            rpc.send("gpuTagVisibility", { id: tab.gpuViewId, visible: active });
+        if (view.gpuViewId != null) {
+            rpc.send("gpuTagVisibility", { id: view.gpuViewId, visible: active });
         }
 
     }, [active]);
