@@ -8,10 +8,10 @@ const EditorThread = @import("editor/Thread.zig");
 const fontpkg = @import("font/mod.zig");
 const Grid = fontpkg.Grid;
 const SharedState = @import("SharedState.zig");
-const log = std.log.scoped(.view);
+const log = std.log.scoped(.surface);
 const Project = @import("Project.zig");
 
-const View = @This();
+const Surface = @This();
 
 pub const Kind = enum(u8) {
     editor = 0,
@@ -39,10 +39,10 @@ editor_thr: std.Thread,
 
 shared_state: SharedState,
 
-pub fn create(project: *Project, alloc: Allocator, kind: Kind, layer_ptr: *anyopaque) !*View {
+pub fn create(project: *Project, alloc: Allocator, kind: Kind, layer_ptr: *anyopaque) !*Surface {
     const metal_layer = objc.Object.fromId(layer_ptr);
 
-    const view = try alloc.create(View);
+    const view = try alloc.create(Surface);
     errdefer alloc.destroy(view);
 
     var grid = try Grid.init(alloc, .{ .size = .{
@@ -97,7 +97,7 @@ pub fn create(project: *Project, alloc: Allocator, kind: Kind, layer_ptr: *anyop
     return view;
 }
 
-pub fn resize(self: *View, width: u32, height: u32) void {
+pub fn resize(self: *Surface, width: u32, height: u32) void {
     switch (self.content) {
         .editor => {
             _ = self.editor_thread.mailbox.push(.{ .resize = .{ .screen = .{ .height = height, .width = width }, .cell = self.grid.cellSize() } }, .instant);
@@ -107,12 +107,12 @@ pub fn resize(self: *View, width: u32, height: u32) void {
     }
 }
 
-pub fn setVisibility(self: *View, visible: bool) !void {
+pub fn setVisibility(self: *Surface, visible: bool) !void {
     _ = self.renderer_thread.mailbox.push(.{ .visible = visible }, .instant);
     self.renderer_thread.wakeup.notify() catch {};
 }
 
-pub fn destroy(self: *View) void {
+pub fn destroy(self: *Surface) void {
     switch (self.content) {
         .editor => {
             self.editor_thread.stop.notify() catch |err|
@@ -146,7 +146,7 @@ pub fn destroy(self: *View) void {
     self.alloc.destroy(self);
 }
 
-pub fn selectEntry(self: *View, id: u64) void {
+pub fn selectSurfaceEntry(self: *Surface, id: u64) void {
     switch (self.content) {
         .editor => {
             _ = self.editor_thread.mailbox.push(.{ .select_entry = id }, .instant);
@@ -156,7 +156,7 @@ pub fn selectEntry(self: *View, id: u64) void {
     }
 }
 
-pub fn scroll(self: *View, row: u64) void {
+pub fn scroll(self: *Surface, row: u64) void {
     switch (self.content) {
         .editor => {
             _ = self.editor_thread.mailbox.push(.{ .scroll = row }, .instant);

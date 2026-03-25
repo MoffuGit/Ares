@@ -1,6 +1,6 @@
 import type { Tab } from "@ares/shared";
-import { EditorView } from "./editor-view";
-import { TerminalView } from "./terminal-view";
+import { EditorSurface } from "./editor";
+import { TerminalSurface } from "./terminal-view";
 
 interface TabContentProps {
     tab: Tab;
@@ -8,10 +8,10 @@ interface TabContentProps {
 }
 
 export function TabContent({ tab, active }: TabContentProps) {
-    switch (tab.view.kind) {
+    switch (tab.surface.kind) {
         case "editor":
-            return <EditorView tab={tab} view={tab.view} active={active} />;
+            return <EditorSurface tab={tab} surface={tab.surface} active={active} />;
         case "terminal":
-            return <TerminalView tabId={tab.id} view={tab.view} active={active} />;
+            return <TerminalSurface tabId={tab.id} view={tab.surface} active={active} />;
     }
 }

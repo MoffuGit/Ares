@@ -2,12 +2,12 @@ import { App } from "../../../shared/src/app/index.ts";
 import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
 import { resolve } from "path";
 import { AppRPC } from "src/rpc.ts";
-import { ViewStore } from "./ViewStore.ts";
+import { SurfaceStore } from "./SurfaceStore.ts";
 
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 
-async function getMainViewUrl(): Promise<string> {
+async function getMainSurfaceUrl(): Promise<string> {
     const channel = await Updater.localInfo.channel();
     if (channel === "dev") {
         try {
@@ -30,17 +30,17 @@ const projectPath = "/Volumes/Home_SSD/Users/home/Documents/projects/ares";
 const app = new App(settingsPath, libPath);
 app.openProject(projectPath);
 
-const url = await getMainViewUrl();
-const viewStore = new ViewStore();
+const url = await getMainSurfaceUrl();
+const surfaceStore = new SurfaceStore();
 
 const rpc = BrowserView.defineRPC<AppRPC>({
     maxRequestTime: 5000,
     handlers: {
         requests: {
             getState: ({ }) => app._state,
-            gpuTagReady: ({ id, rect, view }) => {
+            gpuTagReady: ({ id, rect, surface }) => {
                 try {
-                    viewStore.start(app, id, mainWindow, rect, view);
+                    surfaceStore.start(app, id, mainWindow, rect, surface);
                     return { success: true };
                 } catch (err: any) {
                     console.error(`Metal renderer start failed: ${String(err?.message ?? err)}`);
@@ -50,21 +50,21 @@ const rpc = BrowserView.defineRPC<AppRPC>({
         },
         messages: {
             expandEntry: (id) => { app.expandEntry(id) },
-            selectEntry: ({ viewId, id }) => {
-                viewStore.selectEntry(app, viewId, id);
+            selectSurfaceEntry: ({ surfaceId, id }) => {
+                surfaceStore.selectSurfaceEntry(app, surfaceId, id);
             },
-            scroll: ({ viewId, row }) => {
-                viewStore.scroll(app, viewId, row);
+            surfaceScrollTo: ({ surfaceId, row }) => {
+                surfaceStore.surfaceScrollTo(app, surfaceId, row);
             },
             setMode: (mode) => app.setMode(mode),
-            gpuTagRect: ({id, rect}) => {
-                viewStore.updateRect(app, id, rect);
+            gpuTagRect: ({ id, rect }) => {
+                surfaceStore.updateRect(app, id, rect);
             },
-            gpuTagStop: ({id}) => {
-                viewStore.stop(app, id);
+            gpuTagStop: ({ id }) => {
+                surfaceStore.stop(app, id);
             },
-            gpuTagVisibility: ({id, visible}) => {
-                viewStore.setVisibility(app, id, visible);
+            gpuTagVisibility: ({ id, visible }) => {
+                surfaceStore.setVisibility(app, id, visible);
             },
         },
     },
@@ -131,7 +131,7 @@ mainWindow.webview.on("dom-ready", () => {
 });
 
 mainWindow.on("close", () => {
-    viewStore.stopAll(app);
+    surfaceStore.stopAll(app);
     app.stop();
     Utils.quit();
 });

@@ -57,7 +57,7 @@ export const GpuTag = forwardRef<GpuTagHandle, GpuTagProps>(
 
         const getEl = useCallback(() => {
             return elRef.current as (HTMLElement & {
-                wgpuViewId: number | null;
+                wgpuSurfaceId: number | null;
                 toggleHidden: (v?: boolean) => void;
                 toggleTransparent: (v?: boolean) => void;
                 togglePassthrough: (v?: boolean) => void;
@@ -71,7 +71,7 @@ export const GpuTag = forwardRef<GpuTagHandle, GpuTagProps>(
 
         useImperativeHandle(ref, () => ({
             get viewId() {
-                return getEl()?.wgpuViewId ?? null;
+                return getEl()?.wgpuSurfaceId ?? null;
             },
             get element() {
                 return elRef.current;
@@ -100,7 +100,7 @@ export const GpuTag = forwardRef<GpuTagHandle, GpuTagProps>(
 
         useEffect(() => {
             const el = getEl();
-            if (el?.wgpuViewId == null) return;
+            if (el?.wgpuSurfaceId == null) return;
             el.toggleHidden(hidden);
         }, [hidden, getEl]);
           useEffect(() => {
@@ -108,7 +108,7 @@ export const GpuTag = forwardRef<GpuTagHandle, GpuTagProps>(
       if (!el) return;
 
       const observer = new ResizeObserver(() => {
-          const viewId = el.wgpuViewId;
+          const viewId = el.wgpuSurfaceId;
           if (viewId == null) return;
           const rect = el.getBoundingClientRect();
           onResizeRef.current?.(viewId, {

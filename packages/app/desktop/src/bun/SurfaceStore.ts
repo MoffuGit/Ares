@@ -1,29 +1,29 @@
 import { WGPUView } from "electrobun/bun";
 import type { Pointer } from "bun:ffi";
-import type { View, ViewKind } from "@ares/shared";
+import type { Surface, SurfaceKind } from "@ares/shared";
 import { App } from "node_modules/@ares/shared/src/app";
 
 type Rect = { x: number; y: number; width: number; height: number };
 
-const ViewKindMap: Record<ViewKind, number> = {
+const SurfaceKindMap: Record<SurfaceKind, number> = {
     editor: 0,
     terminal: 1,
 };
 
-type ViewState = {
+type SurfaceState = {
     viewId: number;
-    view: View;
+    view: Surface;
     rect: Rect;
-    coreView: Pointer;
+    coreSurface: Pointer;
     lastWidth: number;
     lastHeight: number;
 };
 
-export class ViewStore {
-    private states = new Map<number, ViewState>();
+export class SurfaceStore {
+    private states = new Map<number, SurfaceState>();
 
 
-    start(app: App, viewId: number, _win: unknown, rect: Rect, view: View) {
+    start(app: App, viewId: number, _win: unknown, rect: Rect, view: Surface) {
         console.log("view", viewId, "request to start");
         if (this.states.has(viewId)) return;
 
@@ -37,8 +37,8 @@ export class ViewStore {
             throw new Error(`Failed to get Metal layer pointer for view ${viewId}`);
         }
 
-        const coreView = app.createView(ViewKindMap[view.kind], metalLayerPtr);
-        if (!coreView) {
+        const coreSurface = app.createSurface(SurfaceKindMap[view.kind], metalLayerPtr);
+        if (!coreSurface) {
             throw new Error(`Failed to create view (kind=${view.kind}) for id ${viewId}`);
         }
 
@@ -47,13 +47,13 @@ export class ViewStore {
 
         console.log("view", viewId, "started");
 
-        app.resizeView(coreView, width, height);
+        app.resizeSurface(coreSurface, width, height);
 
         this.states.set(viewId, {
             viewId,
             view,
             rect,
-            coreView: coreView,
+            coreSurface: coreSurface,
             lastWidth: width,
             lastHeight: height,
         });
@@ -68,7 +68,7 @@ export class ViewStore {
         const height = Math.max(1, Math.floor(rect.height));
 
         if (width !== state.lastWidth || height !== state.lastHeight) {
-            app.resizeView(state.coreView, width, height);
+            app.resizeSurface(state.coreSurface, width, height);
             state.lastWidth = width;
             state.lastHeight = height;
         }
@@ -79,7 +79,7 @@ export class ViewStore {
         const state = this.states.get(viewId);
         if (!state) return;
 
-        app.destroyView(state.coreView);
+        app.destroySurface(state.coreSurface);
         this.states.delete(viewId);
     }
 
@@ -92,18 +92,18 @@ export class ViewStore {
     setVisibility(app: App, viewId: number, visible: boolean) {
         const state = this.states.get(viewId);
         if (!state) return;
-        app.setViewVisibility(state.coreView, visible);
+        app.setSurfaceVisibility(state.coreSurface, visible);
     }
 
-    selectEntry(app: App, viewId: number, id: number) {
+    selectSurfaceEntry(app: App, viewId: number, id: number) {
         const state = this.states.get(viewId);
         if (!state || state.view.kind != "editor") return;
-        app.selectEntry(state.coreView, id);
+        app.selectSurfaceEntry(state.coreSurface, id);
     }
 
-    scroll(app: App, viewId: number, row: number) {
+    surfaceScrollTo(app: App, viewId: number, row: number) {
         const state = this.states.get(viewId);
         if (!state || state.view.kind != "editor") return;
-        app.scroll(state.coreView, row);
+        app.surfaceScrollTo(state.coreSurface, row);
     }
 }

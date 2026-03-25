@@ -40,7 +40,7 @@ export function FileTree() {
 
 function FileTreeItem({ entry }: { entry: WorktreeEntry }) {
     const expandEntry = useAppStore((state) => state.expandEntry);
-    const selectEntry = useAppStore((state) => state.selectEntry);
+    const selectSurfaceEntry = useAppStore((state) => state.selectSurfaceEntry);
     return (
         <SidebarMenuItem key={entry.id}>
             <SidebarMenuButton
@@ -48,7 +48,7 @@ function FileTreeItem({ entry }: { entry: WorktreeEntry }) {
                     if (entry.kind == "dir") {
                         expandEntry(entry)
                     } else {
-                        selectEntry(entry)
+                        selectSurfaceEntry(entry)
                     }
                 }}
                 size="xs" style={{ paddingLeft: `${18 * (entry.depth) + 8}px` }} >

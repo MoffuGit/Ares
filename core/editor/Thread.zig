@@ -108,7 +108,7 @@ fn drainMailbox(self: *Thread) !void {
                 self.editor.writeScreen();
             },
             .select_entry => |id| {
-                self.editor.selectEntry(id);
+                self.editor.selectSurfaceEntry(id);
             },
             .resize => |size| {
                 self.editor.resize(size);

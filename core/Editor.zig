@@ -69,7 +69,7 @@ pub fn resize(self: *Editor, size: sizepkg.Size) void {
     self.renderer_thread.wakeup.notify() catch {};
 }
 
-pub fn selectEntry(self: *Editor, id: u64) void {
+pub fn selectSurfaceEntry(self: *Editor, id: u64) void {
     log.debug("selected entry: {}", .{id});
     if (self.buffer) |curr| {
         if (curr.entry_id == id) return;

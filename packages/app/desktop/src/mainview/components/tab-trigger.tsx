@@ -16,8 +16,8 @@ export function TabTrigger({ tab }: TabContentProps) {
             value={String(tab.id)}
         >
             {
-                tab.view.kind == "editor" && tab.view.entry && (
-                    <FileIcon entry={tab.view.entry} />
+                tab.surface.kind == "editor" && tab.surface.entry && (
+                    <FileIcon entry={tab.surface.entry} />
                 )
             }
             <span className="truncate">{tab.name}</span>

@@ -178,28 +178,28 @@ export class App extends EventEmitter {
         return resolveTheme(json);
     }
 
-    createView(kind: number, metalLayerPtr: Pointer): Pointer | null {
+    createSurface(kind: number, metalLayerPtr: Pointer): Pointer | null {
         if (!this.project) return null;
-        return this.core.createView(this.project, kind, metalLayerPtr);
+        return this.core.createSurface(this.project, kind, metalLayerPtr);
     }
 
-    resizeView(view: Pointer, width: number, height: number) {
-        this.core.resizeView(view, width, height);
+    resizeSurface(view: Pointer, width: number, height: number) {
+        this.core.resizeSurface(view, width, height);
     }
 
-    selectEntry(view: Pointer, id: number) {
-        this.core.selectEntry(view, id);
+    selectSurfaceEntry(view: Pointer, id: number) {
+        this.core.selectSurfaceEntry(view, id);
     }
 
-    scroll(view: Pointer, row: number) {
-        this.core.scroll(view, row);
+    surfaceScrollTo(view: Pointer, row: number) {
+        this.core.surfaceScrollTo(view, row);
     }
 
-    setViewVisibility(view: Pointer, visible: boolean) {
-        this.core.setViewVisibility(view, visible);
+    setSurfaceVisibility(view: Pointer, visible: boolean) {
+        this.core.setSurfaceVisibility(view, visible);
     }
 
-    destroyView(view: Pointer) {
-        this.core.destroyView(view);
+    destroySurface(view: Pointer) {
+        this.core.destroySurface(view);
     }
 }

@@ -1,26 +1,26 @@
 import { useRef, useCallback } from "react";
 import { GpuTag, type GpuTagHandle } from "./gpu-tag";
 import { rpc, useAppStore } from "@/lib/app";
-import type { TerminalView as TerminalViewData } from "@ares/shared";
+import type { TerminalSurface as TerminalSurfaceData } from "@ares/shared";
 
-interface TerminalViewProps {
+interface TerminalSurfaceProps {
     tabId: number;
-    view: TerminalViewData;
+    view: TerminalSurfaceData;
     active: boolean;
 }
 
-export function TerminalView({ tabId, view, active }: TerminalViewProps) {
+export function TerminalSurface({ tabId, view, active }: TerminalSurfaceProps) {
     const gpuRef = useRef<GpuTagHandle>(null);
 
-    const handleReady = useCallback(async (gpuViewId: number) => {
-        useAppStore.getState().setGpuViewId(tabId, gpuViewId);
+    const handleReady = useCallback(async (gpuSurfaceId: number) => {
+        useAppStore.getState().setGpuSurfaceId(tabId, gpuSurfaceId);
 
         const el = gpuRef.current?.element;
         if (!el) return;
         const rect = el.getBoundingClientRect();
         try {
             await rpc.request.gpuTagReady({
-                id: gpuViewId,
+                id: gpuSurfaceId,
                 rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
                 view,
             });

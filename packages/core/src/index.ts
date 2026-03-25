@@ -114,27 +114,27 @@ function getCoreLib(libPath: string) {
                 args: [],
                 return: FFIType.void,
             },
-            createView: {
+            createSurface: {
                 args: [FFIType.pointer, FFIType.u8, FFIType.pointer],
                 returns: FFIType.pointer,
             },
-            resizeView: {
+            resizeSurface: {
                 args: [FFIType.pointer, FFIType.u32, FFIType.u32],
                 returns: FFIType.void,
             },
-            selectEntry: {
+            selectSurfaceEntry: {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void
             },
-            scroll: {
+            surfaceScrollTo: {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void
             },
-            setViewVisibility: {
+            setSurfaceVisibility: {
                 args: [FFIType.pointer, FFIType.bool],
                 returns: FFIType.void
             },
-            destroyView: {
+            destroySurface: {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
@@ -324,28 +324,28 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.drainMailbox();
     }
 
-    createView(project: Pointer, kind: number, metalLayerPtr: Pointer): Pointer | null {
-        return this.lib.symbols.createView(project, kind, metalLayerPtr) as Pointer | null;
+    createSurface(project: Pointer, kind: number, metalLayerPtr: Pointer): Pointer | null {
+        return this.lib.symbols.createSurface(project, kind, metalLayerPtr) as Pointer | null;
     }
 
-    resizeView(view: Pointer, width: number, height: number): void {
-        this.lib.symbols.resizeView(view, width, height);
+    resizeSurface(surface: Pointer, width: number, height: number): void {
+        this.lib.symbols.resizeSurface(surface, width, height);
     }
 
-    selectEntry(view: Pointer, id: number) {
-        this.lib.symbols.selectEntry(view, id);
+    selectSurfaceEntry(surface: Pointer, id: number) {
+        this.lib.symbols.selectSurfaceEntry(surface, id);
     }
 
-    scroll(view: Pointer, row: number) {
-        this.lib.symbols.scroll(view, row);
+    surfaceScrollTo(surface: Pointer, row: number) {
+        this.lib.symbols.surfaceScrollTo(surface, row);
     }
 
-    setViewVisibility(view: Pointer, visible: boolean) {
-        this.lib.symbols.setViewVisibility(view, visible);
+    setSurfaceVisibility(surface: Pointer, visible: boolean) {
+        this.lib.symbols.setSurfaceVisibility(surface, visible);
     }
 
-    destroyView(view: Pointer): void {
-        this.lib.symbols.destroyView(view);
+    destroySurface(surface: Pointer): void {
+        this.lib.symbols.destroySurface(surface);
     }
 
 }

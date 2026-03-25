@@ -5,7 +5,7 @@ const Project = @import("Project.zig");
 const Snapshot = @import("worktree/Snapshot.zig");
 const Appearance = @import("Appearance.zig");
 const App = @import("App.zig");
-const View = @import("View.zig");
+const Surface = @import("Surface.zig");
 
 export fn initState(callback: ?global.Callback) void {
     global.state.init(callback) catch {};
@@ -254,29 +254,29 @@ export fn trieNodeHasChildren(node: *TrieNode) bool {
     return node.childrens.count() > 0;
 }
 
-export fn createView(project: *Project, kind: u8, metal_layer_ptr: *anyopaque) ?*View {
-    if (kind >= @typeInfo(View.Kind).@"enum".fields.len) return null;
-    return View.create(project, global.state.alloc, @enumFromInt(kind), metal_layer_ptr) catch null;
+export fn createSurface(project: *Project, kind: u8, metal_layer_ptr: *anyopaque) ?*Surface {
+    if (kind >= @typeInfo(Surface.Kind).@"enum".fields.len) return null;
+    return Surface.create(project, global.state.alloc, @enumFromInt(kind), metal_layer_ptr) catch null;
 }
 
-export fn resizeView(view: *View, width: u32, height: u32) void {
-    view.resize(width, height);
+export fn resizeSurface(surface: *Surface, width: u32, height: u32) void {
+    surface.resize(width, height);
 }
 
-export fn destroyView(view: *View) void {
-    view.destroy();
+export fn destroySurface(surface: *Surface) void {
+    surface.destroy();
 }
 
-export fn setViewVisibility(view: *View, visible: bool) void {
-    view.setVisibility(visible) catch {};
+export fn setSurfaceVisibility(surface: *Surface, visible: bool) void {
+    surface.setVisibility(visible) catch {};
 }
 
-export fn selectEntry(view: *View, id: u64) void {
-    view.selectEntry(id);
+export fn selectSurfaceEntry(surface: *Surface, id: u64) void {
+    surface.selectSurfaceEntry(id);
 }
 
-export fn scroll(view: *View, row: u64) void {
-    view.scroll(row);
+export fn surfaceScrollTo(surface: *Surface, row: u64) void {
+    surface.scroll(row);
 }
 
 test {

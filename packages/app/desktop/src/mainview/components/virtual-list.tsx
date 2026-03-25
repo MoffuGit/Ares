@@ -61,7 +61,7 @@ function findScrollableAncestor(el: HTMLElement): HTMLElement {
     return document.documentElement;
 }
 
-function getOffsetWithinViewport(
+function getOffsetWithinSurfaceport(
     container: HTMLElement,
     viewport: HTMLElement
 ): number {
@@ -204,7 +204,7 @@ export function VirtualizedList({
     const [resolvedHeight, setResolvedHeight] = useState<number>(
         itemHeight != null && itemHeight > 0 ? itemHeight : DEFAULT_ITEM_HEIGHT
     );
-    const [viewportHeight, setViewportHeight] = useState<number>(0);
+    const [viewportHeight, setSurfaceportHeight] = useState<number>(0);
 
     // Find viewport and set up scroll/resize listeners
     useLayoutEffect(() => {
@@ -221,17 +221,17 @@ export function VirtualizedList({
 
         const update = () => {
             const nextHeight = itemHeight;
-            const nextViewportHeight = viewport.clientHeight;
-            const offset = getOffsetWithinViewport(container, viewport);
+            const nextSurfaceportHeight = viewport.clientHeight;
+            const offset = getOffsetWithinSurfaceport(container, viewport);
             setResolvedHeight((prev) => (prev === nextHeight ? prev : nextHeight));
-            setViewportHeight((prev) =>
-                prev === nextViewportHeight ? prev : nextViewportHeight
+            setSurfaceportHeight((prev) =>
+                prev === nextSurfaceportHeight ? prev : nextSurfaceportHeight
             );
             setRange((prev) => {
                 const next = computeWindowRange(
                     {
                         scrollTop: viewport.scrollTop,
-                        viewportHeight: nextViewportHeight,
+                        viewportHeight: nextSurfaceportHeight,
                         offset,
                         itemCount,
                         itemHeight: nextHeight,
@@ -283,7 +283,7 @@ export function VirtualizedList({
         const container = containerRef.current;
         if (viewport == null || container == null) return;
 
-        const offset = getOffsetWithinViewport(container, viewport);
+        const offset = getOffsetWithinSurfaceport(container, viewport);
 
         const itemTop = offset + scrollToIndex * resolvedHeight;
         const itemBottom = itemTop + resolvedHeight;

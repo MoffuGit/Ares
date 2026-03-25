@@ -1,47 +1,47 @@
 import { useRef, useCallback, useEffect } from "react";
 import { GpuTag, type GpuTagHandle } from "./gpu-tag";
 import { rpc, useAppStore } from "@/lib/app";
-import type { EditorView as EditorViewData, Tab } from "@ares/shared";
+import type { EditorSurface as EditorSurfaceData, Tab } from "@ares/shared";
 
-interface EditorViewProps {
+interface EditorSurfaceProps {
     tab: Tab;
-    view: EditorViewData;
+    surface: EditorSurfaceData;
     active: boolean;
 }
 
-export function EditorView({ tab, view, active }: EditorViewProps) {
+export function EditorSurface({ tab, surface, active }: EditorSurfaceProps) {
     const gpuRef = useRef<GpuTagHandle>(null);
 
-    const handleReady = useCallback(async (gpuViewId: number) => {
-        useAppStore.getState().setGpuViewId(tab.id, gpuViewId);
+    const handleReady = useCallback(async (gpuSurfaceId: number) => {
+        useAppStore.getState().setGpuSurfaceId(tab.id, gpuSurfaceId);
 
         const el = gpuRef.current?.element;
         if (!el) return;
         const rect = el.getBoundingClientRect();
         try {
             const res = await rpc.request.gpuTagReady({
-                id: gpuViewId,
+                id: gpuSurfaceId,
                 rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-                view,
+                surface,
             });
             if (res.success) {
-                if (view.entry != null) {
-                    rpc.send("selectEntry", { viewId: gpuViewId, id: view.entry.id });
+                if (surface.entry != null) {
+                    rpc.send("selectSurfaceEntry", { surfaceId: gpuSurfaceId, id: surface.entry.id });
                 }
             }
         } catch (err) {
             console.error("[GpuTag] gpuTagReady failed:", err);
         }
-    }, [tab.id, view]);
+    }, [tab.id, surface]);
 
-    const handleResize = useCallback((viewId: number, rect: { x: number; y: number; width: number; height: number }) => {
-        rpc.send("gpuTagRect", { id: viewId, rect });
+    const handleResize = useCallback((surfaceId: number, rect: { x: number; y: number; width: number; height: number }) => {
+        rpc.send("gpuTagRect", { id: surfaceId, rect });
     }, []);
 
 
     useEffect(() => {
-        if (view.gpuViewId != null) {
-            rpc.send("gpuTagVisibility", { id: view.gpuViewId, visible: active });
+        if (surface.gpuSurfaceId != null) {
+            rpc.send("gpuTagVisibility", { id: surface.gpuSurfaceId, visible: active });
         }
 
     }, [active]);
