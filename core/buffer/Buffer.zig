@@ -10,7 +10,7 @@ pub const TextBuffer = struct {
     pub const History = struct {};
 
     content: GapBuffer(u8),
-    line_count: usize,
+    rowCount: usize,
     history: History = .{},
 
     pub fn initFromBytes(alloc: Allocator, raw: []const u8) !TextBuffer {
@@ -18,7 +18,7 @@ pub const TextBuffer = struct {
         content.appendSliceBeforeAssumeCapacity(raw);
         return .{
             .content = content,
-            .line_count = countLines(raw),
+            .rowCount = countLines(raw),
         };
     }
 
