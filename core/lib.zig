@@ -6,6 +6,7 @@ const Snapshot = @import("worktree/Snapshot.zig");
 const Appearance = @import("Appearance.zig");
 const App = @import("App.zig");
 const Surface = @import("Surface.zig");
+const Editor = @import("Editor.zig");
 
 export fn initState(callback: ?global.Callback) void {
     global.state.init(callback) catch {};
@@ -254,29 +255,37 @@ export fn trieNodeHasChildren(node: *TrieNode) bool {
     return node.childrens.count() > 0;
 }
 
-export fn createSurface(project: *Project, kind: u8, metal_layer_ptr: *anyopaque) ?*Surface {
-    if (kind >= @typeInfo(Surface.Kind).@"enum".fields.len) return null;
-    return Surface.create(project, global.state.alloc, @enumFromInt(kind), metal_layer_ptr) catch null;
+export fn createEditor(project: *Project, layer_ptr: *anyopaque) ?*Editor {
+    return Editor.create(project, global.state.alloc, layer_ptr) catch null;
 }
 
-export fn resizeSurface(surface: *Surface, width: u32, height: u32) void {
-    surface.resize(width, height);
+export fn resizeEditor(editor: *Editor, width: u32, height: u32) void {
+    _ = editor.editor_thread.mailbox.push(.{ .resize = .{
+        .height = height,
+        .width = width,
+    } }, .instant);
+
+    editor.editor_thread.wakeup.notify() catch {};
 }
 
-export fn destroySurface(surface: *Surface) void {
-    surface.destroy();
+export fn destroyEditor(editor: *Editor) void {
+    editor.destroy();
 }
 
-export fn setSurfaceVisibility(surface: *Surface, visible: bool) void {
-    surface.setVisibility(visible) catch {};
+export fn setEditorVisibility(editor: *Editor, visible: bool) void {
+    editor.setVisibility(visible) catch {};
 }
 
-export fn selectSurfaceEntry(surface: *Surface, id: u64) void {
-    surface.selectSurfaceEntry(id);
+export fn selectEditorEntry(editor: *Editor, id: u64) void {
+    _ = editor.editor_thread.mailbox.push(.{ .select_entry = id }, .instant);
+
+    editor.editor_thread.wakeup.notify() catch {};
 }
 
-export fn surfaceScrollTo(surface: *Surface, row: u64) void {
-    surface.scroll(row);
+export fn editorScrollTo(editor: *Editor, row: u64) void {
+    _ = editor.editor_thread.mailbox.push(.{ .scroll = row }, .instant);
+
+    editor.editor_thread.wakeup.notify() catch {};
 }
 
 test {

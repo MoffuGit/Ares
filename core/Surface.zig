@@ -1,32 +1,19 @@
 const std = @import("std");
 const objc = @import("objc");
 const Allocator = std.mem.Allocator;
-const Editor = @import("Editor.zig");
 const Renderer = @import("Renderer.zig");
 const RendererThread = @import("renderer/Thread.zig");
-const EditorThread = @import("editor/Thread.zig");
 const fontpkg = @import("font/mod.zig");
 const Grid = fontpkg.Grid;
 const SharedState = @import("SharedState.zig");
-const log = std.log.scoped(.surface);
 const Project = @import("Project.zig");
+const sizepkg = @import("size.zig");
+
+const log = std.log.scoped(.surface);
 
 const Surface = @This();
 
-pub const Kind = enum(u8) {
-    editor = 0,
-    terminal = 1,
-};
-
-pub const Content = union(Kind) {
-    editor: *Editor,
-    terminal: struct {
-        id: usize = 1,
-    },
-};
-
 alloc: Allocator,
-content: Content,
 
 grid: Grid,
 
@@ -34,16 +21,13 @@ renderer: Renderer,
 renderer_thread: RendererThread,
 renderer_thr: std.Thread,
 
-editor_thread: EditorThread,
-editor_thr: std.Thread,
-
 shared_state: SharedState,
 
-pub fn create(project: *Project, alloc: Allocator, kind: Kind, layer_ptr: *anyopaque) !*Surface {
+pub fn create(alloc: Allocator, layer_ptr: *anyopaque) !*Surface {
     const metal_layer = objc.Object.fromId(layer_ptr);
 
-    const view = try alloc.create(Surface);
-    errdefer alloc.destroy(view);
+    const self = try alloc.create(Surface);
+    errdefer alloc.destroy(self);
 
     var grid = try Grid.init(alloc, .{ .size = .{
         .points = 12,
@@ -52,59 +36,39 @@ pub fn create(project: *Project, alloc: Allocator, kind: Kind, layer_ptr: *anyop
 
     var renderer = try Renderer.init(
         alloc,
-        .{ .grid = &view.grid, .metal_layer = metal_layer, .size = .{
+        .{ .grid = &self.grid, .metal_layer = metal_layer, .size = .{
             .screen = .{ .height = 0, .width = 0 },
             .cell = grid.cellSize(),
         } },
     );
     errdefer renderer.deinit();
 
-    var renderer_thread = try RendererThread.init(alloc, &view.renderer, &view.shared_state);
+    var renderer_thread = try RendererThread.init(alloc, &self.renderer, &self.shared_state);
     errdefer renderer_thread.deinit();
 
     var shared_state = try SharedState.init(alloc, .{ .screen = .{ .height = 0, .width = 0 }, .cell = grid.cellSize() });
     errdefer shared_state.deinit();
 
-    const editor: ?*Editor = switch (kind) {
-        .editor => try Editor.create(project, alloc, &view.renderer_thread, &view.shared_state),
-        .terminal => null,
-    };
-
-    view.* = .{
+    self.* = .{
         .grid = grid,
         .alloc = alloc,
         .shared_state = shared_state,
-        .content = switch (kind) {
-            .editor => .{ .editor = editor.? },
-            .terminal => .{ .terminal = .{} },
-        },
         .renderer = renderer,
         .renderer_thread = renderer_thread,
         .renderer_thr = undefined,
-        .editor_thread = if (editor) |e| try EditorThread.init(alloc, e) else undefined,
-        .editor_thr = undefined,
     };
 
-    if (editor) |e| {
-        e.editor_thread = &view.editor_thread;
-    }
-
-    view.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&view.renderer_thread});
-    if (editor != null) {
-        view.editor_thr = try std.Thread.spawn(.{}, EditorThread.threadMain, .{&view.editor_thread});
-    }
-
-    return view;
+    self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
+    return self;
 }
 
-pub fn resize(self: *Surface, width: u32, height: u32) void {
-    switch (self.content) {
-        .editor => {
-            _ = self.editor_thread.mailbox.push(.{ .resize = .{ .screen = .{ .height = height, .width = width }, .cell = self.grid.cellSize() } }, .instant);
-            self.editor_thread.wakeup.notify() catch {};
-        },
-        else => {},
-    }
+pub fn wakeup(self: *Surface) void {
+    self.renderer_thread.wakeup.notify() catch {};
+}
+
+pub fn resize(self: *Surface, size: sizepkg.ScreenSize) void {
+    _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
+    self.renderer_thread.wakeup.notify() catch {};
 }
 
 pub fn setVisibility(self: *Surface, visible: bool) !void {
@@ -113,16 +77,6 @@ pub fn setVisibility(self: *Surface, visible: bool) !void {
 }
 
 pub fn destroy(self: *Surface) void {
-    switch (self.content) {
-        .editor => {
-            self.editor_thread.stop.notify() catch |err|
-                log.err("error notifying editor thread to stop, may stall err={}", .{err});
-            self.editor_thr.join();
-            self.editor_thread.deinit();
-        },
-        else => {},
-    }
-
     {
         self.renderer_thread.stop.notify() catch |err|
             log.err("error notifying renderer thread to stop, may stall err={}", .{err});
@@ -136,32 +90,5 @@ pub fn destroy(self: *Surface) void {
 
     self.shared_state.deinit();
 
-    switch (self.content) {
-        .editor => |editor| {
-            editor.destroy();
-        },
-        else => {},
-    }
-
     self.alloc.destroy(self);
-}
-
-pub fn selectSurfaceEntry(self: *Surface, id: u64) void {
-    switch (self.content) {
-        .editor => {
-            _ = self.editor_thread.mailbox.push(.{ .select_entry = id }, .instant);
-            self.editor_thread.wakeup.notify() catch {};
-        },
-        else => {},
-    }
-}
-
-pub fn scroll(self: *Surface, row: u64) void {
-    switch (self.content) {
-        .editor => {
-            _ = self.editor_thread.mailbox.push(.{ .scroll = row }, .instant);
-            self.editor_thread.wakeup.notify() catch {};
-        },
-        else => {},
-    }
 }

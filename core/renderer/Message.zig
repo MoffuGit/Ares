@@ -1,9 +1,6 @@
-pub const SurfaceSize = struct {
-    width: u32,
-    height: u32,
-};
+const sizepkg = @import("../size.zig");
 
 pub const Message = union(enum) {
-    resize: SurfaceSize,
+    resize: sizepkg.ScreenSize,
     visible: bool,
 };
