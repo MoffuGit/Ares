@@ -112,9 +112,9 @@ pub fn writeScreen(self: *Editor) void {
         buffer.mutex.lock();
         defer buffer.mutex.unlock();
 
-        const doc = buffer.document orelse return;
-        const first = doc.content.items;
-        const second = doc.content.secondHalf();
+        const text = buffer.text orelse return;
+        const first = text.content.items;
+        const second = text.content.secondHalf();
 
         self.surface.shared_state.mutex.lock();
         defer self.surface.shared_state.mutex.unlock();

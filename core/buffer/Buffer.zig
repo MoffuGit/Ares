@@ -6,14 +6,14 @@ const GapBuffer = @import("datastruct").GapBuffer;
 
 pub const Buffer = @This();
 
-pub const Document = struct {
+pub const TextBuffer = struct {
     pub const History = struct {};
 
     content: GapBuffer(u8),
     line_count: usize,
     history: History = .{},
 
-    pub fn initFromBytes(alloc: Allocator, raw: []const u8) !Document {
+    pub fn initFromBytes(alloc: Allocator, raw: []const u8) !TextBuffer {
         var content = try GapBuffer(u8).initCapacity(alloc, raw.len);
         content.appendSliceBeforeAssumeCapacity(raw);
         return .{
@@ -22,7 +22,7 @@ pub const Document = struct {
         };
     }
 
-    pub fn deinit(self: *Document) void {
+    pub fn deinit(self: *TextBuffer) void {
         self.content.deinit();
         self.* = undefined;
     }
@@ -44,10 +44,10 @@ entry_id: u64,
 state: std.atomic.Value(State) = .{ .raw = .empty },
 mutex: std.Thread.Mutex = .{},
 file: ?Io.File = null,
-document: ?Document = null,
+text: ?TextBuffer = null,
 
 pub fn initFromFile(alloc: Allocator, entry_id: u64, file: Io.File) Buffer {
-    const doc = Document.initFromBytes(alloc, file.bytes) catch return .{
+    const doc = TextBuffer.initFromBytes(alloc, file.bytes) catch return .{
         .alloc = alloc,
         .entry_id = entry_id,
         .state = .{ .raw = .err },
@@ -59,7 +59,7 @@ pub fn initFromFile(alloc: Allocator, entry_id: u64, file: Io.File) Buffer {
         .entry_id = entry_id,
         .state = .{ .raw = .ready },
         .file = file,
-        .document = doc,
+        .text = doc,
     };
 }
 
@@ -78,7 +78,7 @@ pub fn deinit(self: *Buffer) void {
 }
 
 pub fn applyFile(self: *Buffer, file: Io.File) void {
-    const new_doc = Document.initFromBytes(self.alloc, file.bytes) catch {
+    const new_doc = TextBuffer.initFromBytes(self.alloc, file.bytes) catch {
         file.deinit();
         self.mutex.lock();
         defer self.mutex.unlock();
@@ -91,7 +91,7 @@ pub fn applyFile(self: *Buffer, file: Io.File) void {
     defer self.mutex.unlock();
     self.clearUnlocked();
     self.file = file;
-    self.document = new_doc;
+    self.text = new_doc;
     self.state.store(.ready, .release);
 }
 
@@ -121,9 +121,9 @@ pub fn getState(self: *const Buffer) State {
 }
 
 fn clearUnlocked(self: *Buffer) void {
-    if (self.document) |*doc| {
+    if (self.text) |*doc| {
         doc.deinit();
-        self.document = null;
+        self.text = null;
     }
     if (self.file) |file| {
         file.deinit();
