@@ -69,18 +69,16 @@ fn onBufferUpdate(ctx: *anyopaque, event: @import("global.zig").GlobalEvents) vo
     const entry_id = self.selected_entry orelse return;
     if (event.bufferUpdate != entry_id) return;
 
-    const thread = self.editor_thread;
-    _ = thread.mailbox.push(.{ .buffer_update = {} }, .instant);
-    thread.wakeup.notify() catch {};
+    _ = self.editor_thread.mailbox.push(.{ .buffer_update = {} }, .instant);
+    self.editor_thread.wakeup.notify() catch {};
 }
 
 pub fn resize(self: *Editor, size: sizepkg.ScreenSize) void {
     {
-        var shared_state = self.surface.shared_state;
-        shared_state.mutex.lock();
-        defer shared_state.mutex.unlock();
+        self.surface.shared_state.mutex.lock();
+        defer self.surface.shared_state.mutex.unlock();
 
-        shared_state.screen.resize(.{ .screen = size, .cell = self.surface.grid.cellSize() });
+        self.surface.shared_state.screen.resize(.{ .screen = size, .cell = self.surface.grid.cellSize() });
     }
 
     self.writeScreen();
@@ -118,11 +116,12 @@ pub fn writeScreen(self: *Editor) void {
         const first = doc.content.items;
         const second = doc.content.secondHalf();
 
-        var shared_state = self.surface.shared_state;
-        shared_state.mutex.lock();
-        defer shared_state.mutex.unlock();
+        self.surface.shared_state.mutex.lock();
+        defer self.surface.shared_state.mutex.unlock();
 
-        shared_state.screen.resetCells();
+        const screen = &self.surface.shared_state.screen;
+
+        screen.resetCells();
 
         var line: u64 = 0;
         var row: u16 = 0;
@@ -132,8 +131,8 @@ pub fn writeScreen(self: *Editor) void {
         while (true) {
             if (std.mem.indexOfScalar(u8, remainder, '\n')) |nl| {
                 if (line >= self.scroll_row) {
-                    if (row >= shared_state.screen.rows) break;
-                    shared_state.screen.addNewLine(remainder[0..nl]) catch |e| {
+                    if (row >= screen.rows) break;
+                    screen.addNewLine(remainder[0..nl]) catch |e| {
                         log.err("failed to add line to screen: {}", .{e});
                         return;
                     };
@@ -144,8 +143,8 @@ pub fn writeScreen(self: *Editor) void {
             } else if (!in_second) {
                 in_second = true;
                 if (second.len == 0) {
-                    if (line >= self.scroll_row and row < shared_state.screen.rows) {
-                        shared_state.screen.addNewLine(remainder) catch |e| {
+                    if (line >= self.scroll_row and row < screen.rows) {
+                        screen.addNewLine(remainder) catch |e| {
                             log.err("failed to add line to screen: {}", .{e});
                             return;
                         };
@@ -154,10 +153,10 @@ pub fn writeScreen(self: *Editor) void {
                 }
                 if (std.mem.indexOfScalar(u8, second, '\n')) |nl| {
                     if (line >= self.scroll_row) {
-                        if (row >= shared_state.screen.rows) break;
+                        if (row >= screen.rows) break;
                         const joined = std.mem.concat(self.alloc, u8, &.{ remainder, second[0..nl] }) catch return;
                         defer self.alloc.free(joined);
-                        shared_state.screen.addNewLine(joined) catch |e| {
+                        screen.addNewLine(joined) catch |e| {
                             log.err("failed to add line to screen: {}", .{e});
                             return;
                         };
@@ -166,10 +165,10 @@ pub fn writeScreen(self: *Editor) void {
                     remainder = second[nl + 1 ..];
                     line += 1;
                 } else {
-                    if (line >= self.scroll_row and row < shared_state.screen.rows) {
+                    if (line >= self.scroll_row and row < screen.rows) {
                         const joined = std.mem.concat(self.alloc, u8, &.{ remainder, second }) catch return;
                         defer self.alloc.free(joined);
-                        shared_state.screen.addNewLine(joined) catch |e| {
+                        screen.addNewLine(joined) catch |e| {
                             log.err("failed to add line to screen: {}", .{e});
                             return;
                         };
@@ -177,8 +176,8 @@ pub fn writeScreen(self: *Editor) void {
                     break;
                 }
             } else {
-                if (line >= self.scroll_row and row < shared_state.screen.rows) {
-                    shared_state.screen.addNewLine(remainder) catch |e| {
+                if (line >= self.scroll_row and row < screen.rows) {
+                    screen.addNewLine(remainder) catch |e| {
                         log.err("failed to add line to screen: {}", .{e});
                         return;
                     };

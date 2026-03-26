@@ -44,7 +44,7 @@ export function EditorSurface({ tab, surface, active }: EditorSurfaceProps) {
             rpc.send("gpuTagVisibility", { id: surface.gpuSurfaceId, visible: active });
         }
 
-    }, [active]);
+    }, [active, surface.gpuSurfaceId]);
 
     return (
         <div className="min-w-fit h-full flex flex-col">

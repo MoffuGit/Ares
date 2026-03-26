@@ -114,27 +114,27 @@ function getCoreLib(libPath: string) {
                 args: [],
                 return: FFIType.void,
             },
-            createSurface: {
-                args: [FFIType.pointer, FFIType.u8, FFIType.pointer],
+            createEditor: {
+                args: [FFIType.pointer, FFIType.pointer],
                 returns: FFIType.pointer,
             },
-            resizeSurface: {
+            resizeEditor: {
                 args: [FFIType.pointer, FFIType.u32, FFIType.u32],
                 returns: FFIType.void,
             },
-            selectSurfaceEntry: {
+            selectEditorEntry: {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void
             },
-            surfaceScrollTo: {
+            editorScrollTo: {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void
             },
-            setSurfaceVisibility: {
+            setEditorVisibility: {
                 args: [FFIType.pointer, FFIType.bool],
                 returns: FFIType.void
             },
-            destroySurface: {
+            destroyEditor: {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
@@ -324,28 +324,28 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.drainMailbox();
     }
 
-    createSurface(project: Pointer, kind: number, metalLayerPtr: Pointer): Pointer | null {
-        return this.lib.symbols.createSurface(project, kind, metalLayerPtr) as Pointer | null;
+    createEditor(project: Pointer, metalLayerPtr: Pointer): Pointer | null {
+        return this.lib.symbols.createEditor(project, metalLayerPtr) as Pointer | null;
     }
 
-    resizeSurface(surface: Pointer, width: number, height: number): void {
-        this.lib.symbols.resizeSurface(surface, width, height);
+    resizeEditor(editor: Pointer, width: number, height: number): void {
+        this.lib.symbols.resizeEditor(editor, width, height);
     }
 
-    selectSurfaceEntry(surface: Pointer, id: number) {
-        this.lib.symbols.selectSurfaceEntry(surface, id);
+    selectEditorEntry(editor: Pointer, id: number) {
+        this.lib.symbols.selectEditorEntry(editor, id);
     }
 
-    surfaceScrollTo(surface: Pointer, row: number) {
-        this.lib.symbols.surfaceScrollTo(surface, row);
+    editorScrollTo(editor: Pointer, row: number) {
+        this.lib.symbols.editorScrollTo(editor, row);
     }
 
-    setSurfaceVisibility(surface: Pointer, visible: boolean) {
-        this.lib.symbols.setSurfaceVisibility(surface, visible);
+    setEditorVisibility(editor: Pointer, visible: boolean) {
+        this.lib.symbols.setEditorVisibility(editor, visible);
     }
 
-    destroySurface(surface: Pointer): void {
-        this.lib.symbols.destroySurface(surface);
+    destroyEditor(editor: Pointer): void {
+        this.lib.symbols.destroyEditor(editor);
     }
 
 }

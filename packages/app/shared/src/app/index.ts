@@ -178,28 +178,28 @@ export class App extends EventEmitter {
         return resolveTheme(json);
     }
 
-    createSurface(kind: number, metalLayerPtr: Pointer): Pointer | null {
+    createEditor(metalLayerPtr: Pointer): Pointer | null {
         if (!this.project) return null;
-        return this.core.createSurface(this.project, kind, metalLayerPtr);
+        return this.core.createEditor(this.project, metalLayerPtr);
     }
 
-    resizeSurface(view: Pointer, width: number, height: number) {
-        this.core.resizeSurface(view, width, height);
+    resizeEditor(editor: Pointer, width: number, height: number) {
+        this.core.resizeEditor(editor, width, height);
     }
 
-    selectSurfaceEntry(view: Pointer, id: number) {
-        this.core.selectSurfaceEntry(view, id);
+    selectEditorEntry(editor: Pointer, id: number) {
+        this.core.selectEditorEntry(editor, id);
     }
 
-    surfaceScrollTo(view: Pointer, row: number) {
-        this.core.surfaceScrollTo(view, row);
+    editorScrollTo(editor: Pointer, row: number) {
+        this.core.editorScrollTo(editor, row);
     }
 
-    setSurfaceVisibility(view: Pointer, visible: boolean) {
-        this.core.setSurfaceVisibility(view, visible);
+    setEditorVisibility(editor: Pointer, visible: boolean) {
+        this.core.setEditorVisibility(editor, visible);
     }
 
-    destroySurface(view: Pointer) {
-        this.core.destroySurface(view);
+    destroyEditor(editor: Pointer) {
+        this.core.destroyEditor(editor);
     }
 }

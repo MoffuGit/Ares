@@ -81,7 +81,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const { activeTabId, tabs } = get();
         const activeTab = tabs.find((t) => t.id === activeTabId);
         if (!activeTab || activeTab.surface.kind !== "editor") return;
-        if (activeTab.surface.gpuSurfaceId) {
+        if (activeTab.surface.gpuSurfaceId != null) {
             rpc.send("selectSurfaceEntry", { surfaceId: activeTab.surface.gpuSurfaceId, id: entry.id });
         }
         set({
