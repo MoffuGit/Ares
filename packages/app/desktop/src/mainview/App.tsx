@@ -95,7 +95,7 @@ function App() {
                                     value={activeTabId != null ? String(activeTabId) : undefined}
                                     onValueChange={(val) => setActiveTab(Number(val))}
                                 >
-                                    <TabsList className="h-7 bg-sidebar gap-1">
+                                    <TabsList className="h-6 bg-sidebar gap-1">
                                         {tabs.map((tab) => (
                                             <TabTrigger
                                                 key={tab.id}
@@ -109,7 +109,7 @@ function App() {
                     </div>
                     <div className='flex-1 flex flex-row bg-sidebar'>
                         <AppSidebar />
-                        <SidebarInset className='rounded-xl bg-muted shadow-inset isolate'>
+                        <SidebarInset className='rounded-lg bg-muted shadow-inset isolate'>
                             {tabs.map((tab) => (
                                 <TabContent key={tab.id} tab={tab} active={tab.id === activeTabId} />
                             ))}

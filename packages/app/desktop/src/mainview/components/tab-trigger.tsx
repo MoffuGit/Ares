@@ -23,12 +23,12 @@ export function TabTrigger({ tab }: TabContentProps) {
             <span className="truncate">{tab.name}</span>
             <Button
                 render={({ children, className }) => {
-                    return <div className={className} 
+                    return <div className={className}
                         onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
                     >{children}</div>
                 }}
                 size="icon-xs"
-                className="!pointer-events-auto absolute right-0.5 size-5 top-1/2 transition-none -translate-y-1/2 group-hover/tab-trigger:opacity-100 opacity-0 bg-muted hover:bg-background hover:text-foreground"
+                className="!pointer-events-auto absolute right-0.5 size-5 top-1/2 transition-none -translate-y-1/2 group-hover/tab-trigger:opacity-100 opacity-0 bg-muted/60 hover:bg-background hover:text-foreground"
             >
                 <X />
             </Button>
