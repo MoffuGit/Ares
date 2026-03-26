@@ -40,10 +40,11 @@ export function EditorSurface({ tab, surface, active }: EditorSurfaceProps) {
 
 
     useEffect(() => {
+        gpuRef.current?.toggleHidden(!active);
+
         if (surface.gpuSurfaceId != null) {
             rpc.send("gpuTagVisibility", { id: surface.gpuSurfaceId, visible: active });
         }
-
     }, [active, surface.gpuSurfaceId]);
 
     return (
