@@ -49,7 +49,10 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
 
     return (
         <div className="w-full grow relative">
-            <div className="absolute top-0 w-full h-full overflow-auto">
+            <div
+                className="absolute top-0 w-full h-full overflow-auto data-[active-tab=true]:flex hidden"
+                data-active-tab={active}
+            >
                 <div style={{ "height": surface.bufferState ? surface.bufferState.rowCount * 16 : 0 }} />
             </div>
             <GpuTag

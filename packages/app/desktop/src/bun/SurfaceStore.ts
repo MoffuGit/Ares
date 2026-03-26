@@ -6,8 +6,8 @@ import { App } from "node_modules/@ares/shared/src/app";
 type Rect = { x: number; y: number; width: number; height: number };
 
 type SurfaceState = {
-    viewId: number;
-    view: Surface;
+    id: number;
+    surface: Surface;
     rect: Rect;
     corePtr: Pointer;
     lastWidth: number;
@@ -17,35 +17,35 @@ type SurfaceState = {
 export class SurfaceStore {
     private states = new Map<number, SurfaceState>();
 
-    start(app: App, viewId: number, _win: unknown, rect: Rect, view: Surface) {
-        console.log("view", viewId, "request to start");
-        if (this.states.has(viewId)) return;
+    start(app: App, surfaceId: number, _win: unknown, rect: Rect, surface: Surface) {
+        console.log("view", surfaceId, "request to start");
+        if (this.states.has(surfaceId)) return;
 
-        const wgpuView = WGPUView.getById(viewId);
+        const wgpuView = WGPUView.getById(surfaceId);
         if (!wgpuView?.ptr) {
-            throw new Error(`GPU view not found for id ${viewId}`);
+            throw new Error(`GPU view not found for id ${surfaceId}`);
         }
 
         const metalLayerPtr = wgpuView.getNativeHandle();
         if (!metalLayerPtr) {
-            throw new Error(`Failed to get Metal layer pointer for view ${viewId}`);
+            throw new Error(`Failed to get Metal layer pointer for view ${surfaceId}`);
         }
 
-        const corePtr = this.createCoreSurface(app, view.kind, metalLayerPtr);
+        const corePtr = this.createCoreSurface(app, surface.kind, metalLayerPtr);
         if (!corePtr) {
-            throw new Error(`Failed to create view (kind=${view.kind}) for id ${viewId}`);
+            throw new Error(`Failed to create view (kind=${surface.kind}) for id ${surfaceId}`);
         }
 
         const width = Math.max(1, Math.floor(rect.width));
         const height = Math.max(1, Math.floor(rect.height));
 
-        console.log("view", viewId, "started");
+        console.log("view", surfaceId, "started");
 
-        this.resizeCoreSurface(app, view.kind, corePtr, width, height);
+        this.resizeCoreSurface(app, surface.kind, corePtr, width, height);
 
-        this.states.set(viewId, {
-            viewId,
-            view,
+        this.states.set(surfaceId, {
+            id: surfaceId,
+            surface,
             rect,
             corePtr,
             lastWidth: width,
@@ -62,7 +62,7 @@ export class SurfaceStore {
         const height = Math.max(1, Math.floor(rect.height));
 
         if (width !== state.lastWidth || height !== state.lastHeight) {
-            this.resizeCoreSurface(app, state.view.kind, state.corePtr, width, height);
+            this.resizeCoreSurface(app, state.surface.kind, state.corePtr, width, height);
             state.lastWidth = width;
             state.lastHeight = height;
         }
@@ -73,7 +73,7 @@ export class SurfaceStore {
         const state = this.states.get(viewId);
         if (!state) return;
 
-        this.destroyCoreSurface(app, state.view.kind, state.corePtr);
+        this.destroyCoreSurface(app, state.surface.kind, state.corePtr);
         this.states.delete(viewId);
     }
 
@@ -87,7 +87,7 @@ export class SurfaceStore {
         const state = this.states.get(viewId);
         if (!state) return;
 
-        switch (state.view.kind) {
+        switch (state.surface.kind) {
             case "editor":
                 app.setEditorVisibility(state.corePtr, visible);
                 break;
@@ -98,13 +98,13 @@ export class SurfaceStore {
 
     selectSurfaceEntry(app: App, viewId: number, id: number) {
         const state = this.states.get(viewId);
-        if (!state || state.view.kind !== "editor") return;
+        if (!state || state.surface.kind !== "editor") return;
         app.selectEditorEntry(state.corePtr, id);
     }
 
     surfaceScrollTo(app: App, viewId: number, row: number) {
         const state = this.states.get(viewId);
-        if (!state || state.view.kind !== "editor") return;
+        if (!state || state.surface.kind !== "editor") return;
         app.editorScrollTo(state.corePtr, row);
     }
 

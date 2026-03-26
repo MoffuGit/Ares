@@ -180,7 +180,7 @@ export class CoreLib extends EventEmitter {
                     const data = dataType.unpack(toArrayBuffer(ptr, 0, _len));
                     const event = EventsName[_type];
                     queueMicrotask(() => {
-                        console.log("event received", event);
+                        console.log("event with data received", event, data);
                         this.emit(event, data);
                     })
 

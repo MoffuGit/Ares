@@ -82,8 +82,10 @@ export class App extends EventEmitter {
         this.core.deinitState();
     }
 
-    protected onBufferUpdate = () => {
-        this.emit("bufferUpdate");
+    protected onBufferUpdate = ({ entry_id, row_count }: { entry_id: number | bigint, row_count: number | bigint }) => {
+        const entryId = typeof entry_id === "bigint" ? Number(entry_id) : entry_id;
+        const rowCount = typeof row_count === "bigint" ? Number(row_count) : row_count;
+        this.emit("bufferUpdate", { entryId, rowCount } as BufferState);
     };
 
     protected onFiletreeUpdate = () => {
@@ -212,15 +214,6 @@ export class App extends EventEmitter {
         const raw = this.core.readBufferState(editor);
         if (!raw) return null;
         return { entryId: raw.entry_id, rowCount: raw.row_count };
-    }
-
-    readEditorBufferStates(): BufferState[] {
-        const results: BufferState[] = [];
-        for (const editor of this.editors) {
-            const bs = this.readBufferState(editor);
-            if (bs) results.push(bs);
-        }
-        return results;
     }
 
     destroyEditor(editor: Pointer) {

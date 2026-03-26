@@ -40,7 +40,7 @@ pub fn open(self: *BufferStore, entry_id: u64) ?*Buffer {
     if (self.get(entry_id)) |buf| return buf;
 
     const abs_path = self.worktree.getAbsPath(entry_id) orelse return null;
-    self.buffers.put(entry_id, Buffer.initLoading(self.alloc, entry_id)) catch |err| {
+    self.buffers.put(entry_id, Buffer.init(self.alloc, entry_id)) catch |err| {
         log.err("failed to create buffer for entry_id={}: {}", .{ entry_id, err });
         return null;
     };
@@ -58,6 +58,10 @@ fn readCallback(bufffer: ?*Buffer, file: ?Io.File) void {
         buf.applyError();
     }
     global.state.emitGlobal(.{ .bufferUpdate = buf.entry_id });
+    global.state.emit(.{ .bufferUpdate = .{
+        .entry_id = buf.entry_id,
+        .row_count = buf.text.rowCount,
+    } }, .instant);
 }
 
 pub fn get(self: *BufferStore, entry_id: u64) ?*Buffer {

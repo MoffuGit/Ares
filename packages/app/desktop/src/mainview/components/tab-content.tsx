@@ -11,7 +11,6 @@ export function TabContent({ tab, active }: TabContentProps) {
         <div
             key={tab.id}
             className="w-full h-full absolute inset-0 p-2 flex"
-            data-active-tab={active}
         >
             <Surface surface={tab.surface} id={tab.id} active={active} />
         </div>

@@ -17,11 +17,16 @@ pub const GlobalEvents = union(enum) {
     bufferUpdate: u64,
 };
 
+pub const ExternBufferState = extern struct {
+    entry_id: u64,
+    row_count: u64,
+};
+
 pub const Events = union(enum) {
     settingsUpdate: void,
     themeUpdate: void,
     filetreeUpdate: void,
-    bufferUpdate: void,
+    bufferUpdate: ExternBufferState,
 };
 
 pub const GlobalState = struct {

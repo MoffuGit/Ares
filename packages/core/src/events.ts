@@ -19,5 +19,5 @@ export const Events: Record<EventType, StructDef<any> | null> = {
     [EventType.SettingsUpdate]: null,
     [EventType.ThemeUpdate]: null,
     [EventType.FiletreeUpdate]: null,
-    [EventType.BufferUpdate]: null,
+    [EventType.BufferUpdate]: BufferState,
 };

@@ -26,8 +26,10 @@ export fn drainMailbox() void {
             .settingsUpdate,
             .themeUpdate,
             .filetreeUpdate,
-            .bufferUpdate,
             => cb(@intFromEnum(ev), null, 0),
+            .bufferUpdate => |bs| {
+                cb(@intFromEnum(ev), @ptrCast(&bs), @sizeOf(global.ExternBufferState));
+            },
         }
     }
 }
@@ -299,7 +301,7 @@ export fn readBufferState(editor: *Editor, out: *ExternBufferState) bool {
     if (buffer.getState() != .ready) return false;
     buffer.mutex.lock();
     defer buffer.mutex.unlock();
-    const text = buffer.text orelse return false;
+    const text = buffer.text;
     out.* = .{
         .entry_id = buffer.entry_id,
         .row_count = text.rowCount,
