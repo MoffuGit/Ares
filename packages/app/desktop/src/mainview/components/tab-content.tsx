@@ -1,6 +1,5 @@
 import type { Tab } from "@ares/shared";
-import { EditorSurface } from "./editor";
-import { TerminalSurface } from "./terminal-view";
+import { Surface } from "./surfaces";
 
 interface TabContentProps {
     tab: Tab;
@@ -8,10 +7,13 @@ interface TabContentProps {
 }
 
 export function TabContent({ tab, active }: TabContentProps) {
-    switch (tab.surface.kind) {
-        case "editor":
-            return <EditorSurface tab={tab} surface={tab.surface} active={active} />;
-        case "terminal":
-            return <TerminalSurface tabId={tab.id} view={tab.surface} active={active} />;
-    }
+    return (
+        <div
+            key={tab.id}
+            className="w-full h-full absolute inset-0 p-2 flex"
+            data-active-tab={active}
+        >
+            <Surface surface={tab.surface} id={tab.id} active={active} />
+        </div>
+    );
 }

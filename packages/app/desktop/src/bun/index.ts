@@ -124,6 +124,13 @@ app.on("keymapsUpdate", () => {
     }
 });
 
+app.on("bufferUpdate", () => {
+    const states = app.readEditorBufferStates();
+    for (const state of states) {
+        mainWindow.webview.rpc?.send.bufferUpdate(state);
+    }
+});
+
 mainWindow.webview.on("dom-ready", () => {
     setInterval(() => {
         app.drainMailbox()

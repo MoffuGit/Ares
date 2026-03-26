@@ -1,5 +1,5 @@
 import { Electroview } from "electrobun/view";
-import type { Mode, Scope, KeymapBinding, AppState, WorktreeEntry, Tab, Surface } from "@ares/shared";
+import type { Mode, Scope, KeymapBinding, AppState, WorktreeEntry, Tab, Surface, BufferState } from "@ares/shared";
 import { KeymapHandler, type TrieOps, buildKeymapTrie, edgeKey, type TSTrieNode } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import { create } from "zustand";
@@ -168,6 +168,15 @@ const rpc = Electroview.defineRPC<AppRPC>({
             },
             keymapsUpdate: (keymaps) => {
                 useAppStore.setState({ keymaps });
+            },
+            bufferUpdate: (bufferState) => {
+                const tabs = useAppStore.getState().tabs.map((t) => {
+                    if (t.surface.kind === "editor" && t.surface.entry?.id === bufferState.entryId) {
+                        return { ...t, surface: { ...t.surface, bufferState } };
+                    }
+                    return t;
+                });
+                useAppStore.setState({ tabs });
             },
         },
     },

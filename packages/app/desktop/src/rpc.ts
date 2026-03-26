@@ -1,5 +1,5 @@
 import type { RPCSchema } from "electrobun/bun";
-import type { AppState, Settings, Theme, WorktreeEntry, ScopedKeymaps, Mode, Surface } from "@ares/shared";
+import type { AppState, Settings, Theme, WorktreeEntry, ScopedKeymaps, Mode, Surface, BufferState } from "@ares/shared";
 
 export type GpuRect = { x: number; y: number; width: number; height: number };
 
@@ -29,6 +29,7 @@ export type AppRPC = {
             themeUpdate: Theme;
             filetreeUpdate: WorktreeEntry[];
             keymapsUpdate: ScopedKeymaps;
+            bufferUpdate: BufferState;
         };
     }>;
 };

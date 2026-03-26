@@ -28,3 +28,8 @@ export const WorktreeEntry = defineStruct([
     ["file_type", "char*"],
     ["file_type_len", "u64", { lengthOf: "file_type" }],
 ] as const);
+
+export const BufferState = defineStruct([
+    ["entry_id", "u64"],
+    ["row_count", "u64"],
+] as const);

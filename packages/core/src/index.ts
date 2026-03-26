@@ -2,7 +2,7 @@ import { dlopen, FFIType, JSCallback, ptr, toArrayBuffer, type Pointer } from "b
 import { EventEmitter } from "events";
 import { resolve } from "path";
 import { EventType, Events, EventsName } from "./events";
-import { KeymapEntry, Settings, WorktreeEntry } from "./structs";
+import { BufferState, KeymapEntry, Settings, WorktreeEntry } from "./structs";
 
 const DEFAULT_LIB_PATH = resolve(import.meta.dir, "../../../zig-out/lib/libcore.dylib");
 
@@ -129,6 +129,10 @@ function getCoreLib(libPath: string) {
             editorScrollTo: {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void
+            },
+            readBufferState: {
+                args: [FFIType.pointer, FFIType.pointer],
+                returns: FFIType.bool,
             },
             setEditorVisibility: {
                 args: [FFIType.pointer, FFIType.bool],
@@ -338,6 +342,14 @@ export class CoreLib extends EventEmitter {
 
     editorScrollTo(editor: Pointer, row: number) {
         this.lib.symbols.editorScrollTo(editor, row);
+    }
+
+    readBufferState(editor: Pointer): { entry_id: number; row_count: number } | null {
+        const buf = new ArrayBuffer(BufferState.size);
+        const ok = this.lib.symbols.readBufferState(editor, ptr(buf));
+        if (!ok) return null;
+        const raw = BufferState.unpack(buf);
+        return { entry_id: Number(raw.entry_id), row_count: Number(raw.row_count) };
     }
 
     setEditorVisibility(editor: Pointer, visible: boolean) {

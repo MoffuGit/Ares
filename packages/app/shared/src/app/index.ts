@@ -1,6 +1,6 @@
 import type { Pointer } from "bun:ffi";
 import { resolveCoreLib, type CoreLib } from "@ares/core";
-import type { Settings, Theme, Mode, Scope, KeymapBinding, ScopedKeymaps, AppState, WorktreeEntry } from "../types.ts";
+import type { Settings, Theme, Mode, Scope, KeymapBinding, ScopedKeymaps, AppState, WorktreeEntry, BufferState } from "../types.ts";
 import { resolveTheme } from "./theme.ts";
 
 import { EventEmitter } from "events";
@@ -15,6 +15,7 @@ export class App extends EventEmitter {
     readonly core: CoreLib;
     protected coreApp: Pointer;
     protected project: Pointer | null = null;
+    private editors = new Set<Pointer>();
 
     _state: AppState = { settings: null, theme: null, filetree: null, mode: "normal", keymaps: null };
 
@@ -65,11 +66,13 @@ export class App extends EventEmitter {
         this.core.on("SettingsUpdate", this.onSettingsUpdate);
         this.core.on("ThemeUpdate", this.onThemeUpdate);
         this.core.on("FiletreeUpdate", this.onFiletreeUpdate);
+        this.core.on("BufferUpdate", this.onBufferUpdate);
         const keymaps = this.readAllKeymaps();
         this._state = { ...this._state, settings: this.readSettings(), theme: this.readTheme(), keymaps };
     }
 
     stop() {
+        this.core.off("BufferUpdate", this.onBufferUpdate);
         this.core.off("FiletreeUpdate", this.onFiletreeUpdate);
         this.core.off("SettingsUpdate", this.onSettingsUpdate);
         this.core.off("ThemeUpdate", this.onThemeUpdate);
@@ -78,6 +81,10 @@ export class App extends EventEmitter {
         this.core.destroyApp(this.coreApp);
         this.core.deinitState();
     }
+
+    protected onBufferUpdate = () => {
+        this.emit("bufferUpdate");
+    };
 
     protected onFiletreeUpdate = () => {
         this.readFiletree();
@@ -180,7 +187,9 @@ export class App extends EventEmitter {
 
     createEditor(metalLayerPtr: Pointer): Pointer | null {
         if (!this.project) return null;
-        return this.core.createEditor(this.project, metalLayerPtr);
+        const ptr = this.core.createEditor(this.project, metalLayerPtr);
+        if (ptr) this.editors.add(ptr);
+        return ptr;
     }
 
     resizeEditor(editor: Pointer, width: number, height: number) {
@@ -199,7 +208,23 @@ export class App extends EventEmitter {
         this.core.setEditorVisibility(editor, visible);
     }
 
+    readBufferState(editor: Pointer): BufferState | null {
+        const raw = this.core.readBufferState(editor);
+        if (!raw) return null;
+        return { entryId: raw.entry_id, rowCount: raw.row_count };
+    }
+
+    readEditorBufferStates(): BufferState[] {
+        const results: BufferState[] = [];
+        for (const editor of this.editors) {
+            const bs = this.readBufferState(editor);
+            if (bs) results.push(bs);
+        }
+        return results;
+    }
+
     destroyEditor(editor: Pointer) {
+        this.editors.delete(editor);
         this.core.destroyEditor(editor);
     }
 }

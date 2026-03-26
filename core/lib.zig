@@ -26,6 +26,7 @@ export fn drainMailbox() void {
             .settingsUpdate,
             .themeUpdate,
             .filetreeUpdate,
+            .bufferUpdate,
             => cb(@intFromEnum(ev), null, 0),
         }
     }
@@ -286,6 +287,24 @@ export fn editorScrollTo(editor: *Editor, row: u64) void {
     _ = editor.editor_thread.mailbox.push(.{ .scroll = row }, .instant);
 
     editor.editor_thread.wakeup.notify() catch {};
+}
+
+pub const ExternBufferState = extern struct {
+    entry_id: u64,
+    row_count: u64,
+};
+
+export fn readBufferState(editor: *Editor, out: *ExternBufferState) bool {
+    const buffer = editor.buffer orelse return false;
+    if (buffer.getState() != .ready) return false;
+    buffer.mutex.lock();
+    defer buffer.mutex.unlock();
+    const text = buffer.text orelse return false;
+    out.* = .{
+        .entry_id = buffer.entry_id,
+        .row_count = text.rowCount,
+    };
+    return true;
 }
 
 test {

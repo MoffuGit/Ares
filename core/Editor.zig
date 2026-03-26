@@ -19,6 +19,7 @@ surface: *Surface,
 buffer: ?*Buffer = null,
 selected_entry: ?u64 = null,
 scroll_row: u64 = 0,
+last_row_count: u64 = 0,
 
 editor_thread: EditorThread,
 editor_thr: std.Thread,
@@ -113,6 +114,13 @@ pub fn writeScreen(self: *Editor) void {
         defer buffer.mutex.unlock();
 
         const text = buffer.text orelse return;
+
+        const row_count = text.rowCount;
+        if (row_count != self.last_row_count) {
+            self.last_row_count = row_count;
+            @import("global.zig").state.emit(.bufferUpdate, .instant);
+        }
+
         const first = text.content.items;
         const second = text.content.secondHalf();
 

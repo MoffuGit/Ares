@@ -111,13 +111,7 @@ function App() {
                         <AppSidebar />
                         <SidebarInset className='rounded-xl bg-muted shadow-inset isolate'>
                             {tabs.map((tab) => (
-                                <div
-                                    key={tab.id}
-                                    className="w-full h-full absolute inset-0"
-                                    data-active-tab={tab.id === activeTabId}
-                                >
-                                    <TabContent tab={tab} active={tab.id === activeTabId} />
-                                </div>
+                                <TabContent key={tab.id} tab={tab} active={tab.id === activeTabId} />
                             ))}
                         </SidebarInset>
                     </div>

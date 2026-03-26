@@ -21,6 +21,7 @@ pub const Events = union(enum) {
     settingsUpdate: void,
     themeUpdate: void,
     filetreeUpdate: void,
+    bufferUpdate: void,
 };
 
 pub const GlobalState = struct {

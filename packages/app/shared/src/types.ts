@@ -8,10 +8,16 @@ export type AppState = {
     keymaps: ScopedKeymaps | null;
 };
 
+export type BufferState = {
+    entryId: number;
+    rowCount: number;
+};
+
 export type AppEvents = {
     settingsUpdate: [];
     themeUpdate: [];
     filetreeUpdate: [];
+    bufferUpdate: [state: BufferState];
     modeUpdate: [];
     keymapsUpdate: [];
     keymapSequence: [sequence: string];
@@ -123,7 +129,7 @@ export type KeyDownMods = {
     num_lock: boolean;
 }
 
-export type EditorSurface = { kind: "editor"; path: string; gpuSurfaceId?: number; entry?: WorktreeEntry };
+export type EditorSurface = { kind: "editor"; path: string; gpuSurfaceId?: number; entry?: WorktreeEntry; bufferState?: BufferState };
 export type TerminalSurface = { kind: "terminal"; cwd: string; gpuSurfaceId?: number };
 export type Surface = EditorSurface | TerminalSurface;
 
