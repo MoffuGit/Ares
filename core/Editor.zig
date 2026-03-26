@@ -94,6 +94,12 @@ pub fn selectSurfaceEntry(self: *Editor, id: u64) void {
     if (self.project.buffer_store.open(id)) |buffer| {
         self.buffer = buffer;
         self.selected_entry = id;
+
+        _ = global.emit(.{ .bufferUpdate = .{
+            .entry_id = id,
+            .row_count = buffer.text.rowCount,
+        } }, .instant);
+
         self.writeScreen();
 
         self.surface.wakeup();
