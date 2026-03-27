@@ -99,4 +99,21 @@
   [data-slot="sidebar-content"]::-webkit-scrollbar-thumb:hover {
     background: var(--sidebar-foreground);
   }
+
+  [data-slot="editor-content"]::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  [data-slot="editor-content"]::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  [data-slot="editor-content"]::-webkit-scrollbar-thumb {
+    background: var(--sidebar-border);
+    border-radius: 3px;
+  }
+
+  [data-slot="editor-content"]::-webkit-scrollbar-thumb:hover {
+    background: var(--sidebar-foreground);
+  }
 }

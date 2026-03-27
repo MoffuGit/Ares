@@ -10,7 +10,7 @@ export function TabContent({ tab, active }: TabContentProps) {
     return (
         <div
             key={tab.id}
-            className="w-full h-full absolute inset-0 p-2 flex"
+            className="w-full h-full absolute inset-0 flex"
         >
             <Surface surface={tab.surface} id={tab.id} active={active} />
         </div>

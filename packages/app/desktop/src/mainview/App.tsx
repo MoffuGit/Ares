@@ -11,6 +11,7 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { TabContent } from '@/components/tab-content'
 import type { Scope, ScopeActionMap } from '@ares/shared'
 import { TabTrigger } from './components/tab-trigger'
+import { BottomBar } from './components/bottom-bar'
 
 function useScopedKeymaps<S extends Scope>(scope: S): Record<string, ScopeActionMap[S]> {
     const keymaps = useAppStore((s) => s.keymaps);
@@ -109,10 +110,13 @@ function App() {
                     </div>
                     <div className='flex-1 flex flex-row bg-sidebar'>
                         <AppSidebar />
-                        <SidebarInset className='rounded-lg bg-muted shadow-inset isolate'>
-                            {tabs.map((tab) => (
-                                <TabContent key={tab.id} tab={tab} active={tab.id === activeTabId} />
-                            ))}
+                        <SidebarInset className='rounded-lg bg-muted shadow-inset flex flex-col'>
+                            <div className='isolate relative grow w-full'>
+                                {tabs.map((tab) => (
+                                    <TabContent key={tab.id} tab={tab} active={tab.id === activeTabId} />
+                                ))}
+                            </div>
+                            <BottomBar />
                         </SidebarInset>
                     </div>
                 </div>
