@@ -50,7 +50,7 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
 
     return (
         <div className="w-full flex flex-col grow data-[surface-active=true]:z-10 -z-10 data-[surface-active=true]:opacity-100 opacity-0" data-surface-active={active}>
-            <div className="w-full h-6 flex items-center justify-start px-2">
+            <div className="w-full h-7 flex items-center justify-start px-2">
                 {surface.entry && (
                     <Breadcrumb>
                         <BreadcrumbList>
