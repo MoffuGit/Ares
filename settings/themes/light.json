@@ -22,7 +22,10 @@
     "chart4": "#7c3aed",
     "chart5": "#f4845f",
     "sidebar": "#E6E3E1",
-    "sidebarFg": "#3F3F3F"
+    "sidebarFg": "#3F3F3F",
+    "modeNormal": "#FFFFFF",
+    "modeVisual": "#E8DEF8",
+    "modeInsert": "#D6E4F0"
   },
   "theme": {
     "bg": "background",
@@ -59,6 +62,9 @@
     "sidebarAccentFg": "accentFg",
     "sidebarBorder": "border",
     "sidebarRing": "primaryBg",
+    "modeNormal": "modeNormal",
+    "modeVisual": "modeVisual",
+    "modeInsert": "modeInsert",
     "fileType": {
       "default": "defaultFileColor"
     }

@@ -39,6 +39,9 @@ sidebarAccent: Color,
 sidebarAccentFg: Color,
 sidebarBorder: Color,
 sidebarRing: Color,
+modeNormal: Color,
+modeVisual: Color,
+modeInsert: Color,
 fileType: std.StringHashMapUnmanaged(Color) = .{},
 
 pub const fallback = Theme{
@@ -77,6 +80,9 @@ pub const fallback = Theme{
     .sidebarAccentFg = Color{ 160, 160, 160, 255 },
     .sidebarBorder = Color{ 50, 50, 50, 255 },
     .sidebarRing = Color{ 40, 40, 40, 255 },
+    .modeNormal = Color{ 40, 40, 40, 255 },
+    .modeVisual = Color{ 60, 40, 80, 255 },
+    .modeInsert = Color{ 40, 60, 80, 255 },
 };
 
 pub fn getFileTypeColor(self: Theme, key: []const u8) Color {
@@ -137,6 +143,9 @@ const JsonTheme = struct {
         sidebarAccentFg: []const u8,
         sidebarBorder: []const u8,
         sidebarRing: []const u8,
+        modeNormal: []const u8,
+        modeVisual: []const u8,
+        modeInsert: []const u8,
         fileType: ?std.json.ArrayHashMap([]const u8) = null,
     },
 };
@@ -191,6 +200,9 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
     const sidebarAccentFg = colors.get(json_theme.theme.sidebarAccentFg) orelse return ParseError.ColorNotFound;
     const sidebarBorder = colors.get(json_theme.theme.sidebarBorder) orelse return ParseError.ColorNotFound;
     const sidebarRing = colors.get(json_theme.theme.sidebarRing) orelse return ParseError.ColorNotFound;
+    const modeNormal = colors.get(json_theme.theme.modeNormal) orelse return ParseError.ColorNotFound;
+    const modeVisual = colors.get(json_theme.theme.modeVisual) orelse return ParseError.ColorNotFound;
+    const modeInsert = colors.get(json_theme.theme.modeInsert) orelse return ParseError.ColorNotFound;
 
     var file_type_colors = std.StringHashMapUnmanaged(Color){};
     errdefer {
@@ -248,6 +260,9 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
         .sidebarAccentFg = sidebarAccentFg,
         .sidebarBorder = sidebarBorder,
         .sidebarRing = sidebarRing,
+        .modeNormal = modeNormal,
+        .modeVisual = modeVisual,
+        .modeInsert = modeInsert,
         .fileType = file_type_colors,
     };
 }
@@ -326,7 +341,10 @@ test "parse theme" {
         \\    "sidebarAccent": "mutedBg",
         \\    "sidebarAccentFg": "mutedFg",
         \\    "sidebarBorder": "scrollTrack",
-        \\    "sidebarRing": "primaryBg"
+        \\    "sidebarRing": "primaryBg",
+        \\    "modeNormal": "primaryBg",
+        \\    "modeVisual": "mutedBg",
+        \\    "modeInsert": "mutedBg"
         \\  }
         \\}
     ;
@@ -368,6 +386,9 @@ test "parse theme" {
     try std.testing.expectEqual(Color{ 136, 136, 136, 255 }, theme.sidebarAccentFg);
     try std.testing.expectEqual(Color{ 51, 51, 51, 255 }, theme.sidebarBorder);
     try std.testing.expectEqual(Color{ 26, 26, 26, 255 }, theme.sidebarRing);
+    try std.testing.expectEqual(Color{ 26, 26, 26, 255 }, theme.modeNormal);
+    try std.testing.expectEqual(Color{ 42, 42, 42, 255 }, theme.modeVisual);
+    try std.testing.expectEqual(Color{ 42, 42, 42, 255 }, theme.modeInsert);
 }
 
 test "parse theme with fileType" {
@@ -429,6 +450,9 @@ test "parse theme with fileType" {
         \\    "sidebarAccentFg": "mutedFg",
         \\    "sidebarBorder": "scrollTrack",
         \\    "sidebarRing": "primaryBg",
+        \\    "modeNormal": "primaryBg",
+        \\    "modeVisual": "mutedBg",
+        \\    "modeInsert": "mutedBg",
         \\    "fileType": {
         \\      "default": "defaultFileColor",
         \\      "rust": "rustColor",
@@ -444,6 +468,9 @@ test "parse theme with fileType" {
     try std.testing.expectEqual(Color{ 222, 165, 132, 255 }, theme.getFileTypeColor("rust"));
     try std.testing.expectEqual(Color{ 247, 164, 29, 255 }, theme.getFileTypeColor("zig"));
     try std.testing.expectEqual(Color{ 204, 204, 204, 255 }, theme.getFileTypeColor("lua"));
+    try std.testing.expectEqual(Color{ 26, 26, 26, 255 }, theme.modeNormal);
+    try std.testing.expectEqual(Color{ 42, 42, 42, 255 }, theme.modeVisual);
+    try std.testing.expectEqual(Color{ 42, 42, 42, 255 }, theme.modeInsert);
 }
 
 test "parse theme fileType missing fallback" {
@@ -503,6 +530,9 @@ test "parse theme fileType missing fallback" {
         \\    "sidebarAccentFg": "mutedFg",
         \\    "sidebarBorder": "scrollTrack",
         \\    "sidebarRing": "primaryBg",
+        \\    "modeNormal": "primaryBg",
+        \\    "modeVisual": "mutedBg",
+        \\    "modeInsert": "mutedBg",
         \\    "fileType": {
         \\      "rust": "rustColor"
         \\    }

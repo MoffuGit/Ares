@@ -66,6 +66,9 @@ export type Theme = {
     sidebarAccentFg: string;
     sidebarBorder: string;
     sidebarRing: string;
+    modeNormal: string;
+    modeVisual: string;
+    modeInsert: string;
     fileType: Record<string, string>;
 }
 

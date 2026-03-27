@@ -33,6 +33,9 @@ const themeVarMap: Record<string, keyof Theme> = {
     "--sidebar-accent-foreground": "sidebarAccentFg",
     "--sidebar-border": "sidebarBorder",
     "--sidebar-ring": "sidebarRing",
+    "--mode-normal": "modeNormal",
+    "--mode-visual": "modeVisual",
+    "--mode-insert": "modeInsert",
 };
 
 export function applyTheme(theme: Theme, scheme: "light" | "dark") {

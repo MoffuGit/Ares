@@ -28,7 +28,10 @@
     "cardBg": "#0C0B0E",
     "cardFg": "#fafafa",
     "input": "#343434",
-    "ring": "#737373"
+    "ring": "#737373",
+    "modeNormal": "#48a5fd",
+    "modeVisual": "#00b3bc",
+    "modeInsert": "#b58cf8"
   },
   "theme": {
     "bg": "background",
@@ -65,6 +68,9 @@
     "sidebarAccentFg": "accentFg",
     "sidebarBorder": "border",
     "sidebarRing": "ring",
+    "modeNormal": "modeNormal",
+    "modeVisual": "modeVisual",
+    "modeInsert": "modeInsert",
     "fileType": {
       "default": "defaultFileColor"
     }

@@ -39,6 +39,7 @@ const THEME_KEYS = [
     "input", "ring", "chart1", "chart2", "chart3", "chart4", "chart5",
     "sidebar", "sidebarFg", "sidebarPrimary", "sidebarPrimaryFg",
     "sidebarAccent", "sidebarAccentFg", "sidebarBorder", "sidebarRing",
+    "modeNormal", "modeVisual", "modeInsert",
 ] as const;
 
 function normalizeHex(hex: string): string {
