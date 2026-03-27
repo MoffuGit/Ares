@@ -27,10 +27,7 @@ export interface GpuTagProps {
     hidden?: boolean;
     masks?: string;
     onReady?: (viewId: number) => void;
-    onResize?: (viewId: number, rect: Rect) => void;
 }
-
-type Rect = { x: number; y: number; width: number; height: number };
 
 export const GpuTag = forwardRef<GpuTagHandle, GpuTagProps>(
     function GpuTag(
@@ -43,16 +40,13 @@ export const GpuTag = forwardRef<GpuTagHandle, GpuTagProps>(
             hidden,
             masks,
             onReady,
-            onResize
         },
         ref,
     ) {
         const elRef = useRef<HTMLElement | null>(null);
         const onReadyRef = useRef(onReady);
         const hiddenRef = useRef(hidden);
-        const onResizeRef = useRef(onResize);
         onReadyRef.current = onReady;
-        onResizeRef.current = onResize
         hiddenRef.current = hidden;
 
         const getEl = useCallback(() => {
@@ -103,25 +97,6 @@ export const GpuTag = forwardRef<GpuTagHandle, GpuTagProps>(
             if (el?.wgpuSurfaceId == null) return;
             el.toggleHidden(hidden);
         }, [hidden, getEl]);
-          useEffect(() => {
-      const el = getEl();
-      if (!el) return;
-
-      const observer = new ResizeObserver(() => {
-          const viewId = el.wgpuSurfaceId;
-          if (viewId == null) return;
-          const rect = el.getBoundingClientRect();
-          onResizeRef.current?.(viewId, {
-              x: rect.x,
-              y: rect.y,
-              width: rect.width,
-              height: rect.height,
-          });
-      });
-      observer.observe(el);
-
-      return () => observer.disconnect();
-  }, [getEl]);
 
         const attrs: Record<string, string | undefined> = {};
         if (transparent) attrs.transparent = "";
