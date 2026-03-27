@@ -11,21 +11,6 @@ interface EditorSurfaceProps {
     active: boolean;
 }
 
-//NOTE:
-//for the scroll, 
-//i need to send an rpc msg with the new topRow,
-//there an specific behaviour on this scroll,
-//the scroll is by row, not by pixel,
-//we can follow the pattern that exist on virtual-list
-//for adding the scroll watcher, 
-//we should send the topRow every time our scroll passes the row tresshold
-//but before doing any of this things, the webview needs to know what the size of a row
-//the size of a row is the height of a cell, every surface can have a different cell size,
-//for this to work the wbeview shoudl always have the surface cell size,
-//because there are other parts that we care about a surface state, like the health,
-//we should add a new core library event and make it reach the zustand store, 
-//you can check the path it takes the buffer state,
-
 export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
     const gpuRef = useRef<GpuTagHandle>(null);
 
@@ -59,6 +44,15 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
         }
     }, [active, surface.gpuSurfaceId]);
 
+    const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+        if (!surface.gpuSurfaceId || !surface.bufferState) return;
+        const cellHeight = surface.bufferState.cellHeight;
+        if (cellHeight <= 0) return;
+        const scrollTop = e.currentTarget.scrollTop;
+        const row = Math.floor(scrollTop / cellHeight);
+        rpc.send("surfaceScrollTo", { surfaceId: surface.gpuSurfaceId, row });
+    }, [surface.gpuSurfaceId, surface.bufferState]);
+
     const divRef = useRef(null);
 
     useResizeObserver(divRef, (entry) => {
@@ -90,8 +84,9 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
                     className="absolute top-0 inset-0 w-full h-full overflow-auto data-[active-tab=true]:flex hidden"
                     data-active-tab={active}
                     data-slot="editor-content"
+                    onScroll={handleScroll}
                 >
-                    <div style={{ "height": surface.bufferState ? surface.bufferState.rowCount * 16 : 0 }} />
+                    <div style={{ "height": surface.bufferState ? surface.bufferState.rowCount * surface.bufferState.cellHeight : 0 }} />
                 </div>
                 <div className="w-full h-full grow" ref={divRef}>
                     <GpuTag

@@ -82,10 +82,13 @@ export class App extends EventEmitter {
         this.core.deinitState();
     }
 
-    protected onBufferUpdate = ({ entry_id, row_count }: { entry_id: number | bigint, row_count: number | bigint }) => {
+    protected onBufferUpdate = ({ entry_id, row_count, cell_width, cell_height, renderer_health }: { entry_id: number | bigint, row_count: number | bigint, cell_width: number | bigint, cell_height: number | bigint, renderer_health: number | bigint }) => {
         const entryId = typeof entry_id === "bigint" ? Number(entry_id) : entry_id;
         const rowCount = typeof row_count === "bigint" ? Number(row_count) : row_count;
-        this.emit("bufferUpdate", { entryId, rowCount } as BufferState);
+        const cellWidth = typeof cell_width === "bigint" ? Number(cell_width) : cell_width;
+        const cellHeight = typeof cell_height === "bigint" ? Number(cell_height) : cell_height;
+        const rendererHealth = typeof renderer_health === "bigint" ? Number(renderer_health) : renderer_health;
+        this.emit("bufferUpdate", { entryId, rowCount, cellWidth, cellHeight, rendererHealth } as BufferState);
     };
 
     protected onFiletreeUpdate = () => {
@@ -213,7 +216,7 @@ export class App extends EventEmitter {
     readBufferState(editor: Pointer): BufferState | null {
         const raw = this.core.readBufferState(editor);
         if (!raw) return null;
-        return { entryId: raw.entry_id, rowCount: raw.row_count };
+        return { entryId: raw.entry_id, rowCount: raw.row_count, cellWidth: raw.cell_width, cellHeight: raw.cell_height, rendererHealth: raw.renderer_health };
     }
 
     destroyEditor(editor: Pointer) {

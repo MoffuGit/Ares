@@ -69,6 +69,17 @@ fn onBufferUpdate(ctx: *anyopaque, event: @import("global.zig").GlobalEvents) vo
     const entry_id = self.selected_entry orelse return;
     if (event.bufferUpdate != entry_id) return;
 
+    if (self.buffer) |buffer| {
+        const cell = self.surface.grid.cellSize();
+        _ = global.emit(.{ .bufferUpdate = .{
+            .entry_id = entry_id,
+            .row_count = buffer.text.rowCount,
+            .cell_width = cell.width,
+            .cell_height = cell.height,
+            .renderer_health = @intCast(@intFromEnum(self.surface.renderer.health.load(.seq_cst))),
+        } }, .instant);
+    }
+
     _ = self.editor_thread.mailbox.push(.{ .buffer_update = {} }, .instant);
     self.editor_thread.wakeup.notify() catch {};
 }
@@ -95,9 +106,13 @@ pub fn selectSurfaceEntry(self: *Editor, id: u64) void {
         self.buffer = buffer;
         self.selected_entry = id;
 
+        const cell = self.surface.grid.cellSize();
         _ = global.emit(.{ .bufferUpdate = .{
             .entry_id = id,
             .row_count = buffer.text.rowCount,
+            .cell_width = cell.width,
+            .cell_height = cell.height,
+            .renderer_health = @intCast(@intFromEnum(self.surface.renderer.health.load(.seq_cst))),
         } }, .instant);
 
         self.writeScreen();

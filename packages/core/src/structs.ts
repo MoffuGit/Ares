@@ -32,4 +32,7 @@ export const WorktreeEntry = defineStruct([
 export const BufferState = defineStruct([
     ["entry_id", "u64"],
     ["row_count", "u64"],
+    ["cell_width", "u32"],
+    ["cell_height", "u32"],
+    ["renderer_health", "u8"],
 ] as const);

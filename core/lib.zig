@@ -294,6 +294,9 @@ export fn editorScrollTo(editor: *Editor, row: u64) void {
 pub const ExternBufferState = extern struct {
     entry_id: u64,
     row_count: u64,
+    cell_width: u32,
+    cell_height: u32,
+    renderer_health: u8,
 };
 
 export fn readBufferState(editor: *Editor, out: *ExternBufferState) bool {
@@ -302,9 +305,13 @@ export fn readBufferState(editor: *Editor, out: *ExternBufferState) bool {
     buffer.mutex.lock();
     defer buffer.mutex.unlock();
     const text = buffer.text;
+    const cell = editor.surface.grid.cellSize();
     out.* = .{
         .entry_id = buffer.entry_id,
         .row_count = text.rowCount,
+        .cell_width = cell.width,
+        .cell_height = cell.height,
+        .renderer_health = @intCast(@intFromEnum(editor.surface.renderer.health.load(.seq_cst))),
     };
     return true;
 }

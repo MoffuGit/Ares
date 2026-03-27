@@ -20,6 +20,9 @@ pub const GlobalEvents = union(enum) {
 pub const ExternBufferState = extern struct {
     entry_id: u64,
     row_count: u64,
+    cell_width: u32,
+    cell_height: u32,
+    renderer_health: u8,
 };
 
 pub const Events = union(enum) {

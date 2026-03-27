@@ -27,3 +27,17 @@ canvas of views,
 things like search(files or words),
 and more...
 
+//NOTE:
+//for the scroll,
+//i need to send an rpc msg with the new topRow,
+//there an specific behaviour on this scroll,
+//the scroll is by row, not by pixel,
+//we can follow the pattern that exist on virtual-list
+//for adding the scroll watcher,
+//we should send the topRow every time our scroll passes the row tresshold
+//but before doing any of this things, the webview needs to know what the size of a row
+//the size of a row is the height of a cell, every surface can have a different cell size,
+//for this to work the wbeview shoudl always have the surface cell size,
+//because there are other parts that we care about a surface state, like the health,
+//we should add a new core library event and make it reach the zustand store,
+//you can check the path it takes the buffer state,

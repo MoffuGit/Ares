@@ -11,6 +11,9 @@ export type AppState = {
 export type BufferState = {
     entryId: number;
     rowCount: number;
+    cellWidth: number;
+    cellHeight: number;
+    rendererHealth: number;
 };
 
 export type AppEvents = {

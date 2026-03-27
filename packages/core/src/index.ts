@@ -344,12 +344,12 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.editorScrollTo(editor, row);
     }
 
-    readBufferState(editor: Pointer): { entry_id: number; row_count: number } | null {
+    readBufferState(editor: Pointer): { entry_id: number; row_count: number; cell_width: number; cell_height: number; renderer_health: number } | null {
         const buf = new ArrayBuffer(BufferState.size);
         const ok = this.lib.symbols.readBufferState(editor, ptr(buf));
         if (!ok) return null;
         const raw = BufferState.unpack(buf);
-        return { entry_id: Number(raw.entry_id), row_count: Number(raw.row_count) };
+        return { entry_id: Number(raw.entry_id), row_count: Number(raw.row_count), cell_width: Number(raw.cell_width), cell_height: Number(raw.cell_height), renderer_health: Number(raw.renderer_health) };
     }
 
     setEditorVisibility(editor: Pointer, visible: boolean) {
