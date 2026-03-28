@@ -1,32 +1,9 @@
 import { Electroview } from "electrobun/view";
-import type { Mode, Scope, KeymapBinding, AppState, WorktreeEntry, Tab, Surface, BufferState } from "@ares/shared";
-import { KeymapHandler, type TrieOps, buildKeymapTrie, edgeKey, type TSTrieNode } from "@ares/shared";
+import type { Mode, Scope, KeymapBinding, AppState, WorktreeEntry, Tab, Surface, SidebarKind } from "@ares/shared";
+import { canUseSidebarKind, surfaceName } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import { create } from "zustand";
-import { applyTheme } from "./theme.ts";
 
-let trieRoot: TSTrieNode = { terminal: false, children: new Map() };
-
-const trieOps: TrieOps<TSTrieNode> = {
-    getTrieRoot: () => trieRoot,
-    trieStep: (node, codepoint, mods) => node.children.get(edgeKey(codepoint, mods)) ?? null,
-    trieNodeIsTerminal: (node) => node.terminal,
-    trieNodeHasChildren: (node) => node.children.size > 0,
-};
-
-export const keymapHandler = new KeymapHandler<TSTrieNode>({
-    trie: trieOps,
-    onSequence: (sequence) => {
-        for (const listener of sequenceListeners) listener(sequence);
-    },
-});
-
-const sequenceListeners = new Set<(sequence: string) => void>();
-
-export function onKeymapSequence(listener: (sequence: string) => void): () => void {
-    sequenceListeners.add(listener);
-    return () => sequenceListeners.delete(listener);
-}
 
 interface AppStore extends AppState {
     setMode: (mode: Mode) => void;
@@ -41,20 +18,11 @@ interface AppStore extends AppState {
     nextTab: () => void;
     prevTab: () => void;
 
-    tabs: Tab[];
-    activeTabId: number | null;
-
-    sidebarOpen: boolean;
     setSidebarOpen: (open: boolean) => void;
+    toggleSidebarKind: (kind: SidebarKind) => void;
     toggleSidebar: () => void;
 }
 
-function surfaceName(surface: Surface): string {
-    switch (surface.kind) {
-        case "editor": return surface.path.split("/").pop() ?? "untitled";
-        case "terminal": return "terminal";
-    }
-}
 
 export const useAppStore = create<AppStore>((set, get) => ({
     settings: null,
@@ -65,7 +33,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
     tabs: [],
     activeTabId: null,
     sidebarOpen: false,
+    sidebarKind: "filetree",
     setSidebarOpen: (open) => set({ sidebarOpen: open }),
+    toggleSidebarKind: (kind) => set((state) => {
+        if (!state.settings) return {};
+        if (!canUseSidebarKind(state.settings, kind)) return {};
+        if (!state.sidebarOpen) {
+            return { sidebarOpen: true, sidebarKind: kind };
+        }
+        if (state.sidebarKind !== kind) {
+            return { sidebarKind: kind };
+        }
+        return { sidebarOpen: false };
+    }),
     toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
 
     setMode: (mode) => {
@@ -156,6 +136,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
             filetree: state.filetree,
             mode: state.mode,
             keymaps: state.keymaps,
+            sidebarKind: 'filetree',
         });
     },
 }));
@@ -165,7 +146,10 @@ const rpc = Electroview.defineRPC<AppRPC>({
         requests: {},
         messages: {
             settingsUpdate: (settings) => {
-                useAppStore.setState({ settings });
+                useAppStore.setState({
+                    settings,
+                    sidebarKind: 'filetree',
+                });
             },
             themeUpdate: (theme) => {
                 useAppStore.setState({ theme });
@@ -187,24 +171,6 @@ const rpc = Electroview.defineRPC<AppRPC>({
             },
         },
     },
-});
-
-useAppStore.subscribe((state, prev) => {
-    if (state.theme !== prev.theme || state.settings !== prev.settings) {
-        if (state.theme && state.settings) {
-            const scheme = state.settings.scheme === "system"
-                ? (state.settings.system_scheme as "light" | "dark")
-                : state.settings.scheme;
-            applyTheme(state.theme, scheme);
-        }
-    }
-    if (state.mode !== prev.mode) {
-        keymapHandler.setMode(state.mode);
-    }
-    if (state.keymaps !== prev.keymaps) {
-        trieRoot = buildKeymapTrie(state.keymaps);
-        keymapHandler.resetTrie();
-    }
 });
 
 export { rpc };

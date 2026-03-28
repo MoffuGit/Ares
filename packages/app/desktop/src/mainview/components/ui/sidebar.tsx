@@ -13,7 +13,7 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { PanelLeftIcon } from "lucide-react"
+import { FolderTree } from "lucide-react"
 
 const SIDEBAR_WIDTH_DEFAULT = 192 // 12rem in px
 const SIDEBAR_WIDTH_MIN = 144 // 9rem in px
@@ -219,7 +219,7 @@ function SidebarTrigger({
             }}
             {...props}
         >
-            <PanelLeftIcon className="stroke-sidebar-foreground/80" />
+            <FolderTree className="stroke-sidebar-foreground/80" />
             <span className="sr-only">Toggle Sidebar</span>
         </Button>
     )
@@ -727,4 +727,3 @@ export {
     SidebarTrigger,
     useSidebar,
 }
-

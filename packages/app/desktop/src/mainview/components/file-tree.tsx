@@ -44,7 +44,7 @@ function FileTreeItem({ entry }: { entry: WorktreeEntry }) {
     return (
         <SidebarMenuItem key={entry.id}>
             <SidebarMenuButton
-                className="text-sidebar-accent-foreground/50"
+                className="dark:text-sidebar-accent-foreground/50"
                 onClick={() => {
                     if (entry.kind == "dir") {
                         expandEntry(entry)

@@ -145,7 +145,7 @@ export function FileIcon({ entry }: { entry: WorktreeEntry }) {
         : (fileTypeIconMap[entry.fileType] ?? Icons.File);
 
     return (
-        <div className="size-3.5 flex items-center align-middle [&_svg:not([class*='size-'])]:size-3.5 opacity-50" style={{ color }}>
+        <div className="size-3.5 flex items-center align-middle [&_svg:not([class*='size-'])]:size-3.5 dark:opacity-50" style={{ color }}>
             <IconComponent />
         </div>
     )

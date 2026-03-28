@@ -7,7 +7,15 @@ export type AppState = {
     filetree: WorktreeEntry[] | null;
     mode: Mode;
     keymaps: ScopedKeymaps | null;
+
+    sidebarOpen: boolean;
+    sidebarKind: SidebarKind;
+
+    tabs: Tab[];
+    activeTabId: number | null;
 };
+
+export type SidebarKind = "filetree" | "tabs";
 
 export type BufferState = {
     entryId: number;
@@ -142,6 +150,7 @@ export type TerminalSurface = { kind: "terminal"; cwd: string; gpuSurfaceId?: nu
 export type Surface = EditorSurface | TerminalSurface;
 
 export type SurfaceKind = Surface["kind"];
+
 
 export type Tab = {
     id: number;

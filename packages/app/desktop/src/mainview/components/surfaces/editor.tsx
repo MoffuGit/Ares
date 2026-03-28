@@ -2,7 +2,7 @@ import React, { useRef, useCallback, useEffect } from "react";
 import { rpc, useAppStore } from "@/lib/app";
 import type { EditorSurface as EditorSurfaceData } from "@ares/shared";
 import { GpuTag, GpuTagHandle } from "../gpu-tag";
-import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbSeparator } from "../ui/breadcrumb";
+import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbSeparator, BreadcrumbEllipsis } from "../ui/breadcrumb";
 import useResizeObserver from '@react-hook/resize-observer'
 
 interface EditorSurfaceProps {
@@ -64,20 +64,35 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
     return (
         <div className="w-full flex flex-col grow data-[surface-active=true]:z-10 -z-10 data-[surface-active=true]:visible invisible" data-surface-active={active}>
             <div className="w-full h-8 flex items-center justify-start px-2">
-                {surface.entry && (
-                    <Breadcrumb>
-                        <BreadcrumbList>
-                            {surface.entry.path.split("/").map((part, i) => (
-                                <React.Fragment key={i}>
-                                    {i > 0 && <BreadcrumbSeparator />}
-                                    <BreadcrumbItem>
-                                        <BreadcrumbPage>{part}</BreadcrumbPage>
-                                    </BreadcrumbItem>
-                                </React.Fragment>
-                            ))}
-                        </BreadcrumbList>
-                    </Breadcrumb>
-                )}
+                {surface.entry && (() => {
+                    const parts = surface.entry.path.split("/").slice(1);
+                    const collapsed = parts.length > 4;
+                    const visible = collapsed
+                        ? [parts[0], ...parts.slice(-3)]
+                        : parts;
+                    return (
+                        <Breadcrumb>
+                            <BreadcrumbList>
+                                {visible.map((part, i) => (
+                                    <React.Fragment key={collapsed && i > 0 ? parts.length - 4 + i : i}>
+                                        {i > 0 && <BreadcrumbSeparator />}
+                                        {collapsed && i === 1 && (
+                                            <>
+                                                <BreadcrumbItem>
+                                                    <BreadcrumbEllipsis />
+                                                </BreadcrumbItem>
+                                                <BreadcrumbSeparator />
+                                            </>
+                                        )}
+                                        <BreadcrumbItem>
+                                            <BreadcrumbPage>{part}</BreadcrumbPage>
+                                        </BreadcrumbItem>
+                                    </React.Fragment>
+                                ))}
+                            </BreadcrumbList>
+                        </Breadcrumb>
+                    );
+                })()}
             </div>
             <div className="w-full grow relative flex px-4">
                 <div
