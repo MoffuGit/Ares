@@ -43,39 +43,38 @@ function SidebarTabsItem({ tab }: { tab: Tab }) {
 
     return (
         <SidebarMenuItem>
-            <div className="group relative">
-                <SidebarMenuButton
-                    isActive={tab.id === activeTabId}
-                    className="pr-7 dark:text-sidebar-accent-foreground/50"
-                    size="xs"
-                    onClick={() => setActiveTab(tab.id)}
-                >
-                    {tab.surface.kind === "editor" && tab.surface.entry ? (
-                        <FileIcon entry={tab.surface.entry} />
-                    ) : null}
-                    <span className="truncate">{tab.name}</span>
-                </SidebarMenuButton>
-                <Button
-                    render={({ children, className }) => {
-                        return (
-                            <div
-                                className={className}
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    closeTab(tab.id);
-                                }}
-                            >
-                                {children}
-                            </div>
-                        );
-                    }}
-                    size="icon-xs"
-                    variant="ghost"
-                    className="!pointer-events-auto absolute right-0.5 top-1/2 size-5 -translate-y-1/2 bg-transparent opacity-0 transition-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-hover:opacity-100"
-                >
-                    <X />
-                </Button>
-            </div>
+            <SidebarMenuButton
+                isActive={tab.id === activeTabId}
+                className="pr-7 dark:text-sidebar-accent-foreground/50"
+                size="xs"
+                onClick={() => setActiveTab(tab.id)}
+            >
+                {tab.surface.kind === "editor" && tab.surface.entry ? (
+                    <FileIcon entry={tab.surface.entry} />
+                ) : null}
+                <span className="truncate">{tab.name}</span>
+            </SidebarMenuButton>
+            <Button
+                render={({ children, className }) => {
+                    return (
+                        <div
+                            className={className}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                closeTab(tab.id);
+                            }}
+                        >
+                            {children}
+                        </div>
+                    );
+                }}
+                size="icon-xs"
+                variant="ghost"
+                className="!pointer-events-auto absolute right-0.5 top-1/2 size-5 -translate-y-1/2 bg-transparent opacity-0 transition-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-hover/menu-item:opacity-100"
+
+            >
+                <X />
+            </Button>
         </SidebarMenuItem>
     );
 }

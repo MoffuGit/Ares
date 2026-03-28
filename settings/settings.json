@@ -2,6 +2,7 @@
   "appearance": "system",
   "light_theme": "light",
   "dark_theme": "zenbones",
+  "tabs_position":"vertical",
   "keymaps": {
     "global": {
       "normal": {
