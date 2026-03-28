@@ -25,8 +25,11 @@ export fn drainMailbox() void {
         switch (ev) {
             .settingsUpdate,
             .themeUpdate,
-            .filetreeUpdate,
             => cb(@intFromEnum(ev), null, 0),
+            .filetreeUpdate => {
+                std.log.info("drainMailbox sending filetreeUpdate to JS", .{});
+                cb(@intFromEnum(ev), null, 0);
+            },
             .bufferUpdate => |bs| {
                 cb(@intFromEnum(ev), @ptrCast(&bs), @sizeOf(global.ExternBufferState));
             },
@@ -118,7 +121,12 @@ export fn readThemeJson(app: *App, out_buf: [*]u8, buf_len: u64) void {
 }
 
 export fn createProject(app: *App, path: [*]const u8, len: u64) ?*Project {
-    return Project.create(global.state.alloc, app, path[0..len]) catch null;
+    const project_path = path[0..len];
+    std.log.info("createProject called with path={s}", .{project_path});
+    return Project.create(global.state.alloc, app, project_path) catch |err| {
+        std.log.err("createProject failed for path={s} err={}", .{ project_path, err });
+        return null;
+    };
 }
 
 export fn destroyProject(project: *Project) void {
@@ -140,15 +148,10 @@ export fn getFiletreeCount(project: *Project) usize {
     return project.filetree.visible_entries.items.len;
 }
 
-export fn lockWorktree(project: *Project) void {
-    project.worktree.snapshot.mutex.lock();
-}
-
-export fn unlockWorktree(project: *Project) void {
-    project.worktree.snapshot.mutex.unlock();
-}
-
 export fn readFiletree(project: *Project, out: [*]ExternWorktreeEntry, max_count: u64) u64 {
+    project.worktree.snapshot.mutex.lock();
+    defer project.worktree.snapshot.mutex.unlock();
+
     project.filetree.mutex.lock();
     defer project.filetree.mutex.unlock();
 

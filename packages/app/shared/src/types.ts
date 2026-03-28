@@ -7,6 +7,7 @@ export type AppState = {
     filetree: WorktreeEntry[] | null;
     mode: Mode;
     keymaps: ScopedKeymaps | null;
+    project: ProjectInfo | null;
 
     sidebarOpen: boolean;
     sidebarKind: SidebarKind;
@@ -29,10 +30,16 @@ export type AppEvents = {
     settingsUpdate: [];
     themeUpdate: [];
     filetreeUpdate: [];
+    projectUpdate: [project: ProjectInfo | null];
     bufferUpdate: [state: BufferState];
     modeUpdate: [];
     keymapsUpdate: [];
     keymapSequence: [sequence: string];
+};
+
+export type ProjectInfo = {
+    name: string;
+    path: string;
 };
 
 export type Settings = {

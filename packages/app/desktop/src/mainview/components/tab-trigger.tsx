@@ -13,7 +13,7 @@ export function TabTrigger({ tab }: TabContentProps) {
     const { closeTab } = useAppStore.getState();
     return (
         <TabsTrigger
-            value={String(tab.id)}
+            value={tab.id}
         >
             {
                 tab.surface.kind == "editor" && tab.surface.entry && (

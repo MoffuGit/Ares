@@ -70,14 +70,6 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.pointer, FFIType.u64],
                 returns: FFIType.u64,
             },
-            lockWorktree: {
-                args: [FFIType.pointer],
-                returns: FFIType.void,
-            },
-            unlockWorktree: {
-                args: [FFIType.pointer],
-                returns: FFIType.void,
-            },
             expandEntry: {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void,
@@ -255,8 +247,6 @@ export class CoreLib extends EventEmitter {
     }
 
     readFileTree(project: Pointer) {
-        this.lib.symbols.lockWorktree(project);
-
         const count = Number(this.lib.symbols.getFiletreeCount(project));
         if (count === 0) return [];
 
@@ -269,8 +259,6 @@ export class CoreLib extends EventEmitter {
             const slice = buf.slice(i * entrySize, (i + 1) * entrySize);
             entries.push(WorktreeEntry.unpack(slice));
         }
-
-        this.lib.symbols.unlockWorktree(project);
         return entries;
     }
 

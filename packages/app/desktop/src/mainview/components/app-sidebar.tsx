@@ -7,11 +7,11 @@ import { SidebarTabs } from "./sidebar-tabs"
 import { useAppStore } from "@/lib/app"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-    const sidebarView = useAppStore((state) => state.sidebarView)
+    const kind = useAppStore((state) => state.sidebarKind)
 
     return (
         <Sidebar {...props}>
-            {sidebarView === "tabs" ? <SidebarTabs /> : <FileTree />}
+            {kind === "tabs" ? <SidebarTabs /> : <FileTree />}
             <SidebarRail />
         </Sidebar>
     )

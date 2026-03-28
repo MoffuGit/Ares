@@ -1,6 +1,7 @@
 import { App } from "../../../shared/src/app/index.ts";
 import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
-import { resolve } from "path";
+import { homedir } from "os";
+import { join, resolve } from "path";
 import { AppRPC } from "src/rpc.ts";
 import { SurfaceStore } from "./SurfaceStore.ts";
 
@@ -25,19 +26,32 @@ async function getMainSurfaceUrl(): Promise<string> {
 
 const settingsPath = resolve(import.meta.dir, "../../../../../../../../../../settings/");
 const libPath = resolve(import.meta.dir, "../lib/libcore.dylib");
-const projectPath = "/Volumes/Home_SSD/Users/home/Documents/projects/ares";
 
 const app = new App(settingsPath, libPath);
-app.openProject(projectPath);
 
 const url = await getMainSurfaceUrl();
 const surfaceStore = new SurfaceStore();
 
 const rpc = BrowserView.defineRPC<AppRPC>({
-    maxRequestTime: 5000,
+    maxRequestTime: 600000,
     handlers: {
         requests: {
             getState: ({ }) => app._state,
+            openProjectDialog: async ({ }) => {
+                const chosenPaths = await Utils.openFileDialog({
+                    startingFolder: join(homedir(), "Desktop"),
+                    allowedFileTypes: "*",
+                    canChooseFiles: false,
+                    canChooseDirectory: true,
+                    allowsMultipleSelection: false,
+                });
+
+                const projectPath = chosenPaths?.[0];
+                if (!projectPath) return null;
+
+                app.openProject(projectPath);
+                return app._state.project;
+            },
             gpuTagReady: ({ id, rect, surface }) => {
                 try {
                     surfaceStore.start(app, id, mainWindow, rect, surface);
@@ -116,6 +130,10 @@ app.on("filetreeUpdate", () => {
     if (app._state.filetree) {
         mainWindow.webview.rpc?.send.filetreeUpdate(app._state.filetree);
     }
+});
+
+app.on("projectUpdate", (project) => {
+    mainWindow.webview.rpc?.send.projectUpdate(project);
 });
 
 app.on("keymapsUpdate", () => {

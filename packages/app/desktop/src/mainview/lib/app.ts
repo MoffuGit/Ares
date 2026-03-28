@@ -9,6 +9,7 @@ interface AppStore extends AppState {
     setMode: (mode: Mode) => void;
     readKeymaps: (scope: Scope) => KeymapBinding[];
     loadSettings: () => Promise<void>;
+    openProjectDialog: () => Promise<void>;
     expandEntry: (entry: WorktreeEntry) => void;
     selectSurfaceEntry: (entry: WorktreeEntry) => void;
     newTab: (surface: Surface) => void;
@@ -30,6 +31,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     filetree: null,
     mode: "normal",
     keymaps: null,
+    project: null,
     tabs: [],
     activeTabId: null,
     sidebarOpen: false,
@@ -136,12 +138,24 @@ export const useAppStore = create<AppStore>((set, get) => ({
             filetree: state.filetree,
             mode: state.mode,
             keymaps: state.keymaps,
+            project: state.project,
             sidebarKind: 'filetree',
         });
+    },
+
+    openProjectDialog: async () => {
+        try {
+            const project = await rpc.request.openProjectDialog({});
+            if (!project) return;
+            set({ project, sidebarOpen: true, sidebarKind: "filetree" });
+        } catch (error) {
+            console.error("openProjectDialog failed", error);
+        }
     },
 }));
 
 const rpc = Electroview.defineRPC<AppRPC>({
+    maxRequestTime: 600000,
     handlers: {
         requests: {},
         messages: {
@@ -156,6 +170,9 @@ const rpc = Electroview.defineRPC<AppRPC>({
             },
             filetreeUpdate: (filetree) => {
                 useAppStore.setState({ filetree });
+            },
+            projectUpdate: (project) => {
+                useAppStore.setState({ project });
             },
             keymapsUpdate: (keymaps) => {
                 useAppStore.setState({ keymaps });
