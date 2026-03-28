@@ -44,6 +44,7 @@ function FileTreeItem({ entry }: { entry: WorktreeEntry }) {
     return (
         <SidebarMenuItem key={entry.id}>
             <SidebarMenuButton
+                className="text-sidebar-accent-foreground/50"
                 onClick={() => {
                     if (entry.kind == "dir") {
                         expandEntry(entry)
@@ -52,7 +53,9 @@ function FileTreeItem({ entry }: { entry: WorktreeEntry }) {
                     }
                 }}
                 size="xs" style={{ paddingLeft: `${18 * (entry.depth) + 8}px` }} >
-                <FileIcon entry={entry} />
+                <FileIcon
+                    entry={entry}
+                />
                 <div className="text-clip text-nowrap">{entry.name}</div>
             </SidebarMenuButton>
         </SidebarMenuItem>

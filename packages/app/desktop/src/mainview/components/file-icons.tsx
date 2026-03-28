@@ -138,14 +138,14 @@ const fileTypeIconMap: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = 
 export function FileIcon({ entry }: { entry: WorktreeEntry }) {
     const theme = useAppStore((state) => state.theme);
 
-    const color = theme?.fileType[entry.fileType] ?? theme?.fg
+    const color = theme?.fileType[entry.fileType] ?? theme?.fileType["default"] ?? theme?.fg
 
     const IconComponent = entry.kind === "dir"
         ? (entry.expanded ? FolderOpen : Folder)
         : (fileTypeIconMap[entry.fileType] ?? Icons.File);
 
     return (
-        <div className="size-3.5 flex items-center align-middle [&_svg:not([class*='size-'])]:size-3.5" style={{ color }}>
+        <div className="size-3.5 flex items-center align-middle [&_svg:not([class*='size-'])]:size-3.5 opacity-50" style={{ color }}>
             <IconComponent />
         </div>
     )

@@ -72,7 +72,7 @@
     "modeVisual": "modeVisual",
     "modeInsert": "modeInsert",
     "fileType": {
-      "default": "defaultFileColor"
+      "default": "accentFg"
     }
   }
 }
