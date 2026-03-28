@@ -63,7 +63,7 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
 
     return (
         <div className="w-full flex flex-col grow data-[surface-active=true]:z-10 -z-10 data-[surface-active=true]:visible invisible" data-surface-active={active}>
-            <div className="w-full h-7 flex items-center justify-start px-2 border-b border-b-border/50">
+            <div className="w-full h-8 flex items-center justify-start px-2">
                 {surface.entry && (
                     <Breadcrumb>
                         <BreadcrumbList>
@@ -79,7 +79,7 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
                     </Breadcrumb>
                 )}
             </div>
-            <div className="w-full grow relative flex px-1.5">
+            <div className="w-full grow relative flex px-4">
                 <div
                     className="absolute top-0 inset-0 w-full h-full overflow-auto data-[active-tab=true]:flex hidden"
                     data-active-tab={active}
