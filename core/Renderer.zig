@@ -240,6 +240,8 @@ pub fn frameCompleted(
     if (self.health.load(.seq_cst) != health) {
         self.health.store(health, .seq_cst);
 
+        //WARN:
+        //this should notify the weview
         // Our health value changed, so we notify the surface so that it
         // can do something about it.
         // _ = self.surface_mailbox.push(.{
@@ -361,7 +363,7 @@ fn rebuildCells(self: *Renderer, row: u16, col: u16, new_cells: ArrayList([]u32)
 
             glyphs[glyphs_idx] = shaderpkg.CellText{
                 .grid_pos = .{ @intCast(col_idx), @intCast(row_idx) },
-                .color = .{ 1.0, 0.0, 0.0, 1.0 },
+                .color = .{ 1.0, 1.0, 1.0, 1.0 },
                 .glyph_pos = .{ glyph.atlas_x, glyph.atlas_y },
                 .glyph_size = .{ glyph.width, glyph.height },
                 .bearings = .{
