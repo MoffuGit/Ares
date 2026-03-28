@@ -1,4 +1,5 @@
 export type ColorScheme = "light" | "dark" | "system";
+export type TabsPosition = "horizontal" | "vertical";
 
 export type AppState = {
     settings: Settings | null;
@@ -29,6 +30,7 @@ export type AppEvents = {
 export type Settings = {
     scheme: ColorScheme;
     system_scheme: ColorScheme;
+    tabs_position: TabsPosition;
     light_theme: string;
     dark_theme: string;
 };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { keymapHandler, useAppStore, onKeymapSequence } from '@/lib/app'
 import {
     SidebarProvider,
@@ -24,11 +24,11 @@ function useScopedKeymaps<S extends Scope>(scope: S): Record<string, ScopeAction
 }
 
 function App() {
-    const [open, setOpen] = useState(false);
     const globalKeymaps = useScopedKeymaps("global");
     const tabs = useAppStore((s) => s.tabs);
     const activeTabId = useAppStore((s) => s.activeTabId);
-    const { newTab, closeTab, setActiveTab, nextTab, prevTab, setMode } = useAppStore.getState();
+    const sidebarOpen = useAppStore((s) => s.sidebarOpen);
+    const { newTab, closeTab, setActiveTab, nextTab, prevTab, setMode, setSidebarOpen, toggleSidebar } = useAppStore.getState();
 
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
@@ -57,7 +57,7 @@ function App() {
             const action = globalKeymaps[sequence];
             switch (action) {
                 case "workspace:toggle_left_sidebar":
-                    setOpen((prev) => !prev);
+                    toggleSidebar();
                     break;
                 case "workspace:new_tab":
                     newTab({ kind: "editor", path: "" });
@@ -86,7 +86,7 @@ function App() {
 
     return (
         <TooltipProvider>
-            <SidebarProvider open={open} onOpenChange={setOpen}>
+            <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
                 <div className='w-full h-full flex flex-col flex-1 content-stretch rounded-3xl'>
                     <div className='shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag mb-1.5 pt-1.5 mx-2'>
                         <div className="h-6 max-w-full w-fit flex items-center gap-1.5 overflow-hidden electrobun-webkit-app-region-no-drag pl-14">

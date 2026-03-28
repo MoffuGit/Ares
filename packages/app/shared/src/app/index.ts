@@ -180,6 +180,7 @@ export class App extends EventEmitter {
         return {
             scheme: raw.scheme,
             system_scheme: raw.system_scheme,
+            tabs_position: raw.tabs_position,
             light_theme: raw.light_theme ?? "",
             dark_theme: raw.dark_theme ?? "",
         };

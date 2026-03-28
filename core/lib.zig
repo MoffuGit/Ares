@@ -65,6 +65,7 @@ export fn loadSettings(app: *App, path: [*]const u8, len: u64) void {
 pub const ExternSettings = extern struct {
     scheme: u64,
     system_scheme: u64,
+    tabs_position: u64,
     light_theme_ptr: usize,
     light_theme_len: usize,
     dark_theme_ptr: usize,
@@ -89,6 +90,7 @@ export fn readSettings(app: *App, @"extern": *ExternSettings) void {
     @"extern".* = .{
         .scheme = @intFromEnum(settings.scheme),
         .system_scheme = @intFromEnum(settings.system_scheme),
+        .tabs_position = @intFromEnum(settings.tabs_position),
         .light_theme_ptr = @intFromPtr(settings.light_theme.ptr),
         .light_theme_len = settings.light_theme.len,
         .dark_theme_ptr = @intFromPtr(settings.dark_theme.ptr),

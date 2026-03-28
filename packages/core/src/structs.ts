@@ -1,10 +1,12 @@
 import { defineStruct, defineEnum } from "bun-ffi-structs";
 
 const Scheme = defineEnum({ light: 0, dark: 1, system: 2 }, "u64");
+const TabsPosition = defineEnum({ horizontal: 0, vertical: 1 }, "u64");
 
 export const Settings = defineStruct([
     ["scheme", Scheme],
     ["system_scheme", Scheme],
+    ["tabs_position", TabsPosition],
     ["light_theme", "char*"],
     ["light_theme_len", "u64", { lengthOf: "light_theme" }],
     ["dark_theme", "char*"],

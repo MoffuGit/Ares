@@ -43,6 +43,10 @@ interface AppStore extends AppState {
 
     tabs: Tab[];
     activeTabId: number | null;
+
+    sidebarOpen: boolean;
+    setSidebarOpen: (open: boolean) => void;
+    toggleSidebar: () => void;
 }
 
 function surfaceName(surface: Surface): string {
@@ -60,6 +64,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
     keymaps: null,
     tabs: [],
     activeTabId: null,
+    sidebarOpen: false,
+    setSidebarOpen: (open) => set({ sidebarOpen: open }),
+    toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
 
     setMode: (mode) => {
         if (get().mode === mode) return;

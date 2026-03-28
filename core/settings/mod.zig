@@ -10,6 +10,7 @@ pub const Settings = @This();
 
 pub const Scheme = enum { light, dark, system };
 pub const ColorScheme = enum { light, dark };
+pub const TabsPosition = enum { horizontal, vertical };
 
 const Themes = std.StringHashMapUnmanaged([]const u8);
 
@@ -32,6 +33,7 @@ const JsonSettings = struct {
     appearance: []const u8,
     light_theme: []const u8,
     dark_theme: []const u8,
+    tabs_position: []const u8 = "horizontal",
     keymaps: ?std.json.Value = null,
 };
 
@@ -40,6 +42,7 @@ mutex: std.Thread.Mutex = .{},
 
 scheme: Scheme = .system,
 system_scheme: ColorScheme = .dark,
+tabs_position: TabsPosition = .horizontal,
 
 themes: Themes = .{},
 
@@ -221,6 +224,7 @@ fn loadSettings(self: *Settings, dir: std.fs.Dir) !void {
     self.dark_theme = self.alloc.dupe(u8, json_settings.dark_theme) catch DEFAULT_DARK;
     self.light_theme = self.alloc.dupe(u8, json_settings.light_theme) catch DEFAULT_LIGHT;
     self.scheme = std.meta.stringToEnum(Scheme, json_settings.appearance) orelse .system;
+    self.tabs_position = std.meta.stringToEnum(TabsPosition, json_settings.tabs_position) orelse .horizontal;
 
     if (json_settings.keymaps) |km_json| {
         std.log.debug("keymaps found in settings JSON, loading...", .{});
@@ -376,7 +380,7 @@ test "loadSettings parses settings.json" {
     defer tmp.cleanup();
 
     const json =
-        \\{"appearance":"dark","light_theme":"my_light","dark_theme":"my_dark"}
+        \\{"appearance":"dark","light_theme":"my_light","dark_theme":"my_dark","tabs_position":"vertical"}
     ;
     tmp.dir.writeFile(.{ .sub_path = "settings.json", .data = json }) catch unreachable;
 
@@ -385,6 +389,7 @@ test "loadSettings parses settings.json" {
     };
 
     try std.testing.expectEqual(Scheme.dark, self.scheme);
+    try std.testing.expectEqual(TabsPosition.vertical, self.tabs_position);
     try std.testing.expectEqualStrings("my_light", self.light_theme);
     try std.testing.expectEqualStrings("my_dark", self.dark_theme);
     try std.testing.expect(self.keymaps_initialized);
