@@ -6,7 +6,7 @@ export function BottomBar() {
     const mode = useAppStore((state) => state.mode);
 
     return (
-        <div className="h-6 w-full flex flex-wrap items-center gap-1.5 text-xs wrap-break-word text-muted-foreground px-1.5">
+        <div className="h-6 w-full flex flex-wrap items-center gap-1.5 text-xs wrap-break-word text-muted-foreground pl-0.5 pr-1.5">
             <SidebarTrigger size="icon-xs" className="hover:bg-accent/40" />
             <Separator orientation="vertical" className="my-1" />
             <span
