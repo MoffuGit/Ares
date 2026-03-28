@@ -87,10 +87,9 @@ function App() {
     return (
         <TooltipProvider>
             <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
-                <div className='w-full h-full flex flex-col flex-1 content-stretch rounded-3xl'>
-                    <div className='shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag mb-1.5 pt-1.5 mx-2'>
-                        <div className="h-6 max-w-full w-fit flex items-center gap-1.5 overflow-hidden electrobun-webkit-app-region-no-drag pl-14">
-                            <SidebarTrigger size="icon-xs" className="mx-1 hover:bg-accent/40" />
+                <div className='w-full h-full flex flex-col flex-1 content-stretch gap-1.5'>
+                    <div className='shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag pt-1.5 mx-2'>
+                        <div className="h-6 max-w-full w-fit flex items-center gap-1.5 overflow-hidden electrobun-webkit-app-region-no-drag pl-15">
                             {tabs.length > 0 && (
                                 <Tabs
                                     value={activeTabId != null ? String(activeTabId) : undefined}
@@ -110,15 +109,15 @@ function App() {
                     </div>
                     <div className='flex-1 flex flex-row bg-sidebar'>
                         <AppSidebar />
-                        <SidebarInset className='rounded-lg bg-muted shadow-inset flex flex-col'>
+                        <SidebarInset className='rounded-lg bg-muted shadow-inset flex flex-col border border-border/50'>
                             <div className='isolate relative grow w-full'>
                                 {tabs.map((tab) => (
                                     <TabContent key={tab.id} tab={tab} active={tab.id === activeTabId} />
                                 ))}
                             </div>
-                            <BottomBar />
                         </SidebarInset>
                     </div>
+                    <BottomBar />
                 </div>
             </SidebarProvider>
         </TooltipProvider>
