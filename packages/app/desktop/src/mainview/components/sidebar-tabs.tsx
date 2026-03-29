@@ -4,35 +4,43 @@ import {
     SidebarContent,
     SidebarGroup,
     SidebarGroupContent,
+    SidebarHeader,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Button } from "./ui/button";
 import { FileIcon } from "./file-icons";
-import { X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 
 export function SidebarTabs() {
     const tabs = useAppStore((state) => state.tabs);
+    const project = useAppStore((state) => state.project);
 
     return (
-        <SidebarContent>
-            <SidebarGroup className="p-1">
-                <SidebarGroupContent>
-                    {tabs.length === 0 ? (
-                        <div className="px-2 py-3 text-xs text-sidebar-foreground/50">
-                            No tabs open.
-                        </div>
-                    ) : (
+        <>
+            <SidebarHeader>
+                <SidebarMenu className="pl-1">
+                    <SidebarMenuItem>
+                        <SidebarMenuButton size="sm">
+                            <span className="truncate font-medium">{project?.name}</span>
+                            <ChevronDown className="opacity-50 ml-auto mr-0" />
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                </SidebarMenu>
+            </SidebarHeader>
+            <SidebarContent>
+                <SidebarGroup className="p-1">
+                    <SidebarGroupContent>
                         <SidebarMenu>
                             {tabs.map((tab) => (
                                 <SidebarTabsItem key={tab.id} tab={tab} />
                             ))}
                         </SidebarMenu>
-                    )}
-                </SidebarGroupContent>
-            </SidebarGroup>
-        </SidebarContent>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+            </SidebarContent>
+        </>
     );
 }
 
@@ -52,7 +60,7 @@ function SidebarTabsItem({ tab }: { tab: Tab }) {
                 {tab.surface.kind === "editor" && tab.surface.entry ? (
                     <FileIcon entry={tab.surface.entry} />
                 ) : null}
-                <span className="truncate">{tab.name}</span>
+                <span className="truncate leading-none">{tab.name}</span>
             </SidebarMenuButton>
             <Button
                 render={({ children, className }) => {
