@@ -5,12 +5,15 @@ const keymapspkg = @import("../keymaps/mod.zig");
 const Keymaps = keymapspkg.Keymaps;
 const Monitor = @import("../monitor/mod.zig");
 const Appearance = @import("../Appearance.zig");
+const themepkg = @import("theme/mod.zig");
 
 pub const Settings = @This();
 
 pub const Scheme = enum { light, dark, system };
 pub const ColorScheme = enum { light, dark };
 pub const TabsPosition = enum { horizontal, vertical };
+pub const ThemeColor = themepkg.Color;
+pub const ThemeColors = themepkg.Colors;
 
 const Themes = std.StringHashMapUnmanaged([]const u8);
 
@@ -50,6 +53,7 @@ light_theme: []const u8 = DEFAULT_LIGHT,
 dark_theme: []const u8 = DEFAULT_DARK,
 
 theme_json: []const u8 = FALLBACK_THEME_JSON,
+theme_colors: ThemeColors = .{},
 
 keymaps: Keymaps = undefined,
 keymaps_initialized: bool = false,
@@ -76,6 +80,7 @@ pub fn destroy(self: *Settings) void {
     if (self.settings_path.len > 0) self.alloc.free(self.settings_path);
     if (self.light_theme.len > 0 and self.light_theme.ptr != DEFAULT_LIGHT.ptr) self.alloc.free(self.light_theme);
     if (self.dark_theme.len > 0 and self.dark_theme.ptr != DEFAULT_DARK.ptr) self.alloc.free(self.dark_theme);
+    self.deinitThemeColors();
     var it = self.themes.iterator();
     while (it.next()) |entry| {
         self.alloc.free(entry.key_ptr.*);
@@ -255,7 +260,25 @@ pub fn applyTheme(self: *Settings) void {
 fn applyThemeLocked(self: *Settings) void {
     const dark = self.scheme == .dark or (self.scheme == .system and self.system_scheme == .dark);
     const name = if (dark) self.dark_theme else self.light_theme;
-    self.theme_json = self.themes.get(name) orelse FALLBACK_THEME_JSON;
+    const theme_json = self.themes.get(name) orelse FALLBACK_THEME_JSON;
+    const theme_colors = themepkg.parseColors(self.alloc, theme_json) catch ThemeColors{};
+
+    self.deinitThemeColors();
+    self.theme_json = theme_json;
+    self.theme_colors = theme_colors;
+}
+
+pub fn getThemeColor(self: *const Settings, name: []const u8) ?ThemeColor {
+    return self.theme_colors.get(name);
+}
+
+fn deinitThemeColors(self: *Settings) void {
+    var it = self.theme_colors.keyIterator();
+    while (it.next()) |key| {
+        self.alloc.free(key.*);
+    }
+    self.theme_colors.deinit(self.alloc);
+    self.theme_colors = .{};
 }
 
 pub fn setSystemScheme(self: *Settings, scheme: ColorScheme) void {
@@ -373,6 +396,7 @@ test "loadSettings parses settings.json" {
     defer {
         if (self.light_theme.ptr != DEFAULT_LIGHT.ptr) alloc.free(self.light_theme);
         if (self.dark_theme.ptr != DEFAULT_DARK.ptr) alloc.free(self.dark_theme);
+        self.deinitThemeColors();
         if (self.keymaps_initialized) self.keymaps.deinit();
     }
 
@@ -402,6 +426,7 @@ test "loadSettings returns error for missing settings.json" {
     };
 
     defer {
+        self.deinitThemeColors();
         if (self.keymaps_initialized) self.keymaps.deinit();
     }
 
@@ -419,6 +444,7 @@ test "loadSettings returns error for invalid json" {
     };
 
     defer {
+        self.deinitThemeColors();
         if (self.keymaps_initialized) self.keymaps.deinit();
     }
 
@@ -429,4 +455,39 @@ test "loadSettings returns error for invalid json" {
 
     const result = self.loadSettings(tmp.dir);
     try std.testing.expectError(error.SyntaxError, result);
+}
+
+test "applyThemeLocked parses active theme colors" {
+    const alloc = std.testing.allocator;
+    var self = Settings{
+        .alloc = alloc,
+    };
+    defer {
+        if (self.light_theme.ptr != DEFAULT_LIGHT.ptr) alloc.free(self.light_theme);
+        if (self.dark_theme.ptr != DEFAULT_DARK.ptr) alloc.free(self.dark_theme);
+        self.deinitThemeColors();
+        if (self.keymaps_initialized) self.keymaps.deinit();
+
+        var it = self.themes.iterator();
+        while (it.next()) |entry| {
+            alloc.free(entry.key_ptr.*);
+            alloc.free(entry.value_ptr.*);
+        }
+        self.themes.deinit(alloc);
+    }
+
+    const theme_name = try alloc.dupe(u8, "sunrise");
+    const theme_json = try alloc.dupe(u8,
+        \\{"name":"sunrise","colors":{"accent":"#112233","overlay":"#aabbccdd"},"theme":{"bg":"accent"}}
+    );
+    try self.themes.put(alloc, theme_name, theme_json);
+
+    self.light_theme = try alloc.dupe(u8, "sunrise");
+    self.scheme = .light;
+
+    self.applyThemeLocked();
+
+    try std.testing.expectEqualStrings(theme_json, self.theme_json);
+    try std.testing.expectEqual(ThemeColor{ 0x11, 0x22, 0x33, 0xff }, self.getThemeColor("accent").?);
+    try std.testing.expectEqual(ThemeColor{ 0xaa, 0xbb, 0xcc, 0xdd }, self.getThemeColor("overlay").?);
 }

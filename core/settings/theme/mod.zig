@@ -3,6 +3,7 @@ const std = @import("std");
 pub const Theme = @This();
 
 pub const Color = [4]u8;
+pub const Colors = std.StringHashMapUnmanaged(Color);
 
 name: []const u8 = "",
 bg: Color,
@@ -105,6 +106,16 @@ pub const ParseError = error{
     InvalidJson,
 };
 
+pub const ParseColorsError = error{
+    InvalidRgba,
+    InvalidJson,
+    OutOfMemory,
+};
+
+const JsonThemeColors = struct {
+    colors: std.json.ArrayHashMap([]const u8),
+};
+
 const JsonTheme = struct {
     name: []const u8,
     colors: std.json.ArrayHashMap([]const u8),
@@ -149,6 +160,33 @@ const JsonTheme = struct {
         fileType: ?std.json.ArrayHashMap([]const u8) = null,
     },
 };
+
+pub fn parseColors(allocator: std.mem.Allocator, json: []const u8) ParseColorsError!Colors {
+    const parsed = std.json.parseFromSlice(JsonThemeColors, allocator, json, .{ .ignore_unknown_fields = true }) catch {
+        return ParseColorsError.InvalidJson;
+    };
+    defer parsed.deinit();
+
+    var colors: Colors = .{};
+    errdefer {
+        var it = colors.keyIterator();
+        while (it.next()) |key| {
+            allocator.free(key.*);
+        }
+        colors.deinit(allocator);
+    }
+
+    var it = parsed.value.colors.map.iterator();
+    while (it.next()) |entry| {
+        const key = allocator.dupe(u8, entry.key_ptr.*) catch return ParseColorsError.OutOfMemory;
+        errdefer allocator.free(key);
+
+        const color = parseHexColor(entry.value_ptr.*) catch return ParseColorsError.InvalidRgba;
+        colors.put(allocator, key, color) catch return ParseColorsError.OutOfMemory;
+    }
+
+    return colors;
+}
 
 pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
     const parsed = std.json.parseFromSlice(JsonTheme, allocator, json, .{}) catch {
@@ -284,6 +322,33 @@ fn parseHexColor(hex_str: []const u8) !Color {
     }
 
     return error.InvalidFormat;
+}
+
+test "parse colors from theme json" {
+    const json_str =
+        \\{
+        \\  "name": "dark",
+        \\  "colors": {
+        \\    "background": "#0a0a0a",
+        \\    "foreground": "#eeeeeeff"
+        \\  },
+        \\  "theme": {
+        \\    "bg": "background"
+        \\  }
+        \\}
+    ;
+
+    var colors = try parseColors(std.testing.allocator, json_str);
+    defer {
+        var it = colors.keyIterator();
+        while (it.next()) |key| {
+            std.testing.allocator.free(key.*);
+        }
+        colors.deinit(std.testing.allocator);
+    }
+
+    try std.testing.expectEqual(Color{ 10, 10, 10, 255 }, colors.get("background").?);
+    try std.testing.expectEqual(Color{ 238, 238, 238, 255 }, colors.get("foreground").?);
 }
 
 test "parse theme" {
