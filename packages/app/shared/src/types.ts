@@ -114,7 +114,9 @@ export type GlobalAction =
     | "workspace:next_tab"
     | "workspace:prev_tab"
     | "workspace:close_active_tab"
-    | "workspace:toggle_command_palette";
+    | "workspace:toggle_command_palette"
+    | "workspace:tabs_panel"
+    | "workspace:filetree_panel";
 
 export type EditorAction =
     | string;

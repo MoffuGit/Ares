@@ -64,6 +64,7 @@ export function KeyMaps() {
     const prevTab = useAppStore((state) => state.prevTab);
     const setMode = useAppStore((state) => state.setMode);
     const toggleSidebar = useAppStore((state) => state.toggleSidebar);
+    const toggleSidebarKind = useAppStore((state) => state.toggleSidebarKind);
 
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
@@ -95,6 +96,12 @@ export function KeyMaps() {
             switch (action) {
                 case "workspace:toggle_left_sidebar":
                     toggleSidebar();
+                    break;
+                case "workspace:tabs_panel":
+                    toggleSidebarKind("tabs")
+                    break;
+                case "workspace:filetree_panel":
+                    toggleSidebarKind("filetree");
                     break;
                 case "workspace:new_tab":
                     newTab({ kind: "editor", path: "" });
