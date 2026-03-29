@@ -4,6 +4,7 @@ import type { EditorSurface as EditorSurfaceData } from "@ares/shared";
 import { GpuTag, GpuTagHandle } from "../gpu-tag";
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbSeparator, BreadcrumbEllipsis } from "../ui/breadcrumb";
 import useResizeObserver from '@react-hook/resize-observer'
+import { FileIcon } from "../file-icons";
 
 interface EditorSurfaceProps {
     id: number;
@@ -85,7 +86,14 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
                                             </>
                                         )}
                                         <BreadcrumbItem>
-                                            <BreadcrumbPage>{part}</BreadcrumbPage>
+                                            <BreadcrumbPage>
+                                                {i === parts.length - 1 && surface.entry && (
+                                                    <FileIcon entry={surface.entry} />
+                                                )}
+                                            </BreadcrumbPage>
+                                            <BreadcrumbPage>
+                                                {part}
+                                            </BreadcrumbPage>
                                         </BreadcrumbItem>
                                     </React.Fragment>
                                 ))}
