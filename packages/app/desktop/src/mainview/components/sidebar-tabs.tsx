@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "./ui/button";
 import { FileIcon } from "./file-icons";
-import { ChevronDown, X } from "lucide-react";
+import { X } from "lucide-react";
 
 export function SidebarTabs() {
     const tabs = useAppStore((state) => state.tabs);
@@ -21,11 +21,8 @@ export function SidebarTabs() {
         <>
             <SidebarHeader>
                 <SidebarMenu className="pl-1">
-                    <SidebarMenuItem>
-                        <SidebarMenuButton size="sm">
-                            <span className="truncate font-medium">{project?.name}</span>
-                            <ChevronDown className="opacity-50 ml-auto mr-0 invisible group-hover/menu-item:visible" />
-                        </SidebarMenuButton>
+                    <SidebarMenuItem className="p-2 h-7 text-xs">
+                        <span className="truncate font-medium">{project?.name}</span>
                     </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarHeader>
