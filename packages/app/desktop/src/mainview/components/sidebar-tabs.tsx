@@ -24,7 +24,7 @@ export function SidebarTabs() {
                     <SidebarMenuItem>
                         <SidebarMenuButton size="sm">
                             <span className="truncate font-medium">{project?.name}</span>
-                            <ChevronDown className="opacity-50 ml-auto mr-0" />
+                            <ChevronDown className="opacity-50 ml-auto mr-0 invisible group-hover/menu-item:visible" />
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                 </SidebarMenu>

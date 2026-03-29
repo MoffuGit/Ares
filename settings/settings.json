@@ -8,13 +8,13 @@
       "normal": {
         "i": "workspace:enter_insert",
         "v": "workspace:enter_visual",
-        "super+p super+p": "workspace:toggle_left_sidebar",
+        "super+b": "workspace:toggle_left_sidebar",
         "ctrl+t": "workspace:new_tab",
         "tab": "workspace:next_tab",
         "shift+tab": "workspace:prev_tab",
         "ctrl+q": "workspace:close_active_tab",
         "super+k": "workspace:toggle_command_palette",
-        "super+p p": "workspace:tabs_panel",
+        "super+p t": "workspace:tabs_panel",
         "super+p f": "workspace:filetree_panel"
       },
       "insert": {
