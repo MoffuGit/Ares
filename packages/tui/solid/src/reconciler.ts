@@ -160,6 +160,9 @@ export const {
 
         if (name === "bg" || name === "fg") {
             node.setProps({ [name]: parseColor(value) } as any)
+            if (getChildren(node).some((child) => child instanceof TextNode)) {
+                syncSegments(node)
+            }
             return
         }
 

@@ -1,15 +1,41 @@
-import { createContext, createSignal, createMemo, useContext, type JSX, type Accessor } from "solid-js";
+import { createContext, createSignal, createMemo, splitProps, useContext, type JSX, type Accessor } from "solid-js";
 import { useTheme } from "@ares/shared/solid";
 
 const SIDEBAR_WIDTH = 28;
 const SIDEBAR_WIDTH_ICON = 6;
 
+type BoxProps = JSX.IntrinsicElements["box"];
+type OpenState = boolean | ((prev: boolean) => boolean);
+
 type SidebarContextProps = {
-    state: Accessor<"expanded" | "collapsed">;
     open: Accessor<boolean>;
-    setOpen: (open: boolean) => void;
+    setOpen: (open: OpenState) => void;
     toggleSidebar: () => void;
 };
+
+type SidebarProviderProps = BoxProps & {
+    defaultOpen?: boolean;
+    open?: boolean;
+    onOpenChange?: (open: OpenState) => void;
+};
+
+type SidebarProps = BoxProps & {
+    side?: "left" | "right";
+    collapsible?: "icon" | "none";
+};
+
+type SidebarMenuButtonProps = BoxProps & {
+    isActive?: boolean;
+    onClick: () => void;
+};
+
+function composeClickHandlers(...handlers: Array<BoxProps["on:click"] | undefined>): BoxProps["on:click"] {
+    return (event) => {
+        for (const handler of handlers) {
+            handler?.(event);
+        }
+    };
+}
 
 const SidebarContext = createContext<SidebarContextProps | null>(null);
 
@@ -21,30 +47,24 @@ function useSidebar() {
     return context;
 }
 
-function SidebarProvider(props: {
-    defaultOpen?: boolean;
-    open?: boolean;
-    onOpenChange?: (open: boolean | ((prev: boolean) => boolean)) => void;
-    children?: JSX.Element;
-}) {
-    const [_open, _setOpen] = createSignal(props.defaultOpen ?? true);
+function SidebarProvider(props: SidebarProviderProps) {
+    const [local, boxProps] = splitProps(props, ["defaultOpen", "open", "onOpenChange", "children"]);
+    const [_open, _setOpen] = createSignal(local.defaultOpen ?? true);
 
-    const open = () => props.open !== undefined ? props.open : _open();
+    const open = () => local.open !== undefined ? local.open : _open();
 
-    const setOpen = (value: boolean | ((prev: boolean) => boolean)) => {
-        if (props.onOpenChange) {
-            props.onOpenChange(value);
+    const setOpen = (value: OpenState) => {
+        if (local.onOpenChange) {
+            local.onOpenChange(value);
         } else {
-            _setOpen(value as any);
+            _setOpen(value);
         }
     };
 
-    const toggleSidebar = () => setOpen(!open());
+    const toggleSidebar = () => setOpen((prev) => !prev);
 
-    const state = createMemo(() => (open() ? "expanded" : "collapsed") as const);
 
     const contextValue: SidebarContextProps = {
-        state,
         open,
         setOpen,
         toggleSidebar,
@@ -54,22 +74,27 @@ function SidebarProvider(props: {
 
     return (
         <SidebarContext.Provider value={contextValue}>
-            <box bg={theme()?.bg ?? "#1e1e2e"} fg={theme()?.fg ?? "#cdd6f4"} flexDirection="row" flexGrow={1} width={{ percent: 100 }} height={{ percent: 100 }}>
-                {props.children}
+            <box
+                {...boxProps}
+                bg={boxProps.bg ?? theme()?.bg ?? "#1e1e2e"}
+                fg={boxProps.fg ?? theme()?.fg ?? "#cdd6f4"}
+                flexDirection={boxProps.flexDirection ?? "row"}
+                flexGrow={boxProps.flexGrow ?? 1}
+                width={boxProps.width ?? { percent: 100 }}
+                height={boxProps.height ?? { percent: 100 }}
+            >
+                {local.children}
             </box>
         </SidebarContext.Provider>
     );
 }
 
-function Sidebar(props: {
-    side?: "left" | "right";
-    collapsible?: "icon" | "none";
-    children?: JSX.Element;
-}) {
+function Sidebar(props: SidebarProps) {
+    const [local, boxProps] = splitProps(props, ["side", "collapsible", "children"]);
     const { open } = useSidebar();
     const theme = useTheme();
 
-    const collapsible = () => props.collapsible ?? "icon";
+    const collapsible = () => local.collapsible ?? "icon";
     const width = () => {
         if (collapsible() === "none") return SIDEBAR_WIDTH;
         return open() ? SIDEBAR_WIDTH : SIDEBAR_WIDTH_ICON;
@@ -77,232 +102,260 @@ function Sidebar(props: {
 
     return (
         <box
-            bg={theme()?.sidebar ?? "#1e1e2e"}
-            fg={theme()?.sidebarFg ?? "#cdd6f4"}
-            flexDirection="column"
-            width={{ point: width() }}
-            height={{ percent: 100 }}
-            display={open() ? "flex" : "none"}
+            {...boxProps}
+            bg={boxProps.bg ?? theme()?.sidebar ?? "#1e1e2e"}
+            fg={boxProps.fg ?? theme()?.sidebarFg ?? "#cdd6f4"}
+            flexDirection={boxProps.flexDirection ?? "column"}
+            width={boxProps.width ?? { point: width() }}
+            height={boxProps.height ?? { percent: 100 }}
+            display={boxProps.display ?? (open() ? "flex" : "none")}
         >
-            {props.children}
+            {local.children}
         </box>
     );
 }
 
-function SidebarTrigger(props: {
-    children?: JSX.Element;
-}) {
+function SidebarTrigger(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children", "on:click"]);
     const { toggleSidebar } = useSidebar();
     const theme = useTheme();
 
     return (
-        <box on:click={() => toggleSidebar()} bg={theme()?.sidebarAccent ?? "#313244"} fg={theme()?.sidebarAccentFg ?? "#cdd6f4"} width={{ point: 3 }}>
-            {props.children ?? "☰"}
+        <box
+            {...boxProps}
+            on:click={composeClickHandlers(local["on:click"], () => toggleSidebar())}
+            bg={boxProps.bg ?? theme()?.sidebarAccent ?? "#313244"}
+            fg={boxProps.fg ?? theme()?.sidebarAccentFg ?? "#cdd6f4"}
+            width={boxProps.width ?? { point: 3 }}
+        >
+            {local.children ?? "☰"}
         </box>
     );
 }
 
-function SidebarInset(props: {
-    children?: JSX.Element;
-}) {
+function SidebarInset(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
     const theme = useTheme();
 
     return (
-        <box bg={theme()?.mutedBg ?? "#181825"} fg={theme()?.fg ?? "#cdd6f4"} flexDirection="column" flexGrow={1}>
-            {props.children}
+        <box
+            {...boxProps}
+            bg={boxProps.bg ?? theme()?.mutedBg ?? "#181825"}
+            fg={boxProps.fg ?? theme()?.fg ?? "#cdd6f4"}
+            flexDirection={boxProps.flexDirection ?? "column"}
+            flexGrow={boxProps.flexGrow ?? 1}
+        >
+            {local.children}
         </box>
     );
 }
 
-function SidebarHeader(props: {
-    children?: JSX.Element;
-}) {
+function SidebarHeader(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
     return (
-        <box flexDirection="column" padding={{ all: { point: 1 } }}>
-            {props.children}
+        <box
+            {...boxProps}
+            flexDirection={boxProps.flexDirection ?? "column"}
+            padding={boxProps.padding ?? { all: { point: 1 } }}
+        >
+            {local.children}
         </box>
     );
 }
 
-function SidebarFooter(props: {
-    children?: JSX.Element;
-}) {
+function SidebarFooter(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
     return (
-        <box flexDirection="column" padding={{ all: { point: 1 } }}>
-            {props.children}
+        <box
+            {...boxProps}
+            flexDirection={boxProps.flexDirection ?? "column"}
+            padding={boxProps.padding ?? { all: { point: 1 } }}
+        >
+            {local.children}
         </box>
     );
 }
 
-function SidebarContent(props: {
-    children?: JSX.Element;
-}) {
+function SidebarContent(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
     return (
-        <box flexDirection="column" flexGrow={1} overflow="scroll">
-            {props.children}
+        <box
+            {...boxProps}
+            flexDirection={boxProps.flexDirection ?? "column"}
+            flexGrow={boxProps.flexGrow ?? 1}
+            overflow={boxProps.overflow ?? "scroll"}
+        >
+            {local.children}
         </box>
     );
 }
 
-function SidebarGroup(props: {
-    children?: JSX.Element;
-}) {
+function SidebarGroup(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
     return (
-        <box flexDirection="column" width={{ percent: 100 }}>
-            {props.children}
+        <box
+            {...boxProps}
+            flexDirection={boxProps.flexDirection ?? "column"}
+            width={boxProps.width ?? { percent: 100 }}
+        >
+            {local.children}
         </box>
     );
 }
 
-function SidebarGroupLabel(props: {
-    children?: JSX.Element;
-}) {
+function SidebarGroupLabel(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
     const { open } = useSidebar();
 
     return (
         <box
-            height={{ point: 1 }}
-            padding={{ horizontal: { point: 1 } }}
-            display={open() ? "flex" : "none"}
+            {...boxProps}
+            height={boxProps.height ?? { point: 1 }}
+            padding={boxProps.padding ?? { horizontal: { point: 1 } }}
+            display={boxProps.display ?? (open() ? "flex" : "none")}
         >
-            {props.children}
+            {local.children}
         </box>
     );
 }
 
-function SidebarGroupAction(props: {
-    children?: JSX.Element;
-}) {
+function SidebarGroupAction(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
     const { open } = useSidebar();
 
     return (
-        <box display={open() ? "flex" : "none"}>
-            {props.children}
+        <box {...boxProps} display={boxProps.display ?? (open() ? "flex" : "none")}>
+            {local.children}
         </box>
     );
 }
 
-function SidebarGroupContent(props: {
-    children?: JSX.Element;
-}) {
-    return (
-        <box flexDirection="column" width={{ percent: 100 }}>
-            {props.children}
-        </box>
-    );
-}
-
-function SidebarMenu(props: {
-    children?: JSX.Element;
-}) {
-    return (
-        <box flexDirection="column" width={{ percent: 100 }}>
-            {props.children}
-        </box>
-    );
-}
-
-function SidebarMenuItem(props: {
-    children?: JSX.Element;
-}) {
-    return (
-        <box flexDirection="row" width={{ percent: 100 }}>
-            {props.children}
-        </box>
-    );
-}
-
-function SidebarMenuButton(props: {
-    isActive?: boolean;
-    children?: JSX.Element;
-    onClick: () => void;
-}) {
+function SidebarGroupContent(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
     return (
         <box
-            on:click={props.onClick}
-            flexDirection="row"
-            width={{ percent: 100 }}
-            height={{ point: 1 }}
-            padding={{ horizontal: { point: 1 } }}
+            {...boxProps}
+            flexDirection={boxProps.flexDirection ?? "column"}
+            width={boxProps.width ?? { percent: 100 }}
         >
-            {props.children}
+            {local.children}
         </box>
     );
 }
 
-function SidebarMenuAction(props: {
-    children?: JSX.Element;
-}) {
+function SidebarMenu(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
+    return (
+        <box
+            {...boxProps}
+            flexDirection={boxProps.flexDirection ?? "column"}
+            width={boxProps.width ?? { percent: 100 }}
+        >
+            {local.children}
+        </box>
+    );
+}
+
+function SidebarMenuItem(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
+    return (
+        <box
+            {...boxProps}
+            flexDirection={boxProps.flexDirection ?? "row"}
+            width={boxProps.width ?? { percent: 100 }}
+        >
+            {local.children}
+        </box>
+    );
+}
+
+function SidebarMenuButton(props: SidebarMenuButtonProps) {
+    const [local, boxProps] = splitProps(props, ["isActive", "children", "onClick", "on:click"]);
+    return (
+        <box
+            {...boxProps}
+            on:click={composeClickHandlers(local["on:click"], () => local.onClick())}
+            flexDirection={boxProps.flexDirection ?? "row"}
+            width={boxProps.width ?? { percent: 100 }}
+            height={boxProps.height ?? { point: 1 }}
+            padding={boxProps.padding ?? { horizontal: { point: 1 } }}
+        >
+            {local.children}
+        </box>
+    );
+}
+
+function SidebarMenuAction(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
     const { open } = useSidebar();
 
     return (
-        <box display={open() ? "flex" : "none"}>
-            {props.children}
+        <box {...boxProps} display={boxProps.display ?? (open() ? "flex" : "none")}>
+            {local.children}
         </box>
     );
 }
 
-function SidebarMenuBadge(props: {
-    children?: JSX.Element;
-}) {
+function SidebarMenuBadge(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
     const { open } = useSidebar();
 
     return (
-        <box display={open() ? "flex" : "none"}>
-            {props.children}
+        <box {...boxProps} display={boxProps.display ?? (open() ? "flex" : "none")}>
+            {local.children}
         </box>
     );
 }
 
-function SidebarMenuSub(props: {
-    children?: JSX.Element;
-}) {
+function SidebarMenuSub(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
     const { open } = useSidebar();
 
     return (
         <box
-            flexDirection="column"
-            padding={{ left: { point: 1 } }}
-            display={open() ? "flex" : "none"}
+            {...boxProps}
+            flexDirection={boxProps.flexDirection ?? "column"}
+            padding={boxProps.padding ?? { left: { point: 1 } }}
+            display={boxProps.display ?? (open() ? "flex" : "none")}
         >
-            {props.children}
+            {local.children}
         </box>
     );
 }
 
-function SidebarMenuSubItem(props: {
-    children?: JSX.Element;
-}) {
+function SidebarMenuSubItem(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
     return (
-        <box flexDirection="row">
-            {props.children}
+        <box {...boxProps} flexDirection={boxProps.flexDirection ?? "row"}>
+            {local.children}
         </box>
     );
 }
 
-function SidebarMenuSubButton(props: {
-    isActive?: boolean;
-    children?: JSX.Element;
-}) {
+function SidebarMenuSubButton(props: BoxProps & { isActive?: boolean }) {
+    const [local, boxProps] = splitProps(props, ["isActive", "children"]);
     return (
         <box
-            flexDirection="row"
-            height={{ point: 1 }}
-            padding={{ horizontal: { point: 1 } }}
+            {...boxProps}
+            flexDirection={boxProps.flexDirection ?? "row"}
+            height={boxProps.height ?? { point: 1 }}
+            padding={boxProps.padding ?? { horizontal: { point: 1 } }}
         >
-            {props.children}
+            {local.children}
         </box>
     );
 }
 
-function SidebarSeparator() {
+function SidebarSeparator(props: BoxProps) {
+    const [local, boxProps] = splitProps(props, ["children"]);
     return (
         <box
-            height={{ point: 1 }}
-            width={{ percent: 100 }}
-            margin={{ horizontal: { point: 1 } }}
+            {...boxProps}
+            height={boxProps.height ?? { point: 1 }}
+            width={boxProps.width ?? { percent: 100 }}
+            margin={boxProps.margin ?? { horizontal: { point: 1 } }}
         >
-            {"─".repeat(40)}
+            {local.children ?? "─".repeat(40)}
         </box>
     );
 }

@@ -8,12 +8,14 @@ import {
     SidebarTrigger,
 } from "./components/sidebar.tsx";
 import { AppSidebar } from "./components/app-sidebar.tsx";
-import { CoreApp } from "@ares/shared/core";
+import { App as AppCore } from "../../shared/src/app/index.ts";
 
 const settingsPath = resolve(import.meta.dir, "../../../../settings");
-const projectPath = "/Volumes/Home_SSD/Users/home/Documents/projects/ares";
-const bizApp = new CoreApp(settingsPath, projectPath, false);
+const bizApp = new AppCore(settingsPath);
 bizApp.start();
+
+const projectPath = "/Volumes/Home_SSD/Users/home/Documents/projects/ares";
+bizApp.openProject(projectPath);
 
 setInterval(() => {
     bizApp.drainMailbox()

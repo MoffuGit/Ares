@@ -14,6 +14,7 @@ import {
 function FileTree() {
     const filetree = useFiletree();
     const app = useApp();
+    const theme = useTheme();
 
     return (
         <SidebarGroup>
@@ -22,7 +23,7 @@ function FileTree() {
                     <For each={filetree()}>
                         {(entry) => (
                             <SidebarMenuItem>
-                                <SidebarMenuButton onClick={() => app.expandEntry(entry.id)}>
+                                <SidebarMenuButton bg={theme()?.sidebar ?? "#1e1e2e"} fg={theme()?.sidebarFg ?? "#cdd6f4"} onClick={() => app.expandEntry(entry.id)}>
                                     {" ".repeat(entry.depth)}{entry.kind === "dir" ? (entry.expanded ? "▾ " : "▸ ") : "  "}{entry.name}
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
