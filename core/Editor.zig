@@ -30,9 +30,6 @@ pub fn create(project: *Project, alloc: Allocator, layer_ptr: *anyopaque) !*Edit
     const surface = try Surface.create(alloc, layer_ptr);
     errdefer surface.destroy();
 
-    try global.events.on(.bufferUpdate, .{ .ctx = self, .handle = onBufferUpdate });
-    errdefer global.events.off(.bufferUpdate, .{ .ctx = self, .handle = onBufferUpdate });
-
     var editor_thread = try EditorThread.init(alloc, self);
     errdefer editor_thread.deinit();
 
@@ -43,6 +40,14 @@ pub fn create(project: *Project, alloc: Allocator, layer_ptr: *anyopaque) !*Edit
         .surface = surface,
         .editor_thr = undefined,
     };
+
+    self.syncTextColor();
+
+    try global.events.on(.bufferUpdate, .{ .ctx = self, .handle = onBufferUpdate });
+    errdefer global.events.off(.bufferUpdate, .{ .ctx = self, .handle = onBufferUpdate });
+
+    try global.events.on(.themeUpdate, .{ .ctx = self, .handle = onThemeUpdate });
+    errdefer global.events.off(.themeUpdate, .{ .ctx = self, .handle = onThemeUpdate });
 
     self.editor_thr = try std.Thread.spawn(.{}, EditorThread.threadMain, .{&self.editor_thread});
 
@@ -58,6 +63,7 @@ pub fn destroy(self: *Editor) void {
     self.surface.destroy();
 
     global.events.off(.bufferUpdate, .{ .ctx = self, .handle = onBufferUpdate });
+    global.events.off(.themeUpdate, .{ .ctx = self, .handle = onThemeUpdate });
 
     self.editor_thread.deinit();
     self.alloc.destroy(self);
@@ -82,6 +88,16 @@ fn onBufferUpdate(ctx: *anyopaque, event: @import("global.zig").GlobalEvents) vo
 
     _ = self.editor_thread.mailbox.push(.{ .buffer_update = {} }, .instant);
     self.editor_thread.wakeup.notify() catch {};
+}
+
+fn onThemeUpdate(ctx: *anyopaque, _: @import("global.zig").GlobalEvents) void {
+    const self: *Editor = @ptrCast(@alignCast(ctx));
+    self.syncTextColor();
+}
+
+fn syncTextColor(self: *Editor) void {
+    const color = self.project.app.settings.readThemeTextColor();
+    self.surface.renderer.setTextColor(color);
 }
 
 pub fn resize(self: *Editor, size: sizepkg.ScreenSize) void {

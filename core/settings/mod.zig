@@ -126,43 +126,52 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor, appe: ?*Appear
 
 fn appearanceChanged(ctx: *anyopaque, _: @import("../appearance/mac.zig").ObserverEvents) void {
     const self: *Settings = @ptrCast(@alignCast(ctx));
-    self.mutex.lock();
-    defer self.mutex.unlock();
+    {
+        self.mutex.lock();
+        defer self.mutex.unlock();
 
-    const a = self.appearance orelse return;
-    self.system_scheme = if (a.isDark()) .dark else .light;
-    self.applyThemeLocked();
+        const a = self.appearance orelse return;
+        self.system_scheme = if (a.isDark()) .dark else .light;
+        self.applyThemeLocked();
 
-    std.log.debug("scheme: {}", .{self.system_scheme});
+        std.log.debug("scheme: {}", .{self.system_scheme});
+    }
 
+    global.state.emitGlobal(.themeUpdate);
     global.state.emit(.settingsUpdate, .instant);
 }
 
 fn settingsCallback(self: ?*Settings, _: u64, _: u32) void {
     const s = self orelse return;
 
-    s.mutex.lock();
-    defer s.mutex.unlock();
+    {
+        s.mutex.lock();
+        defer s.mutex.unlock();
 
-    var dir = std.fs.openDirAbsolute(s.settings_path, .{}) catch return;
-    defer dir.close();
+        var dir = std.fs.openDirAbsolute(s.settings_path, .{}) catch return;
+        defer dir.close();
 
-    s.loadSettings(dir) catch {};
-    s.loadThemes(dir) catch {};
+        s.loadSettings(dir) catch {};
+        s.loadThemes(dir) catch {};
+    }
 
+    global.state.emitGlobal(.themeUpdate);
     global.state.emit(.settingsUpdate, .instant);
 }
 fn themeCallback(self: ?*Settings, _: u64, _: u32) void {
     const s = self orelse return;
 
-    s.mutex.lock();
-    defer s.mutex.unlock();
+    {
+        s.mutex.lock();
+        defer s.mutex.unlock();
 
-    var dir = std.fs.openDirAbsolute(s.settings_path, .{}) catch return;
-    defer dir.close();
+        var dir = std.fs.openDirAbsolute(s.settings_path, .{}) catch return;
+        defer dir.close();
 
-    s.loadThemes(dir) catch {};
+        s.loadThemes(dir) catch {};
+    }
 
+    global.state.emitGlobal(.themeUpdate);
     global.state.emit(.themeUpdate, .instant);
 }
 
@@ -272,6 +281,17 @@ pub fn getThemeColor(self: *const Settings, name: []const u8) ?ThemeColor {
     return self.theme_colors.get(name);
 }
 
+pub fn getThemeTextColor(self: *const Settings) ThemeColor {
+    return self.getThemeColor("foreground") orelse themepkg.fallback.fg;
+}
+
+pub fn readThemeTextColor(self: *Settings) ThemeColor {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    return self.getThemeTextColor();
+}
+
 fn deinitThemeColors(self: *Settings) void {
     var it = self.theme_colors.keyIterator();
     while (it.next()) |key| {
@@ -282,10 +302,14 @@ fn deinitThemeColors(self: *Settings) void {
 }
 
 pub fn setSystemScheme(self: *Settings, scheme: ColorScheme) void {
-    self.mutex.lock();
-    defer self.mutex.unlock();
-    self.system_scheme = scheme;
-    self.applyThemeLocked();
+    {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        self.system_scheme = scheme;
+        self.applyThemeLocked();
+    }
+
+    global.state.emitGlobal(.themeUpdate);
 }
 
 fn loadKeymaps(self: *Settings, km_json: std.json.Value) void {

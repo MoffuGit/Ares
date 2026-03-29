@@ -15,6 +15,7 @@ pub var state: GlobalState = undefined;
 pub const GlobalEvents = union(enum) {
     worktreeUpdate: UpdatedEntriesSet,
     bufferUpdate: u64,
+    themeUpdate: void,
 };
 
 pub const ExternBufferState = extern struct {

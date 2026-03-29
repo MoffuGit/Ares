@@ -181,7 +181,11 @@ export class CoreLib extends EventEmitter {
             {
                 args: [FFIType.u8, FFIType.pointer, FFIType.u64],
                 returns: FFIType.void,
-                threadsafe: true
+                // These mailbox events are delivered only while JS is actively calling
+                // `drainMailbox()`, so the payload pointer is only borrowed for the
+                // duration of this native call. Keep the callback synchronous so we
+                // unpack the data before Zig stack memory can be reused.
+                threadsafe: false,
             },
         );
 
@@ -359,4 +363,3 @@ export function resolveCoreLib(libPath?: string): CoreLib {
     }
     return coreLib
 }
-

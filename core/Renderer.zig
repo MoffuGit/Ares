@@ -73,6 +73,7 @@ size: sizepkg.Size,
 
 grid_size: sizepkg.GridSize = .{},
 cells: []shaderpkg.CellText,
+text_color: [4]u8 = .{ 0, 0, 0, 255 },
 
 grid: *fontpkg.Grid,
 
@@ -138,6 +139,17 @@ fn initShaders(self: *Renderer) !void {
     errdefer shaders.deinit(self.alloc);
 
     self.shaders = shaders;
+}
+
+pub fn setTextColor(self: *Renderer, color: [4]u8) void {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    self.text_color = color;
+    for (self.cells) |*cell| {
+        cell.color = color;
+    }
+    self.rebuild_cells = true;
 }
 
 pub fn drawFrame(
@@ -363,7 +375,7 @@ fn rebuildCells(self: *Renderer, row: u16, col: u16, new_cells: ArrayList([]u32)
 
             glyphs[glyphs_idx] = shaderpkg.CellText{
                 .grid_pos = .{ @intCast(col_idx), @intCast(row_idx) },
-                .color = .{ 0.0, 0.0, 0.0, 1.0 },
+                .color = self.text_color,
                 .glyph_pos = .{ glyph.atlas_x, glyph.atlas_y },
                 .glyph_size = .{ glyph.width, glyph.height },
                 .bearings = .{

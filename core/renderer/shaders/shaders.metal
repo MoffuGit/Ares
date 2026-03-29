@@ -139,7 +139,7 @@ vertex CellTextVertexOut cell_text_vertex(
 
   // Get our color. We always fetch a linearized version to
   // make it easier to handle minimum contrast calculations.
-  out.color = float4(in.color);
+  out.color = float4(in.color) / 255.0f;
 
   return out;
 }
