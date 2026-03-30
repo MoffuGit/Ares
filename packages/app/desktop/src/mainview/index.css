@@ -125,7 +125,7 @@
     display: flex;
     min-height: 0;
     flex-direction: column;
-    background: var(--sidebar);
+    background: transparent;
     will-change: transform, opacity;
     transition-property: transform, opacity;
     transition-duration: var(--sidebar-switch-duration, 200ms);
