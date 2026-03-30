@@ -40,12 +40,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
     toggleSidebarKind: (kind) => set((state) => {
         if (!state.settings) return {};
         if (!canUseSidebarKind(state.settings, kind)) return {};
+
         if (!state.sidebarOpen) {
             return { sidebarOpen: true, sidebarKind: kind };
         }
+
         if (state.sidebarKind !== kind) {
             return { sidebarKind: kind };
         }
+
         return { sidebarOpen: false };
     }),
     toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
