@@ -134,6 +134,13 @@ function Sidebar({
     collapsible?: "offcanvas" | "icon" | "none"
 }) {
     const { state, isResizing } = useSidebar()
+    const childArray = React.Children.toArray(children)
+    const railChildren = childArray.filter(
+        (child) => React.isValidElement(child) && child.type === SidebarRail
+    )
+    const contentChildren = childArray.filter(
+        (child) => !(React.isValidElement(child) && child.type === SidebarRail)
+    )
 
     if (collapsible === "none") {
         return (
@@ -153,7 +160,7 @@ function Sidebar({
 
     return (
         <div
-            className="group peer relative text-sidebar-foreground block"
+            className="group peer relative block text-sidebar-foreground"
             data-state={state}
             data-collapsible={state === "collapsed" ? collapsible : ""}
             data-variant={variant}
@@ -165,7 +172,7 @@ function Sidebar({
                 data-slot="sidebar-gap"
                 className={cn(
                     "relative w-(--sidebar-width) bg-transparent",
-                    !isResizing && "transition-[width] duration-150 ease-in-out-quint",
+                    !isResizing && "transition-[width] duration-150 ease-in-out-quad",
                     "group-data-[collapsible=offcanvas]:w-0",
                     "group-data-[side=right]:rotate-180",
                     variant === "floating" || variant === "inset"
@@ -177,8 +184,9 @@ function Sidebar({
                 data-slot="sidebar-container"
                 data-side={side}
                 className={cn(
-                    "absolute inset-y-0 z-10 pb-1.5 h-full w-(--sidebar-width) data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] flex",
-                    !isResizing && "transition-[left,right,width] duration-150 ease-in-out-quint",
+                    "absolute inset-y-0 z-10 h-full w-(--sidebar-width) flex data-[side=left]:left-0 data-[side=right]:right-0",
+                    "group-data-[collapsible=offcanvas]:w-0",
+                    !isResizing && "transition-[width] duration-150 ease-in-out-quad",
                     // Adjust the padding for floating and inset variants.
                     variant === "floating" || variant === "inset"
                         ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
@@ -190,10 +198,23 @@ function Sidebar({
                 <div
                     data-sidebar="sidebar"
                     data-slot="sidebar-inner"
-                    className="flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"
+                    className={cn(
+                        "flex size-full flex-col overflow-hidden bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"
+                    )}
                 >
-                    {children}
+                    <div
+                        data-slot="sidebar-content-frame"
+                        className={cn(
+                            "flex size-full flex-col will-change-transform opacity-100",
+                            side === "right" ? "origin-right" : "origin-left",
+                            !isResizing && "transition-all duration-150 ease-out-quad",
+                            "group-data-[collapsible=offcanvas]:scale-95 group-data-[collapsible=offcanvas]:blur-sm group-data-[collapsible=offcanvas]:opacity-0"
+                        )}
+                    >
+                        {contentChildren}
+                    </div>
                 </div>
+                {railChildren}
             </div>
         </div>
     )
@@ -239,9 +260,11 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
             const sidebar = (e.target as HTMLElement).closest("[data-slot='sidebar']")
             if (sidebar) {
                 const gap = sidebar.querySelector("[data-slot='sidebar-gap']")
-                startWidth.current = gap
-                    ? gap.getBoundingClientRect().width
-                    : SIDEBAR_WIDTH_DEFAULT
+                const container = sidebar.querySelector("[data-slot='sidebar-container']")
+                const gapWidth = gap?.getBoundingClientRect().width ?? 0
+                startWidth.current = gapWidth > 0
+                    ? gapWidth
+                    : container?.getBoundingClientRect().width ?? SIDEBAR_WIDTH_DEFAULT
             }
             document.body.style.cursor = "col-resize"
             document.body.style.userSelect = "none"
