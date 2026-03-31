@@ -37,7 +37,7 @@ const Surface = @This();
 
 alloc: Allocator,
 
-grid: Grid,
+grid: *Grid,
 
 renderer: Renderer,
 renderer_thread: RendererThread,
@@ -45,20 +45,15 @@ renderer_thr: std.Thread,
 
 shared_state: SharedState,
 
-pub fn create(alloc: Allocator, layer_ptr: *anyopaque) !*Surface {
+pub fn create(alloc: Allocator, grid: *Grid, layer_ptr: *anyopaque) !*Surface {
     const metal_layer = objc.Object.fromId(layer_ptr);
 
     const self = try alloc.create(Surface);
     errdefer alloc.destroy(self);
 
-    var grid = try Grid.init(alloc, .{ .size = .{
-        .points = 12,
-    } });
-    errdefer grid.deinit(alloc);
-
     var renderer = try Renderer.init(
         alloc,
-        .{ .grid = &self.grid, .metal_layer = metal_layer, .size = .{
+        .{ .grid = grid, .metal_layer = metal_layer, .size = .{
             .screen = .{ .height = 0, .width = 0 },
             .cell = grid.cellSize(),
         } },
@@ -108,7 +103,6 @@ pub fn destroy(self: *Surface) void {
     self.renderer_thread.deinit();
 
     self.renderer.deinit();
-    self.grid.deinit(self.alloc);
 
     self.shared_state.deinit();
 

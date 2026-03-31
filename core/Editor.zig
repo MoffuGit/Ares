@@ -27,7 +27,7 @@ pub fn create(project: *Project, alloc: Allocator, layer_ptr: *anyopaque) !*Edit
     const self = try alloc.create(Editor);
     errdefer alloc.destroy(self);
 
-    const surface = try Surface.create(alloc, layer_ptr);
+    const surface = try Surface.create(alloc, &project.app.grid, layer_ptr);
     errdefer surface.destroy();
 
     var editor_thread = try EditorThread.init(alloc, self);

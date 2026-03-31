@@ -202,7 +202,11 @@ pub fn drawFrame(
 
     self.rebuild_cells = false;
 
-    try self.syncAtlasTexture(&self.grid.atlas_grayscale, &frame.grayscale);
+    {
+        self.grid.lock.lockShared();
+        defer self.grid.lock.unlockShared();
+        try self.syncAtlasTexture(&self.grid.atlas_grayscale, &frame.grayscale);
+    }
 
     var frame_ctx = try self.api.beginFrame(self, &frame.target);
     defer frame_ctx.complete(sync);
@@ -369,7 +373,7 @@ fn rebuildCells(self: *Renderer, row: u16, col: u16, new_cells: ArrayList([]u32)
         for (row_cells, 0..) |cell_codepoint, col_idx| {
             if (col_idx >= self.grid_size.columns) break;
 
-            const glyph = self.grid.renderCodepoint(self.alloc, cell_codepoint) catch {
+            const glyph = try self.grid.renderCodepoint(self.alloc, cell_codepoint) orelse {
                 continue;
             };
 

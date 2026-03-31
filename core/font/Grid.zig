@@ -54,22 +54,43 @@ pub fn deinit(self: *Grid, alloc: Allocator) void {
     self.codepoints.deinit();
 }
 
-pub fn renderCodepoint(self: *Grid, alloc: Allocator, cp: u32) !fontpkg.Glyph {
-    if (self.codepoints.get(cp)) |cached_index| {
-        return self.renderGlyph(alloc, cached_index);
-    }
-
-    const index = self.resolver.face.glyphIndex(cp) orelse return error.CpWithoutIndex;
-
-    try self.codepoints.put(cp, index);
+pub fn renderCodepoint(self: *Grid, alloc: Allocator, cp: u32) !?fontpkg.Glyph {
+    const index = try self.getIndex(cp) orelse return null;
 
     return try self.renderGlyph(alloc, index);
 }
 
-pub fn renderGlyph(self: *Grid, alloc: Allocator, index: u32) !fontpkg.Glyph {
-    if (self.glyphs.get(index)) |cached_glyph| {
-        return cached_glyph;
+pub fn getIndex(self: *Grid, cp: u32) !?u32 {
+    {
+        self.lock.lockShared();
+        defer self.lock.unlockShared();
+
+        if (self.codepoints.get(cp)) |cached_index| {
+            return cached_index;
+        }
     }
+    self.lock.lock();
+    self.lock.unlock();
+
+    const index = self.resolver.face.glyphIndex(cp) orelse return null;
+
+    try self.codepoints.put(cp, index);
+
+    return index;
+}
+
+pub fn renderGlyph(self: *Grid, alloc: Allocator, index: u32) !fontpkg.Glyph {
+    {
+        self.lock.lockShared();
+        defer self.lock.unlockShared();
+
+        if (self.glyphs.get(index)) |cached_glyph| {
+            return cached_glyph;
+        }
+    }
+
+    self.lock.lock();
+    defer self.lock.unlock();
 
     const atlas = &self.atlas_grayscale;
 

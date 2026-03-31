@@ -3,6 +3,7 @@ const Settings = @import("settings/mod.zig");
 const Appearance = @import("Appearance.zig");
 const Monitor = @import("monitor/mod.zig");
 const Io = @import("io/mod.zig");
+const Grid = @import("font/Grid.zig");
 
 pub const App = @This();
 
@@ -10,6 +11,7 @@ settings: *Settings,
 appearance: *Appearance,
 monitor: *Monitor,
 io: *Io,
+grid: Grid,
 
 pub fn create() !*App {
     const app = try global.alloc.create(App);
@@ -27,7 +29,13 @@ pub fn create() !*App {
     const io = try Io.create(global.alloc);
     errdefer global.alloc.destroy(io);
 
+    var grid = try Grid.init(global.alloc, .{ .size = .{
+        .points = 10,
+    } });
+    errdefer grid.deinit(global.alloc);
+
     app.* = .{
+        .grid = grid,
         .settings = settings,
         .appearance = appearance,
         .monitor = monitor,
@@ -42,6 +50,7 @@ pub fn loadSettings(self: *App, path: []const u8) !void {
 }
 
 pub fn destroy(self: *App) void {
+    self.grid.deinit(global.alloc);
     self.settings.destroy();
     self.appearance.destroy();
     self.monitor.destroy();
