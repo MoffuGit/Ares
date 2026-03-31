@@ -208,7 +208,7 @@ function Sidebar({
                             "flex size-full flex-col will-change-transform opacity-100",
                             side === "right" ? "origin-right" : "origin-left",
                             !isResizing && "transition-all duration-150 ease-out-quad",
-                            "group-data-[collapsible=offcanvas]:scale-95 group-data-[collapsible=offcanvas]:blur-sm group-data-[collapsible=offcanvas]:opacity-0"
+                            "group-data-[collapsible=offcanvas]:scale-[0.98] group-data-[collapsible=offcanvas]:blur-sm group-data-[collapsible=offcanvas]:opacity-0"
                         )}
                     >
                         {contentChildren}
