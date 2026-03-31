@@ -15,7 +15,8 @@
         "ctrl+q": "workspace:close_active_tab",
         "super+k": "workspace:toggle_command_palette",
         "super+p t": "workspace:tabs_panel",
-        "super+p f": "workspace:filetree_panel"
+        "super+p f": "workspace:filetree_panel",
+        "super+t": "workspace:new_terminal_tab"
       },
       "insert": {
         "escape": "workspace:enter_normal"

@@ -7,6 +7,7 @@ const Appearance = @import("Appearance.zig");
 const App = @import("App.zig");
 const Surface = @import("Surface.zig");
 const Editor = @import("Editor.zig");
+const Terminal = @import("Terminal.zig");
 
 export fn initState(callback: ?global.Callback) void {
     global.state.init(callback) catch {};
@@ -265,6 +266,14 @@ export fn trieNodeHasChildren(node: *TrieNode) bool {
 
 export fn createEditor(project: *Project, layer_ptr: *anyopaque) ?*Editor {
     return Editor.create(project, global.state.alloc, layer_ptr) catch null;
+}
+
+export fn createTerminal(layer_ptr: *anyopaque) ?*Terminal {
+    return Terminal.create(global.state.alloc, layer_ptr) catch null;
+}
+
+export fn destroyTerminal(terminal: *Terminal) void {
+    terminal.destroy();
 }
 
 export fn resizeEditor(editor: *Editor, width: u32, height: u32) void {

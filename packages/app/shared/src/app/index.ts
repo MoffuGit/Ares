@@ -16,7 +16,6 @@ export class App extends EventEmitter {
     readonly core: CoreLib;
     protected coreApp: Pointer;
     protected project: Pointer | null = null;
-    private editors = new Set<Pointer>();
 
     _state: AppState = {
         settings: null,
@@ -216,7 +215,6 @@ export class App extends EventEmitter {
     createEditor(metalLayerPtr: Pointer): Pointer | null {
         if (!this.project) return null;
         const ptr = this.core.createEditor(this.project, metalLayerPtr);
-        if (ptr) this.editors.add(ptr);
         return ptr;
     }
 
@@ -243,7 +241,14 @@ export class App extends EventEmitter {
     }
 
     destroyEditor(editor: Pointer) {
-        this.editors.delete(editor);
         this.core.destroyEditor(editor);
+    }
+
+    createTerminal(metalLayerPtr: Pointer) {
+        return this.core.createTerminal(metalLayerPtr);
+    }
+
+    destroyTerminal(terminal: Pointer) {
+        return this.core.destroyTerminal(terminal);
     }
 }

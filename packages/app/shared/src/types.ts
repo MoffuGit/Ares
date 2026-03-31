@@ -116,7 +116,8 @@ export type GlobalAction =
     | "workspace:close_active_tab"
     | "workspace:toggle_command_palette"
     | "workspace:tabs_panel"
-    | "workspace:filetree_panel";
+    | "workspace:filetree_panel"
+    | "workspace:new_terminal_tab";
 
 export type EditorAction =
     | string;
@@ -154,7 +155,7 @@ export type KeyDownMods = {
     num_lock: boolean;
 }
 
-export type EditorSurface = { kind: "editor"; path: string; gpuSurfaceId?: number; entry?: WorktreeEntry; bufferState?: BufferState };
+export type EditorSurface = { kind: "editor"; gpuSurfaceId?: number; entry?: WorktreeEntry; bufferState?: BufferState };
 export type TerminalSurface = { kind: "terminal"; cwd: string; gpuSurfaceId?: number };
 export type Surface = EditorSurface | TerminalSurface;
 

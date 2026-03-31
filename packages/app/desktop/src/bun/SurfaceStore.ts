@@ -113,7 +113,7 @@ export class SurfaceStore {
             case "editor":
                 return app.createEditor(metalLayerPtr);
             case "terminal":
-                return null;
+                return app.createTerminal(metalLayerPtr);
         }
     }
 
@@ -133,6 +133,7 @@ export class SurfaceStore {
                 app.destroyEditor(ptr);
                 break;
             case "terminal":
+                app.destroyTerminal(ptr);
                 break;
         }
     }

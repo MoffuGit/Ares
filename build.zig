@@ -7,6 +7,7 @@ pub fn build(b: *std.Build) void {
 
     const vaxis_dep = b.dependency("vaxis", .{ .target = target, .optimize = optimize });
     const xev_dep = b.dependency("libxev", .{ .target = target, .optimize = optimize });
+    const ghostty_dep = b.dependency("ghostty", .{ .target = target, .optimize = optimize });
     const objc_dep = b.dependency("zig_objc", .{
         .target = target,
         .optimize = optimize,
@@ -23,6 +24,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    core_mod.addImport("ghostty-vt", ghostty_dep.module("ghostty-vt"));
     core_mod.addImport("xev", xev_dep.module("xev"));
     core_mod.addImport("datastruct", datastruct);
     core_mod.addImport("objc", objc_dep.module("objc"));

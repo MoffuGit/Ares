@@ -104,7 +104,10 @@ export function KeyMaps() {
                     toggleSidebarKind("filetree");
                     break;
                 case "workspace:new_tab":
-                    newTab({ kind: "editor", path: "" });
+                    newTab({ kind: "editor" });
+                    break;
+                case "workspace:new_terminal_tab":
+                    newTab({ kind: "terminal", cwd: "" });
                     break;
                 case "workspace:next_tab":
                     nextTab();

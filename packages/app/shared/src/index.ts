@@ -5,7 +5,7 @@ export * from "./keymap/index.ts";
 
 export function surfaceName(surface: Surface): string {
     switch (surface.kind) {
-        case "editor": return surface.path.split("/").pop() ?? "untitled";
+        case "editor": return surface.entry?.path.split("/").pop() ?? "[No Name]";
         case "terminal": return "terminal";
     }
 }

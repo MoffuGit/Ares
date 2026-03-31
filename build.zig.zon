@@ -44,6 +44,10 @@
             .url = "git+https://github.com/mitchellh/zig-objc.git#27d0e03242e7ee6842bf8a86d2e0bb1f586a9847",
             .hash = "zig_objc-0.0.0-Ir_Sp7oUAQC3JpeR9EGUFGcHRSx_33IehitnjBCy-CwD",
         },
+        .ghostty = .{
+            .url = "git+https://github.com/ghostty-org/ghostty.git?ref=HEAD#d9529947a40e16f8e7efd8a1f680d01ff99f213b",
+            .hash = "ghostty-1.3.0-dev-5UdBCw48PQQf5CPUefWgaNNjp--V0UlOtQ9TRz0c0ItK",
+        },
         .macos = .{ .path = "./pkg/macos" },
         .apple_sdk = .{ .path = "./pkg/apple-sdk" },
     },

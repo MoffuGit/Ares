@@ -134,6 +134,14 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
+            createTerminal: {
+                args: [FFIType.pointer],
+                returns: FFIType.pointer,
+            },
+            destroyTerminal: {
+                args: [FFIType.pointer],
+                returns: FFIType.void,
+            },
         },
     );
 
@@ -350,6 +358,14 @@ export class CoreLib extends EventEmitter {
 
     destroyEditor(editor: Pointer): void {
         this.lib.symbols.destroyEditor(editor);
+    }
+
+    createTerminal(layer: Pointer): Pointer | null {
+        return this.lib.symbols.createTerminal(layer);
+    }
+
+    destroyTerminal(terminal: Pointer) {
+        this.lib.symbols.destroyTerminal(terminal);
     }
 
 }
