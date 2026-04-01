@@ -744,7 +744,7 @@ pub fn syncLayoutWithParent(self: *Element, parent_left: u16, parent_top: u16) b
         },
     };
 
-    return (curr_left != new_left) or (curr_top != curr_top);
+    return (curr_left != new_left) or (curr_top != new_top);
 }
 
 pub fn deinit(self: *Element) void {
@@ -974,4 +974,18 @@ test "remove nonexistent child does nothing" {
     parent.removeChild(999999);
 
     try testing.expectEqual(@as(usize, 1), parent.childrens.?.by_order.items.len);
+}
+
+test "syncLayoutWithParent reports top-only parent offset changes" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var element = Element.init(alloc, .{});
+    defer element.deinit();
+
+    try testing.expect(!element.syncLayoutWithParent(0, 0));
+    try testing.expectEqual(@as(u16, 0), element.layout.top);
+
+    try testing.expect(element.syncLayoutWithParent(0, 4));
+    try testing.expectEqual(@as(u16, 4), element.layout.top);
 }

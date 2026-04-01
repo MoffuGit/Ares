@@ -23,6 +23,10 @@ current_clip: ?ClipRect = null,
 opacity_stack: std.ArrayList(f32) = .{},
 current_opacity: f32 = 1.0,
 
+offset_stack: std.ArrayList(struct { dx: i32, dy: i32 }) = .{},
+current_offset_x: i32 = 0,
+current_offset_y: i32 = 0,
+
 pub fn init(alloc: std.mem.Allocator, width: u16, height: u16) !Buffer {
     return .{
         .alloc = alloc,
@@ -35,6 +39,7 @@ pub fn init(alloc: std.mem.Allocator, width: u16, height: u16) !Buffer {
 pub fn deinit(self: *Buffer) void {
     self.clip_stack.deinit(self.alloc);
     self.opacity_stack.deinit(self.alloc);
+    self.offset_stack.deinit(self.alloc);
     self.alloc.free(self.buf);
 }
 
@@ -56,7 +61,7 @@ fn recalculateOpacity(self: *Buffer) void {
 }
 
 pub fn pushClip(self: *Buffer, x: u16, y: u16, w: u16, h: u16) void {
-    const new_clip = ClipRect{ .x = x, .y = y, .width = w, .height = h };
+    const new_clip = translateRect(x, y, w, h, self.current_offset_x, self.current_offset_y);
 
     const effective_clip = if (self.current_clip) |current|
         current.intersect(new_clip)
@@ -90,6 +95,10 @@ fn recalculateClip(self: *Buffer) void {
 }
 
 fn isClipped(self: *const Buffer, col: u16, row: u16) bool {
+    if (self.clip_stack.items.len > 0 and self.current_clip == null) {
+        return true;
+    }
+
     if (self.current_clip) |clip| {
         return !clip.contains(col, row);
     }
@@ -97,10 +106,11 @@ fn isClipped(self: *const Buffer, col: u16, row: u16) bool {
 }
 
 pub fn setCell(self: *Buffer, col: u16, row: u16, cell: Cell) void {
-    if (col >= self.width or row >= self.height) return;
-    if (self.isClipped(col, row)) return;
+    const translated = self.translatePoint(col, row) orelse return;
+    if (translated.col >= self.width or translated.row >= self.height) return;
+    if (self.isClipped(translated.col, translated.row)) return;
 
-    const i = (@as(usize, @intCast(row)) * self.width) + col;
+    const i = (@as(usize, @intCast(translated.row)) * self.width) + translated.col;
     assert(i < self.buf.len);
     self.buf[i] = if (self.current_opacity < 1.0) self.applyOpacity(cell) else cell;
 }
@@ -121,7 +131,9 @@ fn applyOpacity(self: *const Buffer, cell: Cell) Cell {
 }
 
 pub fn writeCell(self: *Buffer, col: u16, row: u16, cell: Cell) void {
-    if (self.readCell(col, row)) |other| {
+    const translated = self.translatePoint(col, row) orelse return;
+
+    if (self.readCell(translated.col, translated.row)) |other| {
         self.setCell(col, row, cell.blend(other));
     } else {
         self.setCell(col, row, cell);
@@ -153,6 +165,56 @@ pub fn fillRect(self: *Buffer, x: u16, y: u16, width: u16, height: u16, cell: Ce
             self.writeCell(x + col, y + row, cell);
         }
     }
+}
+
+pub fn pushOffset(self: *Buffer, dx: i32, dy: i32) void {
+    self.offset_stack.append(self.alloc, .{ .dx = dx, .dy = dy }) catch {};
+    self.current_offset_x += dx;
+    self.current_offset_y += dy;
+}
+
+pub fn popOffset(self: *Buffer) void {
+    if (self.offset_stack.items.len == 0) return;
+    const offset = self.offset_stack.pop().?;
+    self.current_offset_x -= offset.dx;
+    self.current_offset_y -= offset.dy;
+}
+
+fn translatePoint(self: *const Buffer, col: u16, row: u16) ?struct { col: u16, row: u16 } {
+    const translated_col = @as(i32, col) + self.current_offset_x;
+    const translated_row = @as(i32, row) + self.current_offset_y;
+
+    if (translated_col < 0 or translated_row < 0) return null;
+    if (translated_col > std.math.maxInt(u16) or translated_row > std.math.maxInt(u16)) return null;
+
+    return .{
+        .col = @intCast(translated_col),
+        .row = @intCast(translated_row),
+    };
+}
+
+fn translateRect(x: u16, y: u16, width: u16, height: u16, dx: i32, dy: i32) ClipRect {
+    const max_coord: i32 = std.math.maxInt(u16);
+    const left = @as(i32, x) + dx;
+    const top = @as(i32, y) + dy;
+    const right = left + @as(i32, width);
+    const bottom = top + @as(i32, height);
+
+    const clamped_left = std.math.clamp(left, 0, max_coord);
+    const clamped_top = std.math.clamp(top, 0, max_coord);
+    const clamped_right = std.math.clamp(right, 0, max_coord);
+    const clamped_bottom = std.math.clamp(bottom, 0, max_coord);
+
+    if (clamped_left >= clamped_right or clamped_top >= clamped_bottom) {
+        return .{ .x = 0, .y = 0, .width = 0, .height = 0 };
+    }
+
+    return .{
+        .x = @intCast(clamped_left),
+        .y = @intCast(clamped_top),
+        .width = @intCast(clamped_right - clamped_left),
+        .height = @intCast(clamped_bottom - clamped_top),
+    };
 }
 
 fn coordsToIndex(self: *Buffer, x: u32, y: u32) u32 {
@@ -246,4 +308,21 @@ test "clip stack: pop all restores no clipping" {
 
     buffer.setCell(0, 0, .{ .char = .{ .grapheme = "Y", .width = 1 } });
     try testing.expectEqualStrings("Y", buffer.readCell(0, 0).?.char.grapheme);
+}
+
+test "offset stack translates writes and clips" {
+    var buffer = try Buffer.init(testing.allocator, 5, 5);
+    defer buffer.deinit();
+
+    buffer.pushOffset(0, -2);
+    defer buffer.popOffset();
+
+    buffer.pushClip(0, 2, 1, 1);
+    defer buffer.popClip();
+
+    buffer.setCell(0, 2, .{ .char = .{ .grapheme = "X", .width = 1 } });
+    buffer.setCell(0, 3, .{ .char = .{ .grapheme = "Y", .width = 1 } });
+
+    try testing.expectEqualStrings("X", buffer.readCell(0, 0).?.char.grapheme);
+    try testing.expectEqualStrings("", buffer.readCell(0, 1).?.char.grapheme);
 }

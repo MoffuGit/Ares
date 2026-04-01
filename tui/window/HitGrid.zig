@@ -17,6 +17,10 @@ height: u16 = 0,
 clip_stack: std.ArrayList(ClipRect) = .{},
 current_clip: ?ClipRect = null,
 
+offset_stack: std.ArrayList(struct { dx: i32, dy: i32 }) = .{},
+current_offset_x: i32 = 0,
+current_offset_y: i32 = 0,
+
 pub fn init(alloc: Allocator, width: u16, height: u16) !HitGrid {
     const size = @as(usize, width) * height;
     const grid = try alloc.alloc(u64, size);
@@ -33,6 +37,7 @@ pub fn deinit(
     self: *HitGrid,
 ) void {
     self.clip_stack.deinit(self.alloc);
+    self.offset_stack.deinit(self.alloc);
     if (self.grid.len > 0) {
         self.alloc.free(self.grid);
     }
@@ -48,7 +53,7 @@ pub fn clear(self: *HitGrid) void {
 }
 
 pub fn pushClip(self: *HitGrid, x: u16, y: u16, w: u16, h: u16) void {
-    const new_clip = ClipRect{ .x = x, .y = y, .width = w, .height = h };
+    const new_clip = translateRect(x, y, w, h, self.current_offset_x, self.current_offset_y);
 
     const effective_clip = if (self.current_clip) |current|
         current.intersect(new_clip)
@@ -82,6 +87,10 @@ fn recalculateClip(self: *HitGrid) void {
 }
 
 fn isClipped(self: *const HitGrid, col: u16, row: u16) bool {
+    if (self.clip_stack.items.len > 0 and self.current_clip == null) {
+        return true;
+    }
+
     if (self.current_clip) |clip| {
         return !clip.contains(col, row);
     }
@@ -89,10 +98,11 @@ fn isClipped(self: *const HitGrid, col: u16, row: u16) bool {
 }
 
 pub fn set(self: *HitGrid, col: u16, row: u16, element_num: u64) void {
-    if (col >= self.width or row >= self.height) return;
-    if (self.isClipped(col, row)) return;
+    const translated = self.translatePoint(col, row) orelse return;
+    if (translated.col >= self.width or translated.row >= self.height) return;
+    if (self.isClipped(translated.col, translated.row)) return;
 
-    const i = @as(usize, row) * self.width + col;
+    const i = @as(usize, translated.row) * self.width + translated.col;
     self.grid[i] = element_num;
 }
 
@@ -115,6 +125,56 @@ pub fn fillRect(self: *HitGrid, x: u16, y: u16, w: u16, h: u16, element_num: u64
             self.set(col, row, element_num);
         }
     }
+}
+
+pub fn pushOffset(self: *HitGrid, dx: i32, dy: i32) void {
+    self.offset_stack.append(self.alloc, .{ .dx = dx, .dy = dy }) catch {};
+    self.current_offset_x += dx;
+    self.current_offset_y += dy;
+}
+
+pub fn popOffset(self: *HitGrid) void {
+    if (self.offset_stack.items.len == 0) return;
+    const offset = self.offset_stack.pop().?;
+    self.current_offset_x -= offset.dx;
+    self.current_offset_y -= offset.dy;
+}
+
+fn translatePoint(self: *const HitGrid, col: u16, row: u16) ?struct { col: u16, row: u16 } {
+    const translated_col = @as(i32, col) + self.current_offset_x;
+    const translated_row = @as(i32, row) + self.current_offset_y;
+
+    if (translated_col < 0 or translated_row < 0) return null;
+    if (translated_col > std.math.maxInt(u16) or translated_row > std.math.maxInt(u16)) return null;
+
+    return .{
+        .col = @intCast(translated_col),
+        .row = @intCast(translated_row),
+    };
+}
+
+fn translateRect(x: u16, y: u16, width: u16, height: u16, dx: i32, dy: i32) ClipRect {
+    const max_coord: i32 = std.math.maxInt(u16);
+    const left = @as(i32, x) + dx;
+    const top = @as(i32, y) + dy;
+    const right = left + @as(i32, width);
+    const bottom = top + @as(i32, height);
+
+    const clamped_left = std.math.clamp(left, 0, max_coord);
+    const clamped_top = std.math.clamp(top, 0, max_coord);
+    const clamped_right = std.math.clamp(right, 0, max_coord);
+    const clamped_bottom = std.math.clamp(bottom, 0, max_coord);
+
+    if (clamped_left >= clamped_right or clamped_top >= clamped_bottom) {
+        return .{ .x = 0, .y = 0, .width = 0, .height = 0 };
+    }
+
+    return .{
+        .x = @intCast(clamped_left),
+        .y = @intCast(clamped_top),
+        .width = @intCast(clamped_right - clamped_left),
+        .height = @intCast(clamped_bottom - clamped_top),
+    };
 }
 
 const testing = std.testing;
@@ -201,4 +261,21 @@ test "clip stack: fillRect respects clip" {
     try testing.expectEqual(@as(?u64, 42), grid.get(2, 2));
     try testing.expectEqual(@as(?u64, 42), grid.get(5, 5));
     try testing.expectEqual(@as(?u64, null), grid.get(6, 6));
+}
+
+test "offset stack translates hits and clips" {
+    var grid = try HitGrid.init(testing.allocator, 5, 5);
+    defer grid.deinit();
+
+    grid.pushOffset(0, -2);
+    defer grid.popOffset();
+
+    grid.pushClip(0, 2, 1, 1);
+    defer grid.popClip();
+
+    grid.set(0, 2, 42);
+    grid.set(0, 3, 99);
+
+    try testing.expectEqual(@as(?u64, 42), grid.get(0, 0));
+    try testing.expectEqual(@as(?u64, null), grid.get(0, 1));
 }

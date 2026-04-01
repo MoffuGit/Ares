@@ -25,7 +25,6 @@ thumb: vaxis.Color = .{ .rgba = .{ 255, 255, 255, 168 } },
 scroll_x: i32 = 0,
 scroll_y: i32 = 0,
 mode: ScrollMode = .vertical,
-layout_dirty: bool = false,
 bar_dragging: bool = false,
 bar_drag_offset_eighths: u32 = 0,
 
@@ -103,6 +102,11 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
             .overflow = .visible,
             .flex_shrink = 0,
         },
+        .beforeDrawFn = contentBeforeDrawFn,
+        .afterDrawFn = contentAfterDrawFn,
+        .beforeHitFn = contentBeforeHitFn,
+        .afterHitFn = contentAfterHitFn,
+        .userdata = self,
     });
     errdefer inner.deinit();
 
@@ -165,9 +169,6 @@ pub fn removeChild(self: *Scrollable, num: u64) void {
 }
 
 pub fn scrollBy(self: *Scrollable, dx: i32, dy: i32) void {
-    const prev_x = self.scroll_x;
-    const prev_y = self.scroll_y;
-
     switch (self.mode) {
         .vertical => self.scroll_y = self.clampY(self.scroll_y + dy),
         .horizontal => self.scroll_x = self.clampX(self.scroll_x + dx),
@@ -176,29 +177,14 @@ pub fn scrollBy(self: *Scrollable, dx: i32, dy: i32) void {
             self.scroll_y = self.clampY(self.scroll_y + dy);
         },
     }
-
-    self.layout_dirty = self.layout_dirty or self.scroll_x != prev_x or self.scroll_y != prev_y;
 }
 
 pub fn scrollTo(self: *Scrollable, x: i32, y: i32) void {
     const next_x = self.clampX(x);
     const next_y = self.clampY(y);
 
-    self.layout_dirty = self.layout_dirty or self.scroll_x != next_x or self.scroll_y != next_y;
     self.scroll_x = next_x;
     self.scroll_y = next_y;
-}
-
-pub fn isLayoutDirty(self: *const Scrollable) bool {
-    return self.layout_dirty;
-}
-
-pub fn syncContentLayout(self: *Scrollable) bool {
-    const parent_left = subtractOffset(self.outer.layout.left, self.scroll_x);
-    const parent_top = subtractOffset(self.outer.layout.top, self.scroll_y);
-    const changed = self.inner.syncLayoutWithParent(parent_left, parent_top);
-    self.layout_dirty = false;
-    return changed;
 }
 
 pub fn containsPoint(self: *const Scrollable, col: u16, row: u16) bool {
@@ -311,11 +297,22 @@ fn afterHitFn(_: *Element, hit_grid: *HitGrid) void {
     hit_grid.popClip();
 }
 
-fn subtractOffset(pos: u16, offset: i32) u16 {
-    const result = @as(i32, pos) - offset;
-    if (result < 0) return 0;
-    if (result > std.math.maxInt(u16)) return std.math.maxInt(u16);
-    return @intCast(result);
+fn contentBeforeDrawFn(element: *Element, buffer: *Buffer) void {
+    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+    buffer.pushOffset(-self.scroll_x, -self.scroll_y);
+}
+
+fn contentAfterDrawFn(_: *Element, buffer: *Buffer) void {
+    buffer.popOffset();
+}
+
+fn contentBeforeHitFn(element: *Element, hit_grid: *HitGrid) void {
+    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+    hit_grid.pushOffset(-self.scroll_x, -self.scroll_y);
+}
+
+fn contentAfterHitFn(_: *Element, hit_grid: *HitGrid) void {
+    hit_grid.popOffset();
 }
 
 fn drawBar(element: *Element, buffer: *Buffer) void {
