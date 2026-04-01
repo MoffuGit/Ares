@@ -10,6 +10,7 @@ const Element = @import("../window/element/mod.zig");
 const Style = Element.Style;
 const Node = Element.Node;
 const Box = @import("../window/element/Box.zig");
+const Scrollable = @import("../window/element/Scrollable.zig").Scrollable;
 const Window = @import("../window/mod.zig");
 
 const Mutations = @This();
@@ -83,6 +84,16 @@ fn createCmd(self: *Mutations, cmd: Command) void {
                 box.deinit(self.alloc);
             };
         },
+        .scrollable => {
+            const scrollable = Scrollable.init(self.alloc, .{ .num = data.id }) catch |err| {
+                log.err("create scrollable id={}: {}", .{ data.id, err });
+                return;
+            };
+            self.window.addElement(scrollable.elem()) catch |err| {
+                log.err("register scrollable id={}: {}", .{ data.id, err });
+                scrollable.deinit(self.alloc);
+            };
+        },
     }
 }
 
@@ -105,6 +116,10 @@ fn setProps(self: *Mutations, cmd: Command) void {
     if (props.box) |box_props| {
         applyBoxProps(self.alloc, elem, box_props);
     }
+
+    if (props.scrollable) |scrollable_props| {
+        applyScrollableProps(elem, scrollable_props);
+    }
 }
 
 fn appendChild(self: *Mutations, cmd: Command) void {
@@ -120,7 +135,9 @@ fn appendChild(self: *Mutations, cmd: Command) void {
         return;
     };
 
-    parent.addChild(child) catch |err| {
+    const container = resolveChildContainer(parent);
+
+    container.addChild(child) catch |err| {
         log.err("append_child: parent={} child={}: {}", .{ data.id, data.child_id, err });
     };
 }
@@ -138,8 +155,10 @@ fn insertBefore(self: *Mutations, cmd: Command) void {
         return;
     };
 
+    const container = resolveChildContainer(parent);
+
     const index = blk: {
-        if (parent.childrens) |*childrens| {
+        if (container.childrens) |*childrens| {
             for (childrens.by_order.items, 0..) |c, i| {
                 if (c.num == data.before_id) break :blk i;
             }
@@ -148,7 +167,7 @@ fn insertBefore(self: *Mutations, cmd: Command) void {
         return;
     };
 
-    parent.insertChild(child, index) catch |err| {
+    container.insertChild(child, index) catch |err| {
         log.err("insert_before: parent={} child={} before={}: {}", .{ data.id, data.child_id, data.before_id, err });
     };
 }
@@ -161,7 +180,7 @@ fn removeChild(self: *Mutations, cmd: Command) void {
         return;
     };
 
-    parent.removeChild(data.child_id);
+    resolveChildContainer(parent).removeChild(data.child_id);
 }
 
 fn delete(self: *Mutations, id: u64) void {
@@ -178,6 +197,10 @@ fn delete(self: *Mutations, id: u64) void {
         .box => {
             const box: *Box = @ptrCast(@alignCast(elem.userdata orelse return));
             box.deinit(self.alloc);
+        },
+        .scrollable => {
+            const scrollable: *Scrollable = @ptrCast(@alignCast(elem.userdata orelse return));
+            scrollable.deinit(self.alloc);
         },
         .raw => {
             elem.deinit();
@@ -248,6 +271,23 @@ fn applyBoxProps(alloc: Allocator, elem: *Element, props: cmdpkg.BoxProps) void 
             }
         }
     }
+}
+
+fn applyScrollableProps(elem: *Element, props: cmdpkg.ScrollableProps) void {
+    if (elem.kind != .scrollable) return;
+
+    const scrollable: *Scrollable = @ptrCast(@alignCast(elem.userdata orelse return));
+
+    if (props.mode) |mode| {
+        scrollable.mode = mode;
+    }
+}
+
+fn resolveChildContainer(elem: *Element) *Element {
+    if (elem.kind != .scrollable) return elem;
+
+    const scrollable: *Scrollable = @ptrCast(@alignCast(elem.userdata orelse return elem));
+    return scrollable.content();
 }
 
 fn freeSegments(alloc: Allocator, segments: ?[]const Element.Segment) void {

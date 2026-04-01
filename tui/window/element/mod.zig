@@ -42,6 +42,7 @@ pub const Layout = struct {
 pub const Kind = enum(u8) {
     raw,
     box,
+    scrollable,
 };
 
 pub const Options = struct {
@@ -698,11 +699,15 @@ pub fn hitRounded(element: *Element, hit_grid: *HitGrid, radius: f32) void {
 }
 
 pub fn syncLayout(self: *Element) bool {
-    const new_width = self.node.getLayoutWidth();
-    const new_height = self.node.getLayoutHeight();
-
     const parent_left: u16 = if (self.parent) |p| p.layout.left else 0;
     const parent_top: u16 = if (self.parent) |p| p.layout.top else 0;
+
+    return self.syncLayoutWithParent(parent_left, parent_top);
+}
+
+pub fn syncLayoutWithParent(self: *Element, parent_left: u16, parent_top: u16) bool {
+    const new_width = self.node.getLayoutWidth();
+    const new_height = self.node.getLayoutHeight();
 
     const curr_left = self.layout.left;
     const curr_top = self.layout.top;

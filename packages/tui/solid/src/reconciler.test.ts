@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { BoxElement } from "@ares/tui-core/elements"
+import { BoxElement, ScrollableElement } from "@ares/tui-core/elements"
 import { createElement, createTextNode, insertNode, setProp } from "./reconciler"
 
 describe("reconciler", () => {
@@ -22,5 +22,27 @@ describe("reconciler", () => {
                 },
             },
         ])
+    })
+
+    test("supports scrollable native nodes", () => {
+        const root = createElement("box") as BoxElement
+        const before = createElement("box") as BoxElement
+        const scrollable = createElement("scrollable") as ScrollableElement
+
+        expect(scrollable).toBeInstanceOf(ScrollableElement)
+
+        insertNode(root, before)
+        insertNode(root, scrollable)
+
+        setProp(scrollable, "mode", "both")
+        expect(scrollable.mode).toBe("both")
+
+        const child = createElement("box") as BoxElement
+        insertNode(scrollable, child)
+        expect(scrollable.children.map((node) => node.id)).toEqual([child.id])
+
+        const inserted = createElement("box") as BoxElement
+        insertNode(root, inserted, scrollable)
+        expect(root.children.map((node) => node.id)).toEqual([before.id, inserted.id, scrollable.id])
     })
 })

@@ -5,13 +5,16 @@ const Window = @import("window/mod.zig");
 const Element = Window.Element;
 const Screen = @import("Screen.zig");
 const Box = @import("window/element/Box.zig");
+const Scrollable = @import("window/element/Scrollable.zig").Scrollable;
 const Mutations = @import("mutations/mod.zig");
 
 export fn initState(callback: ?global.Callback) void {
     global.state.init(callback);
+    Scrollable.initRegistry(global.state.alloc);
 }
 
 export fn deinitState() void {
+    Scrollable.deinitRegistry();
     global.state.deinit();
 }
 
@@ -101,6 +104,38 @@ export fn drawWindow(app: *App) void {
     app.drawWindow() catch {};
 }
 
+export fn scrollableScrollBy(id: u64, dx: i32, dy: i32) bool {
+    const scrollable = Scrollable.lookup(id) orelse return false;
+    scrollable.scrollBy(dx, dy);
+    return true;
+}
+
+export fn scrollableScrollTo(id: u64, x: i32, y: i32) bool {
+    const scrollable = Scrollable.lookup(id) orelse return false;
+    scrollable.scrollTo(x, y);
+    return true;
+}
+
+export fn scrollableContainsPoint(id: u64, col: u16, row: u16) bool {
+    const scrollable = Scrollable.lookup(id) orelse return false;
+    return scrollable.containsPoint(col, row);
+}
+
+export fn scrollableBarPress(id: u64, col: u16, row: u16) bool {
+    const scrollable = Scrollable.lookup(id) orelse return false;
+    return scrollable.barPress(col, row);
+}
+
+export fn scrollableBarDrag(id: u64, col: u16, row: u16) bool {
+    const scrollable = Scrollable.lookup(id) orelse return false;
+    return scrollable.barDrag(col, row);
+}
+
+export fn scrollableBarRelease(id: u64) bool {
+    const scrollable = Scrollable.lookup(id) orelse return false;
+    return scrollable.barRelease();
+}
+
 fn writeElementJson(elem: *Element, alloc: std.mem.Allocator, buf: *std.ArrayList(u8)) !void {
     try appendSlice(alloc, buf, "{\"id\":");
     try appendInt(alloc, buf, elem.num);
@@ -109,9 +144,9 @@ fn writeElementJson(elem: *Element, alloc: std.mem.Allocator, buf: *std.ArrayLis
     try appendSlice(alloc, buf, "\",\"zIndex\":");
     try appendInt(alloc, buf, elem.zIndex);
 
-    if (elem.childrens) |*childrens| {
+    if (childrenForDump(elem)) |children| {
         try appendSlice(alloc, buf, ",\"children\":[");
-        for (childrens.by_order.items, 0..) |child, i| {
+        for (children, 0..) |child, i| {
             if (i > 0) try buf.append(alloc, ',');
             try writeElementJson(child, alloc, buf);
         }
@@ -119,6 +154,22 @@ fn writeElementJson(elem: *Element, alloc: std.mem.Allocator, buf: *std.ArrayLis
     }
 
     try buf.append(alloc, '}');
+}
+
+fn childrenForDump(elem: *Element) ?[]const *Element {
+    if (elem.kind == .scrollable) {
+        const scrollable: *Scrollable = @ptrCast(@alignCast(elem.userdata orelse return null));
+        if (scrollable.inner.childrens) |*childrens| {
+            return childrens.by_order.items;
+        }
+        return null;
+    }
+
+    if (elem.childrens) |*childrens| {
+        return childrens.by_order.items;
+    }
+
+    return null;
 }
 
 fn appendSlice(alloc: std.mem.Allocator, buf: *std.ArrayList(u8), s: []const u8) !void {

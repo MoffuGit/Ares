@@ -67,6 +67,30 @@ function getTuiLib() {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
             },
+            scrollableScrollBy: {
+                args: [FFIType.u64, FFIType.i32, FFIType.i32],
+                returns: FFIType.bool,
+            },
+            scrollableScrollTo: {
+                args: [FFIType.u64, FFIType.i32, FFIType.i32],
+                returns: FFIType.bool,
+            },
+            scrollableContainsPoint: {
+                args: [FFIType.u64, FFIType.u16, FFIType.u16],
+                returns: FFIType.bool,
+            },
+            scrollableBarPress: {
+                args: [FFIType.u64, FFIType.u16, FFIType.u16],
+                returns: FFIType.bool,
+            },
+            scrollableBarDrag: {
+                args: [FFIType.u64, FFIType.u16, FFIType.u16],
+                returns: FFIType.bool,
+            },
+            scrollableBarRelease: {
+                args: [FFIType.u64],
+                returns: FFIType.bool,
+            },
         },
     );
 
@@ -118,6 +142,7 @@ export class TuiLib {
 
     constructor() {
         this.lib = getTuiLib();
+        tuiLib = this;
         this.initState();
     }
 
@@ -216,6 +241,30 @@ export class TuiLib {
 
     drawWindow(app: Pointer) {
         this.lib.symbols.drawWindow(app);
+    }
+
+    scrollableScrollBy(id: number, dx: number, dy: number): boolean {
+        return this.lib.symbols.scrollableScrollBy(id, dx, dy);
+    }
+
+    scrollableScrollTo(id: number, x: number, y: number): boolean {
+        return this.lib.symbols.scrollableScrollTo(id, x, y);
+    }
+
+    scrollableContainsPoint(id: number, col: number, row: number): boolean {
+        return this.lib.symbols.scrollableContainsPoint(id, col, row);
+    }
+
+    scrollableBarPress(id: number, col: number, row: number): boolean {
+        return this.lib.symbols.scrollableBarPress(id, col, row);
+    }
+
+    scrollableBarDrag(id: number, col: number, row: number): boolean {
+        return this.lib.symbols.scrollableBarDrag(id, col, row);
+    }
+
+    scrollableBarRelease(id: number): boolean {
+        return this.lib.symbols.scrollableBarRelease(id);
     }
 }
 

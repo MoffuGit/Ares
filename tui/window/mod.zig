@@ -11,6 +11,7 @@ const HitGrid = @import("HitGrid.zig");
 const Allocator = std.mem.Allocator;
 const Elements = std.AutoHashMap(u64, *Element);
 const Box = @import("element/Box.zig");
+const Scrollable = @import("element/Scrollable.zig").Scrollable;
 
 const Window = @This();
 
@@ -47,6 +48,10 @@ pub fn deinit(self: *Window) void {
             .box => {
                 const box: *Box = @ptrCast(@alignCast(elem.userdata orelse continue));
                 box.deinit(self.alloc);
+            },
+            .scrollable => {
+                const scrollable: *Scrollable = @ptrCast(@alignCast(elem.userdata orelse continue));
+                scrollable.deinit(self.alloc);
             },
             .raw => {
                 elem.deinit();
@@ -125,10 +130,15 @@ pub fn calculateLayout(self: *Window) void {
 
 fn applyLayout(element: *Element, parent_changed: bool) void {
     const node = element.node.yg_node;
+    const scrollable_dirty = if (element.kind == .scrollable) blk: {
+        const scrollable: *Scrollable = @ptrCast(@alignCast(element.userdata orelse break :blk false));
+        break :blk scrollable.isLayoutDirty();
+    } else false;
 
     const new_layout = yoga.YGNodeGetHasNewLayout(node);
+    const needs_layout = new_layout or parent_changed or scrollable_dirty;
 
-    if (!new_layout and !parent_changed) {
+    if (!needs_layout) {
         return;
     }
 
@@ -137,11 +147,43 @@ fn applyLayout(element: *Element, parent_changed: bool) void {
     }
 
     const position = element.syncLayout();
+    const child_parent_changed = needs_layout or position;
+
+    if (element.kind == .scrollable) {
+        const scrollable: *Scrollable = @ptrCast(@alignCast(element.userdata orelse return));
+        applyScrollableLayout(scrollable, child_parent_changed);
+        return;
+    }
 
     if (element.childrens) |*childrens| {
         for (childrens.by_order.items) |child| {
-            applyLayout(child, new_layout or position);
+            applyLayout(child, child_parent_changed);
         }
+    }
+}
+
+fn applyScrollableLayout(scrollable: *Scrollable, parent_changed: bool) void {
+    const inner = scrollable.inner;
+    const inner_node = inner.node.yg_node;
+    const inner_new_layout = yoga.YGNodeGetHasNewLayout(inner_node);
+
+    if (inner_new_layout) {
+        yoga.YGNodeSetHasNewLayout(inner_node, false);
+    }
+
+    const inner_position = if (inner_new_layout or parent_changed)
+        scrollable.syncContentLayout()
+    else
+        false;
+
+    if (inner.childrens) |*childrens| {
+        for (childrens.by_order.items) |child| {
+            applyLayout(child, parent_changed or inner_new_layout or inner_position);
+        }
+    }
+
+    if (scrollable.bar) |bar| {
+        applyLayout(bar, parent_changed);
     }
 }
 

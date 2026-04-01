@@ -1,4 +1,4 @@
-import { allocId, enqueue, registerElement, unregisterElement } from ".";
+import { allocId, enqueue, registerElement, resolveTuiLib, unregisterElement } from ".";
 
 export type StyleValue =
     | "undefined"
@@ -106,7 +106,8 @@ export interface Segment {
     };
 }
 
-export type ElementType = "box";
+export type ElementType = "box" | "scrollable";
+export type ScrollMode = "vertical" | "horizontal" | "both";
 
 export type EventHandler = (event: ElementEvent) => void;
 
@@ -323,6 +324,20 @@ export interface BoxProps {
     interactive?: boolean;
 }
 
+export interface ScrollableProps {
+    zIndex?: number;
+    style?: Style;
+    mode?: ScrollMode;
+}
+
+type WheelButton = "wheel_up" | "wheel_down" | "wheel_left" | "wheel_right" | 64 | 65 | 66 | 67;
+
+interface MouseData {
+    col?: number;
+    row?: number;
+    button?: WheelButton | number | string;
+}
+
 export class BoxElement extends Element {
     bg: Color = { type: "rgba", r: 0, b: 0, g: 0, a: 0, };
     fg: Color = { type: "rgba", r: 0, b: 0, a: 0, g: 0 };
@@ -353,12 +368,126 @@ export class BoxElement extends Element {
     }
 }
 
+export class ScrollableElement extends Element {
+    mode: ScrollMode = "vertical";
+    private draggingBar = false;
+    private suppressNextClick = false;
+
+    private readonly handleWheel = (event: ElementEvent): void => {
+        const [dx, dy] = getWheelDelta(event.data);
+        if (dx === 0 && dy === 0) return;
+
+        if (this.scrollBy(dx, dy)) {
+            event.stopPropagation();
+        }
+    };
+
+    private readonly handleMouseDown = (event: ElementEvent): void => {
+        const mouse = getMousePosition(event.data);
+        if (!mouse || !isPrimaryButton(event.data)) return;
+
+        if (this.barPress(mouse.col, mouse.row)) {
+            this.draggingBar = true;
+            this.suppressNextClick = true;
+            event.stopPropagation();
+        }
+    };
+
+    private readonly handleMouseMove = (event: ElementEvent): void => {
+        const mouse = getMousePosition(event.data);
+        if (!mouse || !this.draggingBar) return;
+
+        if (this.barDrag(mouse.col, mouse.row)) {
+            event.stopPropagation();
+        }
+    };
+
+    private readonly handleMouseUp = (event: ElementEvent): void => {
+        if (!this.draggingBar) return;
+
+        this.draggingBar = false;
+        if (this.barRelease()) {
+            event.stopPropagation();
+        }
+    };
+
+    private readonly handleMouseLeave = (event: ElementEvent): void => {
+        const mouse = getMousePosition(event.data);
+        const inside = mouse ? this.containsPoint(mouse.col, mouse.row) : false;
+        if (inside) return;
+
+        if (this.draggingBar) {
+            this.draggingBar = false;
+            this.suppressNextClick = false;
+            if (this.barRelease()) {
+                event.stopPropagation();
+            }
+        }
+    };
+
+    private readonly handleClick = (event: ElementEvent): void => {
+        if (!this.suppressNextClick) return;
+
+        this.suppressNextClick = false;
+        event.stopPropagation();
+    };
+
+    constructor() {
+        super("scrollable");
+        this.style = { overflow: "scroll" };
+        this.on("wheel", this.handleWheel);
+        this.on("mousedown", this.handleMouseDown);
+        this.on("mousemove", this.handleMouseMove);
+        this.on("capture:mousemove", this.handleMouseMove);
+        this.on("mouseup", this.handleMouseUp);
+        this.on("capture:mouseup", this.handleMouseUp);
+        this.on("mouseleave", this.handleMouseLeave);
+        this.on("capture:mouseleave", this.handleMouseLeave);
+        this.on("click", this.handleClick);
+        this.on("capture:click", this.handleClick);
+    }
+
+    setProps(props: ScrollableProps): void {
+        if (props.mode !== undefined) this.mode = props.mode;
+        if (props.style !== undefined) this.style = { ...this.style, ...props.style };
+        if (props.zIndex !== undefined) this.zIndex = props.zIndex;
+
+        this.enqueueSetProps(props);
+    }
+
+    scrollBy(dx: number, dy: number): boolean {
+        return resolveTuiLib().scrollableScrollBy(this.id, dx, dy);
+    }
+
+    scrollTo(x: number, y: number): boolean {
+        return resolveTuiLib().scrollableScrollTo(this.id, x, y);
+    }
+
+    containsPoint(col: number, row: number): boolean {
+        return resolveTuiLib().scrollableContainsPoint(this.id, col, row);
+    }
+
+    barPress(col: number, row: number): boolean {
+        return resolveTuiLib().scrollableBarPress(this.id, col, row);
+    }
+
+    barDrag(col: number, row: number): boolean {
+        return resolveTuiLib().scrollableBarDrag(this.id, col, row);
+    }
+
+    barRelease(): boolean {
+        return resolveTuiLib().scrollableBarRelease(this.id);
+    }
+}
+
 // ---- Factory ----
 
 export function createElement(type: ElementType): Element {
     switch (type) {
         case "box":
             return new BoxElement();
+        case "scrollable":
+            return new ScrollableElement();
     }
 }
 
@@ -396,4 +525,39 @@ export function createEvent(type: string, target: Element, data: unknown): Eleme
             this.stopped = true;
         },
     };
+}
+
+function getWheelDelta(data: unknown): [number, number] {
+    const button = (data as MouseData | null | undefined)?.button;
+
+    switch (button) {
+        case "wheel_left":
+        case 67:
+            return [-1, 0];
+        case "wheel_right":
+        case 66:
+            return [1, 0];
+        case "wheel_up":
+        case 64:
+            return [0, -1];
+        case "wheel_down":
+        case 65:
+            return [0, 1];
+        default:
+            return [0, 0];
+    }
+}
+
+function getMousePosition(data: unknown): { col: number; row: number } | null {
+    const mouse = data as MouseData | null | undefined;
+    if (typeof mouse?.col !== "number" || typeof mouse.row !== "number") {
+        return null;
+    }
+
+    return { col: mouse.col, row: mouse.row };
+}
+
+function isPrimaryButton(data: unknown): boolean {
+    const button = (data as MouseData | null | undefined)?.button;
+    return button === "left" || button === 0;
 }

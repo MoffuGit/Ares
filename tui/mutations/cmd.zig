@@ -1,6 +1,7 @@
 const Element = @import("../window/element/mod.zig");
 const Style = Element.Style;
 const Color = @import("vaxis").Color;
+pub const ScrollMode = @import("../window/element/Scrollable.zig").ScrollMode;
 
 pub const CmdType = enum(u8) {
     create = 0,
@@ -15,6 +16,7 @@ pub const CmdType = enum(u8) {
 
 pub const ElementType = enum(u8) {
     box = 0,
+    scrollable = 1,
 };
 
 pub const TextAlign = enum {
@@ -109,10 +111,15 @@ pub const BoxProps = struct {
     interactive: ?bool = null,
 };
 
+pub const ScrollableProps = struct {
+    mode: ?ScrollMode = null,
+};
+
 pub const Props = struct {
     z_index: ?usize = null,
     style: ?StylePatch = null,
     box: ?BoxProps = null,
+    scrollable: ?ScrollableProps = null,
 };
 
 pub const Command = union(CmdType) {

@@ -1,11 +1,15 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
-const Element = @import("mod.zig");
+const ElementMod = @import("mod.zig");
 const Buffer = @import("../../Buffer.zig");
 const HitGrid = @import("../HitGrid.zig");
 const Allocator = std.mem.Allocator;
 
 pub const Scrollable = @This();
+const Element = ElementMod.Element;
+const Registry = std.AutoHashMap(u64, *Scrollable);
+
+var registry: ?Registry = null;
 
 pub const ScrollMode = enum {
     vertical,
@@ -16,35 +20,74 @@ pub const ScrollMode = enum {
 outer: *Element,
 inner: *Element,
 bar: ?*Element = null,
-track: vaxis.Color,
-thumb: vaxis.Color,
-
+track: vaxis.Color = .{ .rgba = .{ 255, 255, 255, 24 } },
+thumb: vaxis.Color = .{ .rgba = .{ 255, 255, 255, 168 } },
 scroll_x: i32 = 0,
 scroll_y: i32 = 0,
-
-drag_start_y_pixel: ?i32 = null,
-drag_start_scroll_y: i32 = 0,
-
 mode: ScrollMode = .vertical,
+layout_dirty: bool = false,
+bar_dragging: bool = false,
+bar_drag_offset_eighths: u32 = 0,
 
-const Options = struct {
+pub const Options = struct {
+    num: ?u64 = null,
+    zIndex: usize = 0,
     mode: ScrollMode = .vertical,
     bar: bool = true,
-    track: vaxis.Color = .default,
-    thumb: vaxis.Color = .default,
-    outer: Element.Style = .{},
+    track: vaxis.Color = .{ .rgba = .{ 255, 255, 255, 24 } },
+    thumb: vaxis.Color = .{ .rgba = .{ 255, 255, 255, 168 } },
+    style: ElementMod.Style = .{},
 };
+
+pub fn initRegistry(alloc: Allocator) void {
+    if (registry != null) return;
+    registry = Registry.init(alloc);
+}
+
+pub fn deinitRegistry() void {
+    if (registry) |*map| {
+        map.deinit();
+        registry = null;
+    }
+}
+
+pub fn lookup(id: u64) ?*Scrollable {
+    if (registry) |*map| {
+        return map.get(id);
+    }
+
+    return null;
+}
 
 pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
     const self = try alloc.create(Scrollable);
-
-    var style = opts.outer;
-
-    style.overflow = .scroll;
+    errdefer alloc.destroy(self);
 
     const outer = try alloc.create(Element);
+    errdefer alloc.destroy(outer);
+
+    const inner = try alloc.create(Element);
+    errdefer alloc.destroy(inner);
+
+    const bar = if (opts.bar) try alloc.create(Element) else null;
+    errdefer if (bar) |bar_elem| alloc.destroy(bar_elem);
+
+    var style = opts.style;
+    style.overflow = .scroll;
+
+    self.* = .{
+        .outer = outer,
+        .inner = inner,
+        .bar = bar,
+        .track = opts.track,
+        .thumb = opts.thumb,
+        .mode = opts.mode,
+    };
+
     outer.* = Element.init(alloc, .{
+        .num = opts.num,
         .kind = .scrollable,
+        .zIndex = opts.zIndex,
         .style = style,
         .beforeDrawFn = beforeDrawFn,
         .afterDrawFn = afterDrawFn,
@@ -53,51 +96,43 @@ pub fn init(alloc: Allocator, opts: Options) !*Scrollable {
         .afterHitFn = afterHitFn,
         .userdata = self,
     });
+    errdefer outer.deinit();
 
-    const inner = try alloc.create(Element);
     inner.* = Element.init(alloc, .{
         .style = .{
             .overflow = .visible,
             .flex_shrink = 0,
         },
     });
+    errdefer inner.deinit();
 
     try outer.addChild(inner);
 
-    self.* = Scrollable{
-        .outer = outer,
-        .inner = inner,
-        .mode = opts.mode,
-        .thumb = opts.thumb,
-        .track = opts.track,
-    };
-
-    if (opts.bar) {
-        const bar = try alloc.create(Element);
-        bar.* = Element.init(alloc, .{
+    if (bar) |bar_elem| {
+        bar_elem.* = Element.init(alloc, .{
             .style = .{
                 .position_type = .absolute,
-                .width = .{
-                    .point = 1,
-                },
+                .width = .{ .point = 1 },
                 .position = .{ .right = .{ .point = 0 } },
                 .height = .{ .percent = 100 },
             },
             .drawFn = drawBar,
+            .hitFn = hitBar,
             .zIndex = 10,
             .userdata = self,
-            .hitFn = Element.hitSelf,
         });
+        errdefer bar_elem.deinit();
 
-        self.bar = bar;
-
-        try outer.addChild(bar);
+        try outer.addChild(bar_elem);
     }
+
+    try self.register();
 
     return self;
 }
 
 pub fn deinit(self: *Scrollable, alloc: Allocator) void {
+    self.unregister();
     if (self.bar) |bar| {
         bar.deinit();
         alloc.destroy(bar);
@@ -109,25 +144,30 @@ pub fn deinit(self: *Scrollable, alloc: Allocator) void {
     alloc.destroy(self);
 }
 
-pub fn mouseOver(self: *Scrollable, _: Element.ElementEvent) void {
-    if (self.bar) |bar| {
-        if (!bar.visible) {
-            bar.visible = true;
-            self.outer.context.?.requestDraw();
-        }
-    }
+pub fn elem(self: *Scrollable) *Element {
+    return self.outer;
 }
 
-pub fn mouseOut(self: *Scrollable, _: Element.ElementEvent) void {
-    if (self.bar) |bar| {
-        if (bar.visible and !bar.dragging) {
-            bar.visible = false;
-            self.outer.context.?.requestDraw();
-        }
-    }
+pub fn content(self: *Scrollable) *Element {
+    return self.inner;
+}
+
+pub fn addChild(self: *Scrollable, child: *Element) !void {
+    try self.inner.addChild(child);
+}
+
+pub fn insertChild(self: *Scrollable, child: *Element, index: usize) !void {
+    try self.inner.insertChild(child, index);
+}
+
+pub fn removeChild(self: *Scrollable, num: u64) void {
+    self.inner.removeChild(num);
 }
 
 pub fn scrollBy(self: *Scrollable, dx: i32, dy: i32) void {
+    const prev_x = self.scroll_x;
+    const prev_y = self.scroll_y;
+
     switch (self.mode) {
         .vertical => self.scroll_y = self.clampY(self.scroll_y + dy),
         .horizontal => self.scroll_x = self.clampX(self.scroll_x + dx),
@@ -136,11 +176,77 @@ pub fn scrollBy(self: *Scrollable, dx: i32, dy: i32) void {
             self.scroll_y = self.clampY(self.scroll_y + dy);
         },
     }
+
+    self.layout_dirty = self.layout_dirty or self.scroll_x != prev_x or self.scroll_y != prev_y;
 }
 
 pub fn scrollTo(self: *Scrollable, x: i32, y: i32) void {
-    self.scroll_x = self.clampX(x);
-    self.scroll_y = self.clampY(y);
+    const next_x = self.clampX(x);
+    const next_y = self.clampY(y);
+
+    self.layout_dirty = self.layout_dirty or self.scroll_x != next_x or self.scroll_y != next_y;
+    self.scroll_x = next_x;
+    self.scroll_y = next_y;
+}
+
+pub fn isLayoutDirty(self: *const Scrollable) bool {
+    return self.layout_dirty;
+}
+
+pub fn syncContentLayout(self: *Scrollable) bool {
+    const parent_left = subtractOffset(self.outer.layout.left, self.scroll_x);
+    const parent_top = subtractOffset(self.outer.layout.top, self.scroll_y);
+    const changed = self.inner.syncLayoutWithParent(parent_left, parent_top);
+    self.layout_dirty = false;
+    return changed;
+}
+
+pub fn containsPoint(self: *const Scrollable, col: u16, row: u16) bool {
+    const layout = self.outer.layout;
+    return col >= layout.left and
+        col < layout.left + layout.width and
+        row >= layout.top and
+        row < layout.top + layout.height;
+}
+
+pub fn barPress(self: *Scrollable, col: u16, row: u16) bool {
+    const metrics = self.barMetrics() orelse return false;
+    if (!metrics.contains(col, row)) return false;
+
+    const pointer_eighths = metrics.pointerEighths(row);
+    const thumb_hit = metrics.thumbContainsRow(row);
+
+    self.bar_drag_offset_eighths = if (thumb_hit)
+        pointer_eighths - metrics.thumb_pos_eighths
+    else
+        metrics.thumb_height_eighths / 2;
+
+    if (!thumb_hit) {
+        self.setScrollYFromBarPointer(metrics, pointer_eighths);
+    }
+
+    self.bar_dragging = true;
+    return true;
+}
+
+pub fn barDrag(self: *Scrollable, col: u16, row: u16) bool {
+    _ = col;
+
+    if (!self.bar_dragging) return false;
+
+    const metrics = self.barMetrics() orelse {
+        self.bar_dragging = false;
+        return false;
+    };
+
+    self.setScrollYFromBarPointer(metrics, metrics.pointerEighths(row));
+    return true;
+}
+
+pub fn barRelease(self: *Scrollable) bool {
+    const was_dragging = self.bar_dragging;
+    self.bar_dragging = false;
+    return was_dragging;
 }
 
 fn clampX(self: *const Scrollable, x: i32) i32 {
@@ -158,80 +264,51 @@ fn clampY(self: *const Scrollable, y: i32) i32 {
 }
 
 pub fn maxScrollX(self: *const Scrollable) i32 {
-    const outer = self.outer.layout.width;
-    const inner = self.inner.layout.width;
+    const outer_width = self.outer.layout.width;
+    const inner_width = self.inner.layout.width;
 
-    if (outer > inner) return @intCast(outer);
+    if (outer_width >= inner_width) return 0;
 
-    return @intCast(inner - outer);
+    return @intCast(inner_width - outer_width);
 }
 
 pub fn maxScrollY(self: *const Scrollable) i32 {
-    const outer = self.outer.layout.height;
-    const inner = self.inner.layout.height;
+    const outer_height = self.outer.layout.height;
+    const inner_height = self.inner.layout.height;
 
-    if (outer > inner) return 0;
+    if (outer_height >= inner_height) return 0;
 
-    return @intCast(inner - outer);
-}
-
-pub const RowSpan = struct { start: usize, end: usize };
-
-pub fn visibleRowSpan(self: *const Scrollable, child: *const Element) RowSpan {
-    const child_offset: i32 = @intCast(child.node.getLayoutTop());
-    const child_height: i32 = @intCast(child.layout.height);
-    const vp_height: i32 = @intCast(self.outer.layout.height);
-
-    const start: i32 = @max(0, self.scroll_y - child_offset);
-    const end: i32 = @min(child_height, self.scroll_y - child_offset + vp_height);
-    if (end <= start) return .{ .start = 0, .end = 0 };
-
-    return .{
-        .start = @intCast(start),
-        .end = @intCast(end),
-    };
-}
-
-pub fn childRowFromScreenY(self: *const Scrollable, child: *const Element, screen_row: u16) ?usize {
-    const child_offset: i32 = @intCast(child.node.getLayoutTop());
-    const child_height: i32 = @intCast(child.layout.height);
-    const vp_top: i32 = @intCast(self.outer.layout.top);
-
-    const vp_row: i32 = @as(i32, @intCast(screen_row)) - vp_top;
-    if (vp_row < 0) return null;
-
-    const content_row: i32 = vp_row + self.scroll_y - child_offset;
-    if (content_row < 0) return null;
-    if (content_row >= child_height) return null;
-    return @intCast(content_row);
+    return @intCast(inner_height - outer_height);
 }
 
 fn beforeDrawFn(element: *Element, buffer: *Buffer) void {
     const layout = element.layout;
-
     buffer.pushClip(layout.left, layout.top, layout.width, layout.height);
 }
 
-fn calculateLayout(element: *Element) void {
-    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
-    const outer = self.outer;
-    const inner = self.inner;
-
-    inner.layout.left = subtractOffset(outer.layout.left, self.scroll_x);
-    inner.layout.top = subtractOffset(outer.layout.top, self.scroll_y);
-
-    applyLayout(inner);
+fn afterDrawFn(_: *Element, buffer: *Buffer) void {
+    buffer.popClip();
 }
 
-fn applyLayout(parent: *Element) void {
-    if (parent.childrens) |*childrens| {
-        for (childrens.by_order.items) |child| {
-            child.layout.left = parent.layout.left + child.node.getLayoutLeft();
-            child.layout.top = parent.layout.top + child.node.getLayoutTop();
+fn beforeHitFn(element: *Element, hit_grid: *HitGrid) void {
+    const layout = element.layout;
+    hit_grid.pushClip(layout.left, layout.top, layout.width, layout.height);
+}
 
-            applyLayout(child);
-        }
-    }
+fn hitGridFn(element: *Element, hit_grid: *HitGrid) void {
+    const layout = element.layout;
+    hit_grid.fillRect(layout.left, layout.top, layout.width, layout.height, element.num);
+}
+
+fn hitBar(element: *Element, hit_grid: *HitGrid) void {
+    const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
+    const metrics = self.barMetrics() orelse return;
+
+    hit_grid.fillRect(metrics.left, metrics.top, metrics.width, metrics.height, self.outer.num);
+}
+
+fn afterHitFn(_: *Element, hit_grid: *HitGrid) void {
+    hit_grid.popClip();
 }
 
 fn subtractOffset(pos: u16, offset: i32) u16 {
@@ -241,214 +318,178 @@ fn subtractOffset(pos: u16, offset: i32) u16 {
     return @intCast(result);
 }
 
-fn afterDrawFn(_: *Element, buffer: *Buffer) void {
-    buffer.popClip();
-}
-
-fn beforeHitFn(element: *Element, hit_grid: *HitGrid) void {
-    calculateLayout(element);
-
-    const layout = element.layout;
-
-    hit_grid.pushClip(layout.left, layout.top, layout.width, layout.height);
-}
-
-fn hitGridFn(element: *Element, hit_grid: *HitGrid) void {
-    const layout = element.layout;
-
-    hit_grid.fillRect(layout.left, layout.top, layout.width, layout.height, element.num);
-}
-
-fn afterHitFn(_: *Element, hit_grid: *HitGrid) void {
-    hit_grid.popClip();
-}
-
-const SCROLL_STEP: i32 = 1;
-
-fn onWheel(self: *Scrollable, data: Element.ElementEvent) void {
-    const mouse = data.event.wheel;
-
-    const dx: i32 = switch (mouse.button) {
-        .wheel_left => -SCROLL_STEP,
-        .wheel_right => SCROLL_STEP,
-        else => 0,
-    };
-
-    const dy: i32 = switch (mouse.button) {
-        .wheel_up => -SCROLL_STEP,
-        .wheel_down => SCROLL_STEP,
-        else => 0,
-    };
-
-    self.scrollBy(dx, dy);
-
-    if (data.element.context) |ctx| {
-        ctx.requestDraw();
-    }
-}
-
-fn withAlpha(color: vaxis.Color, alpha: f32) vaxis.Color {
-    return color.setAlpha(alpha);
-}
-
-const lower_blocks = [8][]const u8{ " ", "▁", "▂", "▃", "▄", "▅", "▆", "▇" };
-const upper_blocks = [8][]const u8{ " ", "▔", "🮂", "🮃", "▀", "🮄", "🮅", "🮆" };
-
 fn drawBar(element: *Element, buffer: *Buffer) void {
     const self: *Scrollable = @ptrCast(@alignCast(element.userdata));
-    const bar_height = element.layout.height;
-    const content_height = self.inner.layout.height;
-    const viewport_height = self.outer.layout.height;
+    const metrics = self.barMetrics() orelse return;
 
-    if (content_height == 0 or bar_height == 0 or viewport_height >= content_height) return;
+    element.fill(buffer, .{ .style = .{ .bg = self.track } });
 
-    const bar_height_eighths: u32 = @as(u32, bar_height) * 8;
-    const thumb_height_eighths: u32 = @max(8, (@as(u32, viewport_height) * bar_height_eighths) / content_height);
-
-    const max_scroll = self.maxScrollY();
-    const scroll_range_eighths: u32 = bar_height_eighths - thumb_height_eighths;
-    const curr: u32 = if (self.scroll_y < 0) 0 else @intCast(self.scroll_y);
-    const thumb_pos_eighths: u32 = if (max_scroll > 0) (curr * scroll_range_eighths) / @as(u32, @intCast(max_scroll)) else 0;
-
-    const alpha: f32 = if (element.hovered or element.dragging) 1.0 else 0.5;
-    const track_color = withAlpha(self.track, alpha);
-    const thumb_color = withAlpha(self.thumb, alpha);
-
-    element.fill(buffer, .{ .style = .{ .bg = track_color } });
-
-    const top_cell = thumb_pos_eighths / 8;
-    const top_frac = thumb_pos_eighths % 8;
-    const thumb_end_eighths = thumb_pos_eighths + thumb_height_eighths;
+    const top_cell = metrics.thumb_pos_eighths / 8;
+    const top_frac = metrics.thumb_pos_eighths % 8;
+    const thumb_end_eighths = metrics.thumb_pos_eighths + metrics.thumb_height_eighths;
     const bottom_cell = thumb_end_eighths / 8;
     const bottom_frac = thumb_end_eighths % 8;
 
-    const bar_left = element.layout.left;
-    const bar_top = element.layout.top;
+    const bar_left = metrics.left;
+    const bar_top = metrics.top;
 
     if (top_cell == bottom_cell) {
         const char = lower_blocks[bottom_frac];
         buffer.writeCell(bar_left, bar_top + @as(u16, @intCast(top_cell)), .{
             .char = .{ .grapheme = char },
-            .style = .{ .fg = thumb_color, .bg = track_color },
+            .style = .{ .fg = self.thumb, .bg = self.track },
         });
-    } else {
-        if (top_frac > 0) {
-            const char = lower_blocks[8 - top_frac];
-            buffer.writeCell(bar_left, bar_top + @as(u16, @intCast(top_cell)), .{
-                .char = .{ .grapheme = char },
-                .style = .{ .fg = thumb_color, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } },
-            });
-        }
+        return;
+    }
 
-        const start_full = top_cell + if (top_frac > 0) @as(u32, 1) else @as(u32, 0);
-        const end_full = bottom_cell;
-        if (end_full > start_full) {
-            buffer.fillRect(
-                bar_left,
-                bar_top + @as(u16, @intCast(start_full)),
-                1,
-                @intCast(end_full - start_full),
-                .{ .style = .{ .bg = thumb_color } },
-            );
-        }
+    if (top_frac > 0) {
+        const char = lower_blocks[8 - top_frac];
+        buffer.writeCell(bar_left, bar_top + @as(u16, @intCast(top_cell)), .{
+            .char = .{ .grapheme = char },
+            .style = .{ .fg = self.thumb, .bg = self.track },
+        });
+    }
 
-        if (bottom_frac > 0 and bottom_cell < bar_height) {
-            const char = upper_blocks[bottom_frac];
-            buffer.writeCell(bar_left, bar_top + @as(u16, @intCast(bottom_cell)), .{
-                .char = .{ .grapheme = char },
-                .style = .{ .fg = thumb_color, .bg = .{ .rgba = .{ 0, 0, 0, 0 } } },
-            });
-        }
+    const start_full = top_cell + if (top_frac > 0) @as(u32, 1) else @as(u32, 0);
+    const end_full = @min(bottom_cell, @as(u32, metrics.height));
+    if (end_full > start_full) {
+        buffer.fillRect(
+            bar_left,
+            bar_top + @as(u16, @intCast(start_full)),
+            1,
+            @intCast(end_full - start_full),
+            .{ .style = .{ .bg = self.thumb } },
+        );
+    }
+
+    if (bottom_frac > 0 and bottom_cell < metrics.height) {
+        const char = upper_blocks[bottom_frac];
+        buffer.writeCell(bar_left, bar_top + @as(u16, @intCast(bottom_cell)), .{
+            .char = .{ .grapheme = char },
+            .style = .{ .fg = self.thumb, .bg = self.track },
+        });
     }
 }
 
-fn getThumbPos(self: *const Scrollable) u16 {
-    const bar = self.bar orelse return 0;
-    const height = bar.layout.height;
-    const max = self.inner.layout.height;
+const BarMetrics = struct {
+    left: u16,
+    top: u16,
+    width: u16,
+    height: u16,
+    bar_height_eighths: u32,
+    thumb_height_eighths: u32,
+    thumb_pos_eighths: u32,
+    scroll_range_eighths: u32,
+    max_scroll: u32,
 
-    if (max == 0 or height == 0) return 0;
-
-    const curr: u32 = if (self.scroll_y < 0) 0 else @intCast(self.scroll_y);
-    return @intCast((curr * height) / max);
-}
-
-fn onBarClick(self: *Scrollable, data: Element.ElementEvent) void {
-    const element = data.element;
-    const mouse = data.event.click;
-
-    const thumb_pos = self.getThumbPos();
-    const bar_top: i32 = @intCast(element.layout.top);
-    const click_y: u16 = @intCast(@max(0, @as(i32, mouse.row) - bar_top));
-
-    if (click_y != thumb_pos) {
-        const bar_height = element.layout.height;
-        const max_scroll = self.maxScrollY();
-
-        if (bar_height > 0) {
-            const new_scroll: i32 = @intCast((@as(u32, click_y) * @as(u32, @intCast(max_scroll))) / bar_height);
-            self.scrollTo(0, new_scroll);
-
-            if (element.context) |ctx| {
-                ctx.requestDraw();
-            }
-        }
-    }
-}
-
-fn onDraw(_: *Scrollable, data: Element.ElementEvent) void {
-    const ctx = data.ctx;
-    if (ctx.phase == .at_target) ctx.stopPropagation();
-}
-
-fn onBarDrag(self: *Scrollable, data: Element.ElementEvent) void {
-    const element = data.element;
-    const mouse = data.event.drag;
-    const ctx = element.context orelse return;
-    const size = ctx.app.window.size;
-
-    data.ctx.stopPropagation();
-
-    const current_y_pixel: i32 = mouse.pixel_row;
-
-    if (self.drag_start_y_pixel == null) {
-        self.drag_start_y_pixel = current_y_pixel;
-        self.drag_start_scroll_y = self.scroll_y;
+    fn contains(self: BarMetrics, col: u16, row: u16) bool {
+        return col >= self.left and
+            col < self.left + self.width and
+            row >= self.top and
+            row < self.top + self.height;
     }
 
-    const cell_height_pixels: i32 = @intCast(size.y_pixel / size.rows);
-    const eighth_pixels: i32 = @max(1, @divFloor(cell_height_pixels, 8));
+    fn pointerEighths(self: BarMetrics, row: u16) u32 {
+        if (row <= self.top) return 0;
 
-    const delta_pixels = current_y_pixel - self.drag_start_y_pixel.?;
-    const delta_eighths = @divFloor(delta_pixels, eighth_pixels);
+        const last_row = self.top + self.height - 1;
+        if (row >= last_row) return self.bar_height_eighths;
 
-    const bar_height = element.layout.height;
+        return (@as(u32, row - self.top) * 8) + 4;
+    }
+
+    fn thumbContainsRow(self: BarMetrics, row: u16) bool {
+        if (row < self.top or row >= self.top + self.height) return false;
+
+        const cell_start = @as(u32, row - self.top) * 8;
+        const cell_end = cell_start + 8;
+        const thumb_end = self.thumb_pos_eighths + self.thumb_height_eighths;
+
+        return cell_start < thumb_end and cell_end > self.thumb_pos_eighths;
+    }
+};
+
+fn barMetrics(self: *const Scrollable) ?BarMetrics {
+    if (self.mode == .horizontal) return null;
+
+    const bar = self.bar orelse return null;
     const content_height = self.inner.layout.height;
     const viewport_height = self.outer.layout.height;
-
-    if (content_height <= viewport_height) return;
-
-    const thumb_height: u16 = @max(1, @as(u16, @intCast((@as(u32, viewport_height) * bar_height) / content_height)));
-    const thumb_travel_eighths: i32 = @as(i32, bar_height - thumb_height) * 8;
+    const bar_height = bar.layout.height;
     const max_scroll = self.maxScrollY();
 
-    if (thumb_travel_eighths > 0) {
-        const scroll_delta = @divFloor(delta_eighths * max_scroll, thumb_travel_eighths);
-        const new_scroll = self.drag_start_scroll_y + scroll_delta;
-        self.scrollTo(0, new_scroll);
-    }
+    if (content_height == 0 or bar_height == 0 or viewport_height == 0) return null;
+    if (viewport_height >= content_height or max_scroll <= 0) return null;
 
-    ctx.requestDraw();
+    const bar_height_eighths: u32 = @as(u32, bar_height) * 8;
+    const thumb_height_eighths: u32 = @max(8, (@as(u32, viewport_height) * bar_height_eighths) / content_height);
+    const scroll_range_eighths: u32 = bar_height_eighths - thumb_height_eighths;
+    const current_scroll: u32 = if (self.scroll_y < 0) 0 else @intCast(self.scroll_y);
+    const max_scroll_u32: u32 = @intCast(max_scroll);
+    const thumb_pos_eighths: u32 = if (scroll_range_eighths > 0)
+        (current_scroll * scroll_range_eighths) / max_scroll_u32
+    else
+        0;
+
+    return .{
+        .left = bar.layout.left,
+        .top = bar.layout.top,
+        .width = bar.layout.width,
+        .height = bar.layout.height,
+        .bar_height_eighths = bar_height_eighths,
+        .thumb_height_eighths = thumb_height_eighths,
+        .thumb_pos_eighths = thumb_pos_eighths,
+        .scroll_range_eighths = scroll_range_eighths,
+        .max_scroll = max_scroll_u32,
+    };
 }
 
-fn onBarDragEnd(self: *Scrollable, data: Element.ElementEvent) void {
-    self.drag_start_y_pixel = null;
-
-    if (!self.outer.hovered and !self.bar.?.hovered) {
-        self.bar.?.visible = false;
+fn setScrollYFromBarPointer(self: *Scrollable, metrics: BarMetrics, pointer_eighths: u32) void {
+    if (metrics.max_scroll == 0 or metrics.scroll_range_eighths == 0) {
+        self.scroll_y = 0;
+        return;
     }
 
-    if (data.element.context) |ctx| {
-        ctx.requestDraw();
+    const raw_thumb_pos = @as(i64, pointer_eighths) - @as(i64, self.bar_drag_offset_eighths);
+    const clamped_thumb_pos: u32 = if (raw_thumb_pos <= 0)
+        0
+    else if (raw_thumb_pos >= metrics.scroll_range_eighths)
+        metrics.scroll_range_eighths
+    else
+        @intCast(raw_thumb_pos);
+
+    const scroll_y = (@as(u64, clamped_thumb_pos) * metrics.max_scroll) / metrics.scroll_range_eighths;
+    self.scroll_y = self.clampY(@intCast(scroll_y));
+}
+
+const lower_blocks = [9][]const u8{ " ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█" };
+const upper_blocks = [9][]const u8{ " ", "▔", "🮂", "🮃", "▀", "🮄", "🮅", "🮆", "█" };
+
+fn register(self: *Scrollable) !void {
+    if (registry) |*map| {
+        try map.put(self.outer.num, self);
     }
+}
+
+fn unregister(self: *Scrollable) void {
+    if (registry) |*map| {
+        _ = map.remove(self.outer.num);
+    }
+}
+
+const testing = std.testing;
+
+test "scrollbar drag updates vertical scroll" {
+    const alloc = testing.allocator;
+    const scrollable = try Scrollable.init(alloc, .{});
+    defer scrollable.deinit(alloc);
+
+    scrollable.outer.layout = .{ .left = 0, .top = 0, .width = 10, .height = 10 };
+    scrollable.inner.layout = .{ .left = 0, .top = 0, .width = 10, .height = 100 };
+    scrollable.bar.?.layout = .{ .left = 9, .top = 0, .width = 1, .height = 10 };
+
+    try testing.expect(scrollable.barPress(9, 0));
+    try testing.expect(scrollable.barDrag(9, 9));
+    try testing.expectEqual(scrollable.maxScrollY(), scrollable.scroll_y);
+    try testing.expect(scrollable.barRelease());
 }

@@ -8,6 +8,8 @@ pub const CmdType = cmdpkg.CmdType;
 pub const ElementType = cmdpkg.ElementType;
 const Props = cmdpkg.Props;
 const BoxProps = cmdpkg.BoxProps;
+const ScrollableProps = cmdpkg.ScrollableProps;
+const ScrollMode = cmdpkg.ScrollMode;
 pub const TextAlign = cmdpkg.TextAlign;
 const StylePatch = cmdpkg.StylePatch;
 const EdgeValues = cmdpkg.EdgeValues;
@@ -126,8 +128,21 @@ fn parseProps(alloc: Allocator, obj: json.ObjectMap) Props {
     }
 
     result.box = parseBoxProps(alloc, props);
+    result.scrollable = parseScrollableProps(props);
 
     return result;
+}
+
+fn parseScrollableProps(props: json.ObjectMap) ?ScrollableProps {
+    var sp = ScrollableProps{};
+    var has_any = false;
+
+    if (props.get("mode")) |v| {
+        sp.mode = parseEnum(ScrollMode, v);
+        if (sp.mode != null) has_any = true;
+    }
+
+    return if (has_any) sp else null;
 }
 
 fn parseBoxProps(alloc: Allocator, props: json.ObjectMap) ?BoxProps {

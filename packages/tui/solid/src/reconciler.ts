@@ -1,4 +1,4 @@
-import { BoxElement, type Segment } from "@ares/tui-core/elements"
+import { BoxElement, Element as CoreElement, ScrollableElement, type Segment } from "@ares/tui-core/elements"
 import { createRenderer } from "./renderer"
 import { nextInternalId, camelToSnake, parseColor, log } from "./utils"
 
@@ -22,7 +22,9 @@ export class SlotNode {
     }
 }
 
-export type TuiNode = BoxElement | TextNode | SlotNode
+type NativeNode = BoxElement | ScrollableElement
+
+export type TuiNode = NativeNode | TextNode | SlotNode
 
 const nodeChildren = new WeakMap<TuiNode, TuiNode[]>()
 
@@ -57,9 +59,14 @@ function syncSegments(parent: BoxElement): void {
     }
 }
 
-function findNativeAnchor(children: TuiNode[], afterIndex: number): BoxElement | null {
+function isNativeNode(node: TuiNode): node is NativeNode {
+    return node instanceof CoreElement
+}
+
+function findNativeAnchor(children: TuiNode[], afterIndex: number): NativeNode | null {
     for (let i = afterIndex; i < children.length; i++) {
-        if (children[i] instanceof BoxElement) return children[i] as BoxElement
+        const candidate = children[i]
+        if (candidate && isNativeNode(candidate)) return candidate
     }
     return null
 }
@@ -83,10 +90,14 @@ export const {
 } = createRenderer<TuiNode>({
     createElement(tag: string): TuiNode {
         log("createElement:", tag)
-        if (tag !== "box") {
-            throw new Error(`[Reconciler] Unknown element type: "${tag}". Only "box" is supported.`)
+        switch (tag) {
+            case "box":
+                return new BoxElement()
+            case "scrollable":
+                return new ScrollableElement()
+            default:
+                throw new Error(`[Reconciler] Unknown element type: "${tag}". Supported types are "box" and "scrollable".`)
         }
-        return new BoxElement()
     },
 
     createTextNode(value: string): TuiNode {
@@ -115,12 +126,12 @@ export const {
     },
 
     setProperty(node: TuiNode, name: string, value: unknown, prev?: unknown): void {
-        if (!(node instanceof BoxElement)) return
+        if (!isNativeNode(node)) return
 
         if (name === "children") return
 
         if (name === "ref") {
-            if (typeof value === "function") (value as (el: BoxElement) => void)(node)
+            if (typeof value === "function") (value as (el: NativeNode) => void)(node)
             return
         }
 
@@ -129,7 +140,7 @@ export const {
             if (prev) node.off(event, prev as any)
             if (value) {
                 node.on(event, value as any)
-                if (MOUSE_EVENTS.has(event)) {
+                if (MOUSE_EVENTS.has(event) && node instanceof BoxElement) {
                     node.setProps({ interactive: true })
                 }
             }
@@ -141,7 +152,7 @@ export const {
             if (prev) node.off(event, prev as any)
             if (value) {
                 node.on(event, value as any)
-                if (MOUSE_EVENTS.has(event)) {
+                if (MOUSE_EVENTS.has(event) && node instanceof BoxElement) {
                     node.setProps({ interactive: true })
                 }
             }
@@ -158,7 +169,15 @@ export const {
             return
         }
 
+        if (name === "mode") {
+            if (node instanceof ScrollableElement) {
+                node.setProps({ mode: value as ScrollableElement["mode"] })
+            }
+            return
+        }
+
         if (name === "bg" || name === "fg") {
+            if (!(node instanceof BoxElement)) return
             node.setProps({ [name]: parseColor(value) } as any)
             if (getChildren(node).some((child) => child instanceof TextNode)) {
                 syncSegments(node)
@@ -171,7 +190,7 @@ export const {
             return
         }
 
-        if (BOX_PROPS.has(name)) {
+        if (node instanceof BoxElement && BOX_PROPS.has(name)) {
             node.setProps({ [name]: value } as any)
             return
         }
@@ -200,7 +219,7 @@ export const {
             node.parent = parent
         }
 
-        if (node instanceof BoxElement && parent instanceof BoxElement) {
+        if (isNativeNode(node) && isNativeNode(parent)) {
             if (!anchor) {
                 parent.appendChild(node)
             } else {
@@ -232,7 +251,7 @@ export const {
             node.parent = null
         }
 
-        if (node instanceof BoxElement && parent instanceof BoxElement) {
+        if (isNativeNode(node) && isNativeNode(parent)) {
             parent.removeChild(node)
         }
 
@@ -245,7 +264,7 @@ export const {
         if (node instanceof TextNode || node instanceof SlotNode) {
             return node.parent ?? undefined
         }
-        return (node as BoxElement).parent ?? undefined
+        return (node.parent as NativeNode | null) ?? undefined
     },
 
     getFirstChild(node: TuiNode): TuiNode | undefined {
@@ -258,7 +277,7 @@ export const {
         if (node instanceof TextNode || node instanceof SlotNode) {
             parent = node.parent
         } else {
-            parent = (node as BoxElement).parent
+            parent = node.parent as NativeNode | null
         }
         if (!parent) return undefined
 
@@ -270,7 +289,7 @@ export const {
 })
 
 function nodeId(node: TuiNode): string {
-    if (node instanceof BoxElement) return `box-${node.id}`
+    if (isNativeNode(node)) return `${node.elementType}-${node.id}`
     if (node instanceof TextNode) return `text-${node.id}`
     return `slot-${(node as SlotNode).id}`
 }

@@ -102,6 +102,13 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    test_core.addImport("macos", b.dependency("macos", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("macos"));
+    core_step.dependOn(&core_lib.step);
+    core_step.dependOn(&lib_install.step);
+
     test_core.addImport("xev", xev_dep.module("xev"));
     test_core.addImport("datastruct", datastruct);
     test_core.addImport("objc", objc_dep.module("objc"));
