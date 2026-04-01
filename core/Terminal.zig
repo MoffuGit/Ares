@@ -14,6 +14,8 @@ ptr: *anyopaque,
 thread: Thread,
 thr: std.Thread,
 
+term: ghostty_vt.Terminal,
+
 pub fn create(alloc: Allocator, layer_ptr: *anyopaque) !*Terminal {
     const self = try alloc.create(Terminal);
     errdefer alloc.destroy(self);
@@ -21,7 +23,15 @@ pub fn create(alloc: Allocator, layer_ptr: *anyopaque) !*Terminal {
     var thread = try Thread.init(alloc, self);
     errdefer thread.deinit();
 
+    var term = try ghostty_vt.Terminal.init(alloc, .{
+        .cols = 0,
+        .rows = 0,
+        .max_scrollback = 1000,
+    });
+    errdefer term.deinit(alloc);
+
     self.* = .{
+        .term = term,
         .alloc = alloc,
         .ptr = layer_ptr,
         .thread = thread,
@@ -43,6 +53,8 @@ pub fn destroy(self: *Terminal) void {
         self.thread.stop.notify() catch {};
         self.thr.join();
     }
+
+    self.term.deinit(self.alloc);
 
     self.thread.deinit();
 
