@@ -1,4 +1,0 @@
-preload = ["@ares/tui-solid/preload"]
-
-[test]
-preload = ["@ares/tui-solid/preload"]
