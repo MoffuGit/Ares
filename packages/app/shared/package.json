@@ -7,26 +7,20 @@
     ".": "./src/index.ts",
     "./core": "./src/core/index.ts",
     "./react": "./src/react/index.ts",
-    "./solid": "./src/solid/index.ts"
   },
   "dependencies": {
     "@ares/core": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
-    "solid-js": "1.9.9",
     "@types/bun": "latest"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
-    "solid-js": "1.9.9"
   },
   "peerDependenciesMeta": {
     "react": {
       "optional": true
     },
-    "solid-js": {
-      "optional": true
-    }
   }
 }
