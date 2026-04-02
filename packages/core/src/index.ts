@@ -2,9 +2,57 @@ import { dlopen, FFIType, JSCallback, ptr, toArrayBuffer, type Pointer } from "b
 import { EventEmitter } from "events";
 import { resolve } from "path";
 import { EventType, Events, EventsName } from "./events";
-import { BufferState, KeymapEntry, Settings, WorktreeEntry } from "./structs";
+import {
+    BufferState as RawBufferState,
+    KeymapEntry,
+    Settings as RawSettings,
+    WorktreeEntry as RawWorktreeEntry,
+} from "./structs";
+import { resolveTheme } from "./theme";
+import type {
+    BufferState,
+    KeymapBinding,
+    Settings,
+    Theme,
+    WorktreeEntry,
+} from "@ares/shared";
 
 const DEFAULT_LIB_PATH = resolve(import.meta.dir, "../../../zig-out/lib/libcore.dylib");
+
+function toNumber(value: number | bigint): number {
+    return typeof value === "bigint" ? Number(value) : value;
+}
+
+function mapBufferState(raw: {
+    entry_id: number | bigint;
+    row_count: number | bigint;
+    cell_width: number | bigint;
+    cell_height: number | bigint;
+    renderer_health: number | bigint;
+}): BufferState {
+    return {
+        entryId: toNumber(raw.entry_id),
+        rowCount: toNumber(raw.row_count),
+        cellWidth: toNumber(raw.cell_width),
+        cellHeight: toNumber(raw.cell_height),
+        rendererHealth: toNumber(raw.renderer_health),
+    };
+}
+
+function mapWorktreeEntry(raw: ReturnType<typeof RawWorktreeEntry.unpack>): WorktreeEntry {
+    const path = raw.path ?? "";
+    const parts = path.split("/");
+
+    return {
+        id: toNumber(raw.id),
+        name: parts[parts.length - 1] ?? path,
+        path,
+        kind: raw.kind === 1 ? "dir" : "file",
+        fileType: raw.file_type ?? "unknown",
+        expanded: raw.is_expanded,
+        depth: raw.depth,
+    };
+}
 
 function getCoreLib(libPath: string) {
     const symbols = dlopen(
@@ -177,7 +225,10 @@ export class CoreLib extends EventEmitter {
                         console.log("expected size: ", dataType.size, "got: ", _len);
                         return
                     };
-                    const data = dataType.unpack(toArrayBuffer(ptr, 0, _len));
+                    const rawData = dataType.unpack(toArrayBuffer(ptr, 0, _len));
+                    const data = _type === EventType.BufferUpdate
+                        ? mapBufferState(rawData)
+                        : rawData;
                     const event = EventsName[_type];
                     queueMicrotask(() => {
                         console.log("event with data received", event, data);
@@ -228,22 +279,29 @@ export class CoreLib extends EventEmitter {
     readSettings(app: Pointer) {
         this.lib.symbols.lockSettings(app);
         try {
-            const buf = new ArrayBuffer(Settings.size);
+            const buf = new ArrayBuffer(RawSettings.size);
             this.lib.symbols.readSettings(app, ptr(buf));
-            return Settings.unpack(buf);
+            const raw = RawSettings.unpack(buf);
+            return {
+                scheme: raw.scheme,
+                system_scheme: raw.system_scheme,
+                tabs_position: raw.tabs_position,
+                light_theme: raw.light_theme ?? "",
+                dark_theme: raw.dark_theme ?? "",
+            } satisfies Settings;
         } finally {
             this.lib.symbols.unlockSettings(app);
         }
     }
 
-    readThemeJson(app: Pointer): string {
+    readTheme(app: Pointer): Theme {
         this.lib.symbols.lockSettings(app);
         try {
             const len = Number(this.lib.symbols.getThemeJsonLen(app));
-            if (len === 0) return "{}";
+            if (len === 0) return resolveTheme("{}");
             const buf = new ArrayBuffer(len);
             this.lib.symbols.readThemeJson(app, ptr(buf), len);
-            return new TextDecoder().decode(buf);
+            return resolveTheme(new TextDecoder().decode(buf));
         } finally {
             this.lib.symbols.unlockSettings(app);
         }
@@ -258,18 +316,18 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.destroyProject(handle);
     }
 
-    readFileTree(project: Pointer) {
+    readFileTree(project: Pointer): WorktreeEntry[] {
         const count = Number(this.lib.symbols.getFiletreeCount(project));
         if (count === 0) return [];
 
-        const entrySize = WorktreeEntry.size;
+        const entrySize = RawWorktreeEntry.size;
         const buf = new ArrayBuffer(count * entrySize);
         const actual = Number(this.lib.symbols.readFiletree(project, ptr(buf), count));
 
-        const entries: ReturnType<typeof WorktreeEntry.unpack>[] = [];
+        const entries: WorktreeEntry[] = [];
         for (let i = 0; i < actual; i++) {
             const slice = buf.slice(i * entrySize, (i + 1) * entrySize);
-            entries.push(WorktreeEntry.unpack(slice));
+            entries.push(mapWorktreeEntry(RawWorktreeEntry.unpack(slice)));
         }
         return entries;
     }
@@ -294,7 +352,7 @@ export class CoreLib extends EventEmitter {
         return this.lib.symbols.trieNodeHasChildren(node) as boolean;
     }
 
-    readKeymapEntries(app: Pointer, scope: number, mode: number): Array<{ sequence: string; action: string }> {
+    readKeymapEntries(app: Pointer, scope: number, mode: number): KeymapBinding[] {
         this.lib.symbols.lockSettings(app);
         try {
             const count = Number(this.lib.symbols.getKeymapEntryCount(app, scope, mode));
@@ -306,7 +364,7 @@ export class CoreLib extends EventEmitter {
                 this.lib.symbols.readKeymapEntries(app, scope, mode, ptr(buf), count),
             );
 
-            const entries: Array<{ sequence: string; action: string }> = [];
+            const entries: KeymapBinding[] = [];
             for (let i = 0; i < actual; i++) {
                 const slice = buf.slice(i * entrySize, (i + 1) * entrySize);
                 const { sequence, action } = KeymapEntry.unpack(slice);
@@ -344,12 +402,11 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.editorScrollTo(editor, row);
     }
 
-    readBufferState(editor: Pointer): { entry_id: number; row_count: number; cell_width: number; cell_height: number; renderer_health: number } | null {
-        const buf = new ArrayBuffer(BufferState.size);
+    readBufferState(editor: Pointer): BufferState | null {
+        const buf = new ArrayBuffer(RawBufferState.size);
         const ok = this.lib.symbols.readBufferState(editor, ptr(buf));
         if (!ok) return null;
-        const raw = BufferState.unpack(buf);
-        return { entry_id: Number(raw.entry_id), row_count: Number(raw.row_count), cell_width: Number(raw.cell_width), cell_height: Number(raw.cell_height), renderer_health: Number(raw.renderer_health) };
+        return mapBufferState(RawBufferState.unpack(buf));
     }
 
     setEditorVisibility(editor: Pointer, visible: boolean) {
@@ -379,3 +436,5 @@ export function resolveCoreLib(libPath?: string): CoreLib {
     }
     return coreLib
 }
+
+export * from "./app.ts";

@@ -9,7 +9,7 @@ import {
 import { FileIcon } from "./file-icons";
 import { VirtualizedList } from "./virtual-list";
 import { useAppStore } from "@/lib/app";
-import { WorktreeEntry } from "@ares/shared";
+import type { WorktreeEntry } from "@ares/shared";
 
 export function FileTree() {
     const filetree = useAppStore((state) => state.filetree);

@@ -1,7 +1,7 @@
 import { WGPUView } from "electrobun/bun";
 import type { Pointer } from "bun:ffi";
+import type { App, CoreLib } from "@ares/core";
 import type { Surface, SurfaceKind } from "@ares/shared";
-import { App } from "node_modules/@ares/shared/src/app";
 
 type Rect = { x: number; y: number; width: number; height: number };
 
@@ -16,8 +16,13 @@ type SurfaceState = {
 
 export class SurfaceStore {
     private states = new Map<number, SurfaceState>();
+    app: App;
 
-    start(app: App, surfaceId: number, _win: unknown, rect: Rect, surface: Surface) {
+    constructor(app: App) {
+        this.app = app;
+    }
+
+    start(surfaceId: number, _win: unknown, rect: Rect, surface: Surface) {
         console.log("view", surfaceId, "request to start");
         if (this.states.has(surfaceId)) return;
 
@@ -31,7 +36,8 @@ export class SurfaceStore {
             throw new Error(`Failed to get Metal layer pointer for view ${surfaceId}`);
         }
 
-        const corePtr = this.createCoreSurface(app, surface.kind, metalLayerPtr);
+        if (!this.app.coreProject) throw new Error(`There is no project for this surface ${surfaceId}`);
+        const corePtr = this.createCoreSurface(this.app.core, this.app.coreProject, surface.kind, metalLayerPtr);
         if (!corePtr) {
             throw new Error(`Failed to create view (kind=${surface.kind}) for id ${surfaceId}`);
         }
@@ -41,7 +47,7 @@ export class SurfaceStore {
 
         console.log("view", surfaceId, "started");
 
-        this.resizeCoreSurface(app, surface.kind, corePtr, width, height);
+        this.resizeCoreSurface(this.app.core, surface.kind, corePtr, width, height);
 
         this.states.set(surfaceId, {
             id: surfaceId,
@@ -53,7 +59,7 @@ export class SurfaceStore {
         });
     }
 
-    updateRect(app: App, viewId: number, rect: Rect) {
+    updateRect(viewId: number, rect: Rect) {
         const state = this.states.get(viewId);
         if (!state) return;
 
@@ -62,78 +68,78 @@ export class SurfaceStore {
         const height = Math.max(1, Math.floor(rect.height));
 
         if (width !== state.lastWidth || height !== state.lastHeight) {
-            this.resizeCoreSurface(app, state.surface.kind, state.corePtr, width, height);
+            this.resizeCoreSurface(this.app.core, state.surface.kind, state.corePtr, width, height);
             state.lastWidth = width;
             state.lastHeight = height;
         }
     }
 
-    stop(app: App, viewId: number) {
+    stop(viewId: number) {
         console.log("view", viewId, "stopped");
         const state = this.states.get(viewId);
         if (!state) return;
 
-        this.destroyCoreSurface(app, state.surface.kind, state.corePtr);
+        this.destroyCoreSurface(this.app.core, state.surface.kind, state.corePtr);
         this.states.delete(viewId);
     }
 
-    stopAll(app: App) {
+    stopAll() {
         for (const viewId of this.states.keys()) {
-            this.stop(app, viewId);
+            this.stop(viewId);
         }
     }
 
-    setVisibility(app: App, viewId: number, visible: boolean) {
+    setVisibility(viewId: number, visible: boolean) {
         const state = this.states.get(viewId);
         if (!state) return;
 
         switch (state.surface.kind) {
             case "editor":
-                app.setEditorVisibility(state.corePtr, visible);
+                this.app.core.setEditorVisibility(state.corePtr, visible);
                 break;
             case "terminal":
                 break;
         }
     }
 
-    selectSurfaceEntry(app: App, viewId: number, id: number) {
+    selectSurfaceEntry(viewId: number, id: number) {
         const state = this.states.get(viewId);
         if (!state || state.surface.kind !== "editor") return;
-        app.selectEditorEntry(state.corePtr, id);
+        this.app.core.selectEditorEntry(state.corePtr, id);
     }
 
-    surfaceScrollTo(app: App, viewId: number, row: number) {
+    surfaceScrollTo(viewId: number, row: number) {
         const state = this.states.get(viewId);
         if (!state || state.surface.kind !== "editor") return;
-        app.editorScrollTo(state.corePtr, row);
+        this.app.core.editorScrollTo(state.corePtr, row);
     }
 
-    private createCoreSurface(app: App, kind: SurfaceKind, metalLayerPtr: Pointer): Pointer | null {
+    private createCoreSurface(core: CoreLib, project: Pointer | null, kind: SurfaceKind, metalLayerPtr: Pointer): Pointer | null {
         switch (kind) {
             case "editor":
-                return app.createEditor(metalLayerPtr);
+                return project ? core.createEditor(project, metalLayerPtr) : null;
             case "terminal":
-                return app.createTerminal(metalLayerPtr);
+                return core.createTerminal(metalLayerPtr);
         }
     }
 
-    private resizeCoreSurface(app: App, kind: SurfaceKind, ptr: Pointer, width: number, height: number) {
+    private resizeCoreSurface(core: CoreLib, kind: SurfaceKind, ptr: Pointer, width: number, height: number) {
         switch (kind) {
             case "editor":
-                app.resizeEditor(ptr, width, height);
+                core.resizeEditor(ptr, width, height);
                 break;
             case "terminal":
                 break;
         }
     }
 
-    private destroyCoreSurface(app: App, kind: SurfaceKind, ptr: Pointer) {
+    private destroyCoreSurface(core: CoreLib, kind: SurfaceKind, ptr: Pointer) {
         switch (kind) {
             case "editor":
-                app.destroyEditor(ptr);
+                core.destroyEditor(ptr);
                 break;
             case "terminal":
-                app.destroyTerminal(ptr);
+                core.destroyTerminal(ptr);
                 break;
         }
     }

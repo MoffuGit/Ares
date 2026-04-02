@@ -1,21 +1,6 @@
 export type ColorScheme = "light" | "dark" | "system";
 export type TabsPosition = "horizontal" | "vertical";
 
-export type AppState = {
-    settings: Settings | null;
-    theme: Theme | null;
-    filetree: WorktreeEntry[] | null;
-    mode: Mode;
-    keymaps: ScopedKeymaps | null;
-    project: ProjectInfo | null;
-
-    sidebarOpen: boolean;
-    sidebarKind: SidebarKind;
-
-    tabs: Tab[];
-    activeTabId: number | null;
-};
-
 export type SidebarKind = "filetree" | "tabs";
 
 export type BufferState = {
@@ -26,18 +11,7 @@ export type BufferState = {
     rendererHealth: number;
 };
 
-export type AppEvents = {
-    settingsUpdate: [];
-    themeUpdate: [];
-    filetreeUpdate: [];
-    projectUpdate: [project: ProjectInfo | null];
-    bufferUpdate: [state: BufferState];
-    modeUpdate: [];
-    keymapsUpdate: [];
-    keymapSequence: [sequence: string];
-};
-
-export type ProjectInfo = {
+export type Project = {
     name: string;
     path: string;
 };
@@ -90,17 +64,17 @@ export type Theme = {
     modeVisual: string;
     modeInsert: string;
     fileType: Record<string, string>;
-}
+};
 
 export type WorktreeEntry = {
     id: number;
     name: string;
     path: string;
-    expanded: boolean,
+    expanded: boolean;
     kind: "file" | "dir";
     fileType: string;
     depth: number;
-}
+};
 
 export type Mode = "normal" | "insert" | "visual";
 export type Scope = "global" | "editor" | "command_palette";
@@ -119,8 +93,7 @@ export type GlobalAction =
     | "workspace:filetree_panel"
     | "workspace:new_terminal_tab";
 
-export type EditorAction =
-    | string;
+export type EditorAction = string;
 
 export type CommandPaletteAction =
     | "command:up"
@@ -140,7 +113,7 @@ export type ScopeActionMap = {
 export type KeymapBinding = {
     sequence: string;
     action: string;
-}
+};
 
 export type ScopedKeymaps = Record<Scope, KeymapBinding[]>;
 
@@ -153,14 +126,24 @@ export type KeyDownMods = {
     meta: boolean;
     caps_lock: boolean;
     num_lock: boolean;
-}
+};
 
-export type EditorSurface = { kind: "editor"; gpuSurfaceId?: number; entry?: WorktreeEntry; bufferState?: BufferState };
-export type TerminalSurface = { kind: "terminal"; cwd: string; gpuSurfaceId?: number };
+export type EditorSurface = {
+    kind: "editor";
+    gpuSurfaceId?: number;
+    entry?: WorktreeEntry;
+    bufferState?: BufferState;
+};
+
+export type TerminalSurface = {
+    kind: "terminal";
+    cwd: string;
+    gpuSurfaceId?: number;
+};
+
 export type Surface = EditorSurface | TerminalSurface;
 
 export type SurfaceKind = Surface["kind"];
-
 
 export type Tab = {
     id: number;

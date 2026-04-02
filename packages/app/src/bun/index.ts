@@ -1,12 +1,22 @@
-import { App } from "../../../shared/src/app/index.ts";
+import { App } from "@ares/core";
+import { Project } from "@ares/shared";
 import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
 import { homedir } from "os";
-import { join, resolve } from "path";
+import { join, resolve, basename } from "path";
 import { AppRPC } from "src/rpc.ts";
-import { SurfaceStore } from "./SurfaceStore.ts";
+import { SurfaceStore } from "./SurfaceStore";
+
+const MAC_TRAFFIC_LIGHTS_X = 12;
+const MAC_TRAFFIC_LIGHTS_Y = 10;
 
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
+
+const libPath = resolve(import.meta.dir, "../lib/libcore.dylib");
+const settingsPath = resolve(import.meta.dir, "../../../../../../../../../settings/");
+
+const app = new App(settingsPath, libPath);
+const surfaceStore = new SurfaceStore(app);
 
 async function getMainSurfaceUrl(): Promise<string> {
     const channel = await Updater.localInfo.channel();
@@ -24,20 +34,18 @@ async function getMainSurfaceUrl(): Promise<string> {
     return "views://mainview/index.html";
 }
 
-const settingsPath = resolve(import.meta.dir, "../../../../../../../../../settings/");
-const libPath = resolve(import.meta.dir, "../lib/libcore.dylib");
-
-const app = new App(settingsPath, libPath);
-
-const url = await getMainSurfaceUrl();
-const surfaceStore = new SurfaceStore();
 
 const rpc = BrowserView.defineRPC<AppRPC>({
     maxRequestTime: 600000,
     handlers: {
         requests: {
-            getState: ({ }) => app._state,
-            openProjectDialog: async ({ }) => {
+            initialLoad: () => {
+                return {
+                    settings: app.readSettings(),
+                    theme: app.readTheme()
+                }
+            },
+            openProjectDialog: async () => {
                 const chosenPaths = await Utils.openFileDialog({
                     startingFolder: join(homedir(), "Desktop"),
                     allowedFileTypes: "*",
@@ -50,11 +58,14 @@ const rpc = BrowserView.defineRPC<AppRPC>({
                 if (!projectPath) return null;
 
                 app.openProject(projectPath);
-                return app._state.project;
+                const name = basename(projectPath) || projectPath;
+                const project: Project = { name, path: projectPath };
+
+                return project;
             },
             gpuTagReady: ({ id, rect, surface }) => {
                 try {
-                    surfaceStore.start(app, id, mainWindow, rect, surface);
+                    surfaceStore.start(id, mainWindow, rect, surface);
                     return { success: true };
                 } catch (err: any) {
                     console.error(`Metal renderer start failed: ${String(err?.message ?? err)}`);
@@ -65,26 +76,31 @@ const rpc = BrowserView.defineRPC<AppRPC>({
         messages: {
             expandEntry: (id) => { app.expandEntry(id) },
             selectSurfaceEntry: ({ surfaceId, id }) => {
-                surfaceStore.selectSurfaceEntry(app, surfaceId, id);
+                surfaceStore.selectSurfaceEntry(surfaceId, id);
             },
             surfaceScrollTo: ({ surfaceId, row }) => {
-                surfaceStore.surfaceScrollTo(app, surfaceId, row);
+                surfaceStore.surfaceScrollTo(surfaceId, row);
             },
-            setMode: (mode) => app.setMode(mode),
+            setMode: (mode) => {
+                // setMode(mode);
+                // if (appState.keymaps) {
+                //     mainWindow.webview.rpc?.send.keymapsUpdate(appState.keymaps);
+                // }
+            },
             gpuTagRect: ({ id, rect }) => {
-                surfaceStore.updateRect(app, id, rect);
+                surfaceStore.updateRect(id, rect);
             },
             gpuTagStop: ({ id }) => {
-                surfaceStore.stop(app, id);
+                surfaceStore.stop(id);
             },
             gpuTagVisibility: ({ id, visible }) => {
-                surfaceStore.setVisibility(app, id, visible);
+                surfaceStore.setVisibility(id, visible);
             },
         },
     },
 });
 
-
+const url = await getMainSurfaceUrl();
 const mainWindow = new BrowserWindow({
     titleBarStyle: "hiddenInset",
     title: "Ares",
@@ -95,67 +111,44 @@ const mainWindow = new BrowserWindow({
         x: 200,
         y: 200,
     },
-    transparent: true,
+    transparent: false,
     rpc: rpc,
 });
 
 const alignButtons = () =>
-    app.setWindowTrafficLightPosition(
-        mainWindow.ptr,
-    );
+    app.core.setWindowTrafficLightsPosition(mainWindow.ptr, MAC_TRAFFIC_LIGHTS_X, MAC_TRAFFIC_LIGHTS_Y);
 
 
 alignButtons();
 mainWindow.on("resize", alignButtons);
 
-app.start();
-
-app.on("settingsUpdate", () => {
-    if (app._state.settings) {
-        console.log("sending new settings:", app._state.settings);
-        mainWindow.webview.rpc?.send.settingsUpdate(app._state.settings)
-    }
-    if (app._state.theme) {
-        mainWindow.webview.rpc?.send.themeUpdate(app._state.theme)
-    }
+app.core.on("SettingsUpdate", () => {
+    mainWindow.webview.rpc?.send.settingsUpdate(app.readSettings())
+    mainWindow.webview.rpc?.send.themeUpdate(app.readTheme())
 });
 
-app.on("themeUpdate", () => {
-    if (app._state.theme) {
-        mainWindow.webview.rpc?.send.themeUpdate(app._state.theme)
-    }
+app.core.on("ThemeUpdate", () => {
+    mainWindow.webview.rpc?.send.themeUpdate(app.readTheme());
 });
 
-app.on("filetreeUpdate", () => {
-    if (app._state.filetree) {
-        mainWindow.webview.rpc?.send.filetreeUpdate(app._state.filetree);
-    }
+app.core.on("FiletreeUpdate", () => {
+    const fileTree = app.readFileTree();
+    if (!fileTree) return;
+    mainWindow.webview.rpc?.send.filetreeUpdate(fileTree);
 });
 
-app.on("projectUpdate", (project) => {
-    mainWindow.webview.rpc?.send.projectUpdate(project);
-});
-
-app.on("keymapsUpdate", () => {
-    if (app._state.keymaps) {
-        mainWindow.webview.rpc?.send.keymapsUpdate(app._state.keymaps);
-    }
-});
-
-app.on("bufferUpdate", (state) => {
+app.core.on("BufferUpdate", (state) => {
     mainWindow.webview.rpc?.send.bufferUpdate(state);
 });
 
 mainWindow.webview.on("dom-ready", () => {
     setInterval(() => {
-        app.drainMailbox()
+        app.core.drainMailbox()
     }, 100);
 });
 
 mainWindow.on("close", () => {
-    surfaceStore.stopAll(app);
-    app.stop();
+    surfaceStore.stopAll();
+    app.destroy();
     Utils.quit();
 });
-
-console.log("Ares desktop app started!");

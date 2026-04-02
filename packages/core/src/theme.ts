@@ -1,18 +1,20 @@
-import type { Theme } from "../types";
+import type { Theme } from "./types.ts";
 
 export function resolveTheme(json: string): Theme {
-    const raw: RawThemeFile = JSON.parse(json);
+    const raw = JSON.parse(json) as Partial<RawThemeFile>;
+    const colors = raw.colors ?? {};
+    const theme = raw.theme ?? {};
 
     const resolved: Record<string, string> = {};
     for (const key of THEME_KEYS) {
-        const ref = raw.theme[key];
-        resolved[key] = ref ? resolveColor(ref, raw.colors) : "#000000ff";
+        const ref = theme[key];
+        resolved[key] = ref ? resolveColor(ref, colors) : "#000000ff";
     }
 
     const fileType: Record<string, string> = {};
-    if (raw.theme.fileType) {
-        for (const [key, value] of Object.entries(raw.theme.fileType)) {
-            fileType[key] = resolveColor(value, raw.colors);
+    if (theme.fileType) {
+        for (const [key, value] of Object.entries(theme.fileType)) {
+            fileType[key] = resolveColor(value, colors);
         }
     }
 

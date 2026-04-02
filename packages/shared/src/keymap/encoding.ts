@@ -88,20 +88,23 @@ function parseStroke(tok: string): EncodedStroke | null {
 
     const parts = tok.split("+");
     if (parts.length === 0) return null;
+    const keyPart = parts.at(-1);
+    if (!keyPart) return null;
 
     let mods = 0;
     for (let i = 0; i < parts.length - 1; i++) {
-        const m = parts[i].toLowerCase();
-        if (m === "shift") mods |= 1 << 0;
-        else if (m === "alt") mods |= 1 << 1;
-        else if (m === "ctrl") mods |= 1 << 2;
-        else if (m === "super") mods |= 1 << 3;
-        else if (m === "hyper") mods |= 1 << 4;
-        else if (m === "meta") mods |= 1 << 5;
+        const m = parts[i];
+        if (!m) return null;
+        const normalized = m.toLowerCase();
+        if (normalized === "shift") mods |= 1 << 0;
+        else if (normalized === "alt") mods |= 1 << 1;
+        else if (normalized === "ctrl") mods |= 1 << 2;
+        else if (normalized === "super") mods |= 1 << 3;
+        else if (normalized === "hyper") mods |= 1 << 4;
+        else if (normalized === "meta") mods |= 1 << 5;
         else return null;
     }
 
-    const keyPart = parts[parts.length - 1];
     const codepoint = parseKeyCodepoint(keyPart);
     if (codepoint === 0) return null;
 

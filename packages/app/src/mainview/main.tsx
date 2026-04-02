@@ -7,7 +7,7 @@ import App from "./App";
 
 export const electroview = new Electroview({ rpc });
 
-useAppStore.getState().loadSettings();
+useAppStore.getState().initialLoad();
 
 createRoot(document.getElementById("root")!).render(
     <StrictMode>

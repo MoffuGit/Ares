@@ -1,4 +1,4 @@
-import { WorktreeEntry } from "@ares/shared";
+import type { WorktreeEntry } from "@ares/shared";
 import type { ComponentType, SVGProps } from "react";
 import { Folder, FolderOpen } from "lucide-react";
 import * as Icons from "./ui/icons";
