@@ -116,6 +116,7 @@ export type KeymapBinding = {
 };
 
 export type ScopedKeymaps = Record<Scope, KeymapBinding[]>;
+export type ModeKeymaps = Record<Mode, ScopedKeymaps>;
 
 export type KeyDownMods = {
     shift: boolean;

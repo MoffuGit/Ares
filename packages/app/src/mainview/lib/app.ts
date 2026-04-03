@@ -1,5 +1,5 @@
 import { Electroview } from "electrobun/view";
-import type { Mode, Scope, KeymapBinding, WorktreeEntry, Tab, Surface, SidebarKind, Settings, Theme, Project, ScopedKeymaps } from "@ares/shared";
+import type { Mode, WorktreeEntry, Tab, Surface, SidebarKind, Settings, Theme, Project, ModeKeymaps } from "@ares/shared";
 import { canUseSidebarKind, surfaceName } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import { create } from "zustand";
@@ -9,7 +9,7 @@ export type AppState = {
     theme: Theme | null;
     filetree: WorktreeEntry[] | null;
     mode: Mode;
-    keymaps: ScopedKeymaps | null;
+    keymaps: ModeKeymaps | null;
     project: Project | null;
 
     sidebarOpen: boolean;
@@ -21,7 +21,6 @@ export type AppState = {
 
 interface AppStore extends AppState {
     setMode: (mode: Mode) => void;
-    readKeymaps: (scope: Scope) => KeymapBinding[];
     initialLoad: () => Promise<void>;
     openProjectDialog: () => Promise<void>;
     expandEntry: (entry: WorktreeEntry) => void;
@@ -70,11 +69,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
     setMode: (mode) => {
         if (get().mode === mode) return;
         set({ mode: mode });
-        rpc.send("setMode", mode);
-    },
-
-    readKeymaps: (scope) => {
-        return get().keymaps?.[scope] ?? [];
     },
 
     expandEntry: (entry) => {
@@ -148,10 +142,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
     },
 
     initialLoad: async () => {
-        const { settings, theme } = await rpc.request.initialLoad({});
+        const { settings, theme, keymaps } = await rpc.request.initialLoad({});
         set({
             settings: settings,
             theme: theme,
+            keymaps: keymaps,
         });
     },
 

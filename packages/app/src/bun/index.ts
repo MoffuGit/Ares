@@ -42,7 +42,8 @@ const rpc = BrowserView.defineRPC<AppRPC>({
             initialLoad: () => {
                 return {
                     settings: app.readSettings(),
-                    theme: app.readTheme()
+                    theme: app.readTheme(),
+                    keymaps: app.readKeymaps(),
                 }
             },
             openProjectDialog: async () => {
@@ -81,12 +82,6 @@ const rpc = BrowserView.defineRPC<AppRPC>({
             surfaceScrollTo: ({ surfaceId, row }) => {
                 surfaceStore.surfaceScrollTo(surfaceId, row);
             },
-            setMode: (mode) => {
-                // setMode(mode);
-                // if (appState.keymaps) {
-                //     mainWindow.webview.rpc?.send.keymapsUpdate(appState.keymaps);
-                // }
-            },
             gpuTagRect: ({ id, rect }) => {
                 surfaceStore.updateRect(id, rect);
             },
@@ -124,6 +119,7 @@ mainWindow.on("resize", alignButtons);
 
 app.core.on("SettingsUpdate", () => {
     mainWindow.webview.rpc?.send.settingsUpdate(app.readSettings())
+    mainWindow.webview.rpc?.send.keymapsUpdate(app.readKeymaps())
     mainWindow.webview.rpc?.send.themeUpdate(app.readTheme())
 });
 

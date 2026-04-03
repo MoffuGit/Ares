@@ -1,5 +1,17 @@
 import type { Pointer } from "bun:ffi";
 import { CoreLib, resolveCoreLib } from "@ares/core";
+import type { Mode, ModeKeymaps, Scope, ScopedKeymaps } from "@ares/shared";
+
+const MODES: Mode[] = ["normal", "insert", "visual"];
+const SCOPES: Scope[] = ["global", "editor", "command_palette"];
+
+function createScopedKeymaps(): ScopedKeymaps {
+    return {
+        global: [],
+        editor: [],
+        command_palette: [],
+    };
+}
 
 export class App {
     core: CoreLib;
@@ -24,6 +36,22 @@ export class App {
 
     readTheme() {
         return this.core.readTheme(this.coreApp);
+    }
+
+    readKeymaps(): ModeKeymaps {
+        const keymaps: ModeKeymaps = {
+            normal: createScopedKeymaps(),
+            insert: createScopedKeymaps(),
+            visual: createScopedKeymaps(),
+        };
+
+        for (const [modeIndex, mode] of MODES.entries()) {
+            for (const [scopeIndex, scope] of SCOPES.entries()) {
+                keymaps[mode][scope] = this.core.readKeymapEntries(this.coreApp, scopeIndex, modeIndex);
+            }
+        }
+
+        return keymaps;
     }
 
     readFileTree() {

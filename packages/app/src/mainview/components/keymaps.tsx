@@ -27,24 +27,25 @@ function onKeymapSequence(listener: (sequence: string) => void): () => void {
 
 const initialState = useAppStore.getState();
 keymapHandler.setMode(initialState.mode);
-trieRoot = buildKeymapTrie(initialState.keymaps);
+trieRoot = buildKeymapTrie(initialState.keymaps?.[initialState.mode] ?? null);
 keymapHandler.resetTrie();
 
 useAppStore.subscribe((state, prev) => {
     if (state.mode !== prev.mode) {
         keymapHandler.setMode(state.mode);
     }
-    if (state.keymaps !== prev.keymaps) {
-        trieRoot = buildKeymapTrie(state.keymaps);
+    if (state.mode !== prev.mode || state.keymaps !== prev.keymaps) {
+        trieRoot = buildKeymapTrie(state.keymaps?.[state.mode] ?? null);
         keymapHandler.resetTrie();
     }
 });
 
 function useScopedKeymaps<S extends Scope>(scope: S): Record<string, ScopeActionMap[S]> {
+    const mode = useAppStore((state) => state.mode);
     const keymaps = useAppStore((state) => state.keymaps);
 
     return useMemo(() => {
-        const bindings = keymaps?.[scope] ?? [];
+        const bindings = keymaps?.[mode]?.[scope] ?? [];
         const map: Record<string, ScopeActionMap[S]> = {};
 
         for (const binding of bindings) {
@@ -52,7 +53,7 @@ function useScopedKeymaps<S extends Scope>(scope: S): Record<string, ScopeAction
         }
 
         return map;
-    }, [keymaps, scope]);
+    }, [keymaps, mode, scope]);
 }
 
 export function KeyMaps() {
