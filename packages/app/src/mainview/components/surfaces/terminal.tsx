@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import type { TerminalSurface as TerminalSurfaceData } from "@ares/shared";
-import useResizeObserver from "@react-hook/resize-observer";
-import { rpc, useAppStore } from "@/lib/app";
-import { GpuTag, type GpuTagHandle } from "../gpu-tag";
+import { useAppStore } from "@/lib/app";
+import { GpuTag } from "../gpu-tag";
 import * as Icons from "../ui/icons";
+import { useGpuSurface } from "./use-gpu-surface";
 
 interface TerminalSurfaceProps {
     id: number;
@@ -12,41 +12,9 @@ interface TerminalSurfaceProps {
 }
 
 export function TerminalSurface({ id, surface, active }: TerminalSurfaceProps) {
-    const gpuRef = useRef<GpuTagHandle>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const project = useAppStore((state) => state.project);
-
-    const handleReady = useCallback(async (gpuSurfaceId: number) => {
-        useAppStore.getState().setGpuSurfaceId(id, gpuSurfaceId);
-
-        const el = gpuRef.current?.element;
-        if (!el) return;
-
-        const rect = el.getBoundingClientRect();
-        try {
-            await rpc.request.gpuTagReady({
-                id: gpuSurfaceId,
-                rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-                surface,
-            });
-        } catch (err) {
-            console.error("[GpuTag] gpuTagReady failed:", err);
-        }
-    }, [id, surface]);
-
-    useEffect(() => {
-        gpuRef.current?.toggleHidden(!active);
-
-        if (surface.gpuSurfaceId != null) {
-            rpc.send("gpuTagVisibility", { id: surface.gpuSurfaceId, visible: active });
-        }
-    }, [active, surface.gpuSurfaceId]);
-
-    useResizeObserver(containerRef, (entry) => {
-        if (!surface.gpuSurfaceId) return;
-        const content = entry.contentRect;
-        rpc.send("gpuTagRect", { id: surface.gpuSurfaceId, rect: { x: content.x, y: content.y, width: content.width, height: content.height } });
-    });
+    const { gpuRef, handleReady } = useGpuSurface({ id, surface, active, containerRef });
 
     const displayCwd = surface.cwd || project?.path || "~";
     const terminalName = useMemo(() => {
@@ -75,6 +43,7 @@ export function TerminalSurface({ id, surface, active }: TerminalSurfaceProps) {
                         ref={gpuRef}
                         id={`gpu-${id}`}
                         style={{ width: "100%", height: "100%", backgroundColor: "transparent" }}
+                        passthrough={true}
                         hidden={!active}
                         onReady={handleReady}
                     />
