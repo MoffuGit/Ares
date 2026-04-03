@@ -9,6 +9,7 @@ const Project = @import("Project.zig");
 const Buffer = @import("buffer/Buffer.zig");
 const EditorThread = @import("editor/Thread.zig");
 const Surface = @import("Surface.zig");
+const App = @import("App.zig");
 
 const log = std.log.scoped(.editor);
 
@@ -20,25 +21,25 @@ buffer: ?*Buffer = null,
 selected_entry: ?u64 = null,
 scroll_row: u64 = 0,
 
-editor_thread: EditorThread,
-editor_thr: std.Thread,
+thread: EditorThread,
+thr: std.Thread,
 
-pub fn create(project: *Project, alloc: Allocator, layer_ptr: *anyopaque) !*Editor {
+pub fn create(app: *App, project: *Project, alloc: Allocator, layer_ptr: *anyopaque) !*Editor {
     const self = try alloc.create(Editor);
     errdefer alloc.destroy(self);
 
-    const surface = try Surface.create(alloc, &project.app.grid, layer_ptr);
+    const surface = try Surface.create(alloc, &app.grid, layer_ptr);
     errdefer surface.destroy();
 
     var editor_thread = try EditorThread.init(alloc, self);
     errdefer editor_thread.deinit();
 
     self.* = .{
-        .editor_thread = editor_thread,
+        .thread = editor_thread,
         .alloc = alloc,
         .project = project,
         .surface = surface,
-        .editor_thr = undefined,
+        .thr = undefined,
     };
 
     self.syncTextColor();
@@ -49,15 +50,15 @@ pub fn create(project: *Project, alloc: Allocator, layer_ptr: *anyopaque) !*Edit
     try global.events.on(.themeUpdate, .{ .ctx = self, .handle = onThemeUpdate });
     errdefer global.events.off(.themeUpdate, .{ .ctx = self, .handle = onThemeUpdate });
 
-    self.editor_thr = try std.Thread.spawn(.{}, EditorThread.threadMain, .{&self.editor_thread});
+    self.thr = try std.Thread.spawn(.{}, EditorThread.threadMain, .{&self.thread});
 
     return self;
 }
 pub fn destroy(self: *Editor) void {
     {
-        self.editor_thread.stop.notify() catch |err|
+        self.thread.stop.notify() catch |err|
             log.err("error notifying editor thread to stop, may stall err={}", .{err});
-        self.editor_thr.join();
+        self.thr.join();
     }
 
     self.surface.destroy();
@@ -65,7 +66,7 @@ pub fn destroy(self: *Editor) void {
     global.events.off(.bufferUpdate, .{ .ctx = self, .handle = onBufferUpdate });
     global.events.off(.themeUpdate, .{ .ctx = self, .handle = onThemeUpdate });
 
-    self.editor_thread.deinit();
+    self.thread.deinit();
     self.alloc.destroy(self);
 }
 
@@ -86,8 +87,8 @@ fn onBufferUpdate(ctx: *anyopaque, event: @import("global.zig").GlobalEvents) vo
         } }, .instant);
     }
 
-    _ = self.editor_thread.mailbox.push(.{ .buffer_update = {} }, .instant);
-    self.editor_thread.wakeup.notify() catch {};
+    _ = self.thread.mailbox.push(.{ .buffer_update = {} }, .instant);
+    self.thread.wakeup.notify() catch {};
 }
 
 fn onThemeUpdate(ctx: *anyopaque, _: @import("global.zig").GlobalEvents) void {

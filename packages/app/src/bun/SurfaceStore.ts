@@ -37,7 +37,7 @@ export class SurfaceStore {
         }
 
         if (!this.app.coreProject) throw new Error(`There is no project for this surface ${surfaceId}`);
-        const corePtr = this.createCoreSurface(this.app.core, this.app.coreProject, surface.kind, metalLayerPtr);
+        const corePtr = this.createCoreSurface(surface.kind, metalLayerPtr);
         if (!corePtr) {
             throw new Error(`Failed to create view (kind=${surface.kind}) for id ${surfaceId}`);
         }
@@ -114,12 +114,12 @@ export class SurfaceStore {
         this.app.core.editorScrollTo(state.corePtr, row);
     }
 
-    private createCoreSurface(core: CoreLib, project: Pointer | null, kind: SurfaceKind, metalLayerPtr: Pointer): Pointer | null {
+    private createCoreSurface(kind: SurfaceKind, metalLayerPtr: Pointer): Pointer | null {
         switch (kind) {
             case "editor":
-                return project ? core.createEditor(project, metalLayerPtr) : null;
+                return this.app.coreProject ? this.app.core.createEditor(this.app.coreApp, this.app.coreProject, metalLayerPtr) : null;
             case "terminal":
-                return core.createTerminal(metalLayerPtr);
+                return this.app.core.createTerminal(this.app.coreApp, metalLayerPtr);
         }
     }
 

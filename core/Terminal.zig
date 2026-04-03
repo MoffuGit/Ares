@@ -4,36 +4,41 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ghostty_vt = @import("ghostty-vt");
 const Thread = @import("terminal/Thread.zig");
+const Surface = @import("Surface.zig");
 const sizepkg = @import("size.zig");
+const App = @import("App.zig");
 
 const log = std.log.scoped(.terminal);
 
 alloc: Allocator,
-ptr: *anyopaque,
+surface: *Surface,
 
 thread: Thread,
 thr: std.Thread,
 
-term: ghostty_vt.Terminal,
+// term: ghostty_vt.Terminal,
 
-pub fn create(alloc: Allocator, layer_ptr: *anyopaque) !*Terminal {
+pub fn create(app: *App, alloc: Allocator, layer_ptr: *anyopaque) !*Terminal {
     const self = try alloc.create(Terminal);
     errdefer alloc.destroy(self);
+
+    const surface = try Surface.create(alloc, &app.grid, layer_ptr);
+    errdefer surface.destroy();
 
     var thread = try Thread.init(alloc, self);
     errdefer thread.deinit();
 
-    var term = try ghostty_vt.Terminal.init(alloc, .{
-        .cols = 0,
-        .rows = 0,
-        .max_scrollback = 1000,
-    });
-    errdefer term.deinit(alloc);
+    // var term = try ghostty_vt.Terminal.init(alloc, .{
+    //     .cols = 0,
+    //     .rows = 0,
+    //     .max_scrollback = 1000,
+    // });
+    // errdefer term.deinit(alloc);
 
     self.* = .{
-        .term = term,
+        // .term = term,
         .alloc = alloc,
-        .ptr = layer_ptr,
+        .surface = surface,
         .thread = thread,
         .thr = undefined,
     };
@@ -44,8 +49,8 @@ pub fn create(alloc: Allocator, layer_ptr: *anyopaque) !*Terminal {
 }
 
 pub fn resize(self: *Terminal, size: sizepkg.ScreenSize) void {
-    _ = self;
-    _ = size;
+    _ = self.surface.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
+    self.surface.renderer_thread.wakeup.notify() catch {};
 }
 
 pub fn destroy(self: *Terminal) void {
@@ -54,7 +59,9 @@ pub fn destroy(self: *Terminal) void {
         self.thr.join();
     }
 
-    self.term.deinit(self.alloc);
+    self.surface.destroy();
+
+    // self.term.deinit(self.alloc);
 
     self.thread.deinit();
 

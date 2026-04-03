@@ -236,12 +236,12 @@ export fn readKeymapEntries(app: *App, scope: u8, mode: u8, out: [*]ExternKeymap
     return count;
 }
 
-export fn createEditor(project: *Project, layer_ptr: *anyopaque) ?*Editor {
-    return Editor.create(project, global.state.alloc, layer_ptr) catch null;
+export fn createEditor(app: *App, project: *Project, layer_ptr: *anyopaque) ?*Editor {
+    return Editor.create(app, project, global.state.alloc, layer_ptr) catch null;
 }
 
-export fn createTerminal(layer_ptr: *anyopaque) ?*Terminal {
-    return Terminal.create(global.state.alloc, layer_ptr) catch null;
+export fn createTerminal(app: *App, layer_ptr: *anyopaque) ?*Terminal {
+    return Terminal.create(app, global.state.alloc, layer_ptr) catch null;
 }
 
 export fn destroyTerminal(terminal: *Terminal) void {
@@ -249,12 +249,12 @@ export fn destroyTerminal(terminal: *Terminal) void {
 }
 
 export fn resizeEditor(editor: *Editor, width: u32, height: u32) void {
-    _ = editor.editor_thread.mailbox.push(.{ .resize = .{
+    _ = editor.thread.mailbox.push(.{ .resize = .{
         .height = height,
         .width = width,
     } }, .instant);
 
-    editor.editor_thread.wakeup.notify() catch {};
+    editor.thread.wakeup.notify() catch {};
 }
 
 export fn destroyEditor(editor: *Editor) void {
@@ -266,15 +266,15 @@ export fn setEditorVisibility(editor: *Editor, visible: bool) void {
 }
 
 export fn selectEditorEntry(editor: *Editor, id: u64) void {
-    _ = editor.editor_thread.mailbox.push(.{ .select_entry = id }, .instant);
+    _ = editor.thread.mailbox.push(.{ .select_entry = id }, .instant);
 
-    editor.editor_thread.wakeup.notify() catch {};
+    editor.thread.wakeup.notify() catch {};
 }
 
 export fn editorScrollTo(editor: *Editor, row: u64) void {
-    _ = editor.editor_thread.mailbox.push(.{ .scroll = row }, .instant);
+    _ = editor.thread.mailbox.push(.{ .scroll = row }, .instant);
 
-    editor.editor_thread.wakeup.notify() catch {};
+    editor.thread.wakeup.notify() catch {};
 }
 
 pub const ExternBufferState = extern struct {

@@ -139,7 +139,7 @@ function getCoreLib(libPath: string) {
                 return: FFIType.void,
             },
             createEditor: {
-                args: [FFIType.pointer, FFIType.pointer],
+                args: [FFIType.pointer, FFIType.pointer, FFIType.pointer],
                 returns: FFIType.pointer,
             },
             resizeEditor: {
@@ -167,7 +167,7 @@ function getCoreLib(libPath: string) {
                 returns: FFIType.void,
             },
             createTerminal: {
-                args: [FFIType.pointer],
+                args: [FFIType.pointer, FFIType.pointer],
                 returns: FFIType.pointer,
             },
             destroyTerminal: {
@@ -354,8 +354,8 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.drainMailbox();
     }
 
-    createEditor(project: Pointer, metalLayerPtr: Pointer): Pointer | null {
-        return this.lib.symbols.createEditor(project, metalLayerPtr) as Pointer | null;
+    createEditor(app: Pointer, project: Pointer, metalLayerPtr: Pointer): Pointer | null {
+        return this.lib.symbols.createEditor(app, project, metalLayerPtr) as Pointer | null;
     }
 
     resizeEditor(editor: Pointer, width: number, height: number): void {
@@ -385,8 +385,8 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.destroyEditor(editor);
     }
 
-    createTerminal(layer: Pointer): Pointer | null {
-        return this.lib.symbols.createTerminal(layer);
+    createTerminal(app: Pointer, layer: Pointer): Pointer | null {
+        return this.lib.symbols.createTerminal(app, layer);
     }
 
     destroyTerminal(terminal: Pointer) {
