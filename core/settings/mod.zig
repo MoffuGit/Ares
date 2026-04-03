@@ -243,9 +243,8 @@ fn loadSettings(self: *Settings, dir: std.fs.Dir) !void {
     if (json_settings.keymaps) |km_json| {
         std.log.debug("keymaps found in settings JSON, loading...", .{});
         self.loadKeymaps(km_json);
-        std.log.debug("keymaps loaded, initialized={}, normal trie root children={}", .{
+        std.log.debug("keymaps loaded, initialized={}", .{
             self.keymaps_initialized,
-            if (self.keymaps_initialized) self.keymaps.trie(.normal).root.childrens.count() else 0,
         });
     } else {
         std.log.debug("no keymaps in settings JSON", .{});
@@ -254,9 +253,7 @@ fn loadSettings(self: *Settings, dir: std.fs.Dir) !void {
     if (!self.keymaps_initialized) {
         std.log.debug("keymaps not initialized, loading defaults", .{});
         self.loadDefaultKeymaps();
-        std.log.debug("defaults loaded, normal trie root children={}", .{
-            self.keymaps.trie(.normal).root.childrens.count(),
-        });
+        std.log.debug("defaults loaded", .{});
     }
 }
 
