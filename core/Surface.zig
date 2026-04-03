@@ -45,7 +45,7 @@ renderer_thr: std.Thread,
 
 shared_state: SharedState,
 
-pub fn create(alloc: Allocator, grid: *Grid, layer_ptr: *anyopaque) !*Surface {
+pub fn create(alloc: Allocator, grid: *Grid, layer_ptr: *anyopaque, screen_size: sizepkg.ScreenSize) !*Surface {
     const metal_layer = objc.Object.fromId(layer_ptr);
 
     const self = try alloc.create(Surface);
@@ -54,7 +54,7 @@ pub fn create(alloc: Allocator, grid: *Grid, layer_ptr: *anyopaque) !*Surface {
     var renderer = try Renderer.init(
         alloc,
         .{ .grid = grid, .metal_layer = metal_layer, .size = .{
-            .screen = .{ .height = 0, .width = 0 },
+            .screen = screen_size,
             .cell = grid.cellSize(),
         } },
     );
@@ -63,7 +63,7 @@ pub fn create(alloc: Allocator, grid: *Grid, layer_ptr: *anyopaque) !*Surface {
     var renderer_thread = try RendererThread.init(alloc, &self.renderer, &self.shared_state);
     errdefer renderer_thread.deinit();
 
-    var shared_state = try SharedState.init(alloc, .{ .screen = .{ .height = 0, .width = 0 }, .cell = grid.cellSize() });
+    var shared_state = try SharedState.init(alloc, .{ .screen = screen_size, .cell = grid.cellSize() });
     errdefer shared_state.deinit();
 
     self.* = .{

@@ -26,6 +26,9 @@ export class SurfaceStore {
         console.log("view", surfaceId, "request to start");
         if (this.states.has(surfaceId)) return;
 
+        const width = Math.max(1, Math.floor(rect.width));
+        const height = Math.max(1, Math.floor(rect.height));
+
         const wgpuView = WGPUView.getById(surfaceId);
         if (!wgpuView?.ptr) {
             throw new Error(`GPU view not found for id ${surfaceId}`);
@@ -37,17 +40,12 @@ export class SurfaceStore {
         }
 
         if (!this.app.coreProject) throw new Error(`There is no project for this surface ${surfaceId}`);
-        const corePtr = this.createCoreSurface(surface.kind, metalLayerPtr);
+        const corePtr = this.createCoreSurface(surface.kind, metalLayerPtr, width, height);
         if (!corePtr) {
             throw new Error(`Failed to create view (kind=${surface.kind}) for id ${surfaceId}`);
         }
 
-        const width = Math.max(1, Math.floor(rect.width));
-        const height = Math.max(1, Math.floor(rect.height));
-
         console.log("view", surfaceId, "started");
-
-        this.resizeCoreSurface(this.app.core, surface.kind, corePtr, width, height);
 
         this.states.set(surfaceId, {
             id: surfaceId,
@@ -114,12 +112,12 @@ export class SurfaceStore {
         this.app.core.editorScrollTo(state.corePtr, row);
     }
 
-    private createCoreSurface(kind: SurfaceKind, metalLayerPtr: Pointer): Pointer | null {
+    private createCoreSurface(kind: SurfaceKind, metalLayerPtr: Pointer, width: number, height: number): Pointer | null {
         switch (kind) {
             case "editor":
-                return this.app.coreProject ? this.app.core.createEditor(this.app.coreApp, this.app.coreProject, metalLayerPtr) : null;
+                return this.app.coreProject ? this.app.core.createEditor(this.app.coreApp, this.app.coreProject, metalLayerPtr, width, height) : null;
             case "terminal":
-                return this.app.core.createTerminal(this.app.coreApp, metalLayerPtr);
+                return this.app.core.createTerminal(this.app.coreApp, metalLayerPtr, width, height);
         }
     }
 

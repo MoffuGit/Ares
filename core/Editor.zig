@@ -24,11 +24,11 @@ scroll_row: u64 = 0,
 thread: EditorThread,
 thr: std.Thread,
 
-pub fn create(app: *App, project: *Project, alloc: Allocator, layer_ptr: *anyopaque) !*Editor {
+pub fn create(app: *App, project: *Project, alloc: Allocator, layer_ptr: *anyopaque, width: u32, height: u32) !*Editor {
     const self = try alloc.create(Editor);
     errdefer alloc.destroy(self);
 
-    const surface = try Surface.create(alloc, &app.grid, layer_ptr);
+    const surface = try Surface.create(alloc, &app.grid, layer_ptr, .{ .width = width, .height = height });
     errdefer surface.destroy();
 
     var editor_thread = try EditorThread.init(alloc, self);

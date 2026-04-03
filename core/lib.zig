@@ -236,12 +236,12 @@ export fn readKeymapEntries(app: *App, scope: u8, mode: u8, out: [*]ExternKeymap
     return count;
 }
 
-export fn createEditor(app: *App, project: *Project, layer_ptr: *anyopaque) ?*Editor {
-    return Editor.create(app, project, global.state.alloc, layer_ptr) catch null;
+export fn createEditor(app: *App, project: *Project, layer_ptr: *anyopaque, width: u32, height: u32) ?*Editor {
+    return Editor.create(app, project, global.state.alloc, layer_ptr, width, height) catch null;
 }
 
-export fn createTerminal(app: *App, layer_ptr: *anyopaque) ?*Terminal {
-    return Terminal.create(app, global.state.alloc, layer_ptr) catch null;
+export fn createTerminal(app: *App, layer_ptr: *anyopaque, width: u32, height: u32) ?*Terminal {
+    return Terminal.create(app, global.state.alloc, layer_ptr, width, height) catch null;
 }
 
 export fn destroyTerminal(terminal: *Terminal) void {

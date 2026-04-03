@@ -16,27 +16,27 @@ surface: *Surface,
 thread: Thread,
 thr: std.Thread,
 
-// term: ghostty_vt.Terminal,
+term: ghostty_vt.Terminal,
 
-pub fn create(app: *App, alloc: Allocator, layer_ptr: *anyopaque) !*Terminal {
+pub fn create(app: *App, alloc: Allocator, layer_ptr: *anyopaque, width: u32, height: u32) !*Terminal {
     const self = try alloc.create(Terminal);
     errdefer alloc.destroy(self);
 
-    const surface = try Surface.create(alloc, &app.grid, layer_ptr);
+    const surface = try Surface.create(alloc, &app.grid, layer_ptr, .{ .width = width, .height = height });
     errdefer surface.destroy();
 
     var thread = try Thread.init(alloc, self);
     errdefer thread.deinit();
 
-    // var term = try ghostty_vt.Terminal.init(alloc, .{
-    //     .cols = 0,
-    //     .rows = 0,
-    //     .max_scrollback = 1000,
-    // });
-    // errdefer term.deinit(alloc);
+    var term = try ghostty_vt.Terminal.init(alloc, .{
+        .cols = @intCast(width),
+        .rows = @intCast(height),
+        .max_scrollback = 1000,
+    });
+    errdefer term.deinit(alloc);
 
     self.* = .{
-        // .term = term,
+        .term = term,
         .alloc = alloc,
         .surface = surface,
         .thread = thread,
@@ -61,7 +61,7 @@ pub fn destroy(self: *Terminal) void {
 
     self.surface.destroy();
 
-    // self.term.deinit(self.alloc);
+    self.term.deinit(self.alloc);
 
     self.thread.deinit();
 
