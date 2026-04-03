@@ -74,8 +74,6 @@ pub fn expandEntry(self: *FileTree, id: u64) void {
 }
 
 fn rebuildVisibleEntries(self: *FileTree) void {
-    const old_length = self.visible_entries.items.len;
-
     self.visible_entries.clearRetainingCapacity();
 
     self.worktree.snapshot.mutex.lock();
@@ -92,9 +90,7 @@ fn rebuildVisibleEntries(self: *FileTree) void {
         }
     }
 
-    if (old_length != self.visible_entries.items.len) {
-        global.state.emit(.filetreeUpdate, .instant);
-    }
+    global.state.emit(.filetreeUpdate, .instant);
 }
 
 fn appendDirectChildren(self: *FileTree, dir_path: []const u8) void {
