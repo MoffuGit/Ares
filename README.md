@@ -1,3 +1,12 @@
+https://github.com/MoffuGit/electrobun.git
+i made a fork of electrobun, i need to change the behavior
+when creating a gpu view, this views should not gain the focus ever,
+you can check the thread from electrobun for undestanding why this happens and how to fix it
+
+second, lets check inside the different pull request for one that handles the traffic lights position,
+i would love having this as part of electrobun and not as part of my zig library
+
+---
 something i want to have is the option to start a terminal that is not like link to a project,
 i think that can be a cool behavoir, you start with a terminal, then you choose to go to a x project,
 then you could set a keymap that creates or open a project at that pwd,

@@ -1,7 +1,13 @@
 {
   "name": "ares",
   "private": true,
-  "workspaces": ["packages/*", "packages/app/*"],
+  "scripts": {
+    "core": "zig build core",
+    "test": "zig build test",
+    "app:dev": "cd packages/app && bun run dev:hmr",
+    "start": "bun run core && bun run app:dev"
+  },
+  "workspaces": ["packages/*", "packages/app/*", "electrobun/package"],
   "overrides": {
     "@types/react": "^19",
     "@types/react-dom": "^19"

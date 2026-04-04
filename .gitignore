@@ -26,6 +26,7 @@ old_tui/
 node_modules/
 bun.lock
 trash/
+electrobun/
 
 glad.zip
 /Box_test.ppm

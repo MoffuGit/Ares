@@ -55,13 +55,6 @@ pub fn build(b: *std.Build) void {
         .root_source_file = metallib.?.output,
     });
 
-    const desktop_bun = b.addSystemCommand(&.{ "bun", "run", "start" });
-    desktop_bun.setCwd(b.path("packages/app/desktop"));
-
-    const desktop_step = b.step("desktop", "Build desktop lib and run the Electrobun application");
-    desktop_step.dependOn(core_step);
-    desktop_step.dependOn(&desktop_bun.step);
-
     const test_filter = b.option([]const u8, "test-filter", "Filter for tests");
 
     const test_core = b.createModule(.{
@@ -76,26 +69,26 @@ pub fn build(b: *std.Build) void {
     core_step.dependOn(&core_lib.step);
     core_step.dependOn(&lib_install.step);
 
+    test_core.addImport("ghostty-vt", ghostty_dep.module("ghostty-vt"));
     test_core.addImport("xev", xev_dep.module("xev"));
     test_core.addImport("datastruct", datastruct);
     test_core.addImport("objc", objc_dep.module("objc"));
+    test_core.addAnonymousImport("ares_metallib", .{
+        .root_source_file = metallib.?.output,
+    });
 
     const test_core_exe = b.addTest(.{
         .name = "test-core",
         .root_module = test_core,
         .filters = if (test_filter) |f| &.{f} else &.{},
     });
+    test_core_exe.linkFramework("Metal");
+    test_core_exe.linkFramework("QuartzCore");
 
     const test_core_run = b.addRunArtifact(test_core_exe);
     const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(metallib.?.step);
     test_step.dependOn(&test_core_run.step);
-
-    const bun_core_test = b.addSystemCommand(&.{ "bun", "test" });
-    bun_core_test.setCwd(b.path("packages/core"));
-    bun_core_test.step.dependOn(&core_lib.step);
-    bun_core_test.step.dependOn(&lib_install.step);
-
-    test_step.dependOn(&bun_core_test.step);
 }
 /// A zig build step that compiles a set of ".metal" files into a
 /// ".metallib" file.

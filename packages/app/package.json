@@ -17,7 +17,7 @@
 		"@react-hook/resize-observer": "^2.0.2",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
-		"electrobun": "1.16.0",
+		"electrobun": "workspace:*",
 		"lucide-react": "^0.577.0",
 		"react": "^19.2.4",
 		"react-dom": "^19.2.4",
