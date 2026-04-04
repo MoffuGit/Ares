@@ -110,12 +110,7 @@ const mainWindow = new BrowserWindow({
     rpc: rpc,
 });
 
-const alignButtons = () =>
-    app.core.setWindowTrafficLightsPosition(mainWindow.ptr, MAC_TRAFFIC_LIGHTS_X, MAC_TRAFFIC_LIGHTS_Y);
-
-
-alignButtons();
-mainWindow.on("resize", alignButtons);
+mainWindow.setWindowButtonPosition(MAC_TRAFFIC_LIGHTS_X, MAC_TRAFFIC_LIGHTS_Y);
 
 app.core.on("SettingsUpdate", () => {
     mainWindow.webview.rpc?.send.settingsUpdate(app.readSettings())

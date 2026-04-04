@@ -201,17 +201,6 @@ fn trafficLightsWork(ctx_ptr: ?*anyopaque) callconv(.c) void {
     ctx.success = true;
 }
 
-pub fn setWindowTrafficLightsPosition(window_ptr: *anyopaque, x: f64, y_from_top: f64) bool {
-    var ctx = TrafficLightsContext{
-        .window_ptr = window_ptr,
-        .x = x,
-        .y_from_top = y_from_top,
-        .success = false,
-    };
-    c.dispatch_sync_f(c.dispatch_get_main_queue(), @ptrCast(&ctx), &trafficLightsWork);
-    return ctx.success;
-}
-
 pub fn isDark() bool {
     const pool = objc.AutoreleasePool.init();
     defer pool.deinit();
