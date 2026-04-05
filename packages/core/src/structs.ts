@@ -38,3 +38,14 @@ export const BufferState = defineStruct([
     ["cell_height", "u32"],
     ["renderer_health", "u8"],
 ] as const);
+
+export const ModeUpdate = defineStruct([
+    ["mode", "u8"],
+] as const);
+
+export const KeymapMatch = defineStruct([
+    ["sequence", "char*"],
+    ["sequence_len", "u64", { lengthOf: "sequence" }],
+    ["action", "char*"],
+    ["action_len", "u64", { lengthOf: "action" }],
+] as const);

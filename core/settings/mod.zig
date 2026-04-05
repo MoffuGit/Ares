@@ -108,7 +108,7 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor, appe: ?*Appear
 
     try settings_result;
 
-    global.state.emit(.settingsUpdate, .instant);
+    _ = global.state.emit(.settingsUpdate, .instant);
 
     if (appe) |a| {
         self.appearance = a;
@@ -138,7 +138,7 @@ fn appearanceChanged(ctx: *anyopaque, _: @import("../appearance/mac.zig").Observ
     }
 
     global.state.emitGlobal(.themeUpdate);
-    global.state.emit(.settingsUpdate, .instant);
+    _ = global.state.emit(.settingsUpdate, .instant);
 }
 
 fn settingsCallback(self: ?*Settings, _: u64, _: u32) void {
@@ -156,7 +156,7 @@ fn settingsCallback(self: ?*Settings, _: u64, _: u32) void {
     }
 
     global.state.emitGlobal(.themeUpdate);
-    global.state.emit(.settingsUpdate, .instant);
+    _ = global.state.emit(.settingsUpdate, .instant);
 }
 fn themeCallback(self: ?*Settings, _: u64, _: u32) void {
     const s = self orelse return;
@@ -172,7 +172,7 @@ fn themeCallback(self: ?*Settings, _: u64, _: u32) void {
     }
 
     global.state.emitGlobal(.themeUpdate);
-    global.state.emit(.themeUpdate, .instant);
+    _ = global.state.emit(.themeUpdate, .instant);
 }
 
 fn loadThemes(self: *Settings, dir: std.fs.Dir) LoadError!void {

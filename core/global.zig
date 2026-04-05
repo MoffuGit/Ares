@@ -26,11 +26,29 @@ pub const ExternBufferState = extern struct {
     renderer_health: u8,
 };
 
+pub const ExternModeUpdate = extern struct {
+    mode: u8,
+};
+
+pub const KeymapMatch = struct {
+    sequence: []u8,
+    action: []u8,
+};
+
+pub const ExternKeymapMatch = extern struct {
+    sequence_ptr: usize,
+    sequence_len: usize,
+    action_ptr: usize,
+    action_len: usize,
+};
+
 pub const Events = union(enum) {
     settingsUpdate: void,
     themeUpdate: void,
     filetreeUpdate: void,
     bufferUpdate: ExternBufferState,
+    modeUpdate: ExternModeUpdate,
+    keymapMatch: KeymapMatch,
 };
 
 pub const GlobalState = struct {
@@ -58,8 +76,8 @@ pub const GlobalState = struct {
         self.events.emit(event);
     }
 
-    pub fn emit(self: *Self, event: Events, timeout: MailBox.Timeout) void {
-        _ = self.mailbox.push(event, timeout);
+    pub fn emit(self: *Self, event: Events, timeout: MailBox.Timeout) u32 {
+        return self.mailbox.push(event, timeout);
     }
 
     pub fn deinit(self: *Self) void {

@@ -26,6 +26,10 @@ export class App {
         return this.core.readTheme(this.coreApp);
     }
 
+    onKeyDown(data: { keyCode: number; modifiers: number; isRepeat: boolean }) {
+        return this.core.onKeyDown(this.coreApp, data.keyCode, data.modifiers, data.isRepeat);
+    }
+
     readFileTree() {
         if (!this.coreProject) return null;
 

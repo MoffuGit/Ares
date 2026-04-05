@@ -28,11 +28,25 @@ export fn drainMailbox() void {
             .themeUpdate,
             => cb(@intFromEnum(ev), null, 0),
             .filetreeUpdate => {
-                std.log.info("drainMailbox sending filetreeUpdate to JS", .{});
                 cb(@intFromEnum(ev), null, 0);
             },
             .bufferUpdate => |bs| {
                 cb(@intFromEnum(ev), @ptrCast(&bs), @sizeOf(global.ExternBufferState));
+            },
+            .modeUpdate => |mode| {
+                cb(@intFromEnum(ev), @ptrCast(&mode), @sizeOf(global.ExternModeUpdate));
+            },
+            .keymapMatch => |match| {
+                defer global.state.alloc.free(match.sequence);
+                defer global.state.alloc.free(match.action);
+
+                const payload = global.ExternKeymapMatch{
+                    .sequence_ptr = @intFromPtr(match.sequence.ptr),
+                    .sequence_len = match.sequence.len,
+                    .action_ptr = @intFromPtr(match.action.ptr),
+                    .action_len = match.action.len,
+                };
+                cb(@intFromEnum(ev), @ptrCast(&payload), @sizeOf(global.ExternKeymapMatch));
             },
         }
     }
@@ -55,6 +69,10 @@ export fn loadSettings(app: *App, path: [*]const u8, len: u64) void {
     app.loadSettings(path[0..len]) catch |err| {
         std.log.err("error while loading the settings: {}", .{err});
     };
+}
+
+export fn onKeyDown(app: *App, key_code: u32, modifiers: u32, is_repeat: bool) bool {
+    return app.onKeyDown(key_code, modifiers, is_repeat);
 }
 
 pub const ExternSettings = extern struct {

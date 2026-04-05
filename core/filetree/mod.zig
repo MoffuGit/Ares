@@ -90,7 +90,7 @@ fn rebuildVisibleEntries(self: *FileTree) void {
         }
     }
 
-    global.state.emit(.filetreeUpdate, .instant);
+    _ = global.state.emit(.filetreeUpdate, .instant);
 }
 
 fn appendDirectChildren(self: *FileTree, dir_path: []const u8) void {

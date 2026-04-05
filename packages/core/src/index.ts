@@ -4,7 +4,9 @@ import { resolve } from "path";
 import { EventType, Events, EventsName } from "./events";
 import {
     BufferState as RawBufferState,
+    KeymapMatch as RawKeymapMatch,
     KeymapEntry,
+    ModeUpdate as RawModeUpdate,
     Settings as RawSettings,
     WorktreeEntry as RawWorktreeEntry,
 } from "./structs";
@@ -12,6 +14,8 @@ import { resolveTheme } from "./theme";
 import type {
     BufferState,
     KeymapBinding,
+    KeymapMatch,
+    Mode,
     Settings,
     Theme,
     WorktreeEntry,
@@ -54,6 +58,24 @@ function mapWorktreeEntry(raw: ReturnType<typeof RawWorktreeEntry.unpack>): Work
     };
 }
 
+function mapMode(value: number | bigint): Mode {
+    switch (toNumber(value)) {
+        case 1:
+            return "insert";
+        case 2:
+            return "visual";
+        default:
+            return "normal";
+    }
+}
+
+function mapKeymapMatch(raw: ReturnType<typeof RawKeymapMatch.unpack>): KeymapMatch {
+    return {
+        sequence: raw.sequence ?? "",
+        action: raw.action ?? "",
+    };
+}
+
 function getCoreLib(libPath: string) {
     const symbols = dlopen(
         libPath,
@@ -73,6 +95,10 @@ function getCoreLib(libPath: string) {
             destroyApp: {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
+            },
+            onKeyDown: {
+                args: [FFIType.pointer, FFIType.u32, FFIType.u32, FFIType.bool],
+                returns: FFIType.bool,
             },
             lockSettings: {
                 args: [FFIType.pointer],
@@ -224,7 +250,11 @@ export class CoreLib extends EventEmitter {
                     const rawData = dataType.unpack(toArrayBuffer(ptr, 0, _len));
                     const data = _type === EventType.BufferUpdate
                         ? mapBufferState(rawData)
-                        : rawData;
+                        : _type === EventType.ModeUpdate
+                            ? { mode: mapMode(rawData.mode) }
+                            : _type === EventType.KeymapMatch
+                                ? mapKeymapMatch(rawData)
+                                : rawData;
                     const event = EventsName[_type];
                     queueMicrotask(() => {
                         console.log("event with data received", event, data);
@@ -261,6 +291,10 @@ export class CoreLib extends EventEmitter {
 
     destroyApp(app: Pointer) {
         this.lib.symbols.destroyApp(app);
+    }
+
+    onKeyDown(app: Pointer, keyCode: number, modifiers: number, isRepeat: boolean): boolean {
+        return this.lib.symbols.onKeyDown(app, keyCode, modifiers, isRepeat) as boolean;
     }
 
     loadSettings(app: Pointer, path: string): void {

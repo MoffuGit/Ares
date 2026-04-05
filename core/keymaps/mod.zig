@@ -15,6 +15,7 @@ pub const Scope = enum { global, editor, command_palette };
 pub const KeymapEntry = struct {
     sequence: []const u8,
     action: []const u8,
+    strokes: []const KeyStroke,
 };
 
 const EntryList = std.ArrayListUnmanaged(KeymapEntry);
@@ -57,6 +58,7 @@ pub const Keymaps = struct {
                 for (list.items) |entry| {
                     self.alloc.free(entry.sequence);
                     self.alloc.free(entry.action);
+                    self.alloc.free(entry.strokes);
                 }
                 list.deinit(self.alloc);
             }
@@ -73,7 +75,7 @@ pub const Keymaps = struct {
 
     pub fn insert(self: *Keymaps, scope: Scope, mode: Mode, sequence_str: []const u8, action_str: []const u8) !void {
         const seq = try parseSequence(self.alloc, sequence_str);
-        defer self.alloc.free(seq);
+        errdefer self.alloc.free(seq);
 
         const t = self.trie(mode);
         if (t.get(seq) == null) {
@@ -89,6 +91,7 @@ pub const Keymaps = struct {
         try self.bindings[@intFromEnum(scope)][@intFromEnum(mode)].append(self.alloc, .{
             .sequence = owned_seq,
             .action = owned_action,
+            .strokes = seq,
         });
     }
 };

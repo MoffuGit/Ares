@@ -130,6 +130,29 @@ app.core.on("BufferUpdate", (state) => {
     mainWindow.webview.rpc?.send.bufferUpdate(state);
 });
 
+app.core.on("ModeUpdate", ({ mode }) => {
+    mainWindow.webview.rpc?.send.modeUpdate(mode);
+});
+
+app.core.on("KeymapMatch", (match) => {
+    mainWindow.webview.rpc?.send.keymapMatch(match);
+});
+
+mainWindow.on("keyDown", (event: any) => {
+    const data = event.data;
+    if (!data) return;
+
+    if (app.onKeyDown(data)) {
+        event.preventDefault();
+        //HACK:
+        //If we wait for the interval callback
+        //the keymaps become kinda slow,
+        //because almost every keydown that is consumed produce
+        //a sequence this work fine
+        app.core.drainMailbox();
+    }
+});
+
 mainWindow.webview.on("dom-ready", () => {
     setInterval(() => {
         app.core.drainMailbox()
