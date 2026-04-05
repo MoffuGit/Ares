@@ -98,7 +98,6 @@ export fn setSystemScheme(app: *App, scheme: u8) void {
 
     if (scheme >= @typeInfo(@import("settings/mod.zig").ColorScheme).@"enum".fields.len) return;
     settings.setSystemScheme(@enumFromInt(scheme));
-    global.state.emit(.themeUpdate, .instant);
 }
 
 export fn getThemeJsonLen(app: *App) u64 {
@@ -114,7 +113,6 @@ export fn readThemeJson(app: *App, out_buf: [*]u8, buf_len: u64) void {
 
 export fn createProject(app: *App, path: [*]const u8, len: u64) ?*Project {
     const project_path = path[0..len];
-    std.log.info("createProject called with path={s}", .{project_path});
     return Project.create(global.state.alloc, app, project_path) catch |err| {
         std.log.err("createProject failed for path={s} err={}", .{ project_path, err });
         return null;
