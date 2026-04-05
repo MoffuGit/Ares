@@ -43,7 +43,6 @@ const rpc = BrowserView.defineRPC<AppRPC>({
                 return {
                     settings: app.readSettings(),
                     theme: app.readTheme(),
-                    keymaps: app.readKeymaps(),
                 }
             },
             openProjectDialog: async () => {
@@ -114,7 +113,6 @@ mainWindow.setWindowButtonPosition(MAC_TRAFFIC_LIGHTS_X, MAC_TRAFFIC_LIGHTS_Y);
 
 app.core.on("SettingsUpdate", () => {
     mainWindow.webview.rpc?.send.settingsUpdate(app.readSettings())
-    mainWindow.webview.rpc?.send.keymapsUpdate(app.readKeymaps())
     mainWindow.webview.rpc?.send.themeUpdate(app.readTheme())
 });
 

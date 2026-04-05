@@ -1,12 +1,12 @@
 import type { RPCSchema } from "electrobun/bun";
-import type { Settings, Theme, WorktreeEntry, ModeKeymaps, Surface, BufferState, Project } from "@ares/shared";
+import type { Settings, Theme, WorktreeEntry, Surface, BufferState, Project } from "@ares/shared";
 
 export type GpuRect = { x: number; y: number; width: number; height: number };
 
 export type AppRPC = {
     bun: RPCSchema<{
         requests: {
-            initialLoad: { params: {}; response: { settings: Settings, theme: Theme, keymaps: ModeKeymaps } },
+            initialLoad: { params: {}; response: { settings: Settings, theme: Theme } },
             getTheme: { params: {}; response: Theme },
             openProjectDialog: { params: {}; response: Project | null };
             gitFileTree: { params: {}; response: WorktreeEntry[] }
@@ -28,7 +28,6 @@ export type AppRPC = {
             themeUpdate: Theme;
             filetreeUpdate: WorktreeEntry[];
             projectUpdate: Project | null;
-            keymapsUpdate: ModeKeymaps;
             bufferUpdate: BufferState;
         };
     }>;

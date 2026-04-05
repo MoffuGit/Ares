@@ -225,6 +225,34 @@ export fn readKeymapEntries(app: *App, scope: u8, mode: u8, out: [*]ExternKeymap
     return count;
 }
 
+const KeyStroke = @import("keymaps/KeyStroke.zig").KeyStroke;
+const KeyStrokeContext = @import("keymaps/KeyStroke.zig").KeyStrokeContext;
+const triepkg = @import("datastruct");
+const TrieNode = triepkg.NodeType(KeyStroke, u8, KeyStrokeContext);
+
+export fn getTrieRoot(app: *App, mode: u8) ?*TrieNode {
+    const settings = app.settings;
+
+    if (!settings.keymaps_initialized) return null;
+    if (mode >= @typeInfo(keymapspkg.Mode).@"enum".fields.len) return null;
+
+    const m: keymapspkg.Mode = @enumFromInt(mode);
+    return settings.keymaps.trie(m).root;
+}
+
+export fn trieStep(node: *TrieNode, codepoint: u32, mods: u8) ?*TrieNode {
+    const ks = KeyStroke{ .codepoint = @truncate(codepoint), .mods = @bitCast(mods) };
+    return node.childrens.get(ks);
+}
+
+export fn trieNodeIsTerminal(node: *TrieNode) bool {
+    return node.values.items.len > 0;
+}
+
+export fn trieNodeHasChildren(node: *TrieNode) bool {
+    return node.childrens.count() > 0;
+}
+
 export fn createEditor(app: *App, project: *Project, layer_ptr: *anyopaque, width: u32, height: u32) ?*Editor {
     return Editor.create(app, project, global.state.alloc, layer_ptr, width, height) catch null;
 }

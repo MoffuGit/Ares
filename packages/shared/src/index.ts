@@ -1,7 +1,6 @@
 import type { Settings, SidebarKind, Surface } from "./types.ts";
 
 export type * from "./types.ts";
-export * from "./keymap/index.ts";
 
 export function surfaceName(surface: Surface): string {
     switch (surface.kind) {

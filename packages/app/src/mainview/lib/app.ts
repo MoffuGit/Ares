@@ -1,5 +1,5 @@
 import { Electroview } from "electrobun/view";
-import type { Mode, WorktreeEntry, Tab, Surface, SidebarKind, Settings, Theme, Project, ModeKeymaps } from "@ares/shared";
+import type { Mode, WorktreeEntry, Tab, Surface, SidebarKind, Settings, Theme, Project } from "@ares/shared";
 import { canUseSidebarKind, surfaceName } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import { create } from "zustand";
@@ -9,7 +9,6 @@ export type AppState = {
     theme: Theme | null;
     filetree: WorktreeEntry[] | null;
     mode: Mode;
-    keymaps: ModeKeymaps | null;
     project: Project | null;
 
     sidebarOpen: boolean;
@@ -43,7 +42,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
     theme: null,
     filetree: null,
     mode: "normal",
-    keymaps: null,
     project: null,
     tabs: [],
     activeTabId: null,
@@ -142,11 +140,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
     },
 
     initialLoad: async () => {
-        const { settings, theme, keymaps } = await rpc.request.initialLoad({});
+        const { settings, theme } = await rpc.request.initialLoad({});
         set({
             settings: settings,
             theme: theme,
-            keymaps: keymaps,
         });
     },
 
@@ -180,9 +177,6 @@ const rpc = Electroview.defineRPC<AppRPC>({
             },
             projectUpdate: (project) => {
                 useAppStore.setState({ project });
-            },
-            keymapsUpdate: (keymaps) => {
-                useAppStore.setState({ keymaps });
             },
             bufferUpdate: (bufferState) => {
                 const tabs = useAppStore.getState().tabs.map((t) => {

@@ -7,7 +7,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { AppSidebar } from '@/components/app-sidebar'
 import { EmptyState } from '@/components/empty-state'
 import { TabContent } from '@/components/tab-content'
-import { BottomBar, KeyMaps, Theme, TopBar } from './components'
+import { BottomBar, Theme, TopBar } from './components'
 
 function App() {
     const project = useAppStore((s) => s.project);
@@ -22,7 +22,6 @@ function App() {
             <TopBar />
             {project ? (
                 <>
-                    <KeyMaps />
                     <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
                         <div className='flex-1 flex flex-row bg-sidebar'>
                             <AppSidebar />
