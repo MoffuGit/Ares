@@ -6,7 +6,6 @@ import {
     BufferState as RawBufferState,
     KeymapMatch as RawKeymapMatch,
     KeymapEntry,
-    ModeUpdate as RawModeUpdate,
     Settings as RawSettings,
     WorktreeEntry as RawWorktreeEntry,
 } from "./structs";
@@ -143,22 +142,6 @@ function getCoreLib(libPath: string) {
             expandEntry: {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void,
-            },
-            getTrieRoot: {
-                args: [FFIType.pointer, FFIType.u8],
-                returns: FFIType.pointer,
-            },
-            trieStep: {
-                args: [FFIType.pointer, FFIType.u32, FFIType.u8],
-                returns: FFIType.pointer,
-            },
-            trieNodeIsTerminal: {
-                args: [FFIType.pointer],
-                returns: FFIType.bool,
-            },
-            trieNodeHasChildren: {
-                args: [FFIType.pointer],
-                returns: FFIType.bool,
             },
             getKeymapEntryCount: {
                 args: [FFIType.pointer, FFIType.u8, FFIType.u8],
@@ -360,22 +343,6 @@ export class CoreLib extends EventEmitter {
 
     expandEntry(project: Pointer, id: number): void {
         this.lib.symbols.expandEntry(project, id);
-    }
-
-    getTrieRoot(app: Pointer, mode: number): Pointer | null {
-        return this.lib.symbols.getTrieRoot(app, mode) as Pointer | null;
-    }
-
-    trieStep(node: Pointer, codepoint: number, mods: number): Pointer | null {
-        return this.lib.symbols.trieStep(node, codepoint, mods) as Pointer | null;
-    }
-
-    trieNodeIsTerminal(node: Pointer): boolean {
-        return this.lib.symbols.trieNodeIsTerminal(node) as boolean;
-    }
-
-    trieNodeHasChildren(node: Pointer): boolean {
-        return this.lib.symbols.trieNodeHasChildren(node) as boolean;
     }
 
     readKeymapEntries(app: Pointer, scope: number, mode: number): KeymapBinding[] {
