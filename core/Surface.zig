@@ -115,7 +115,7 @@ pub fn Surface(comptime Io: type) type {
                 self.io_thr.join();
             }
 
-            self.emitSurfaceUpdate();
+            self.emitStateUpdate();
 
             return self;
         }
@@ -124,21 +124,7 @@ pub fn Surface(comptime Io: type) type {
             self.renderer_thread.wakeup.notify() catch {};
         }
 
-        pub fn resize(self: *Self, size: sizepkg.ScreenSize) void {
-            {
-                self.shared_state.mutex.lock();
-                defer self.shared_state.mutex.unlock();
-
-                self.shared_state.screen.resize(.{ .screen = size, .cell = self.grid.cellSize() });
-            }
-
-            _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
-            self.renderer_thread.wakeup.notify() catch {};
-
-            self.sendIo(.{ .resize = size });
-        }
-
-        pub fn readSurfaceState(self: *Self, out: *globalpkg.ExternSurfaceState) void {
+        pub fn state(self: *Self, out: *globalpkg.ExternSurfaceState) void {
             out.* = .{
                 .cell_width = self.renderer.size.cell.width,
                 .cell_height = self.renderer.size.cell.height,
@@ -146,9 +132,9 @@ pub fn Surface(comptime Io: type) type {
             };
         }
 
-        fn emitSurfaceUpdate(self: *Self) void {
+        fn emitStateUpdate(self: *Self) void {
             var surface_state: globalpkg.ExternSurfaceState = undefined;
-            self.readSurfaceState(&surface_state);
+            self.state(&surface_state);
             _ = globalpkg.state.emit(.{ .surfaceUpdate = surface_state }, .instant);
         }
 

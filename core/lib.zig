@@ -264,10 +264,7 @@ export fn destroyTerminal(terminal: *Terminal) void {
 }
 
 export fn resizeEditor(editor: *Editor, width: u32, height: u32) void {
-    editor.resize(.{
-        .height = height,
-        .width = width,
-    });
+    editor.sendIo(.{ .resize = .{ .height = height, .width = width } });
 }
 
 export fn destroyEditor(editor: *Editor) void {
@@ -290,11 +287,11 @@ pub const ExternSurfaceState = global.ExternSurfaceState;
 pub const ExternEditorState = global.ExternEditorState;
 
 export fn readEditorSurfaceState(editor: *Editor, out: *ExternSurfaceState) void {
-    editor.readSurfaceState(out);
+    editor.state(out);
 }
 
 export fn readTerminalSurfaceState(terminal: *Terminal, out: *ExternSurfaceState) void {
-    terminal.readSurfaceState(out);
+    terminal.state(out);
 }
 
 export fn readEditorState(editor: *Editor, out: *ExternEditorState) bool {
