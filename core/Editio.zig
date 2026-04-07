@@ -26,7 +26,6 @@ grid: *Grid,
 shared_state: *SharedState,
 renderer: *Renderer,
 renderer_thread: *RendererThread,
-io_thread: ?*Thread = null,
 
 buffer: ?*Buffer = null,
 selected_entry: ?u64 = null,
@@ -55,22 +54,19 @@ pub fn deinit(self: *Editio) void {
     _ = self;
 }
 
-pub fn threadEnter(self: *Editio, io_thread: *Thread) !void {
-    self.io_thread = io_thread;
-
+pub fn threadEnter(self: *Editio, thread: *Thread) !void {
     self.syncTextColor();
 
-    try global.events.on(.bufferUpdate, .{ .ctx = self, .handle = handleBufferUpdateEvent });
-    errdefer global.events.off(.bufferUpdate, .{ .ctx = self, .handle = handleBufferUpdateEvent });
+    try global.events.on(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdateEvent });
+    errdefer global.events.off(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdateEvent });
 
-    try global.events.on(.themeUpdate, .{ .ctx = self, .handle = handleThemeUpdateEvent });
-    errdefer global.events.off(.themeUpdate, .{ .ctx = self, .handle = handleThemeUpdateEvent });
+    try global.events.on(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdateEvent });
+    errdefer global.events.off(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdateEvent });
 }
 
-pub fn threadExit(self: *Editio) void {
-    self.io_thread = null;
-    global.events.off(.bufferUpdate, .{ .ctx = self, .handle = handleBufferUpdateEvent });
-    global.events.off(.themeUpdate, .{ .ctx = self, .handle = handleThemeUpdateEvent });
+pub fn threadExit(_: *Editio, thread: *Thread) void {
+    global.events.off(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdateEvent });
+    global.events.off(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdateEvent });
 }
 
 pub fn resize(self: *Editio, size: sizepkg.ScreenSize) void {
@@ -224,17 +220,15 @@ fn emitBufferUpdate(_: *Editio, entry_id: u64, buffer: *Buffer) void {
 }
 
 fn handleBufferUpdateEvent(ctx: *anyopaque, event: globalpkg.GlobalEvents) void {
-    const self: *Editio = @ptrCast(@alignCast(ctx));
-    const io_thread = self.io_thread orelse return;
+    const self: *Thread = @ptrCast(@alignCast(ctx));
 
-    _ = io_thread.mailbox.push(.{ .buffer_update = event.bufferUpdate }, .instant);
-    io_thread.wakeup.notify() catch {};
+    _ = self.mailbox.push(.{ .buffer_update = event.bufferUpdate }, .instant);
+    self.wakeup.notify() catch {};
 }
 
 fn handleThemeUpdateEvent(ctx: *anyopaque, _: globalpkg.GlobalEvents) void {
-    const self: *Editio = @ptrCast(@alignCast(ctx));
-    const io_thread = self.io_thread orelse return;
+    const self: *Thread = @ptrCast(@alignCast(ctx));
 
-    _ = io_thread.mailbox.push(.{ .theme_update = {} }, .instant);
-    io_thread.wakeup.notify() catch {};
+    _ = self.mailbox.push(.{ .theme_update = {} }, .instant);
+    self.wakeup.notify() catch {};
 }

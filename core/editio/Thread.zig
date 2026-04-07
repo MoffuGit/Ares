@@ -64,7 +64,7 @@ fn threadMain_(self: *Thread) !void {
     defer log.debug("editio thread exited", .{});
 
     try self.io.threadEnter(self);
-    defer self.io.threadExit();
+    defer self.io.threadExit(self);
 
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
