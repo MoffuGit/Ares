@@ -70,7 +70,19 @@ pub fn threadExit(_: *Editio, thread: *Thread) void {
 }
 
 pub fn resize(self: *Editio, size: sizepkg.ScreenSize) void {
-    _ = size;
+    {
+        self.shared_state.mutex.lock();
+        defer self.shared_state.mutex.unlock();
+
+        self.shared_state.screen.resize(.{
+            .screen = size,
+            .cell = self.grid.cellSize(),
+        });
+    }
+
+    _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
+    self.renderer_thread.wakeup.notify() catch {};
+
     self.writeScreen();
 }
 
