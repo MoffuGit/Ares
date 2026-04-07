@@ -79,6 +79,7 @@ pub const Worktree = struct {
 
     pub fn deinit(self: *Worktree) void {
         {
+            self.scanner.requestStop();
             self.scanner_thread.stop.notify() catch |err| {
                 log.err("error notifying scanner thread to stop, may stall err={}", .{err});
             };

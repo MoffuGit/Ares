@@ -110,7 +110,18 @@ fn flushTimerCallback(
     };
 
     const self = self_.?;
+    if (self.scanner.isStopRequested()) {
+        self.loop.stop();
+        return .disarm;
+    }
+
     self.processDirtyEntries();
+
+    if (self.scanner.isStopRequested()) {
+        self.loop.stop();
+        return .disarm;
+    }
+
     self.scheduleFlushTimer();
     return .disarm;
 }
@@ -129,6 +140,7 @@ fn processDirtyEntries(self: *Thread) void {
     if (entries.items.len == 0) return;
 
     var update = self.scanner.process_events(entries.items) catch |err| {
+        if (err == error.StopRequested) return;
         log.err("error processing dirty entries: {}", .{err});
         return;
     };
@@ -151,6 +163,10 @@ fn wakeupCallback(
     const t = self_.?;
 
     t.drainMailbox() catch |err| {
+        if (err == error.StopRequested) {
+            t.loop.stop();
+            return .disarm;
+        }
         log.err("error draining mailbox err={}", .{err});
     };
 

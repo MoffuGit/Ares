@@ -22,6 +22,7 @@ abs_root: []const u8,
 root_name: []const u8,
 snapshot: *Snapshot,
 monitor: *Monitor,
+stop_requested: std.atomic.Value(bool) = .{ .raw = false },
 
 mutex: std.Thread.Mutex = .{},
 watcher_to_entry: std.AutoHashMap(u64, u64),
@@ -41,6 +42,20 @@ pub fn init(alloc: Allocator, monitor: *Monitor, snapshot: *Snapshot, abs_root: 
 pub fn deinit(self: *Scanner) void {
     self.watcher_to_entry.deinit();
     self.dirty_entries.deinit(self.alloc);
+}
+
+pub fn requestStop(self: *Scanner) void {
+    self.stop_requested.store(true, .release);
+}
+
+pub fn isStopRequested(self: *Scanner) bool {
+    return self.stop_requested.load(.acquire);
+}
+
+fn ensureRunning(self: *Scanner) !void {
+    if (self.isStopRequested()) {
+        return error.StopRequested;
+    }
 }
 
 fn monitorCallback(self: ?*Scanner, watcher_id: u64, _: u32) void {
@@ -64,6 +79,7 @@ fn buildAbsPath(self: *Scanner, rel_path: []const u8, buf: []u8) ![]const u8 {
 }
 
 pub fn initial_scan(self: *Scanner) !void {
+    try self.ensureRunning();
     const root_stat = self.getRootStat() catch Stat{};
 
     var dir = std.fs.openDirAbsolute(self.abs_root, .{}) catch |err| {
@@ -109,11 +125,14 @@ pub fn initial_scan(self: *Scanner) !void {
 }
 
 pub fn process_scan_by_id(self: *Scanner, id: u64) !void {
+    try self.ensureRunning();
     var count: usize = 0;
     try self.scanRecursive(id, &count);
 }
 
 fn scanRecursive(self: *Scanner, dir_id: u64, count: *usize) !void {
+    try self.ensureRunning();
+
     const rel_path = blk: {
         self.snapshot.mutex.lock();
         defer self.snapshot.mutex.unlock();
@@ -132,6 +151,8 @@ fn scanRecursive(self: *Scanner, dir_id: u64, count: *usize) !void {
 
         var iter = d.iterate();
         while (try iter.next()) |entry| {
+            try self.ensureRunning();
+
             const kind: Kind = switch (entry.kind) {
                 .directory => .dir,
                 .file => .file,
@@ -181,6 +202,7 @@ fn scanRecursive(self: *Scanner, dir_id: u64, count: *usize) !void {
     }
 
     for (child_dirs.items) |child_id| {
+        try self.ensureRunning();
         try self.scanRecursive(child_id, count);
     }
 }
@@ -202,9 +224,13 @@ const ChildInfo = struct {
 };
 
 pub fn process_events(self: *Scanner, dirty_ids: []const u64) !UpdatedEntriesSet {
+    try self.ensureRunning();
+
     var result = UpdatedEntriesSet.init(self.alloc);
 
     for (dirty_ids) |id| {
+        try self.ensureRunning();
+
         const dir_path = blk: {
             self.snapshot.mutex.lock();
             defer self.snapshot.mutex.unlock();
@@ -224,6 +250,8 @@ pub fn process_events(self: *Scanner, dirty_ids: []const u64) !UpdatedEntriesSet
 }
 
 fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8, result: *UpdatedEntriesSet) !void {
+    try self.ensureRunning();
+
     var current_children = std.AutoHashMap(u64, ChildInfo).init(self.alloc);
     defer current_children.deinit();
 
@@ -273,6 +301,8 @@ fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8
 
     var iter = dir.iterate();
     while (try iter.next()) |entry| {
+        try self.ensureRunning();
+
         const kind: Kind = switch (entry.kind) {
             .directory => .dir,
             .file => .file,
@@ -737,4 +767,40 @@ test "process_events detects modified files" {
         }
     }
     try testing.expect(found_update);
+}
+
+test "scanRecursive stops when stop requested" {
+    const alloc = testing.allocator;
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.makePath("sub/deep");
+    (try tmp.dir.createFile("sub/deep/file.txt", .{})).close();
+
+    var path_buf: [fs.max_path_bytes]u8 = undefined;
+    const abs_path = try tmp.dir.realpath(".", &path_buf);
+
+    var snapshot = try Snapshot.init(alloc);
+    defer snapshot.deinit();
+
+    var scanner = try testInit(alloc, &snapshot, abs_path);
+    defer scanner.deinit();
+
+    const root_name = fs.path.basename(abs_path);
+    const root_id = snapshot.newId();
+    {
+        snapshot.mutex.lock();
+        defer snapshot.mutex.unlock();
+
+        const root_path = try snapshot.internPathSingle(root_name);
+        const root_abs = try snapshot.internPathSingle(abs_path);
+        try snapshot.insertInterned(root_id, root_path, root_abs, .dir, "unknown", .{});
+    }
+
+    scanner.requestStop();
+
+    var count: usize = 0;
+    try testing.expectError(error.StopRequested, scanner.scanRecursive(root_id, &count));
+    try testing.expectEqual(@as(usize, 1), snapshot.id_to_path.count());
 }
