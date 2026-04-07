@@ -23,88 +23,167 @@
 const std = @import("std");
 const objc = @import("objc");
 const Allocator = std.mem.Allocator;
+const globalpkg = @import("global.zig");
 const Renderer = @import("Renderer.zig");
 const RendererThread = @import("renderer/Thread.zig");
 const fontpkg = @import("font/mod.zig");
 const Grid = fontpkg.Grid;
 const SharedState = @import("SharedState.zig");
-const Project = @import("Project.zig");
 const sizepkg = @import("size.zig");
 
 const log = std.log.scoped(.surface);
 
-const Surface = @This();
+pub fn Surface(comptime Io: type) type {
+    return struct {
+        const Self = @This();
 
-alloc: Allocator,
+        alloc: Allocator,
+        grid: *Grid,
 
-grid: *Grid,
+        renderer: Renderer,
+        renderer_thread: RendererThread,
+        renderer_thr: std.Thread,
 
-renderer: Renderer,
-renderer_thread: RendererThread,
-renderer_thr: std.Thread,
+        io: Io,
+        io_thread: Io.Thread,
+        io_thr: std.Thread,
 
-shared_state: SharedState,
+        shared_state: SharedState,
 
-pub fn create(alloc: Allocator, grid: *Grid, layer_ptr: *anyopaque, screen_size: sizepkg.ScreenSize) !*Surface {
-    const metal_layer = objc.Object.fromId(layer_ptr);
+        pub fn create(
+            alloc: Allocator,
+            grid: *Grid,
+            layer_ptr: *anyopaque,
+            screen_size: sizepkg.ScreenSize,
+            io_config: Io.InitConfig,
+        ) !*Self {
+            const metal_layer = objc.Object.fromId(layer_ptr);
 
-    const self = try alloc.create(Surface);
-    errdefer alloc.destroy(self);
+            const self = try alloc.create(Self);
+            errdefer alloc.destroy(self);
 
-    var renderer = try Renderer.init(
-        alloc,
-        .{ .grid = grid, .metal_layer = metal_layer, .size = .{
-            .screen = screen_size,
-            .cell = grid.cellSize(),
-        } },
-    );
-    errdefer renderer.deinit();
+            var renderer = try Renderer.init(
+                alloc,
+                .{ .grid = grid, .metal_layer = metal_layer, .size = .{
+                    .screen = screen_size,
+                    .cell = grid.cellSize(),
+                } },
+            );
+            errdefer renderer.deinit();
 
-    var renderer_thread = try RendererThread.init(alloc, &self.renderer, &self.shared_state);
-    errdefer renderer_thread.deinit();
+            var shared_state = try SharedState.init(alloc, .{ .screen = screen_size, .cell = grid.cellSize() });
+            errdefer shared_state.deinit();
 
-    var shared_state = try SharedState.init(alloc, .{ .screen = screen_size, .cell = grid.cellSize() });
-    errdefer shared_state.deinit();
+            self.* = .{
+                .alloc = alloc,
+                .grid = grid,
+                .renderer = renderer,
+                .renderer_thread = undefined,
+                .renderer_thr = undefined,
+                .io = undefined,
+                .io_thread = undefined,
+                .io_thr = undefined,
+                .shared_state = shared_state,
+            };
 
-    self.* = .{
-        .grid = grid,
-        .alloc = alloc,
-        .shared_state = shared_state,
-        .renderer = renderer,
-        .renderer_thread = renderer_thread,
-        .renderer_thr = undefined,
+            self.renderer_thread = try RendererThread.init(alloc, &self.renderer, &self.shared_state);
+            errdefer self.renderer_thread.deinit();
+
+            self.io = try Io.init(
+                alloc,
+                grid,
+                &self.shared_state,
+                &self.renderer,
+                &self.renderer_thread,
+                screen_size,
+                io_config,
+            );
+            errdefer self.io.deinit();
+
+            self.io_thread = try Io.Thread.init(alloc, &self.io);
+            errdefer self.io_thread.deinit();
+
+            self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
+            errdefer {
+                self.renderer_thread.stop.notify() catch {};
+                self.renderer_thr.join();
+            }
+
+            self.io_thr = try std.Thread.spawn(.{}, Io.Thread.threadMain, .{&self.io_thread});
+            errdefer {
+                self.io_thread.stop.notify() catch {};
+                self.io_thr.join();
+            }
+
+            self.emitSurfaceUpdate();
+
+            return self;
+        }
+
+        pub fn wakeup(self: *Self) void {
+            self.renderer_thread.wakeup.notify() catch {};
+        }
+
+        pub fn resize(self: *Self, size: sizepkg.ScreenSize) void {
+            {
+                self.shared_state.mutex.lock();
+                defer self.shared_state.mutex.unlock();
+
+                self.shared_state.screen.resize(.{ .screen = size, .cell = self.grid.cellSize() });
+            }
+
+            _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
+            self.renderer_thread.wakeup.notify() catch {};
+
+            self.sendIo(.{ .resize = size });
+        }
+
+        pub fn readSurfaceState(self: *Self, out: *globalpkg.ExternSurfaceState) void {
+            out.* = .{
+                .cell_width = self.renderer.size.cell.width,
+                .cell_height = self.renderer.size.cell.height,
+                .renderer_health = @intCast(@intFromEnum(self.renderer.health.load(.seq_cst))),
+            };
+        }
+
+        fn emitSurfaceUpdate(self: *Self) void {
+            var surface_state: globalpkg.ExternSurfaceState = undefined;
+            self.readSurfaceState(&surface_state);
+            _ = globalpkg.state.emit(.{ .surfaceUpdate = surface_state }, .instant);
+        }
+
+        pub fn sendIo(self: *Self, message: Io.Thread.Message) void {
+            _ = self.io_thread.mailbox.push(message, .instant);
+            self.io_thread.wakeup.notify() catch {};
+        }
+
+        pub fn setVisibility(self: *Self, visible: bool) !void {
+            _ = self.renderer_thread.mailbox.push(.{ .visible = visible }, .instant);
+            self.renderer_thread.wakeup.notify() catch {};
+        }
+
+        pub fn destroy(self: *Self) void {
+            {
+                self.io_thread.stop.notify() catch |err|
+                    log.err("error notifying io thread to stop, may stall err={}", .{err});
+                self.io_thr.join();
+            }
+
+            {
+                self.renderer_thread.stop.notify() catch |err|
+                    log.err("error notifying renderer thread to stop, may stall err={}", .{err});
+                self.renderer_thr.join();
+            }
+
+            self.io_thread.deinit();
+            self.io.deinit();
+
+            self.renderer_thread.deinit();
+            self.renderer.deinit();
+
+            self.shared_state.deinit();
+
+            self.alloc.destroy(self);
+        }
     };
-
-    self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
-    return self;
-}
-
-pub fn wakeup(self: *Surface) void {
-    self.renderer_thread.wakeup.notify() catch {};
-}
-
-pub fn resize(self: *Surface, size: sizepkg.ScreenSize) void {
-    _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
-    self.renderer_thread.wakeup.notify() catch {};
-}
-
-pub fn setVisibility(self: *Surface, visible: bool) !void {
-    _ = self.renderer_thread.mailbox.push(.{ .visible = visible }, .instant);
-    self.renderer_thread.wakeup.notify() catch {};
-}
-
-pub fn destroy(self: *Surface) void {
-    {
-        self.renderer_thread.stop.notify() catch |err|
-            log.err("error notifying renderer thread to stop, may stall err={}", .{err});
-        self.renderer_thr.join();
-    }
-
-    self.renderer_thread.deinit();
-
-    self.renderer.deinit();
-
-    self.shared_state.deinit();
-
-    self.alloc.destroy(self);
 }

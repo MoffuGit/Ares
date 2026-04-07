@@ -2,13 +2,13 @@ pub const Thread = @This();
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const log = std.log.scoped(.terminal_thread);
+const log = std.log.scoped(.editio_thread);
 const xev = @import("../global.zig").xev;
 const BlockingQueue = @import("datastruct").BlockingQueue;
 const messagepkg = @import("./Message.zig");
-const SharedState = @import("../SharedState.zig");
-const Terminal = @import("../Terminal.zig");
+const Editio = @import("../Editio.zig");
 
+pub const Message = messagepkg.Message;
 pub const Mailbox = BlockingQueue(messagepkg.Message, 64);
 
 alloc: Allocator,
@@ -23,9 +23,9 @@ stop_c: xev.Completion = .{},
 
 mailbox: *Mailbox,
 
-terminal: *Terminal,
+io: *Editio,
 
-pub fn init(alloc: Allocator, terminal: *Terminal) !Thread {
+pub fn init(alloc: Allocator, io: *Editio) !Thread {
     var loop = try xev.Loop.init(.{});
     errdefer loop.deinit();
 
@@ -44,7 +44,7 @@ pub fn init(alloc: Allocator, terminal: *Terminal) !Thread {
         .wakeup = wakeup_h,
         .stop = stop_h,
         .mailbox = mailbox,
-        .terminal = terminal,
+        .io = io,
     };
 }
 
@@ -56,18 +56,18 @@ pub fn deinit(self: *Thread) void {
 
 pub fn threadMain(self: *Thread) void {
     self.threadMain_() catch |err| {
-        log.warn("error in terminal thread err={}", .{err});
+        log.warn("error in editio thread err={}", .{err});
     };
 }
 
 fn threadMain_(self: *Thread) !void {
-    defer log.debug("terminal thread exited", .{});
+    defer log.debug("editio thread exited", .{});
 
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
 
-    log.debug("starting terminal thread", .{});
-    defer log.debug("starting terminal thread shutdown", .{});
+    log.debug("starting editio thread", .{});
+    defer log.debug("starting editio thread shutdown", .{});
     _ = try self.loop.run(.until_done);
 }
 
@@ -104,8 +104,20 @@ fn wakeupCallback(
 fn drainMailbox(self: *Thread) !void {
     while (self.mailbox.pop()) |message| {
         switch (message) {
+            .buffer_update => |entry_id| {
+                self.io.onBufferUpdate(entry_id);
+            },
+            .theme_update => {
+                self.io.onThemeUpdate();
+            },
+            .select_entry => |id| {
+                self.io.selectEntry(id);
+            },
             .resize => |size| {
-                self.terminal.resize(size);
+                self.io.resize(size);
+            },
+            .scroll => |row| {
+                self.io.scroll(row);
             },
         }
     }

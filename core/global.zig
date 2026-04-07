@@ -18,12 +18,15 @@ pub const GlobalEvents = union(enum) {
     themeUpdate: void,
 };
 
-pub const ExternBufferState = extern struct {
-    entry_id: u64,
-    row_count: u64,
+pub const ExternSurfaceState = extern struct {
     cell_width: u32,
     cell_height: u32,
     renderer_health: u8,
+};
+
+pub const ExternEditorState = extern struct {
+    entry_id: u64,
+    row_count: u64,
 };
 
 pub const ExternModeUpdate = extern struct {
@@ -46,7 +49,8 @@ pub const Events = union(enum) {
     settingsUpdate: void,
     themeUpdate: void,
     filetreeUpdate: void,
-    bufferUpdate: ExternBufferState,
+    surfaceUpdate: ExternSurfaceState,
+    bufferUpdate: ExternEditorState,
     modeUpdate: ExternModeUpdate,
     keymapMatch: KeymapMatch,
 };

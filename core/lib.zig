@@ -5,7 +5,6 @@ const Project = @import("Project.zig");
 const Snapshot = @import("worktree/Snapshot.zig");
 const Appearance = @import("Appearance.zig");
 const App = @import("App.zig");
-const Surface = @import("Surface.zig");
 const Editor = @import("Editor.zig");
 const Terminal = @import("Terminal.zig");
 
@@ -30,8 +29,11 @@ export fn drainMailbox() void {
             .filetreeUpdate => {
                 cb(@intFromEnum(ev), null, 0);
             },
+            .surfaceUpdate => |surface| {
+                cb(@intFromEnum(ev), @ptrCast(&surface), @sizeOf(global.ExternSurfaceState));
+            },
             .bufferUpdate => |bs| {
-                cb(@intFromEnum(ev), @ptrCast(&bs), @sizeOf(global.ExternBufferState));
+                cb(@intFromEnum(ev), @ptrCast(&bs), @sizeOf(global.ExternEditorState));
             },
             .modeUpdate => |mode| {
                 cb(@intFromEnum(ev), @ptrCast(&mode), @sizeOf(global.ExternModeUpdate));
@@ -256,12 +258,10 @@ export fn destroyTerminal(terminal: *Terminal) void {
 }
 
 export fn resizeEditor(editor: *Editor, width: u32, height: u32) void {
-    _ = editor.thread.mailbox.push(.{ .resize = .{
+    editor.resize(.{
         .height = height,
         .width = width,
-    } }, .instant);
-
-    editor.thread.wakeup.notify() catch {};
+    });
 }
 
 export fn destroyEditor(editor: *Editor) void {
@@ -273,40 +273,26 @@ export fn setEditorVisibility(editor: *Editor, visible: bool) void {
 }
 
 export fn selectEditorEntry(editor: *Editor, id: u64) void {
-    _ = editor.thread.mailbox.push(.{ .select_entry = id }, .instant);
-
-    editor.thread.wakeup.notify() catch {};
+    editor.selectEntry(id);
 }
 
 export fn editorScrollTo(editor: *Editor, row: u64) void {
-    _ = editor.thread.mailbox.push(.{ .scroll = row }, .instant);
-
-    editor.thread.wakeup.notify() catch {};
+    editor.scrollTo(row);
 }
 
-pub const ExternBufferState = extern struct {
-    entry_id: u64,
-    row_count: u64,
-    cell_width: u32,
-    cell_height: u32,
-    renderer_health: u8,
-};
+pub const ExternSurfaceState = global.ExternSurfaceState;
+pub const ExternEditorState = global.ExternEditorState;
 
-export fn readBufferState(editor: *Editor, out: *ExternBufferState) bool {
-    const buffer = editor.buffer orelse return false;
-    if (buffer.getState() != .ready) return false;
-    buffer.mutex.lock();
-    defer buffer.mutex.unlock();
-    const text = buffer.text;
-    const cell = editor.surface.grid.cellSize();
-    out.* = .{
-        .entry_id = buffer.entry_id,
-        .row_count = text.rowCount,
-        .cell_width = cell.width,
-        .cell_height = cell.height,
-        .renderer_health = @intCast(@intFromEnum(editor.surface.renderer.health.load(.seq_cst))),
-    };
-    return true;
+export fn readEditorSurfaceState(editor: *Editor, out: *ExternSurfaceState) void {
+    editor.readSurfaceState(out);
+}
+
+export fn readTerminalSurfaceState(terminal: *Terminal, out: *ExternSurfaceState) void {
+    terminal.readSurfaceState(out);
+}
+
+export fn readEditorState(editor: *Editor, out: *ExternEditorState) bool {
+    return editor.readEditorState(out);
 }
 
 test {

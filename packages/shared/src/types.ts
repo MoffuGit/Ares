@@ -3,12 +3,15 @@ export type TabsPosition = "horizontal" | "vertical";
 
 export type SidebarKind = "filetree" | "tabs";
 
-export type BufferState = {
-    entryId: number;
-    rowCount: number;
+export type SurfaceState = {
     cellWidth: number;
     cellHeight: number;
     rendererHealth: number;
+};
+
+export type EditorState = {
+    entryId: number;
+    rowCount: number;
 };
 
 export type Project = {
@@ -138,13 +141,15 @@ export type EditorSurface = {
     kind: "editor";
     gpuSurfaceId?: number;
     entry?: WorktreeEntry;
-    bufferState?: BufferState;
+    surfaceState?: SurfaceState;
+    editorState?: EditorState;
 };
 
 export type TerminalSurface = {
     kind: "terminal";
     cwd: string;
     gpuSurfaceId?: number;
+    surfaceState?: SurfaceState;
 };
 
 export type Surface = EditorSurface | TerminalSurface;

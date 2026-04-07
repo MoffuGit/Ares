@@ -1,4 +1,4 @@
-import type { Theme } from "./types.ts";
+import type { Theme } from "@ares/shared";
 
 export function resolveTheme(json: string): Theme {
     const raw = JSON.parse(json) as Partial<RawThemeFile>;

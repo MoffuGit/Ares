@@ -1,5 +1,5 @@
 import { Electroview } from "electrobun/view";
-import type { Mode, WorktreeEntry, Tab, Surface, SidebarKind, Settings, Theme, Project } from "@ares/shared";
+import type { EditorState, Mode, SurfaceState, WorktreeEntry, Tab, Surface, SidebarKind, Settings, Theme, Project } from "@ares/shared";
 import { canUseSidebarKind, surfaceName } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import { create } from "zustand";
@@ -84,7 +84,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         }
         set({
             tabs: tabs.map((t) => t.id === activeTabId && t.surface.kind === "editor"
-                ? { ...t, name: entry.name, surface: { ...t.surface, entry: entry } } : t)
+                ? { ...t, name: entry.name, surface: { ...t.surface, entry: entry, editorState: undefined } } : t)
         });
     },
 
@@ -178,14 +178,11 @@ const rpc = Electroview.defineRPC<AppRPC>({
             projectUpdate: (project) => {
                 useAppStore.setState({ project });
             },
-            bufferUpdate: (bufferState) => {
-                const tabs = useAppStore.getState().tabs.map((t) => {
-                    if (t.surface.kind === "editor" && t.surface.entry?.id === bufferState.entryId) {
-                        return { ...t, surface: { ...t.surface, bufferState } };
-                    }
-                    return t;
-                });
-                useAppStore.setState({ tabs });
+            surfaceUpdate: ({ surfaceId, state }) => {
+                syncSurfaceState(surfaceId, state);
+            },
+            editorStateUpdate: ({ surfaceId, state }) => {
+                syncEditorState(surfaceId, state);
             },
             modeUpdate: (mode) => {
                 useAppStore.setState({ mode });
@@ -226,3 +223,25 @@ const rpc = Electroview.defineRPC<AppRPC>({
 });
 
 export { rpc };
+
+function syncSurfaceState(surfaceId: number, surfaceState: SurfaceState) {
+    const tabs = useAppStore.getState().tabs.map((tab) => {
+        if (tab.surface.gpuSurfaceId !== surfaceId) return tab;
+        return { ...tab, surface: { ...tab.surface, surfaceState } };
+    });
+    useAppStore.setState({ tabs });
+}
+
+function syncEditorState(surfaceId: number, editorState: EditorState | null) {
+    const tabs = useAppStore.getState().tabs.map((tab) => {
+        if (tab.surface.kind !== "editor" || tab.surface.gpuSurfaceId !== surfaceId) return tab;
+        return {
+            ...tab,
+            surface: {
+                ...tab.surface,
+                editorState: editorState ?? undefined,
+            },
+        };
+    });
+    useAppStore.setState({ tabs });
+}

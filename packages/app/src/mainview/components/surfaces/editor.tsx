@@ -27,13 +27,13 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
     });
 
     const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-        if (!surface.gpuSurfaceId || !surface.bufferState) return;
-        const cellHeight = surface.bufferState.cellHeight;
+        if (!surface.gpuSurfaceId || !surface.surfaceState) return;
+        const cellHeight = surface.surfaceState.cellHeight;
         if (cellHeight <= 0) return;
         const scrollTop = e.currentTarget.scrollTop;
         const row = Math.floor(scrollTop / cellHeight);
         rpc.send("surfaceScrollTo", { surfaceId: surface.gpuSurfaceId, row });
-    }, [surface.gpuSurfaceId, surface.bufferState]);
+    }, [surface.gpuSurfaceId, surface.surfaceState]);
 
     return (
         <div className="w-full flex flex-col grow data-[surface-active=true]:z-10 -z-10 data-[surface-active=true]:visible invisible" data-surface-active={active}>
@@ -82,7 +82,11 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
                     data-slot="editor-content"
                     onScroll={handleScroll}
                 >
-                    <div style={{ "height": surface.bufferState ? surface.bufferState.rowCount * surface.bufferState.cellHeight : 0 }} />
+                    <div style={{
+                        height: surface.editorState && surface.surfaceState
+                            ? surface.editorState.rowCount * surface.surfaceState.cellHeight
+                            : 0,
+                    }} />
                 </div>
                 <div className="w-full h-full grow" ref={containerRef}>
                     <GpuTag

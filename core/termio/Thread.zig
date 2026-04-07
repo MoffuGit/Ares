@@ -2,13 +2,13 @@ pub const Thread = @This();
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const log = std.log.scoped(.editor_thread);
+const log = std.log.scoped(.termio_thread);
 const xev = @import("../global.zig").xev;
 const BlockingQueue = @import("datastruct").BlockingQueue;
 const messagepkg = @import("./Message.zig");
-const SharedState = @import("../SharedState.zig");
-const Editor = @import("../Editor.zig");
+const Termio = @import("../Termio.zig");
 
+pub const Message = messagepkg.Message;
 pub const Mailbox = BlockingQueue(messagepkg.Message, 64);
 
 alloc: Allocator,
@@ -23,9 +23,9 @@ stop_c: xev.Completion = .{},
 
 mailbox: *Mailbox,
 
-editor: *Editor,
+io: *Termio,
 
-pub fn init(alloc: Allocator, editor: *Editor) !Thread {
+pub fn init(alloc: Allocator, io: *Termio) !Thread {
     var loop = try xev.Loop.init(.{});
     errdefer loop.deinit();
 
@@ -44,7 +44,7 @@ pub fn init(alloc: Allocator, editor: *Editor) !Thread {
         .wakeup = wakeup_h,
         .stop = stop_h,
         .mailbox = mailbox,
-        .editor = editor,
+        .io = io,
     };
 }
 
@@ -56,18 +56,18 @@ pub fn deinit(self: *Thread) void {
 
 pub fn threadMain(self: *Thread) void {
     self.threadMain_() catch |err| {
-        log.warn("error in editor thread err={}", .{err});
+        log.warn("error in termio thread err={}", .{err});
     };
 }
 
 fn threadMain_(self: *Thread) !void {
-    defer log.debug("editor thread exited", .{});
+    defer log.debug("termio thread exited", .{});
 
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
 
-    log.debug("starting editor thread", .{});
-    defer log.debug("starting editor thread shutdown", .{});
+    log.debug("starting termio thread", .{});
+    defer log.debug("starting termio thread shutdown", .{});
     _ = try self.loop.run(.until_done);
 }
 
@@ -104,17 +104,8 @@ fn wakeupCallback(
 fn drainMailbox(self: *Thread) !void {
     while (self.mailbox.pop()) |message| {
         switch (message) {
-            .buffer_update => {
-                self.editor.writeScreen();
-            },
-            .select_entry => |id| {
-                self.editor.selectSurfaceEntry(id);
-            },
             .resize => |size| {
-                self.editor.resize(size);
-            },
-            .scroll => |row| {
-                self.editor.scroll(row);
+                self.io.resize(size);
             },
         }
     }

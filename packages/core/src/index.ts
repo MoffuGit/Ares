@@ -3,19 +3,21 @@ import { EventEmitter } from "events";
 import { resolve } from "path";
 import { EventType, Events, EventsName } from "./events";
 import {
-    BufferState as RawBufferState,
+    EditorState as RawEditorState,
     KeymapMatch as RawKeymapMatch,
     KeymapEntry,
     Settings as RawSettings,
+    SurfaceState as RawSurfaceState,
     WorktreeEntry as RawWorktreeEntry,
 } from "./structs";
 import { resolveTheme } from "./theme";
 import type {
-    BufferState,
+    EditorState,
     KeymapBinding,
     KeymapMatch,
     Mode,
     Settings,
+    SurfaceState,
     Theme,
     WorktreeEntry,
 } from "@ares/shared";
@@ -26,19 +28,25 @@ function toNumber(value: number | bigint): number {
     return typeof value === "bigint" ? Number(value) : value;
 }
 
-function mapBufferState(raw: {
-    entry_id: number | bigint;
-    row_count: number | bigint;
+function mapSurfaceState(raw: {
     cell_width: number | bigint;
     cell_height: number | bigint;
     renderer_health: number | bigint;
-}): BufferState {
+}): SurfaceState {
     return {
-        entryId: toNumber(raw.entry_id),
-        rowCount: toNumber(raw.row_count),
         cellWidth: toNumber(raw.cell_width),
         cellHeight: toNumber(raw.cell_height),
         rendererHealth: toNumber(raw.renderer_health),
+    };
+}
+
+function mapEditorState(raw: {
+    entry_id: number | bigint;
+    row_count: number | bigint;
+}): EditorState {
+    return {
+        entryId: toNumber(raw.entry_id),
+        rowCount: toNumber(raw.row_count),
     };
 }
 
@@ -175,7 +183,15 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void
             },
-            readBufferState: {
+            readEditorSurfaceState: {
+                args: [FFIType.pointer, FFIType.pointer],
+                returns: FFIType.void,
+            },
+            readTerminalSurfaceState: {
+                args: [FFIType.pointer, FFIType.pointer],
+                returns: FFIType.void,
+            },
+            readEditorState: {
                 args: [FFIType.pointer, FFIType.pointer],
                 returns: FFIType.bool,
             },
@@ -231,8 +247,10 @@ export class CoreLib extends EventEmitter {
                         return
                     };
                     const rawData = dataType.unpack(toArrayBuffer(ptr, 0, _len));
-                    const data = _type === EventType.BufferUpdate
-                        ? mapBufferState(rawData)
+                    const data = _type === EventType.SurfaceUpdate
+                        ? mapSurfaceState(rawData)
+                        : _type === EventType.BufferUpdate
+                            ? mapEditorState(rawData)
                         : _type === EventType.ModeUpdate
                             ? { mode: mapMode(rawData.mode) }
                             : _type === EventType.KeymapMatch
@@ -395,11 +413,23 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.editorScrollTo(editor, row);
     }
 
-    readBufferState(editor: Pointer): BufferState | null {
-        const buf = new ArrayBuffer(RawBufferState.size);
-        const ok = this.lib.symbols.readBufferState(editor, ptr(buf));
+    readEditorSurfaceState(editor: Pointer): SurfaceState {
+        const buf = new ArrayBuffer(RawSurfaceState.size);
+        this.lib.symbols.readEditorSurfaceState(editor, ptr(buf));
+        return mapSurfaceState(RawSurfaceState.unpack(buf));
+    }
+
+    readTerminalSurfaceState(terminal: Pointer): SurfaceState {
+        const buf = new ArrayBuffer(RawSurfaceState.size);
+        this.lib.symbols.readTerminalSurfaceState(terminal, ptr(buf));
+        return mapSurfaceState(RawSurfaceState.unpack(buf));
+    }
+
+    readEditorState(editor: Pointer): EditorState | null {
+        const buf = new ArrayBuffer(RawEditorState.size);
+        const ok = this.lib.symbols.readEditorState(editor, ptr(buf));
         if (!ok) return null;
-        return mapBufferState(RawBufferState.unpack(buf));
+        return mapEditorState(RawEditorState.unpack(buf));
     }
 
     setEditorVisibility(editor: Pointer, visible: boolean) {

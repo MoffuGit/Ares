@@ -1,11 +1,11 @@
 import { WGPUView } from "electrobun/bun";
 import type { Pointer } from "bun:ffi";
 import type { App, CoreLib } from "@ares/core";
-import type { Surface, SurfaceKind } from "@ares/shared";
+import type { EditorState, Surface, SurfaceKind, SurfaceState } from "@ares/shared";
 
 type Rect = { x: number; y: number; width: number; height: number };
 
-type SurfaceState = {
+type SurfaceRecord = {
     id: number;
     surface: Surface;
     rect: Rect;
@@ -15,7 +15,7 @@ type SurfaceState = {
 };
 
 export class SurfaceStore {
-    private states = new Map<number, SurfaceState>();
+    private states = new Map<number, SurfaceRecord>();
     app: App;
 
     constructor(app: App) {
@@ -110,6 +110,44 @@ export class SurfaceStore {
         const state = this.states.get(viewId);
         if (!state || state.surface.kind !== "editor") return;
         this.app.core.editorScrollTo(state.corePtr, row);
+    }
+
+    readSurfaceState(viewId: number): SurfaceState | null {
+        const state = this.states.get(viewId);
+        if (!state) return null;
+
+        switch (state.surface.kind) {
+            case "editor":
+                return this.app.core.readEditorSurfaceState(state.corePtr);
+            case "terminal":
+                return this.app.core.readTerminalSurfaceState(state.corePtr);
+        }
+    }
+
+    readEditorState(viewId: number): EditorState | null {
+        const state = this.states.get(viewId);
+        if (!state || state.surface.kind !== "editor") return null;
+        return this.app.core.readEditorState(state.corePtr);
+    }
+
+    readAllSurfaceStates(): Array<{ surfaceId: number; state: SurfaceState }> {
+        const updates: Array<{ surfaceId: number; state: SurfaceState }> = [];
+        for (const state of this.states.values()) {
+            const surfaceState = this.readSurfaceState(state.id);
+            if (surfaceState) {
+                updates.push({ surfaceId: state.id, state: surfaceState });
+            }
+        }
+        return updates;
+    }
+
+    readAllEditorStates(): Array<{ surfaceId: number; state: EditorState | null }> {
+        const updates: Array<{ surfaceId: number; state: EditorState | null }> = [];
+        for (const state of this.states.values()) {
+            if (state.surface.kind !== "editor") continue;
+            updates.push({ surfaceId: state.id, state: this.readEditorState(state.id) });
+        }
+        return updates;
     }
 
     private createCoreSurface(kind: SurfaceKind, metalLayerPtr: Pointer, width: number, height: number): Pointer | null {

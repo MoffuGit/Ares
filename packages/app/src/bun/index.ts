@@ -66,6 +66,13 @@ const rpc = BrowserView.defineRPC<AppRPC>({
             gpuTagReady: ({ id, rect, surface }) => {
                 try {
                     surfaceStore.start(id, mainWindow, rect, surface);
+                    const surfaceState = surfaceStore.readSurfaceState(id);
+                    if (surfaceState) {
+                        mainWindow.webview.rpc?.send.surfaceUpdate({ surfaceId: id, state: surfaceState });
+                    }
+                    if (surface.kind === "editor") {
+                        mainWindow.webview.rpc?.send.editorStateUpdate({ surfaceId: id, state: surfaceStore.readEditorState(id) });
+                    }
                     return { success: true };
                 } catch (err: any) {
                     console.error(`Metal renderer start failed: ${String(err?.message ?? err)}`);
@@ -126,8 +133,16 @@ app.core.on("FiletreeUpdate", () => {
     mainWindow.webview.rpc?.send.filetreeUpdate(fileTree);
 });
 
-app.core.on("BufferUpdate", (state) => {
-    mainWindow.webview.rpc?.send.bufferUpdate(state);
+app.core.on("SurfaceUpdate", () => {
+    for (const update of surfaceStore.readAllSurfaceStates()) {
+        mainWindow.webview.rpc?.send.surfaceUpdate(update);
+    }
+});
+
+app.core.on("BufferUpdate", () => {
+    for (const update of surfaceStore.readAllEditorStates()) {
+        mainWindow.webview.rpc?.send.editorStateUpdate(update);
+    }
 });
 
 app.core.on("ModeUpdate", ({ mode }) => {

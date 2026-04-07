@@ -33,7 +33,9 @@ const mtl = @import("./renderer/metal/api.zig");
 const SwapChain = @import("./renderer/SwapChain.zig");
 const macos = @import("macos");
 const Thread = @import("renderer/Thread.zig");
-const xev = @import("global.zig").xev;
+const globalpkg = @import("global.zig");
+const global = &globalpkg.state;
+const xev = globalpkg.xev;
 const sizepkg = @import("size.zig");
 const fontpkg = @import("font/mod.zig");
 const SharedState = @import("SharedState.zig");
@@ -255,18 +257,19 @@ pub fn frameCompleted(
     // do a cmpxchg here because strict atomicity isn't important.
     if (self.health.load(.seq_cst) != health) {
         self.health.store(health, .seq_cst);
-
-        //WARN:
-        //this should notify the weview
-        // Our health value changed, so we notify the surface so that it
-        // can do something about it.
-        // _ = self.surface_mailbox.push(.{
-        //     .renderer_health = health,
-        // }, .{ .forever = {} });
+        self.emitSurfaceUpdate();
     }
 
     // Always release our semaphore
     self.swap_chain.releaseFrame();
+}
+
+fn emitSurfaceUpdate(self: *Renderer) void {
+    _ = global.emit(.{ .surfaceUpdate = .{
+        .cell_width = self.size.cell.width,
+        .cell_height = self.size.cell.height,
+        .renderer_health = @intCast(@intFromEnum(self.health.load(.seq_cst))),
+    } }, .instant);
 }
 
 pub fn hasVsync(self: *const Renderer) bool {
