@@ -124,4 +124,6 @@ fn drainMailbox(self: *Thread) !void {
             },
         }
     }
+
+    self.io.renderer_thread.wakeup.notify() catch {};
 }

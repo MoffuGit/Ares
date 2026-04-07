@@ -79,25 +79,21 @@ pub fn resize(self: *Editio, size: sizepkg.ScreenSize) void {
     self.editor.writeScreen();
 
     _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
-    self.renderer_thread.wakeup.notify() catch {};
 }
 
 pub fn selectEntry(self: *Editio, id: u64) void {
     self.editor.selectEntry(id);
     self.editor.writeScreen();
-    self.renderer_thread.wakeup.notify() catch {};
 }
 
 pub fn scroll(self: *Editio, row: u64) void {
     self.editor.scroll(row);
     self.editor.writeScreen();
-    self.renderer_thread.wakeup.notify() catch {};
 }
 
 pub fn onBufferUpdate(self: *Editio, entry_id: u64) void {
     self.editor.onBufferUpdate(entry_id);
     self.editor.writeScreen();
-    self.renderer_thread.wakeup.notify() catch {};
 }
 
 pub fn onThemeUpdate(self: *Editio) void {
