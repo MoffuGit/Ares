@@ -5,8 +5,12 @@ const Project = @import("Project.zig");
 const Snapshot = @import("worktree/Snapshot.zig");
 const Appearance = @import("Appearance.zig");
 const App = @import("App.zig");
-const Editor = @import("Editor.zig");
-const Terminal = @import("Terminal.zig");
+const SurfacePkg = @import("Surface.zig");
+const Editio = @import("Editio.zig");
+const Termio = @import("Termio.zig");
+
+const Editor = SurfacePkg.Surface(Editio);
+const Terminal = SurfacePkg.Surface(Termio);
 
 export fn initState(callback: ?global.Callback) void {
     global.state.init(callback) catch {};
@@ -246,11 +250,13 @@ export fn readKeymapEntries(app: *App, scope: u8, mode: u8, out: [*]ExternKeymap
 }
 
 export fn createEditor(app: *App, project: *Project, layer_ptr: *anyopaque, width: u32, height: u32) ?*Editor {
-    return Editor.create(app, project, global.state.alloc, layer_ptr, width, height) catch null;
+    return Editor.create(global.state.alloc, &app.grid, layer_ptr, .{ .width = width, .height = height }, .{
+        .project = project,
+    }) catch null;
 }
 
 export fn createTerminal(app: *App, layer_ptr: *anyopaque, width: u32, height: u32) ?*Terminal {
-    return Terminal.create(app, global.state.alloc, layer_ptr, width, height) catch null;
+    return Terminal.create(global.state.alloc, &app.grid, layer_ptr, .{ .width = width, .height = height }, .{}) catch null;
 }
 
 export fn destroyTerminal(terminal: *Terminal) void {
@@ -273,11 +279,11 @@ export fn setEditorVisibility(editor: *Editor, visible: bool) void {
 }
 
 export fn selectEditorEntry(editor: *Editor, id: u64) void {
-    editor.selectEntry(id);
+    editor.sendIo(.{ .select_entry = id });
 }
 
 export fn editorScrollTo(editor: *Editor, row: u64) void {
-    editor.scrollTo(row);
+    editor.sendIo(.{ .scroll = row });
 }
 
 pub const ExternSurfaceState = global.ExternSurfaceState;
@@ -292,7 +298,7 @@ export fn readTerminalSurfaceState(terminal: *Terminal, out: *ExternSurfaceState
 }
 
 export fn readEditorState(editor: *Editor, out: *ExternEditorState) bool {
-    return editor.readEditorState(out);
+    return editor.io.readEditorState(out);
 }
 
 test {
