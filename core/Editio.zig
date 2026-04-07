@@ -7,10 +7,10 @@ const Allocator = std.mem.Allocator;
 const SharedState = @import("SharedState.zig");
 const sizepkg = @import("size.zig");
 const Project = @import("Project.zig");
-const Buffer = @import("buffer/Buffer.zig");
 const Renderer = @import("Renderer.zig");
 const RendererThread = @import("renderer/Thread.zig");
 const Grid = @import("font/mod.zig").Grid;
+const Editor = @import("Editor.zig");
 
 pub const Thread = @import("editio/Thread.zig").Thread;
 
@@ -21,15 +21,11 @@ pub const InitConfig = struct {
 };
 
 alloc: Allocator,
-project: *Project,
 grid: *Grid,
 shared_state: *SharedState,
 renderer: *Renderer,
 renderer_thread: *RendererThread,
-
-buffer: ?*Buffer = null,
-selected_entry: ?u64 = null,
-scroll_row: u64 = 0,
+editor: Editor,
 
 pub fn init(
     alloc: Allocator,
@@ -42,11 +38,11 @@ pub fn init(
 ) !Editio {
     return .{
         .alloc = alloc,
-        .project = config.project,
         .grid = grid,
         .shared_state = shared_state,
         .renderer = renderer,
         .renderer_thread = renderer_thread,
+        .editor = Editor.init(alloc, config.project, shared_state, renderer),
     };
 }
 
@@ -55,7 +51,7 @@ pub fn deinit(self: *Editio) void {
 }
 
 pub fn threadEnter(self: *Editio, thread: *Thread) !void {
-    self.syncTextColor();
+    self.editor.syncTextColor();
 
     try global.events.on(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdateEvent });
     errdefer global.events.off(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdateEvent });
@@ -80,155 +76,36 @@ pub fn resize(self: *Editio, size: sizepkg.ScreenSize) void {
         });
     }
 
+    self.editor.writeScreen();
+
     _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
     self.renderer_thread.wakeup.notify() catch {};
-
-    self.writeScreen();
 }
 
 pub fn selectEntry(self: *Editio, id: u64) void {
-    if (self.buffer) |curr| {
-        if (curr.entry_id == id) return;
-    }
-
-    if (self.project.openBuffer(id)) |buffer| {
-        self.buffer = buffer;
-        self.selected_entry = id;
-
-        self.emitBufferUpdate(id, buffer);
-        self.writeScreen();
-    }
-}
-
-pub fn scroll(self: *Editio, row: u64) void {
-    self.scroll_row = row;
-    self.writeScreen();
-}
-
-pub fn onBufferUpdate(self: *Editio, entry_id: u64) void {
-    const selected_entry = self.selected_entry orelse return;
-    if (selected_entry != entry_id) return;
-
-    const buffer = self.buffer orelse return;
-    self.emitBufferUpdate(entry_id, buffer);
-    self.writeScreen();
-}
-
-pub fn onThemeUpdate(self: *Editio) void {
-    self.syncTextColor();
-}
-
-pub fn syncTextColor(self: *Editio) void {
-    const color = self.project.app.settings.readThemeTextColor();
-    self.renderer.setTextColor(color);
-}
-
-pub fn readEditorState(self: *Editio, out: *globalpkg.ExternEditorState) bool {
-    const buffer = self.buffer orelse return false;
-    if (buffer.getState() != .ready) return false;
-
-    buffer.mutex.lock();
-    defer buffer.mutex.unlock();
-
-    const text = buffer.text;
-    out.* = .{
-        .entry_id = buffer.entry_id,
-        .row_count = text.rowCount,
-    };
-    return true;
-}
-
-pub fn writeScreen(self: *Editio) void {
-    const buffer = self.buffer orelse return;
-
-    if (buffer.getState() == .ready) {
-        buffer.mutex.lock();
-        defer buffer.mutex.unlock();
-
-        const text = buffer.text;
-
-        const first = text.content.items;
-        const second = text.content.secondHalf();
-
-        self.shared_state.mutex.lock();
-        defer self.shared_state.mutex.unlock();
-
-        const screen = &self.shared_state.screen;
-
-        screen.resetCells();
-
-        var line: u64 = 0;
-        var row: u16 = 0;
-        var remainder: []const u8 = first;
-        var in_second = false;
-
-        while (true) {
-            if (std.mem.indexOfScalar(u8, remainder, '\n')) |nl| {
-                if (line >= self.scroll_row) {
-                    if (row >= screen.rows) break;
-                    screen.addNewLine(remainder[0..nl]) catch |err| {
-                        log.err("failed to add line to screen: {}", .{err});
-                        return;
-                    };
-                    row += 1;
-                }
-                remainder = remainder[nl + 1 ..];
-                line += 1;
-            } else if (!in_second) {
-                in_second = true;
-                if (second.len == 0) {
-                    if (line >= self.scroll_row and row < screen.rows) {
-                        screen.addNewLine(remainder) catch |err| {
-                            log.err("failed to add line to screen: {}", .{err});
-                            return;
-                        };
-                    }
-                    break;
-                }
-                if (std.mem.indexOfScalar(u8, second, '\n')) |nl| {
-                    if (line >= self.scroll_row) {
-                        if (row >= screen.rows) break;
-                        const joined = std.mem.concat(self.alloc, u8, &.{ remainder, second[0..nl] }) catch return;
-                        defer self.alloc.free(joined);
-                        screen.addNewLine(joined) catch |err| {
-                            log.err("failed to add line to screen: {}", .{err});
-                            return;
-                        };
-                        row += 1;
-                    }
-                    remainder = second[nl + 1 ..];
-                    line += 1;
-                } else {
-                    if (line >= self.scroll_row and row < screen.rows) {
-                        const joined = std.mem.concat(self.alloc, u8, &.{ remainder, second }) catch return;
-                        defer self.alloc.free(joined);
-                        screen.addNewLine(joined) catch |err| {
-                            log.err("failed to add line to screen: {}", .{err});
-                            return;
-                        };
-                    }
-                    break;
-                }
-            } else {
-                if (line >= self.scroll_row and row < screen.rows) {
-                    screen.addNewLine(remainder) catch |err| {
-                        log.err("failed to add line to screen: {}", .{err});
-                        return;
-                    };
-                }
-                break;
-            }
-        }
-    }
-
+    self.editor.selectEntry(id);
+    self.editor.writeScreen();
     self.renderer_thread.wakeup.notify() catch {};
 }
 
-fn emitBufferUpdate(_: *Editio, entry_id: u64, buffer: *Buffer) void {
-    _ = global.emit(.{ .bufferUpdate = .{
-        .entry_id = entry_id,
-        .row_count = buffer.text.rowCount,
-    } }, .instant);
+pub fn scroll(self: *Editio, row: u64) void {
+    self.editor.scroll(row);
+    self.editor.writeScreen();
+    self.renderer_thread.wakeup.notify() catch {};
+}
+
+pub fn onBufferUpdate(self: *Editio, entry_id: u64) void {
+    self.editor.onBufferUpdate(entry_id);
+    self.editor.writeScreen();
+    self.renderer_thread.wakeup.notify() catch {};
+}
+
+pub fn onThemeUpdate(self: *Editio) void {
+    self.editor.onThemeUpdate();
+}
+
+pub fn readEditorState(self: *Editio, out: *globalpkg.ExternEditorState) bool {
+    return self.editor.readEditorState(out);
 }
 
 fn handleBufferUpdateEvent(ctx: *anyopaque, event: globalpkg.GlobalEvents) void {
