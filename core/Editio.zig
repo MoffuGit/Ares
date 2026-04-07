@@ -41,7 +41,7 @@ pub fn init(
     _: sizepkg.ScreenSize,
     config: InitConfig,
 ) !Editio {
-    var self: Editio = .{
+    return .{
         .alloc = alloc,
         .project = config.project,
         .grid = grid,
@@ -49,9 +49,6 @@ pub fn init(
         .renderer = renderer,
         .renderer_thread = renderer_thread,
     };
-
-    self.syncTextColor();
-    return self;
 }
 
 pub fn deinit(self: *Editio) void {
@@ -60,6 +57,8 @@ pub fn deinit(self: *Editio) void {
 
 pub fn threadEnter(self: *Editio, io_thread: *Thread) !void {
     self.io_thread = io_thread;
+
+    self.syncTextColor();
 
     try global.events.on(.bufferUpdate, .{ .ctx = self, .handle = handleBufferUpdateEvent });
     errdefer global.events.off(.bufferUpdate, .{ .ctx = self, .handle = handleBufferUpdateEvent });

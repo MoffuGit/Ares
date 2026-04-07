@@ -71,25 +71,13 @@ pub fn Surface(comptime Io: type) type {
             );
             errdefer renderer.deinit();
 
+            var renderer_thread = try RendererThread.init(alloc, &self.renderer, &self.shared_state);
+            errdefer renderer_thread.deinit();
+
             var shared_state = try SharedState.init(alloc, .{ .screen = screen_size, .cell = grid.cellSize() });
             errdefer shared_state.deinit();
 
-            self.* = .{
-                .alloc = alloc,
-                .grid = grid,
-                .renderer = renderer,
-                .renderer_thread = undefined,
-                .renderer_thr = undefined,
-                .io = undefined,
-                .io_thread = undefined,
-                .io_thr = undefined,
-                .shared_state = shared_state,
-            };
-
-            self.renderer_thread = try RendererThread.init(alloc, &self.renderer, &self.shared_state);
-            errdefer self.renderer_thread.deinit();
-
-            self.io = try Io.init(
+            var io = try Io.init(
                 alloc,
                 grid,
                 &self.shared_state,
@@ -98,10 +86,22 @@ pub fn Surface(comptime Io: type) type {
                 screen_size,
                 io_config,
             );
-            errdefer self.io.deinit();
+            errdefer io.deinit();
 
-            self.io_thread = try Io.Thread.init(alloc, &self.io);
-            errdefer self.io_thread.deinit();
+            var io_thread = try Io.Thread.init(alloc, &self.io);
+            errdefer io_thread.deinit();
+
+            self.* = .{
+                .alloc = alloc,
+                .grid = grid,
+                .renderer = renderer,
+                .renderer_thread = renderer_thread,
+                .renderer_thr = undefined,
+                .io = io,
+                .io_thread = io_thread,
+                .io_thr = undefined,
+                .shared_state = shared_state,
+            };
 
             self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
             errdefer {
