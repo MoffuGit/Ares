@@ -120,11 +120,15 @@ fn drainMailbox(self: *Thread) !void {
     while (self.mailbox.pop()) |message| {
         switch (message) {
             .read => |req| {
-                req.init() catch continue;
+                req.init() catch {
+                    req.deinit();
+                    continue;
+                };
+                self.io.addPendingRead(req);
                 req.xev_file.read(
                     &self.loop,
                     &req.completion,
-                    .{ .slice = req.buffer },
+                    .{ .slice = req.buffer.? },
                     Io.ReadRequest,
                     req,
                     readCallback,

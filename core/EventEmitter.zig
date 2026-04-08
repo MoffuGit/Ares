@@ -18,6 +18,7 @@ pub fn EventEmitter(comptime Event: type) type {
 
         allocator: Allocator,
         listeners: std.EnumMap(Tag, std.ArrayListUnmanaged(Listener)),
+        mutex: std.Thread.Mutex = .{},
 
         pub fn init(allocator: Allocator) Self {
             return .{
@@ -34,15 +35,26 @@ pub fn EventEmitter(comptime Event: type) type {
         }
 
         pub fn on(self: *Self, event: Tag, listener: Listener) !void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             const list_ptr = self.listeners.getPtr(event) orelse {
                 self.listeners.put(event, .{});
-                return self.on(event, listener);
+                return self.onLocked(event, listener);
             };
 
             try list_ptr.append(self.allocator, listener);
         }
 
+        fn onLocked(self: *Self, event: Tag, listener: Listener) !void {
+            const list_ptr = self.listeners.getPtr(event) orelse unreachable;
+            try list_ptr.append(self.allocator, listener);
+        }
+
         pub fn off(self: *Self, event: Tag, listener: Listener) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             const list_ptr = self.listeners.getPtr(event) orelse return;
 
             var i: usize = 0;
@@ -57,10 +69,16 @@ pub fn EventEmitter(comptime Event: type) type {
         }
 
         pub fn emit(self: *Self, event: Event) void {
-            const tag = std.meta.activeTag(event);
-            const list_ptr = self.listeners.getPtr(tag) orelse return;
+            const snapshot = blk: {
+                self.mutex.lock();
+                defer self.mutex.unlock();
 
-            for (list_ptr.items) |listener| {
+                const tag = std.meta.activeTag(event);
+                const list_ptr = self.listeners.getPtr(tag) orelse return;
+                break :blk list_ptr.items;
+            };
+
+            for (snapshot) |listener| {
                 listener.handle(listener.ctx, event);
             }
         }

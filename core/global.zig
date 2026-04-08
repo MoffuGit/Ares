@@ -1,6 +1,7 @@
 const std = @import("std");
 const GPA = std.heap.GeneralPurposeAllocator(.{});
 const UpdatedEntriesSet = @import("worktree/scanner/mod.zig").UpdatedEntriesSet;
+const io_types = @import("io/types.zig");
 
 pub const EventEmitter = @import("EventEmitter.zig").EventEmitter(GlobalEvents);
 
@@ -16,6 +17,7 @@ pub const GlobalEvents = union(enum) {
     worktreeUpdate: UpdatedEntriesSet,
     bufferUpdate: u64,
     themeUpdate: void,
+    ioReadComplete: io_types.ReadResult,
 };
 
 pub const ExternSurfaceState = extern struct {

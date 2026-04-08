@@ -5,43 +5,26 @@ const xev = global.xev;
 const Allocator = std.mem.Allocator;
 const Thread = @import("Thread.zig");
 
+pub const io_types = @import("types.zig");
+pub const File = io_types.File;
+pub const Stat = io_types.Stat;
+
 const log = std.log.scoped(.io);
 
 pub const Io = @This();
-
-pub const File = struct {
-    bytes: []const u8,
-    stat: Stat,
-    alloc: Allocator,
-
-    pub fn deinit(self: File) void {
-        self.alloc.free(self.bytes);
-    }
-};
-
-pub const Stat = struct {
-    size: u64 = 0,
-    mtime: i128 = 0,
-    atime: i128 = 0,
-    ctime: i128 = 0,
-    mode: u32 = 0,
-};
 
 pub const ReadRequest = struct {
     path: []u8,
     completion: xev.Completion = .{},
 
-    xev_file: xev.File,
-    fd: std.fs.File,
-    buffer: []u8,
+    xev_file: xev.File = undefined,
+    fd: ?std.fs.File = null,
+    buffer: ?[]u8 = null,
     file_stat: Stat = .{},
 
     alloc: Allocator,
 
     io: *Io,
-
-    userdata: ?*anyopaque,
-    callback: *const fn (userdata: ?*anyopaque, file: ?File) void,
 
     pub fn init(self: *ReadRequest) !void {
         var file = try std.fs.openFileAbsolute(self.path, .{ .mode = .read_only });
@@ -49,7 +32,7 @@ pub const ReadRequest = struct {
 
         const stat = try file.stat();
 
-        const file_stat = Stat{
+        self.file_stat = Stat{
             .size = stat.size,
             .mtime = stat.mtime,
             .atime = stat.atime,
@@ -57,13 +40,10 @@ pub const ReadRequest = struct {
             .mode = @intCast(stat.mode),
         };
 
-        self.file_stat = file_stat;
-
         const buffer = try self.alloc.alloc(u8, stat.size);
         errdefer self.alloc.free(buffer);
 
         const xev_file = try xev.File.init(file);
-        errdefer xev_file.deinit();
 
         self.xev_file = xev_file;
         self.fd = file;
@@ -71,7 +51,8 @@ pub const ReadRequest = struct {
     }
 
     pub fn deinit(self: *ReadRequest) void {
-        self.fd.close();
+        if (self.fd) |fd| fd.close();
+        if (self.buffer) |buf| self.alloc.free(buf);
         self.alloc.free(self.path);
         self.alloc.destroy(self);
     }
@@ -80,6 +61,7 @@ pub const ReadRequest = struct {
 alloc: Allocator,
 thread: Thread,
 thr: std.Thread,
+pending_reads: std.ArrayListUnmanaged(*ReadRequest),
 
 pub fn create(alloc: Allocator) !*Io {
     var io = try alloc.create(Io);
@@ -88,6 +70,7 @@ pub fn create(alloc: Allocator) !*Io {
         .alloc = alloc,
         .thread = try Thread.init(alloc, io),
         .thr = undefined,
+        .pending_reads = .{},
     };
 
     io.thr = try std.Thread.spawn(.{}, Thread.threadMain, .{&io.thread});
@@ -102,38 +85,34 @@ pub fn destroy(self: *Io) void {
         };
         self.thr.join();
     }
+
+    // Clean up any requests still in the mailbox
+    while (self.thread.mailbox.pop()) |message| {
+        switch (message) {
+            .read => |req| req.deinit(),
+        }
+    }
+
+    // Clean up any pending reads that were submitted but never completed
+    for (self.pending_reads.items) |req| {
+        req.deinit();
+    }
+    self.pending_reads.deinit(self.alloc);
+
     self.thread.deinit();
     self.alloc.destroy(self);
 }
 
-pub fn readFile(
-    self: *Io,
-    abs_path: []const u8,
-    comptime Userdata: type,
-    userdata: ?*Userdata,
-    comptime callback: *const fn (userdata: ?*Userdata, file: ?File) void,
-) !void {
+pub fn readFile(self: *Io, abs_path: []const u8) !void {
     const path = try self.alloc.dupe(u8, abs_path);
     const req = try self.alloc.create(ReadRequest);
 
     req.* = .{
-        .buffer = undefined,
-        .fd = undefined,
-        .xev_file = undefined,
         .path = path,
         .alloc = self.alloc,
         .io = self,
-        .userdata = userdata,
-        .callback = (struct {
-            pub fn cb(ud: ?*anyopaque, f: ?File) void {
-                @call(
-                    .always_inline,
-                    callback,
-                    .{ @as(*Userdata, @ptrCast(@alignCast(ud orelse return))), f },
-                );
-            }
-        }).cb,
     };
+
     if (self.thread.mailbox.push(.{ .read = req }, .instant) != 0) {
         self.thread.wakeup.notify() catch |err| {
             log.err("error notifying io thread to wakeup: {}", .{err});
@@ -144,35 +123,55 @@ pub fn readFile(
     }
 }
 
+pub fn addPendingRead(self: *Io, req: *ReadRequest) void {
+    self.pending_reads.append(self.alloc, req) catch |err| {
+        log.err("failed to track pending read: {}", .{err});
+    };
+}
+
+pub fn removePendingRead(self: *Io, req: *ReadRequest) void {
+    for (self.pending_reads.items, 0..) |item, i| {
+        if (item == req) {
+            _ = self.pending_reads.swapRemove(i);
+            return;
+        }
+    }
+}
+
 pub fn onReadComplete(req: *ReadRequest, bytes_read: usize) void {
     const alloc = req.alloc;
-    const callback = req.callback;
-    const userdata = req.userdata;
-    const buf = req.buffer;
+    const path = req.path;
+    const buf = req.buffer.?;
     const file_stat = req.file_stat;
 
     const file_bytes = alloc.dupe(u8, buf[0..bytes_read]) catch {
         log.err("failed to allocate file bytes", .{});
-        alloc.free(buf);
+        req.io.removePendingRead(req);
+        global.state.emitGlobal(.{ .ioReadComplete = .{ .path = path, .file = null } });
         req.deinit();
-        callback(userdata, null);
         return;
     };
 
-    alloc.free(buf);
-    req.deinit();
+    // Remove from pending and emit before deinit (path is freed in deinit)
+    req.io.removePendingRead(req);
 
-    callback(userdata, File{
-        .bytes = file_bytes,
-        .stat = file_stat,
-        .alloc = alloc,
-    });
+    global.state.emitGlobal(.{ .ioReadComplete = .{
+        .path = path,
+        .file = File{
+            .bytes = file_bytes,
+            .stat = file_stat,
+            .alloc = alloc,
+        },
+    } });
+
+    req.deinit();
 }
 
 pub fn onReadError(req: *ReadRequest) void {
-    const callback = req.callback;
-    const userdata = req.userdata;
-    req.alloc.free(req.buffer);
+    const path = req.path;
+    req.io.removePendingRead(req);
+
+    global.state.emitGlobal(.{ .ioReadComplete = .{ .path = path, .file = null } });
+
     req.deinit();
-    callback(userdata, null);
 }
