@@ -33,11 +33,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const kind = useAppStore((state) => state.sidebarKind)
     const sidebarOpen = useAppStore((state) => state.sidebarOpen)
     const previousKindRef = React.useRef(kind)
+    const previousSidebarOpenRef = React.useRef(sidebarOpen)
     const transitionTimeoutRef = React.useRef<number | null>(null)
     const transitionFrameRef = React.useRef<number | null>(null)
     const [transition, setTransition] = React.useState<SidebarTransition | null>(null)
 
     React.useLayoutEffect(() => {
+        const wasSidebarOpen = previousSidebarOpenRef.current
+
         if (transitionTimeoutRef.current != null) {
             window.clearTimeout(transitionTimeoutRef.current)
             transitionTimeoutRef.current = null
@@ -49,11 +52,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
         if (!sidebarOpen) {
             previousKindRef.current = kind
+            previousSidebarOpenRef.current = sidebarOpen
             setTransition(null)
             return
         }
 
-        if (previousKindRef.current === kind) return
+        if (!wasSidebarOpen) {
+            previousKindRef.current = kind
+            previousSidebarOpenRef.current = sidebarOpen
+            setTransition(null)
+            return
+        }
+
+        if (previousKindRef.current === kind) {
+            previousSidebarOpenRef.current = sidebarOpen
+            return
+        }
 
         const nextTransition: SidebarTransition = {
             from: previousKindRef.current,
@@ -63,6 +77,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         }
 
         previousKindRef.current = kind
+        previousSidebarOpenRef.current = sidebarOpen
         setTransition(nextTransition)
         transitionFrameRef.current = window.requestAnimationFrame(() => {
             setTransition((current) => current?.to === nextTransition.to
