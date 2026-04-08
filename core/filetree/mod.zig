@@ -56,8 +56,8 @@ pub fn destroy(self: *FileTree) void {
 
 pub fn expandEntry(self: *FileTree, id: u64) void {
     const entry = entry: {
-        self.worktree.snapshot.mutex.lock();
-        defer self.worktree.snapshot.mutex.unlock();
+        self.worktree.snapshot.rwlock.lockShared();
+        defer self.worktree.snapshot.rwlock.unlockShared();
 
         const path = self.worktree.snapshot.getPathById(id) orelse return;
         break :entry self.worktree.snapshot.entries.get(path) catch return;
@@ -76,8 +76,8 @@ pub fn expandEntry(self: *FileTree, id: u64) void {
 fn rebuildVisibleEntries(self: *FileTree) void {
     self.visible_entries.clearRetainingCapacity();
 
-    self.worktree.snapshot.mutex.lock();
-    defer self.worktree.snapshot.mutex.unlock();
+    self.worktree.snapshot.rwlock.lockShared();
+    defer self.worktree.snapshot.rwlock.unlockShared();
 
     var it = self.worktree.snapshot.entries.iter();
     while (it.next()) |entry| {

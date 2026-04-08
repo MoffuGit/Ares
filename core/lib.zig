@@ -169,8 +169,8 @@ export fn getFiletreeCount(project: *Project) usize {
 }
 
 export fn readFiletree(project: *Project, out: [*]ExternWorktreeEntry, max_count: u64) u64 {
-    project.worktree.snapshot.mutex.lock();
-    defer project.worktree.snapshot.mutex.unlock();
+    project.worktree.snapshot.rwlock.lockShared();
+    defer project.worktree.snapshot.rwlock.unlockShared();
 
     project.filetree.mutex.lock();
     defer project.filetree.mutex.unlock();

@@ -11,7 +11,7 @@ fn entryOrder(a: []const u8, b: []const u8) std.math.Order {
 
 pub const Snapshot = @This();
 
-mutex: std.Thread.Mutex = .{},
+rwlock: std.Thread.RwLock = .{},
 alloc: Allocator,
 arena: std.heap.ArenaAllocator,
 version: std.atomic.Value(u64) = .{ .raw = 0 },
@@ -84,8 +84,8 @@ pub fn insertInterned(self: *Snapshot, id: u64, path: []const u8, abs_path: []co
 }
 
 pub fn insertInternedLocked(self: *Snapshot, id: u64, path: []const u8, abs_path: []const u8, kind: Kind, file_type: []const u8, stat: Stat) !void {
-    self.mutex.lock();
-    defer self.mutex.unlock();
+    self.rwlock.lock();
+    defer self.rwlock.unlock();
     try self.insertInterned(id, path, abs_path, kind, file_type, stat);
 }
 
@@ -105,22 +105,22 @@ pub fn getAbsPathById(self: *Snapshot, id: u64) ?[]const u8 {
 }
 
 pub fn clonePathById(self: *Snapshot, alloc: Allocator, id: u64) ?[]const u8 {
-    self.mutex.lock();
-    defer self.mutex.unlock();
+    self.rwlock.lockShared();
+    defer self.rwlock.unlockShared();
     const path = self.id_to_path.get(id) orelse return null;
     return alloc.dupe(u8, path) catch return null;
 }
 
 pub fn cloneAbsPathById(self: *Snapshot, alloc: Allocator, id: u64) ?[]const u8 {
-    self.mutex.lock();
-    defer self.mutex.unlock();
+    self.rwlock.lockShared();
+    defer self.rwlock.unlockShared();
     const abs_path = self.id_to_abs_path.get(id) orelse return null;
     return alloc.dupe(u8, abs_path) catch return null;
 }
 
 pub fn getEntryById(self: *Snapshot, id: u64) ?Entry {
-    self.mutex.lock();
-    defer self.mutex.unlock();
+    self.rwlock.lockShared();
+    defer self.rwlock.unlockShared();
     const path = self.id_to_path.get(id) orelse return null;
     return self.entries.get(path) catch return null;
 }

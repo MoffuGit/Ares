@@ -85,8 +85,8 @@ pub fn initial_scan(self: *Scanner) !void {
     var dir = std.fs.openDirAbsolute(self.abs_root, .{}) catch |err| {
         if (err == error.NotDir) {
             const id = self.snapshot.newId();
-            self.snapshot.mutex.lock();
-            defer self.snapshot.mutex.unlock();
+            self.snapshot.rwlock.lock();
+            defer self.snapshot.rwlock.unlock();
 
             const root_path = try self.snapshot.internPathSingle(self.root_name);
             const root_abs = try self.snapshot.internPathSingle(self.abs_root);
@@ -99,8 +99,8 @@ pub fn initial_scan(self: *Scanner) !void {
 
     const id = self.snapshot.newId();
     {
-        self.snapshot.mutex.lock();
-        defer self.snapshot.mutex.unlock();
+        self.snapshot.rwlock.lock();
+        defer self.snapshot.rwlock.unlock();
 
         const root_path = try self.snapshot.internPathSingle(self.root_name);
         const root_abs = try self.snapshot.internPathSingle(self.abs_root);
@@ -134,8 +134,8 @@ fn scanRecursive(self: *Scanner, dir_id: u64, count: *usize) !void {
     try self.ensureRunning();
 
     const rel_path = blk: {
-        self.snapshot.mutex.lock();
-        defer self.snapshot.mutex.unlock();
+        self.snapshot.rwlock.lockShared();
+        defer self.snapshot.rwlock.unlockShared();
         break :blk self.snapshot.getPathById(dir_id) orelse return;
     };
 
@@ -164,8 +164,8 @@ fn scanRecursive(self: *Scanner, dir_id: u64, count: *usize) !void {
             const child_id = self.snapshot.newId();
 
             {
-                self.snapshot.mutex.lock();
-                defer self.snapshot.mutex.unlock();
+                self.snapshot.rwlock.lock();
+                defer self.snapshot.rwlock.unlock();
 
                 const interned = try self.snapshot.internPath(rel_path, entry.name);
                 const interned_abs = try self.snapshot.internPath(abs_path, entry.name);
@@ -176,8 +176,8 @@ fn scanRecursive(self: *Scanner, dir_id: u64, count: *usize) !void {
                 try child_dirs.append(self.alloc, child_id);
 
                 const child_abs = blk: {
-                    self.snapshot.mutex.lock();
-                    defer self.snapshot.mutex.unlock();
+                    self.snapshot.rwlock.lockShared();
+                    defer self.snapshot.rwlock.unlockShared();
                     break :blk self.snapshot.getAbsPathById(child_id) orelse continue;
                 };
                 _ = child_abs;
@@ -232,14 +232,14 @@ pub fn process_events(self: *Scanner, dirty_ids: []const u64) !UpdatedEntriesSet
         try self.ensureRunning();
 
         const dir_path = blk: {
-            self.snapshot.mutex.lock();
-            defer self.snapshot.mutex.unlock();
+            self.snapshot.rwlock.lockShared();
+            defer self.snapshot.rwlock.unlockShared();
             break :blk self.snapshot.getPathById(id) orelse continue;
         };
 
         const abs_dir_path = blk: {
-            self.snapshot.mutex.lock();
-            defer self.snapshot.mutex.unlock();
+            self.snapshot.rwlock.lockShared();
+            defer self.snapshot.rwlock.unlockShared();
             break :blk self.snapshot.getAbsPathById(id) orelse continue;
         };
 
@@ -256,8 +256,8 @@ fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8
     defer current_children.deinit();
 
     {
-        self.snapshot.mutex.lock();
-        defer self.snapshot.mutex.unlock();
+        self.snapshot.rwlock.lockShared();
+        defer self.snapshot.rwlock.unlockShared();
 
         var prefix_buf: [std.fs.max_path_bytes]u8 = undefined;
         const prefix = std.fmt.bufPrint(&prefix_buf, "{s}/", .{dir_path}) catch return;
@@ -287,8 +287,8 @@ fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8
                 const deleted_path = try self.alloc.dupe(u8, child.path);
                 try result.deleteEntry(child.entry.id, deleted_path);
 
-                self.snapshot.mutex.lock();
-                defer self.snapshot.mutex.unlock();
+                self.snapshot.rwlock.lock();
+                defer self.snapshot.rwlock.unlock();
                 _ = self.snapshot.remove(deleted_path);
             }
         }
@@ -310,8 +310,8 @@ fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8
         };
 
         const existing_id: ?u64 = blk: {
-            self.snapshot.mutex.lock();
-            defer self.snapshot.mutex.unlock();
+            self.snapshot.rwlock.lock();
+            defer self.snapshot.rwlock.unlock();
 
             const child_path = try self.snapshot.internPath(dir_path, entry.name);
             if (self.snapshot.entries.get(child_path) catch null) |existing| {
@@ -332,8 +332,8 @@ fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8
                 if (kind_changed or stat_changed) {
                     try result.updateEntry(id, kind);
 
-                    self.snapshot.mutex.lock();
-                    defer self.snapshot.mutex.unlock();
+                    self.snapshot.rwlock.lock();
+                    defer self.snapshot.rwlock.unlock();
                     const child_path = self.snapshot.getPathById(id) orelse continue;
                     if (self.snapshot.entries.get_ref(child_path) catch null) |entry_ref| {
                         entry_ref.kind = kind;
@@ -347,8 +347,8 @@ fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8
 
             const id = self.snapshot.newId();
             {
-                self.snapshot.mutex.lock();
-                defer self.snapshot.mutex.unlock();
+                self.snapshot.rwlock.lock();
+                defer self.snapshot.rwlock.unlock();
 
                 const interned_path = try self.snapshot.internPath(dir_path, entry.name);
                 const interned_abs = try self.snapshot.internPath(abs_dir_path, entry.name);
@@ -358,8 +358,8 @@ fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8
 
             if (kind == .dir) {
                 const child_abs = blk: {
-                    self.snapshot.mutex.lock();
-                    defer self.snapshot.mutex.unlock();
+                    self.snapshot.rwlock.lockShared();
+                    defer self.snapshot.rwlock.unlockShared();
                     break :blk self.snapshot.getAbsPathById(id) orelse continue;
                 };
                 _ = child_abs;
@@ -381,8 +381,8 @@ fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8
             const deleted_path = try self.alloc.dupe(u8, kv.value_ptr.path);
             try result.deleteEntry(kv.key_ptr.*, deleted_path);
 
-            self.snapshot.mutex.lock();
-            defer self.snapshot.mutex.unlock();
+            self.snapshot.rwlock.lock();
+            defer self.snapshot.rwlock.unlock();
             _ = self.snapshot.remove(deleted_path);
         }
     }
@@ -608,8 +608,8 @@ test "process_scan_by_id scans specific directory" {
     const root_name = fs.path.basename(abs_path);
     const dir_id = snapshot.newId();
     {
-        snapshot.mutex.lock();
-        defer snapshot.mutex.unlock();
+        snapshot.rwlock.lock();
+        defer snapshot.rwlock.unlock();
 
         const dir_rel = try snapshot.internPath(root_name, "target");
         var abs_buf: [fs.max_path_bytes]u8 = undefined;
@@ -790,8 +790,8 @@ test "scanRecursive stops when stop requested" {
     const root_name = fs.path.basename(abs_path);
     const root_id = snapshot.newId();
     {
-        snapshot.mutex.lock();
-        defer snapshot.mutex.unlock();
+        snapshot.rwlock.lock();
+        defer snapshot.rwlock.unlock();
 
         const root_path = try snapshot.internPathSingle(root_name);
         const root_abs = try snapshot.internPathSingle(abs_path);

@@ -64,15 +64,15 @@ pub const Worktree = struct {
     }
 
     pub fn count(self: *Worktree) usize {
-        self.snapshot.mutex.lock();
-        defer self.snapshot.mutex.unlock();
+        self.snapshot.rwlock.lockShared();
+        defer self.snapshot.rwlock.unlockShared();
 
         return self.snapshot.count();
     }
 
     pub fn getAbsPath(self: *Worktree, id: u64) ?[]const u8 {
-        self.snapshot.mutex.lock();
-        defer self.snapshot.mutex.unlock();
+        self.snapshot.rwlock.lockShared();
+        defer self.snapshot.rwlock.unlockShared();
 
         return self.snapshot.getAbsPathById(id);
     }
