@@ -23,6 +23,10 @@
 //all the files inside the renderer dir share this license
 pub const Renderer = @This();
 
+// try global.events.on(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdateEvent });
+// errdefer global.events.off(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdateEvent });
+// global.events.off(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdateEvent });
+
 const Metal = @import("renderer/Metal.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;

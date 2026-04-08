@@ -42,21 +42,13 @@ pub fn deinit(self: *Editio) void {
     _ = self;
 }
 
-pub fn threadEnter(self: *Editio, thread: *Thread) !void {
-    self.state.renderer = self.renderer;
-
-    self.state.syncTextColor();
-
+pub fn threadEnter(_: *Editio, thread: *Thread) !void {
     try global.events.on(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdateEvent });
     errdefer global.events.off(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdateEvent });
-
-    try global.events.on(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdateEvent });
-    errdefer global.events.off(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdateEvent });
 }
 
 pub fn threadExit(_: *Editio, thread: *Thread) void {
     global.events.off(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdateEvent });
-    global.events.off(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdateEvent });
 }
 
 pub fn resize(self: *Editio, size: sizepkg.ScreenSize) void {
@@ -80,10 +72,6 @@ pub fn onBufferUpdate(self: *Editio, entry_id: u64) void {
     self.state.writeScreen();
 }
 
-pub fn onThemeUpdate(self: *Editio) void {
-    self.state.onThemeUpdate();
-}
-
 pub fn readEditorState(self: *Editio, out: *globalpkg.ExternEditorState) bool {
     return self.state.readEditorState(out);
 }
@@ -92,12 +80,5 @@ fn handleBufferUpdateEvent(ctx: *anyopaque, event: globalpkg.GlobalEvents) void 
     const self: *Thread = @ptrCast(@alignCast(ctx));
 
     _ = self.mailbox.push(.{ .buffer_update = event.bufferUpdate }, .instant);
-    self.wakeup.notify() catch {};
-}
-
-fn handleThemeUpdateEvent(ctx: *anyopaque, _: globalpkg.GlobalEvents) void {
-    const self: *Thread = @ptrCast(@alignCast(ctx));
-
-    _ = self.mailbox.push(.{ .theme_update = {} }, .instant);
     self.wakeup.notify() catch {};
 }

@@ -2,7 +2,6 @@ const sizepkg = @import("../size.zig");
 
 pub const Message = union(enum) {
     buffer_update: u64,
-    theme_update: void,
     select_entry: u64,
     resize: sizepkg.ScreenSize,
     scroll: u64,

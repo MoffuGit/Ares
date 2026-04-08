@@ -110,9 +110,6 @@ fn drainMailbox(self: *Thread) !void {
             .buffer_update => |entry_id| {
                 self.io.onBufferUpdate(entry_id);
             },
-            .theme_update => {
-                self.io.onThemeUpdate();
-            },
             .select_entry => |id| {
                 self.io.selectEntry(id);
             },

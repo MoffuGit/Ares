@@ -6,13 +6,11 @@ const global = &globalpkg.state;
 const Allocator = std.mem.Allocator;
 const Project = @import("Project.zig");
 const Buffer = @import("buffer/Buffer.zig");
-const Renderer = @import("Renderer.zig");
 
 const log = std.log.scoped(.editor);
 
 project: *Project,
 alloc: Allocator,
-renderer: *Renderer,
 
 buffer: ?*Buffer = null,
 selected_entry: ?u64 = null,
@@ -25,7 +23,6 @@ pub fn init(
     return .{
         .alloc = alloc,
         .project = project,
-        .renderer = undefined,
     };
 }
 
@@ -56,15 +53,6 @@ pub fn onBufferUpdate(self: *Editor, entry_id: u64) void {
 
     const buffer = self.buffer orelse return;
     self.emitBufferUpdate(entry_id, buffer);
-}
-
-pub fn onThemeUpdate(self: *Editor) void {
-    self.syncTextColor();
-}
-
-pub fn syncTextColor(self: *Editor) void {
-    const color = self.project.app.settings.readThemeTextColor();
-    self.renderer.setTextColor(color);
 }
 
 pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
