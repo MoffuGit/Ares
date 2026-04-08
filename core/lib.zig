@@ -264,18 +264,29 @@ export fn createEditor(app: *App, project: *Project, layer_ptr: *anyopaque, widt
         layer_ptr,
         .{ .width = width, .height = height },
         state,
+        app.settings,
     ) catch null;
 }
 
 export fn createTerminal(app: *App, layer_ptr: *anyopaque, width: u32, height: u32) ?*TerminalSurface {
     const screen_size: sizepkg.ScreenSize = .{ .width = width, .height = height };
+
     const grid_size = (sizepkg.Size{ .screen = screen_size, .cell = app.grid.cellSize() }).grid();
+
     const state = Terminal.init(global.state.alloc, .{
         .cols = grid_size.columns,
         .rows = grid_size.rows,
         .max_scrollback = 1000,
     }) catch return null;
-    return TerminalSurface.create(global.state.alloc, &app.grid, layer_ptr, screen_size, state) catch null;
+
+    return TerminalSurface.create(
+        global.state.alloc,
+        &app.grid,
+        layer_ptr,
+        screen_size,
+        state,
+        app.settings,
+    ) catch null;
 }
 
 export fn destroyTerminal(terminal: *TerminalSurface) void {

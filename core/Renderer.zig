@@ -23,10 +23,6 @@
 //all the files inside the renderer dir share this license
 pub const Renderer = @This();
 
-// try global.events.on(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdateEvent });
-// errdefer global.events.off(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdateEvent });
-// global.events.off(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdateEvent });
-
 const Metal = @import("renderer/Metal.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -44,6 +40,7 @@ const sizepkg = @import("size.zig");
 const fontpkg = @import("font/mod.zig");
 const math = @import("math.zig");
 const ArrayList = std.ArrayList;
+const Settings = @import("settings/mod.zig");
 
 const log = std.log.scoped(.renderer);
 
@@ -84,7 +81,9 @@ grid: *fontpkg.Grid,
 
 rebuild_cells: bool = false,
 
-pub fn init(alloc: Allocator, opts: Options) !Renderer {
+settings: *Settings,
+
+pub fn init(alloc: Allocator, settings: *Settings, opts: Options) !Renderer {
     var api = try Metal.init(opts.metal_layer);
     errdefer api.deinit();
 
@@ -94,7 +93,18 @@ pub fn init(alloc: Allocator, opts: Options) !Renderer {
     const display_link = try macos.video.DisplayLink.createWithActiveCGDisplays();
     errdefer display_link.release();
 
-    var renderer = Renderer{ .alloc = alloc, .size = opts.size, .api = api, .shaders = undefined, .swap_chain = swap_chain, .display_link = display_link, .grid = opts.grid, .uniforms = .{ .grid_size = undefined, .cell_size = undefined, .screen_size = undefined, .projection_matrix = undefined }, .cells = &.{} };
+    var renderer = Renderer{
+        .alloc = alloc,
+        .size = opts.size,
+        .api = api,
+        .shaders = undefined,
+        .swap_chain = swap_chain,
+        .display_link = display_link,
+        .grid = opts.grid,
+        .settings = settings,
+        .uniforms = .{ .grid_size = undefined, .cell_size = undefined, .screen_size = undefined, .projection_matrix = undefined },
+        .cells = &.{},
+    };
 
     try renderer.initShaders();
     renderer.updateFontGridUniforms();
@@ -291,15 +301,28 @@ pub fn loopEnter(self: *Renderer, thr: *Thread) !void {
         &displayLinkCallback,
         &thr.draw_now,
     );
+
+    try global.events.on(.themeUpdate, .{ .ctx = thr, .handle = onThemeUpdate });
+    errdefer global.events.off(.themeUpdate, .{ .ctx = thr, .handle = onThemeUpdate });
+
     display_link.start() catch {};
 }
 
-pub fn loopExit(self: *Renderer) void {
+pub fn loopExit(self: *Renderer, thr: *Thread) void {
     // Stop our display link. If this fails its okay it just means
     // that we either never started it or the view its attached to
     // is gone which is fine.
     const display_link = self.display_link orelse return;
     display_link.stop() catch {};
+
+    global.events.off(.themeUpdate, .{ .ctx = thr, .handle = onThemeUpdate });
+}
+
+pub fn onThemeUpdate(ctx: *anyopaque, _: globalpkg.GlobalEvents) void {
+    const self: *Thread = @ptrCast(@alignCast(ctx));
+
+    _ = self.mailbox.push(.themeUpdate, .instant);
+    self.wakeup.notify() catch {};
 }
 
 fn displayLinkCallback(

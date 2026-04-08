@@ -29,6 +29,7 @@ const RendererThread = @import("renderer/Thread.zig");
 const fontpkg = @import("font/mod.zig");
 const Grid = fontpkg.Grid;
 const sizepkg = @import("size.zig");
+const Settings = @import("settings/mod.zig");
 
 const log = std.log.scoped(.surface);
 
@@ -55,6 +56,7 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
             layer_ptr: *anyopaque,
             screen_size: sizepkg.ScreenSize,
             state: State,
+            settings: *Settings,
         ) !*Self {
             const metal_layer = objc.Object.fromId(layer_ptr);
 
@@ -63,6 +65,7 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
 
             var renderer = try Renderer.init(
                 alloc,
+                settings,
                 .{ .grid = grid, .metal_layer = metal_layer, .size = .{
                     .screen = screen_size,
                     .cell = grid.cellSize(),

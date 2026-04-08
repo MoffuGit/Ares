@@ -78,7 +78,7 @@ fn threadMain_(self: *Thread) !void {
     defer log.debug("renderer thread exited", .{});
 
     try self.renderer.loopEnter(self);
-    defer self.renderer.loopExit();
+    defer self.renderer.loopExit(self);
 
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
@@ -293,7 +293,11 @@ fn drainMailbox(self: *Thread) !void {
 
                 self.renderer.setVisible(v);
             },
-            else => {},
+            .themeUpdate => {
+                const color = self.renderer.settings.readThemeTextColor();
+                self.renderer.setTextColor(color);
+            },
+            .resize => {},
         }
     }
 }
