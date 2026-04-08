@@ -41,7 +41,7 @@ mailbox: *Mailbox,
 
 shared_state: *SharedState,
 
-pub fn init(alloc: Allocator, renderer_impl: *rendererpkg.Renderer, state: *SharedState) !Thread {
+pub fn init(alloc: Allocator, renderer: *rendererpkg.Renderer, state: *SharedState) !Thread {
     var loop = try xev.Loop.init(.{});
     errdefer loop.deinit();
 
@@ -60,7 +60,7 @@ pub fn init(alloc: Allocator, renderer_impl: *rendererpkg.Renderer, state: *Shar
     var mailbox = try Mailbox.create(alloc);
     errdefer mailbox.destroy(alloc);
 
-    return .{ .alloc = alloc, .shared_state = state, .draw_now = draw_now, .renderer = renderer_impl, .loop = loop, .draw_h = draw_h, .stop = stop_h, .mailbox = mailbox, .wakeup = wakeup_h };
+    return .{ .alloc = alloc, .shared_state = state, .draw_now = draw_now, .renderer = renderer, .loop = loop, .draw_h = draw_h, .stop = stop_h, .mailbox = mailbox, .wakeup = wakeup_h };
 }
 
 pub fn deinit(self: *Thread) void {
