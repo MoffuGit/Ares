@@ -16,16 +16,12 @@ pub const Thread = @import("editio/Thread.zig").Thread;
 
 const log = std.log.scoped(.editio);
 
-pub const InitConfig = struct {
-    project: *Project,
-};
-
 alloc: Allocator,
 grid: *Grid,
 shared_state: *SharedState,
 renderer: *Renderer,
 renderer_thread: *RendererThread,
-editor: Editor,
+state: *Editor,
 
 pub fn init(
     alloc: Allocator,
@@ -34,7 +30,7 @@ pub fn init(
     renderer: *Renderer,
     renderer_thread: *RendererThread,
     _: sizepkg.ScreenSize,
-    config: InitConfig,
+    state: *Editor,
 ) !Editio {
     return .{
         .alloc = alloc,
@@ -42,7 +38,7 @@ pub fn init(
         .shared_state = shared_state,
         .renderer = renderer,
         .renderer_thread = renderer_thread,
-        .editor = Editor.init(alloc, config.project, shared_state, renderer),
+        .state = state,
     };
 }
 
@@ -51,7 +47,10 @@ pub fn deinit(self: *Editio) void {
 }
 
 pub fn threadEnter(self: *Editio, thread: *Thread) !void {
-    self.editor.syncTextColor();
+    self.state.shared_state = self.shared_state;
+    self.state.renderer = self.renderer;
+
+    self.state.syncTextColor();
 
     try global.events.on(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdateEvent });
     errdefer global.events.off(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdateEvent });
@@ -76,32 +75,32 @@ pub fn resize(self: *Editio, size: sizepkg.ScreenSize) void {
         });
     }
 
-    self.editor.writeScreen();
+    self.state.writeScreen();
 
     _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
 }
 
 pub fn selectEntry(self: *Editio, id: u64) void {
-    self.editor.selectEntry(id);
-    self.editor.writeScreen();
+    self.state.selectEntry(id);
+    self.state.writeScreen();
 }
 
 pub fn scroll(self: *Editio, row: u64) void {
-    self.editor.scroll(row);
-    self.editor.writeScreen();
+    self.state.scroll(row);
+    self.state.writeScreen();
 }
 
 pub fn onBufferUpdate(self: *Editio, entry_id: u64) void {
-    self.editor.onBufferUpdate(entry_id);
-    self.editor.writeScreen();
+    self.state.onBufferUpdate(entry_id);
+    self.state.writeScreen();
 }
 
 pub fn onThemeUpdate(self: *Editio) void {
-    self.editor.onThemeUpdate();
+    self.state.onThemeUpdate();
 }
 
 pub fn readEditorState(self: *Editio, out: *globalpkg.ExternEditorState) bool {
-    return self.editor.readEditorState(out);
+    return self.state.readEditorState(out);
 }
 
 fn handleBufferUpdateEvent(ctx: *anyopaque, event: globalpkg.GlobalEvents) void {

@@ -8,16 +8,15 @@ const SharedState = @import("SharedState.zig");
 const Renderer = @import("Renderer.zig");
 const RendererThread = @import("renderer/Thread.zig");
 const Grid = @import("font/mod.zig").Grid;
+const Terminal = @import("Terminal.zig");
 
 pub const Thread = @import("termio/Thread.zig").Thread;
 
 const log = std.log.scoped(.termio);
 
-pub const InitConfig = struct {};
-
 alloc: Allocator,
 grid: *Grid,
-term: ghostty_vt.Terminal,
+state: *Terminal,
 
 pub fn init(
     alloc: Allocator,
@@ -25,30 +24,18 @@ pub fn init(
     _: *SharedState,
     _: *Renderer,
     _: *RendererThread,
-    screen_size: sizepkg.ScreenSize,
-    _: InitConfig,
+    _: sizepkg.ScreenSize,
+    state: *Terminal,
 ) !Termio {
-    const grid_size = (sizepkg.Size{
-        .screen = screen_size,
-        .cell = grid.cellSize(),
-    }).grid();
-
-    var term = try ghostty_vt.Terminal.init(alloc, .{
-        .cols = grid_size.columns,
-        .rows = grid_size.rows,
-        .max_scrollback = 1000,
-    });
-    errdefer term.deinit(alloc);
-
     return .{
         .alloc = alloc,
         .grid = grid,
-        .term = term,
+        .state = state,
     };
 }
 
 pub fn deinit(self: *Termio) void {
-    self.term.deinit(self.alloc);
+    _ = self;
 }
 
 pub fn resize(self: *Termio, size: sizepkg.ScreenSize) void {
@@ -57,7 +44,7 @@ pub fn resize(self: *Termio, size: sizepkg.ScreenSize) void {
         .cell = self.grid.cellSize(),
     }).grid();
 
-    self.term.resize(self.alloc, grid_size.columns, grid_size.rows) catch |err| {
+    self.state.term.resize(self.alloc, grid_size.columns, grid_size.rows) catch |err| {
         log.err("failed to resize terminal err={}", .{err});
     };
 }

@@ -1,5 +1,7 @@
 const std = @import("std");
 const global = @import("global.zig");
+const sizepkg = @import("size.zig");
+const ghostty_vt = @import("ghostty-vt");
 
 const Project = @import("Project.zig");
 const Snapshot = @import("worktree/Snapshot.zig");
@@ -8,9 +10,13 @@ const App = @import("App.zig");
 const SurfacePkg = @import("Surface.zig");
 const Editio = @import("Editio.zig");
 const Termio = @import("Termio.zig");
+const Allocator = std.mem.Allocator;
 
-const Editor = SurfacePkg.Surface(Editio);
-const Terminal = SurfacePkg.Surface(Termio);
+const Editor = @import("Editor.zig");
+const Terminal = @import("Terminal.zig");
+
+const EditorSurface = SurfacePkg.Surface(Editio, Editor);
+const TerminalSurface = SurfacePkg.Surface(Termio, Terminal);
 
 export fn initState(callback: ?global.Callback) void {
     global.state.init(callback) catch {};
@@ -249,53 +255,66 @@ export fn readKeymapEntries(app: *App, scope: u8, mode: u8, out: [*]ExternKeymap
     return count;
 }
 
-export fn createEditor(app: *App, project: *Project, layer_ptr: *anyopaque, width: u32, height: u32) ?*Editor {
-    return Editor.create(global.state.alloc, &app.grid, layer_ptr, .{ .width = width, .height = height }, .{
-        .project = project,
-    }) catch null;
+export fn createEditor(app: *App, project: *Project, layer_ptr: *anyopaque, width: u32, height: u32) ?*EditorSurface {
+    const state = Editor.init(global.state.alloc, project);
+
+    return EditorSurface.create(
+        global.state.alloc,
+        &app.grid,
+        layer_ptr,
+        .{ .width = width, .height = height },
+        state,
+    ) catch null;
 }
 
-export fn createTerminal(app: *App, layer_ptr: *anyopaque, width: u32, height: u32) ?*Terminal {
-    return Terminal.create(global.state.alloc, &app.grid, layer_ptr, .{ .width = width, .height = height }, .{}) catch null;
+export fn createTerminal(app: *App, layer_ptr: *anyopaque, width: u32, height: u32) ?*TerminalSurface {
+    const screen_size: sizepkg.ScreenSize = .{ .width = width, .height = height };
+    const grid_size = (sizepkg.Size{ .screen = screen_size, .cell = app.grid.cellSize() }).grid();
+    const state = Terminal.init(global.state.alloc, .{
+        .cols = grid_size.columns,
+        .rows = grid_size.rows,
+        .max_scrollback = 1000,
+    }) catch return null;
+    return TerminalSurface.create(global.state.alloc, &app.grid, layer_ptr, screen_size, state) catch null;
 }
 
-export fn destroyTerminal(terminal: *Terminal) void {
+export fn destroyTerminal(terminal: *TerminalSurface) void {
     terminal.destroy();
 }
 
-export fn resizeEditor(editor: *Editor, width: u32, height: u32) void {
+export fn resizeEditor(editor: *EditorSurface, width: u32, height: u32) void {
     editor.sendIo(.{ .resize = .{ .height = height, .width = width } });
 }
 
-export fn destroyEditor(editor: *Editor) void {
+export fn destroyEditor(editor: *EditorSurface) void {
     editor.destroy();
 }
 
-export fn setEditorVisibility(editor: *Editor, visible: bool) void {
+export fn setEditorVisibility(editor: *EditorSurface, visible: bool) void {
     editor.setVisibility(visible) catch {};
 }
 
-export fn selectEditorEntry(editor: *Editor, id: u64) void {
+export fn selectEditorEntry(editor: *EditorSurface, id: u64) void {
     editor.sendIo(.{ .select_entry = id });
 }
 
-export fn editorScrollTo(editor: *Editor, row: u64) void {
+export fn editorScrollTo(editor: *EditorSurface, row: u64) void {
     editor.sendIo(.{ .scroll = row });
 }
 
 pub const ExternSurfaceState = global.ExternSurfaceState;
 pub const ExternEditorState = global.ExternEditorState;
 
-export fn readEditorSurfaceState(editor: *Editor, out: *ExternSurfaceState) void {
-    editor.state(out);
+export fn readEditorSurfaceState(editor: *EditorSurface, out: *ExternSurfaceState) void {
+    editor.surfaceState(out);
 }
 
-export fn readTerminalSurfaceState(terminal: *Terminal, out: *ExternSurfaceState) void {
-    terminal.state(out);
+export fn readTerminalSurfaceState(terminal: *TerminalSurface, out: *ExternSurfaceState) void {
+    terminal.surfaceState(out);
 }
 
-export fn readEditorState(editor: *Editor, out: *ExternEditorState) bool {
-    return editor.io.readEditorState(out);
+export fn readEditorState(editor: *EditorSurface, out: *ExternEditorState) bool {
+    return editor.state.readEditorState(out);
 }
 
 test {

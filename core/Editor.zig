@@ -23,15 +23,17 @@ scroll_row: u64 = 0,
 pub fn init(
     alloc: Allocator,
     project: *Project,
-    shared_state: *SharedState,
-    renderer: *Renderer,
 ) Editor {
     return .{
         .alloc = alloc,
         .project = project,
-        .shared_state = shared_state,
-        .renderer = renderer,
+        .shared_state = undefined,
+        .renderer = undefined,
     };
+}
+
+pub fn deinit(self: *Editor) void {
+    _ = self;
 }
 
 pub fn selectEntry(self: *Editor, id: u64) void {

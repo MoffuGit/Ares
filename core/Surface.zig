@@ -33,7 +33,7 @@ const sizepkg = @import("size.zig");
 
 const log = std.log.scoped(.surface);
 
-pub fn Surface(comptime Io: type) type {
+pub fn Surface(comptime Io: type, comptime State: type) type {
     return struct {
         const Self = @This();
 
@@ -48,6 +48,8 @@ pub fn Surface(comptime Io: type) type {
         io_thread: Io.Thread,
         io_thr: std.Thread,
 
+        state: State,
+
         shared_state: SharedState,
 
         pub fn create(
@@ -55,7 +57,7 @@ pub fn Surface(comptime Io: type) type {
             grid: *Grid,
             layer_ptr: *anyopaque,
             screen_size: sizepkg.ScreenSize,
-            io_config: Io.InitConfig,
+            state: State,
         ) !*Self {
             const metal_layer = objc.Object.fromId(layer_ptr);
 
@@ -84,7 +86,7 @@ pub fn Surface(comptime Io: type) type {
                 &self.renderer,
                 &self.renderer_thread,
                 screen_size,
-                io_config,
+                &self.state,
             );
             errdefer io.deinit();
 
@@ -100,6 +102,7 @@ pub fn Surface(comptime Io: type) type {
                 .io = io,
                 .io_thread = io_thread,
                 .io_thr = undefined,
+                .state = state,
                 .shared_state = shared_state,
             };
 
@@ -124,7 +127,7 @@ pub fn Surface(comptime Io: type) type {
             self.renderer_thread.wakeup.notify() catch {};
         }
 
-        pub fn state(self: *Self, out: *globalpkg.ExternSurfaceState) void {
+        pub fn surfaceState(self: *Self, out: *globalpkg.ExternSurfaceState) void {
             out.* = .{
                 .cell_width = self.renderer.size.cell.width,
                 .cell_height = self.renderer.size.cell.height,
@@ -134,7 +137,7 @@ pub fn Surface(comptime Io: type) type {
 
         fn emitStateUpdate(self: *Self) void {
             var surface_state: globalpkg.ExternSurfaceState = undefined;
-            self.state(&surface_state);
+            self.surfaceState(&surface_state);
             _ = globalpkg.state.emit(.{ .surfaceUpdate = surface_state }, .instant);
         }
 
@@ -167,6 +170,7 @@ pub fn Surface(comptime Io: type) type {
             self.renderer_thread.deinit();
             self.renderer.deinit();
 
+            self.state.deinit();
             self.shared_state.deinit();
 
             self.alloc.destroy(self);
