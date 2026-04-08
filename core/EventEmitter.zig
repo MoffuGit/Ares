@@ -16,52 +16,51 @@ pub fn EventEmitter(comptime Event: type) type {
             handle: *const fn (ctx: *anyopaque, event: Event) void,
         };
 
+        const ListenerList = struct {
+            items: std.ArrayListUnmanaged(Listener) = .{},
+            mutex: std.Thread.Mutex = .{},
+        };
+
         allocator: Allocator,
-        listeners: std.EnumMap(Tag, std.ArrayListUnmanaged(Listener)),
-        mutex: std.Thread.Mutex = .{},
+        listeners: std.EnumMap(Tag, ListenerList),
 
         pub fn init(allocator: Allocator) Self {
             return .{
                 .allocator = allocator,
-                .listeners = std.EnumMap(Tag, std.ArrayListUnmanaged(Listener)).init(.{}),
+                .listeners = std.EnumMap(Tag, ListenerList).init(.{}),
             };
         }
 
         pub fn deinit(self: *Self) void {
             var iter = self.listeners.iterator();
             while (iter.next()) |entry| {
-                entry.value.deinit(self.allocator);
+                entry.value.items.deinit(self.allocator);
             }
         }
 
         pub fn on(self: *Self, event: Tag, listener: Listener) !void {
-            self.mutex.lock();
-            defer self.mutex.unlock();
-
             const list_ptr = self.listeners.getPtr(event) orelse {
                 self.listeners.put(event, .{});
-                return self.onLocked(event, listener);
+                return self.on(event, listener);
             };
 
-            try list_ptr.append(self.allocator, listener);
-        }
+            list_ptr.mutex.lock();
+            defer list_ptr.mutex.unlock();
 
-        fn onLocked(self: *Self, event: Tag, listener: Listener) !void {
-            const list_ptr = self.listeners.getPtr(event) orelse unreachable;
-            try list_ptr.append(self.allocator, listener);
+            try list_ptr.items.append(self.allocator, listener);
         }
 
         pub fn off(self: *Self, event: Tag, listener: Listener) void {
-            self.mutex.lock();
-            defer self.mutex.unlock();
-
             const list_ptr = self.listeners.getPtr(event) orelse return;
 
+            list_ptr.mutex.lock();
+            defer list_ptr.mutex.unlock();
+
             var i: usize = 0;
-            while (i < list_ptr.items.len) {
-                const item = list_ptr.items[i];
+            while (i < list_ptr.items.items.len) {
+                const item = list_ptr.items.items[i];
                 if (item.ctx == listener.ctx and item.handle == listener.handle) {
-                    _ = list_ptr.swapRemove(i);
+                    _ = list_ptr.items.swapRemove(i);
                 } else {
                     i += 1;
                 }
@@ -69,16 +68,13 @@ pub fn EventEmitter(comptime Event: type) type {
         }
 
         pub fn emit(self: *Self, event: Event) void {
-            const snapshot = blk: {
-                self.mutex.lock();
-                defer self.mutex.unlock();
+            const tag = std.meta.activeTag(event);
+            const list_ptr = self.listeners.getPtr(tag) orelse return;
 
-                const tag = std.meta.activeTag(event);
-                const list_ptr = self.listeners.getPtr(tag) orelse return;
-                break :blk list_ptr.items;
-            };
+            list_ptr.mutex.lock();
+            defer list_ptr.mutex.unlock();
 
-            for (snapshot) |listener| {
+            for (list_ptr.items.items) |listener| {
                 listener.handle(listener.ctx, event);
             }
         }
