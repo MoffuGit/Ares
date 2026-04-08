@@ -28,7 +28,6 @@ const Renderer = @import("Renderer.zig");
 const RendererThread = @import("renderer/Thread.zig");
 const fontpkg = @import("font/mod.zig");
 const Grid = fontpkg.Grid;
-const SharedState = @import("SharedState.zig");
 const sizepkg = @import("size.zig");
 
 const log = std.log.scoped(.surface);
@@ -49,8 +48,6 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
         io_thr: std.Thread,
 
         state: State,
-
-        shared_state: SharedState,
 
         pub fn create(
             alloc: Allocator,
@@ -73,16 +70,12 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
             );
             errdefer renderer.deinit();
 
-            var renderer_thread = try RendererThread.init(alloc, &self.renderer, &self.shared_state);
+            var renderer_thread = try RendererThread.init(alloc, &self.renderer);
             errdefer renderer_thread.deinit();
-
-            var shared_state = try SharedState.init(alloc, .{ .screen = screen_size, .cell = grid.cellSize() });
-            errdefer shared_state.deinit();
 
             var io = try Io.init(
                 alloc,
                 grid,
-                &self.shared_state,
                 &self.renderer,
                 &self.renderer_thread,
                 screen_size,
@@ -103,7 +96,6 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
                 .io_thread = io_thread,
                 .io_thr = undefined,
                 .state = state,
-                .shared_state = shared_state,
             };
 
             self.renderer_thr = try std.Thread.spawn(.{}, RendererThread.threadMain, .{&self.renderer_thread});
@@ -171,7 +163,6 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
             self.renderer.deinit();
 
             self.state.deinit();
-            self.shared_state.deinit();
 
             self.alloc.destroy(self);
         }

@@ -4,7 +4,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ghostty_vt = @import("ghostty-vt");
 const sizepkg = @import("size.zig");
-const SharedState = @import("SharedState.zig");
 const Renderer = @import("Renderer.zig");
 const RendererThread = @import("renderer/Thread.zig");
 const Grid = @import("font/mod.zig").Grid;
@@ -21,7 +20,6 @@ state: *Terminal,
 pub fn init(
     alloc: Allocator,
     grid: *Grid,
-    _: *SharedState,
     _: *Renderer,
     _: *RendererThread,
     _: sizepkg.ScreenSize,

@@ -6,14 +6,12 @@ const global = &globalpkg.state;
 const Allocator = std.mem.Allocator;
 const Project = @import("Project.zig");
 const Buffer = @import("buffer/Buffer.zig");
-const SharedState = @import("SharedState.zig");
 const Renderer = @import("Renderer.zig");
 
 const log = std.log.scoped(.editor);
 
 project: *Project,
 alloc: Allocator,
-shared_state: *SharedState,
 renderer: *Renderer,
 
 buffer: ?*Buffer = null,
@@ -27,7 +25,6 @@ pub fn init(
     return .{
         .alloc = alloc,
         .project = project,
-        .shared_state = undefined,
         .renderer = undefined,
     };
 }
@@ -96,76 +93,78 @@ pub fn writeScreen(self: *Editor) void {
 
         const first = text.content.items;
         const second = text.content.secondHalf();
+        _ = first;
+        _ = second;
 
-        self.shared_state.mutex.lock();
-        defer self.shared_state.mutex.unlock();
-
-        const screen = &self.shared_state.screen;
-
-        screen.resetCells();
-
-        var line: u64 = 0;
-        var row: u16 = 0;
-        var remainder: []const u8 = first;
-        var in_second = false;
-
-        while (true) {
-            if (std.mem.indexOfScalar(u8, remainder, '\n')) |nl| {
-                if (line >= self.scroll_row) {
-                    if (row >= screen.rows) break;
-                    screen.addNewLine(remainder[0..nl]) catch |err| {
-                        log.err("failed to add line to screen: {}", .{err});
-                        return;
-                    };
-                    row += 1;
-                }
-                remainder = remainder[nl + 1 ..];
-                line += 1;
-            } else if (!in_second) {
-                in_second = true;
-                if (second.len == 0) {
-                    if (line >= self.scroll_row and row < screen.rows) {
-                        screen.addNewLine(remainder) catch |err| {
-                            log.err("failed to add line to screen: {}", .{err});
-                            return;
-                        };
-                    }
-                    break;
-                }
-                if (std.mem.indexOfScalar(u8, second, '\n')) |nl| {
-                    if (line >= self.scroll_row) {
-                        if (row >= screen.rows) break;
-                        const joined = std.mem.concat(self.alloc, u8, &.{ remainder, second[0..nl] }) catch return;
-                        defer self.alloc.free(joined);
-                        screen.addNewLine(joined) catch |err| {
-                            log.err("failed to add line to screen: {}", .{err});
-                            return;
-                        };
-                        row += 1;
-                    }
-                    remainder = second[nl + 1 ..];
-                    line += 1;
-                } else {
-                    if (line >= self.scroll_row and row < screen.rows) {
-                        const joined = std.mem.concat(self.alloc, u8, &.{ remainder, second }) catch return;
-                        defer self.alloc.free(joined);
-                        screen.addNewLine(joined) catch |err| {
-                            log.err("failed to add line to screen: {}", .{err});
-                            return;
-                        };
-                    }
-                    break;
-                }
-            } else {
-                if (line >= self.scroll_row and row < screen.rows) {
-                    screen.addNewLine(remainder) catch |err| {
-                        log.err("failed to add line to screen: {}", .{err});
-                        return;
-                    };
-                }
-                break;
-            }
-        }
+        // self.shared_state.mutex.lock();
+        // defer self.shared_state.mutex.unlock();
+        //
+        // const screen = &self.shared_state.screen;
+        //
+        // screen.resetCells();
+        //
+        // var line: u64 = 0;
+        // var row: u16 = 0;
+        // var remainder: []const u8 = first;
+        // var in_second = false;
+        //
+        // while (true) {
+        //     if (std.mem.indexOfScalar(u8, remainder, '\n')) |nl| {
+        //         if (line >= self.scroll_row) {
+        //             if (row >= screen.rows) break;
+        //             screen.addNewLine(remainder[0..nl]) catch |err| {
+        //                 log.err("failed to add line to screen: {}", .{err});
+        //                 return;
+        //             };
+        //             row += 1;
+        //         }
+        //         remainder = remainder[nl + 1 ..];
+        //         line += 1;
+        //     } else if (!in_second) {
+        //         in_second = true;
+        //         if (second.len == 0) {
+        //             if (line >= self.scroll_row and row < screen.rows) {
+        //                 screen.addNewLine(remainder) catch |err| {
+        //                     log.err("failed to add line to screen: {}", .{err});
+        //                     return;
+        //                 };
+        //             }
+        //             break;
+        //         }
+        //         if (std.mem.indexOfScalar(u8, second, '\n')) |nl| {
+        //             if (line >= self.scroll_row) {
+        //                 if (row >= screen.rows) break;
+        //                 const joined = std.mem.concat(self.alloc, u8, &.{ remainder, second[0..nl] }) catch return;
+        //                 defer self.alloc.free(joined);
+        //                 screen.addNewLine(joined) catch |err| {
+        //                     log.err("failed to add line to screen: {}", .{err});
+        //                     return;
+        //                 };
+        //                 row += 1;
+        //             }
+        //             remainder = second[nl + 1 ..];
+        //             line += 1;
+        //         } else {
+        //             if (line >= self.scroll_row and row < screen.rows) {
+        //                 const joined = std.mem.concat(self.alloc, u8, &.{ remainder, second }) catch return;
+        //                 defer self.alloc.free(joined);
+        //                 screen.addNewLine(joined) catch |err| {
+        //                     log.err("failed to add line to screen: {}", .{err});
+        //                     return;
+        //                 };
+        //             }
+        //             break;
+        //         }
+        //     } else {
+        //         if (line >= self.scroll_row and row < screen.rows) {
+        //             screen.addNewLine(remainder) catch |err| {
+        //                 log.err("failed to add line to screen: {}", .{err});
+        //                 return;
+        //             };
+        //         }
+        //         break;
+        //     }
+        // }
     }
 }
 

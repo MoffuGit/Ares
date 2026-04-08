@@ -4,7 +4,6 @@ const std = @import("std");
 const globalpkg = @import("global.zig");
 const global = &globalpkg.state;
 const Allocator = std.mem.Allocator;
-const SharedState = @import("SharedState.zig");
 const sizepkg = @import("size.zig");
 const Project = @import("Project.zig");
 const Renderer = @import("Renderer.zig");
@@ -18,7 +17,6 @@ const log = std.log.scoped(.editio);
 
 alloc: Allocator,
 grid: *Grid,
-shared_state: *SharedState,
 renderer: *Renderer,
 renderer_thread: *RendererThread,
 state: *Editor,
@@ -26,7 +24,6 @@ state: *Editor,
 pub fn init(
     alloc: Allocator,
     grid: *Grid,
-    shared_state: *SharedState,
     renderer: *Renderer,
     renderer_thread: *RendererThread,
     _: sizepkg.ScreenSize,
@@ -35,7 +32,6 @@ pub fn init(
     return .{
         .alloc = alloc,
         .grid = grid,
-        .shared_state = shared_state,
         .renderer = renderer,
         .renderer_thread = renderer_thread,
         .state = state,
@@ -47,7 +43,6 @@ pub fn deinit(self: *Editio) void {
 }
 
 pub fn threadEnter(self: *Editio, thread: *Thread) !void {
-    self.state.shared_state = self.shared_state;
     self.state.renderer = self.renderer;
 
     self.state.syncTextColor();
@@ -65,16 +60,6 @@ pub fn threadExit(_: *Editio, thread: *Thread) void {
 }
 
 pub fn resize(self: *Editio, size: sizepkg.ScreenSize) void {
-    {
-        self.shared_state.mutex.lock();
-        defer self.shared_state.mutex.unlock();
-
-        self.shared_state.screen.resize(.{
-            .screen = size,
-            .cell = self.grid.cellSize(),
-        });
-    }
-
     self.state.writeScreen();
 
     _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);

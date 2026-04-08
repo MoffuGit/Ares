@@ -7,7 +7,6 @@ const log = std.log.scoped(.renderer_thread);
 const xev = @import("../global.zig").xev;
 const BlockingQueue = @import("datastruct").BlockingQueue;
 const messagepkg = @import("./Message.zig");
-const SharedState = @import("../SharedState.zig");
 
 pub const Mailbox = BlockingQueue(messagepkg.Message, 64);
 
@@ -39,9 +38,7 @@ renderer: *rendererpkg.Renderer,
 
 mailbox: *Mailbox,
 
-shared_state: *SharedState,
-
-pub fn init(alloc: Allocator, renderer: *rendererpkg.Renderer, state: *SharedState) !Thread {
+pub fn init(alloc: Allocator, renderer: *rendererpkg.Renderer) !Thread {
     var loop = try xev.Loop.init(.{});
     errdefer loop.deinit();
 
@@ -60,7 +57,7 @@ pub fn init(alloc: Allocator, renderer: *rendererpkg.Renderer, state: *SharedSta
     var mailbox = try Mailbox.create(alloc);
     errdefer mailbox.destroy(alloc);
 
-    return .{ .alloc = alloc, .shared_state = state, .draw_now = draw_now, .renderer = renderer, .loop = loop, .draw_h = draw_h, .stop = stop_h, .mailbox = mailbox, .wakeup = wakeup_h };
+    return .{ .alloc = alloc, .draw_now = draw_now, .renderer = renderer, .loop = loop, .draw_h = draw_h, .stop = stop_h, .mailbox = mailbox, .wakeup = wakeup_h };
 }
 
 pub fn deinit(self: *Thread) void {
@@ -198,9 +195,7 @@ fn renderCallback(
     };
 
     // Update our frame data
-    t.renderer.updateFrame(
-        t.shared_state,
-    ) catch |err|
+    t.renderer.updateFrame() catch |err|
         log.warn("error rendering err={}", .{err});
 
     // Draw

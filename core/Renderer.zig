@@ -38,7 +38,6 @@ const global = &globalpkg.state;
 const xev = globalpkg.xev;
 const sizepkg = @import("size.zig");
 const fontpkg = @import("font/mod.zig");
-const SharedState = @import("SharedState.zig");
 const math = @import("math.zig");
 const ArrayList = std.ArrayList;
 
@@ -309,39 +308,40 @@ fn displayLinkCallback(
     };
 }
 
-pub fn updateFrame(self: *Renderer, state: *SharedState) !void {
-    const Critical = struct { row: u16, col: u16, cells: ArrayList([]u32) };
-    var critical: Critical = critical: {
-        state.mutex.lock();
-        defer state.mutex.unlock();
-
-        const screen = state.screen;
-
-        var new_cells = try ArrayList([]u32).initCapacity(self.alloc, screen.cells.items.len);
-        errdefer {
-            for (new_cells.items) |slice| {
-                self.alloc.free(slice);
-            }
-            new_cells.deinit(self.alloc);
-        }
-
-        for (screen.cells.items) |row_slice| {
-            const allocated_row = try self.alloc.alloc(u32, row_slice.len);
-            @memcpy(allocated_row, row_slice);
-            try new_cells.append(self.alloc, allocated_row);
-        }
-
-        break :critical .{ .col = screen.cols, .row = screen.rows, .cells = new_cells };
-    };
-
-    defer {
-        for (critical.cells.items) |slice| {
-            self.alloc.free(slice);
-        }
-        critical.cells.deinit(self.alloc);
-    }
-
-    self.rebuildCells(critical.row, critical.col, critical.cells) catch {};
+pub fn updateFrame(self: *Renderer) !void {
+    _ = self;
+    // const Critical = struct { row: u16, col: u16, cells: ArrayList([]u32) };
+    // var critical: Critical = critical: {
+    //     state.mutex.lock();
+    //     defer state.mutex.unlock();
+    //
+    //     const screen = state.screen;
+    //
+    //     var new_cells = try ArrayList([]u32).initCapacity(self.alloc, screen.cells.items.len);
+    //     errdefer {
+    //         for (new_cells.items) |slice| {
+    //             self.alloc.free(slice);
+    //         }
+    //         new_cells.deinit(self.alloc);
+    //     }
+    //
+    //     for (screen.cells.items) |row_slice| {
+    //         const allocated_row = try self.alloc.alloc(u32, row_slice.len);
+    //         @memcpy(allocated_row, row_slice);
+    //         try new_cells.append(self.alloc, allocated_row);
+    //     }
+    //
+    //     break :critical .{ .col = screen.cols, .row = screen.rows, .cells = new_cells };
+    // };
+    //
+    // defer {
+    //     for (critical.cells.items) |slice| {
+    //         self.alloc.free(slice);
+    //     }
+    //     critical.cells.deinit(self.alloc);
+    // }
+    //
+    // self.rebuildCells(critical.row, critical.col, critical.cells) catch {};
 }
 
 fn rebuildCells(self: *Renderer, row: u16, col: u16, new_cells: ArrayList([]u32)) !void {
