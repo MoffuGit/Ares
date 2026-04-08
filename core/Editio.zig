@@ -52,24 +52,21 @@ pub fn threadExit(_: *Editio, thread: *Thread) void {
 }
 
 pub fn resize(self: *Editio, size: sizepkg.ScreenSize) void {
-    self.state.writeScreen();
+    self.state.resize(size);
 
     _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
 }
 
 pub fn selectEntry(self: *Editio, id: u64) void {
     self.state.selectEntry(id);
-    self.state.writeScreen();
 }
 
 pub fn scroll(self: *Editio, row: u64) void {
     self.state.scroll(row);
-    self.state.writeScreen();
 }
 
 pub fn onBufferUpdate(self: *Editio, entry_id: u64) void {
     self.state.onBufferUpdate(entry_id);
-    self.state.writeScreen();
 }
 
 pub fn readEditorState(self: *Editio, out: *globalpkg.ExternEditorState) bool {

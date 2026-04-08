@@ -256,7 +256,7 @@ export fn readKeymapEntries(app: *App, scope: u8, mode: u8, out: [*]ExternKeymap
 }
 
 export fn createEditor(app: *App, project: *Project, layer_ptr: *anyopaque, width: u32, height: u32) ?*EditorSurface {
-    const state = Editor.init(global.state.alloc, project);
+    const state = Editor.init(global.state.alloc, project, .{ .height = height, .width = width });
 
     return EditorSurface.create(
         global.state.alloc,

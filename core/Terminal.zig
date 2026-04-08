@@ -1,5 +1,6 @@
 const std = @import("std");
 const ghostty_vt = @import("ghostty-vt");
+const Renderer = @import("Renderer.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -14,4 +15,9 @@ pub fn init(alloc: Allocator, opts: ghostty_vt.Terminal.Options) !Terminal {
 
 pub fn deinit(self: *Terminal) void {
     self.term.deinit(self.alloc);
+}
+
+pub fn frameCallback(self: *Terminal, renderer: *Renderer) !void {
+    _ = self;
+    _ = renderer;
 }

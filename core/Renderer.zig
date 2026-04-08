@@ -57,6 +57,8 @@ pub const Health = enum(c_int) {
     unhealthy = 1,
 };
 
+pub const FrameCallback = *const fn (*anyopaque, *Renderer) void;
+
 alloc: Allocator,
 
 api: Metal,
@@ -83,6 +85,9 @@ rebuild_cells: bool = false,
 
 settings: *Settings,
 
+state: *anyopaque,
+update_frame: FrameCallback,
+
 pub fn init(alloc: Allocator, settings: *Settings, opts: Options) !Renderer {
     var api = try Metal.init(opts.metal_layer);
     errdefer api.deinit();
@@ -94,6 +99,8 @@ pub fn init(alloc: Allocator, settings: *Settings, opts: Options) !Renderer {
     errdefer display_link.release();
 
     var renderer = Renderer{
+        .state = opts.state,
+        .update_frame = opts.frame_callback,
         .alloc = alloc,
         .size = opts.size,
         .api = api,
@@ -336,42 +343,10 @@ fn displayLinkCallback(
 }
 
 pub fn updateFrame(self: *Renderer) !void {
-    _ = self;
-    // const Critical = struct { row: u16, col: u16, cells: ArrayList([]u32) };
-    // var critical: Critical = critical: {
-    //     state.mutex.lock();
-    //     defer state.mutex.unlock();
-    //
-    //     const screen = state.screen;
-    //
-    //     var new_cells = try ArrayList([]u32).initCapacity(self.alloc, screen.cells.items.len);
-    //     errdefer {
-    //         for (new_cells.items) |slice| {
-    //             self.alloc.free(slice);
-    //         }
-    //         new_cells.deinit(self.alloc);
-    //     }
-    //
-    //     for (screen.cells.items) |row_slice| {
-    //         const allocated_row = try self.alloc.alloc(u32, row_slice.len);
-    //         @memcpy(allocated_row, row_slice);
-    //         try new_cells.append(self.alloc, allocated_row);
-    //     }
-    //
-    //     break :critical .{ .col = screen.cols, .row = screen.rows, .cells = new_cells };
-    // };
-    //
-    // defer {
-    //     for (critical.cells.items) |slice| {
-    //         self.alloc.free(slice);
-    //     }
-    //     critical.cells.deinit(self.alloc);
-    // }
-    //
-    // self.rebuildCells(critical.row, critical.col, critical.cells) catch {};
+    self.update_frame(self.state, self);
 }
 
-fn rebuildCells(self: *Renderer, row: u16, col: u16, new_cells: ArrayList([]u32)) !void {
+pub fn rebuildCells(self: *Renderer, row: u16, col: u16, new_cells: ArrayList([]u32)) !void {
     self.mutex.lock();
     defer self.mutex.unlock();
 

@@ -63,14 +63,27 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
             const self = try alloc.create(Self);
             errdefer alloc.destroy(self);
 
-            var renderer = try Renderer.init(
-                alloc,
-                settings,
-                .{ .grid = grid, .metal_layer = metal_layer, .size = .{
+            var renderer = try Renderer.init(alloc, settings, .{
+                .grid = grid,
+                .metal_layer = metal_layer,
+                .size = .{
                     .screen = screen_size,
                     .cell = grid.cellSize(),
-                } },
-            );
+                },
+                .state = &self.state,
+                .frame_callback = (struct {
+                    pub fn cb(ptr: *anyopaque, renderer: *Renderer) void {
+                        return @call(
+                            .auto,
+                            State.frameCallback,
+                            .{
+                                @as(*State, @ptrCast(@alignCast(ptr))),
+                                renderer,
+                            },
+                        ) catch {};
+                    }
+                }).cb,
+            });
             errdefer renderer.deinit();
 
             var renderer_thread = try RendererThread.init(alloc, &self.renderer);
