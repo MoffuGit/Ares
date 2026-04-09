@@ -32,7 +32,7 @@ pub fn create() !*App {
     errdefer global.alloc.destroy(io);
 
     var grid = try Grid.init(global.alloc, .{ .size = .{
-        .points = 10,
+        .points = 12,
     } });
     errdefer grid.deinit(global.alloc);
 

@@ -77,7 +77,7 @@ size: sizepkg.Size,
 
 grid_size: sizepkg.GridSize = .{},
 cells: []shaderpkg.CellText,
-text_color: [4]u8 = .{ 0, 0, 0, 255 },
+text_color: [4]u8,
 
 grid: *fontpkg.Grid,
 
@@ -109,6 +109,7 @@ pub fn init(alloc: Allocator, settings: *Settings, opts: Options) !Renderer {
         .display_link = display_link,
         .grid = opts.grid,
         .settings = settings,
+        .text_color = settings.readThemeTextColor(),
         .uniforms = .{ .grid_size = undefined, .cell_size = undefined, .screen_size = undefined, .projection_matrix = undefined },
         .cells = &.{},
     };
