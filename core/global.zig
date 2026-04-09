@@ -52,7 +52,7 @@ pub const Events = union(enum) {
     themeUpdate: void,
     filetreeUpdate: void,
     surfaceUpdate: ExternSurfaceState,
-    bufferUpdate: ExternEditorState,
+    editorUpdate: ExternEditorState,
     modeUpdate: ExternModeUpdate,
     keymapMatch: KeymapMatch,
 };

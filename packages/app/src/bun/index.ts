@@ -142,7 +142,7 @@ app.core.on("SurfaceUpdate", () => {
     }
 });
 
-app.core.on("BufferUpdate", () => {
+app.core.on("EditorUpdate", () => {
     for (const update of surfaceStore.readAllEditorStates()) {
         mainWindow.webview.rpc?.send.editorStateUpdate(update);
     }

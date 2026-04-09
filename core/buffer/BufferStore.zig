@@ -73,7 +73,9 @@ fn handleIoReadComplete(ctx: *anyopaque, event: global.GlobalEvents) void {
         } else {
             buf.applyError();
         }
+
         global.state.emitGlobal(.{ .bufferUpdate = entry_id });
+
         return;
     }
 }

@@ -44,7 +44,7 @@ export fn drainMailbox() void {
             .surfaceUpdate => |surface| {
                 cb(@intFromEnum(ev), @ptrCast(&surface), @sizeOf(global.ExternSurfaceState));
             },
-            .bufferUpdate => |bs| {
+            .editorUpdate => |bs| {
                 cb(@intFromEnum(ev), @ptrCast(&bs), @sizeOf(global.ExternEditorState));
             },
             .modeUpdate => |mode| {

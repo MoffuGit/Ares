@@ -44,12 +44,11 @@ pub fn deinit(self: *Editio) void {
 }
 
 pub fn threadEnter(_: *Editio, thread: *Thread) !void {
-    try global.events.on(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdateEvent });
-    errdefer global.events.off(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdateEvent });
+    try global.events.on(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdate });
 }
 
 pub fn threadExit(_: *Editio, thread: *Thread) void {
-    global.events.off(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdateEvent });
+    global.events.off(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdate });
 }
 
 pub fn resize(self: *Editio, size: sizepkg.ScreenSize) void {
@@ -74,17 +73,21 @@ pub fn mouseMove(self: *Editio, event: inputpkg.MouseMoveEvent) void {
     self.state.mouseMove(event);
 }
 
-pub fn onBufferUpdate(self: *Editio, entry_id: u64) void {
-    self.state.onBufferUpdate(entry_id);
+pub fn onEditorUpdate(self: *Editio, entry_id: u64) void {
+    self.state.onEditorUpdate(entry_id);
 }
 
 pub fn readEditorState(self: *Editio, out: *globalpkg.ExternEditorState) bool {
     return self.state.readEditorState(out);
 }
 
-fn handleBufferUpdateEvent(ctx: *anyopaque, event: globalpkg.GlobalEvents) void {
+fn handleBufferUpdate(ctx: *anyopaque, event: globalpkg.GlobalEvents) void {
     const self: *Thread = @ptrCast(@alignCast(ctx));
 
-    _ = self.mailbox.push(.{ .buffer_update = event.bufferUpdate }, .instant);
-    self.wakeup.notify() catch {};
+    const data = event.bufferUpdate;
+
+    if (self.io.state.selected_entry == data) {
+        _ = self.mailbox.push(.{ .buffer_update = event.bufferUpdate }, .instant);
+        self.wakeup.notify() catch {};
+    }
 }

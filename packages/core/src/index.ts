@@ -257,7 +257,7 @@ export class CoreLib extends EventEmitter {
                     const rawData = dataType.unpack(toArrayBuffer(ptr, 0, _len));
                     const data = _type === EventType.SurfaceUpdate
                         ? mapSurfaceState(rawData)
-                        : _type === EventType.BufferUpdate
+                        : _type === EventType.EditorUpdate
                             ? mapEditorState(rawData)
                         : _type === EventType.ModeUpdate
                             ? { mode: mapMode(rawData.mode) }

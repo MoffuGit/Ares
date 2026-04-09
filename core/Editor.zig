@@ -50,7 +50,7 @@ pub fn selectEntry(self: *Editor, id: u64) void {
         self.buffer = buffer;
         self.selected_entry = id;
 
-        self.emitBufferUpdate(id, buffer);
+        self.emitEditorUpdate(id, buffer);
     }
 }
 
@@ -68,33 +68,16 @@ pub fn resize(self: *Editor, size: sizepkg.ScreenSize) void {
     self.size = size;
 }
 
-pub fn mouseButton(_: *Editor, event: inputpkg.MouseButtonEvent) void {
-    log.debug("mouse button={s} action={s} x={d:.1} y={d:.1} mods=0x{x}", .{
-        @tagName(event.button),
-        @tagName(event.action),
-        event.x,
-        event.y,
-        @as(u8, @bitCast(event.mods)),
-    });
-}
+pub fn mouseButton(_: *Editor, _: inputpkg.MouseButtonEvent) void {}
 
-pub fn mouseMove(_: *Editor, event: inputpkg.MouseMoveEvent) void {
-    log.debug("mouse move x={d:.1} y={d:.1} mods=0x{x}", .{
-        event.x,
-        event.y,
-        @as(u8, @bitCast(event.mods)),
-    });
-}
+pub fn mouseMove(_: *Editor, _: inputpkg.MouseMoveEvent) void {}
 
 pub fn onBufferUpdate(self: *Editor, entry_id: u64) void {
     self.mutex.lock();
     defer self.mutex.unlock();
 
-    const selected_entry = self.selected_entry orelse return;
-    if (selected_entry != entry_id) return;
-
     const buffer = self.buffer orelse return;
-    self.emitBufferUpdate(entry_id, buffer);
+    self.emitEditorUpdate(entry_id, buffer);
 }
 
 pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
@@ -115,8 +98,8 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
     return true;
 }
 
-fn emitBufferUpdate(_: *Editor, entry_id: u64, buffer: *Buffer) void {
-    _ = global.emit(.{ .bufferUpdate = .{
+fn emitEditorUpdate(_: *Editor, entry_id: u64, buffer: *Buffer) void {
+    _ = global.emit(.{ .editorUpdate = .{
         .entry_id = entry_id,
         .row_count = buffer.text.rowCount,
     } }, .instant);

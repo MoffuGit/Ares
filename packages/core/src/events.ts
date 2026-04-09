@@ -6,7 +6,7 @@ export enum EventType {
     ThemeUpdate,
     FiletreeUpdate,
     SurfaceUpdate,
-    BufferUpdate,
+    EditorUpdate,
     ModeUpdate,
     KeymapMatch,
 }
@@ -15,7 +15,7 @@ export const EventsName: Record<EventType, string> = {
     [EventType.FiletreeUpdate]: "FiletreeUpdate",
     [EventType.SettingsUpdate]: "SettingsUpdate",
     [EventType.ThemeUpdate]: "ThemeUpdate",
-    [EventType.BufferUpdate]: "BufferUpdate",
+    [EventType.EditorUpdate]: "EditorUpdate",
     [EventType.SurfaceUpdate]: "SurfaceUpdate",
     [EventType.ModeUpdate]: "ModeUpdate",
     [EventType.KeymapMatch]: "KeymapMatch",
@@ -26,7 +26,7 @@ export const Events: Record<EventType, StructDef<any> | null> = {
     [EventType.ThemeUpdate]: null,
     [EventType.FiletreeUpdate]: null,
     [EventType.SurfaceUpdate]: SurfaceState,
-    [EventType.BufferUpdate]: EditorState,
+    [EventType.EditorUpdate]: EditorState,
     [EventType.ModeUpdate]: ModeUpdate,
     [EventType.KeymapMatch]: KeymapMatch,
 };
