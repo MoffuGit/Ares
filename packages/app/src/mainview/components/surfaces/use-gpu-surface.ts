@@ -70,12 +70,18 @@ export function useGpuSurface<TSurface extends Surface>({
         const sendMouseEvent = (e: MouseEvent) => {
             if (!surface.gpuSurfaceId) return;
             const rect = target.getBoundingClientRect();
+            let mods = 0;
+            if (e.shiftKey) mods |= 1 << 0;
+            if (e.altKey) mods |= 1 << 1;
+            if (e.ctrlKey) mods |= 1 << 2;
+            if (e.metaKey) mods |= 1 << 3;
             rpc.send("surfaceMouseEvent", {
                 surfaceId: surface.gpuSurfaceId,
                 type: e.type as "mousedown" | "mousemove" | "mouseup",
                 x: e.clientX - rect.left,
                 y: e.clientY - rect.top,
                 button: e.button,
+                mods,
             });
         };
 

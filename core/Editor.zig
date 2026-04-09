@@ -4,6 +4,7 @@ const std = @import("std");
 const globalpkg = @import("global.zig");
 const global = &globalpkg.state;
 const Allocator = std.mem.Allocator;
+const inputpkg = @import("input.zig");
 const Project = @import("Project.zig");
 const Buffer = @import("buffer/Buffer.zig");
 const Renderer = @import("Renderer.zig");
@@ -65,6 +66,24 @@ pub fn resize(self: *Editor, size: sizepkg.ScreenSize) void {
     defer self.mutex.unlock();
 
     self.size = size;
+}
+
+pub fn mouseButton(_: *Editor, event: inputpkg.MouseButtonEvent) void {
+    log.debug("mouse button={s} action={s} x={d:.1} y={d:.1} mods=0x{x}", .{
+        @tagName(event.button),
+        @tagName(event.action),
+        event.x,
+        event.y,
+        @as(u8, @bitCast(event.mods)),
+    });
+}
+
+pub fn mouseMove(_: *Editor, event: inputpkg.MouseMoveEvent) void {
+    log.debug("mouse move x={d:.1} y={d:.1} mods=0x{x}", .{
+        event.x,
+        event.y,
+        @as(u8, @bitCast(event.mods)),
+    });
 }
 
 pub fn onBufferUpdate(self: *Editor, entry_id: u64) void {

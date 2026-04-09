@@ -107,6 +107,12 @@ fn drainMailbox(self: *Thread) !void {
             .resize => |size| {
                 self.io.resize(size);
             },
+            .mouse_button => |ev| {
+                self.io.mouseButton(ev);
+            },
+            .mouse_move => |ev| {
+                self.io.mouseMove(ev);
+            },
         }
     }
 }

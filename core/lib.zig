@@ -1,6 +1,7 @@
 const std = @import("std");
 const global = @import("global.zig");
 const sizepkg = @import("size.zig");
+const inputpkg = @import("input.zig");
 const ghostty_vt = @import("ghostty-vt");
 
 const Project = @import("Project.zig");
@@ -14,6 +15,7 @@ const Allocator = std.mem.Allocator;
 
 const Editor = @import("Editor.zig");
 const Terminal = @import("Terminal.zig");
+const Modifiers = @import("keymaps/KeyStroke.zig").Modifiers;
 
 const EditorSurface = SurfacePkg.Surface(Editio, Editor);
 const TerminalSurface = SurfacePkg.Surface(Termio, Terminal);
@@ -311,6 +313,43 @@ export fn selectEditorEntry(editor: *EditorSurface, id: u64) void {
 
 export fn editorScrollTo(editor: *EditorSurface, row: u64) void {
     editor.sendIo(.{ .scroll = row });
+}
+
+export fn surfaceMouseButton(surface: *anyopaque, is_editor: bool, button: u8, action: u8, x: f64, y: f64, mods: u8) void {
+    if (button >= @typeInfo(inputpkg.MouseButton).@"enum".fields.len) return;
+    if (action >= @typeInfo(inputpkg.MouseAction).@"enum".fields.len) return;
+
+    const event = inputpkg.MouseButtonEvent{
+        .button = @enumFromInt(button),
+        .action = @enumFromInt(action),
+        .x = x,
+        .y = y,
+        .mods = @bitCast(mods),
+    };
+
+    if (is_editor) {
+        const editor: *EditorSurface = @ptrCast(@alignCast(surface));
+        editor.sendIo(.{ .mouse_button = event });
+    } else {
+        const terminal: *TerminalSurface = @ptrCast(@alignCast(surface));
+        terminal.sendIo(.{ .mouse_button = event });
+    }
+}
+
+export fn surfaceMouseMove(surface: *anyopaque, is_editor: bool, x: f64, y: f64, mods: u8) void {
+    const event = inputpkg.MouseMoveEvent{
+        .x = x,
+        .y = y,
+        .mods = @bitCast(mods),
+    };
+
+    if (is_editor) {
+        const editor: *EditorSurface = @ptrCast(@alignCast(surface));
+        editor.sendIo(.{ .mouse_move = event });
+    } else {
+        const terminal: *TerminalSurface = @ptrCast(@alignCast(surface));
+        terminal.sendIo(.{ .mouse_move = event });
+    }
 }
 
 pub const ExternSurfaceState = global.ExternSurfaceState;

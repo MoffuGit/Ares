@@ -119,6 +119,12 @@ fn drainMailbox(self: *Thread) !void {
             .scroll => |row| {
                 self.io.scroll(row);
             },
+            .mouse_button => |ev| {
+                self.io.mouseButton(ev);
+            },
+            .mouse_move => |ev| {
+                self.io.mouseMove(ev);
+            },
         }
     }
 

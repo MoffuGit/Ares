@@ -4,6 +4,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ghostty_vt = @import("ghostty-vt");
 const sizepkg = @import("size.zig");
+const inputpkg = @import("input.zig");
 const Renderer = @import("Renderer.zig");
 const RendererThread = @import("renderer/Thread.zig");
 const Grid = @import("font/mod.zig").Grid;
@@ -45,4 +46,22 @@ pub fn resize(self: *Termio, size: sizepkg.ScreenSize) void {
     self.state.term.resize(self.alloc, grid_size.columns, grid_size.rows) catch |err| {
         log.err("failed to resize terminal err={}", .{err});
     };
+}
+
+pub fn mouseButton(_: *Termio, event: inputpkg.MouseButtonEvent) void {
+    log.debug("mouse button={s} action={s} x={d:.1} y={d:.1} mods=0x{x}", .{
+        @tagName(event.button),
+        @tagName(event.action),
+        event.x,
+        event.y,
+        @as(u8, @bitCast(event.mods)),
+    });
+}
+
+pub fn mouseMove(_: *Termio, event: inputpkg.MouseMoveEvent) void {
+    log.debug("mouse move x={d:.1} y={d:.1} mods=0x{x}", .{
+        event.x,
+        event.y,
+        @as(u8, @bitCast(event.mods)),
+    });
 }

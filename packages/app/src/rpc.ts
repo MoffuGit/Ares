@@ -16,7 +16,7 @@ export type AppRPC = {
             expandEntry: number;
             selectSurfaceEntry: { surfaceId: number, id: number };
             surfaceScrollTo: { surfaceId: number, row: number };
-            surfaceMouseEvent: { surfaceId: number; type: "mousedown" | "mousemove" | "mouseup"; x: number; y: number; button: number };
+            surfaceMouseEvent: { surfaceId: number; type: "mousedown" | "mousemove" | "mouseup"; x: number; y: number; button: number; mods: number };
             gpuTagRect: { id: number; rect: GpuRect };
             gpuTagStop: { id: number };
             gpuTagVisibility: { id: number; visible: boolean };

@@ -5,6 +5,7 @@ const globalpkg = @import("global.zig");
 const global = &globalpkg.state;
 const Allocator = std.mem.Allocator;
 const sizepkg = @import("size.zig");
+const inputpkg = @import("input.zig");
 const Project = @import("Project.zig");
 const Renderer = @import("Renderer.zig");
 const RendererThread = @import("renderer/Thread.zig");
@@ -63,6 +64,14 @@ pub fn selectEntry(self: *Editio, id: u64) void {
 
 pub fn scroll(self: *Editio, row: u64) void {
     self.state.scroll(row);
+}
+
+pub fn mouseButton(self: *Editio, event: inputpkg.MouseButtonEvent) void {
+    self.state.mouseButton(event);
+}
+
+pub fn mouseMove(self: *Editio, event: inputpkg.MouseMoveEvent) void {
+    self.state.mouseMove(event);
 }
 
 pub fn onBufferUpdate(self: *Editio, entry_id: u64) void {
