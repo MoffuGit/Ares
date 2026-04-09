@@ -112,6 +112,12 @@ export class SurfaceStore {
         this.app.core.editorScrollTo(state.corePtr, row);
     }
 
+    surfaceMouseEvent(viewId: number, type: "mousedown" | "mousemove" | "mouseup", x: number, y: number, button: number) {
+        const state = this.states.get(viewId);
+        if (!state) return;
+        console.log(`[SurfaceStore] mouse ${type} on surface ${viewId}: (${x}, ${y}) button=${button}`);
+    }
+
     readSurfaceState(viewId: number): SurfaceState | null {
         const state = this.states.get(viewId);
         if (!state) return null;

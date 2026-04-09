@@ -14,11 +14,13 @@ interface EditorSurfaceProps {
 
 export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
+    const overlayRef = useRef<HTMLDivElement | null>(null);
     const { gpuRef, handleReady } = useGpuSurface({
         id,
         surface,
         active,
         containerRef,
+        eventRef: overlayRef,
         onReadySuccess: (gpuSurfaceId) => {
             if (surface.entry != null) {
                 rpc.send("selectSurfaceEntry", { surfaceId: gpuSurfaceId, id: surface.entry.id });
@@ -77,6 +79,7 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
             </div>
             <div className="w-full grow relative flex px-4">
                 <div
+                    ref={overlayRef}
                     className="absolute top-0 inset-0 w-full h-full overflow-auto data-[active-tab=true]:flex hidden"
                     data-active-tab={active}
                     data-slot="editor-content"

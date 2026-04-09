@@ -11,6 +11,7 @@ type UseGpuSurfaceOptions<TSurface extends Surface> = {
     surface: TSurface;
     active: boolean;
     containerRef: RefObject<HTMLElement | null>;
+    eventRef?: RefObject<HTMLElement | null>;
     onReadySuccess?: (gpuSurfaceId: number) => void | Promise<void>;
 };
 
@@ -28,6 +29,7 @@ export function useGpuSurface<TSurface extends Surface>({
     surface,
     active,
     containerRef,
+    eventRef,
     onReadySuccess,
 }: UseGpuSurfaceOptions<TSurface>) {
     const gpuRef = useRef<GpuTagHandle>(null);
@@ -60,6 +62,33 @@ export function useGpuSurface<TSurface extends Surface>({
             rpc.send("gpuTagVisibility", { id: surface.gpuSurfaceId, visible: active });
         }
     }, [active, surface.gpuSurfaceId]);
+
+    useEffect(() => {
+        const target = eventRef?.current ?? containerRef.current;
+        if (!target) return;
+
+        const sendMouseEvent = (e: MouseEvent) => {
+            if (!surface.gpuSurfaceId) return;
+            const rect = target.getBoundingClientRect();
+            rpc.send("surfaceMouseEvent", {
+                surfaceId: surface.gpuSurfaceId,
+                type: e.type as "mousedown" | "mousemove" | "mouseup",
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top,
+                button: e.button,
+            });
+        };
+
+        target.addEventListener("mousedown", sendMouseEvent);
+        target.addEventListener("mousemove", sendMouseEvent);
+        target.addEventListener("mouseup", sendMouseEvent);
+
+        return () => {
+            target.removeEventListener("mousedown", sendMouseEvent);
+            target.removeEventListener("mousemove", sendMouseEvent);
+            target.removeEventListener("mouseup", sendMouseEvent);
+        };
+    }, [eventRef, containerRef, surface.gpuSurfaceId]);
 
     useResizeObserver(containerRef, (entry) => {
         if (!surface.gpuSurfaceId) return;
