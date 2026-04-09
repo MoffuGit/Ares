@@ -74,6 +74,7 @@ swap_chain: SwapChain,
 first: bool = true,
 
 size: sizepkg.Size,
+surface_id: u64,
 
 grid_size: sizepkg.GridSize = .{},
 cells: []shaderpkg.CellText,
@@ -103,6 +104,7 @@ pub fn init(alloc: Allocator, settings: *Settings, opts: Options) !Renderer {
         .update_frame = opts.frame_callback,
         .alloc = alloc,
         .size = opts.size,
+        .surface_id = opts.surface_id,
         .api = api,
         .shaders = undefined,
         .swap_chain = swap_chain,
@@ -287,6 +289,7 @@ pub fn frameCompleted(
 
 fn emitSurfaceUpdate(self: *Renderer) void {
     _ = global.emit(.{ .surfaceUpdate = .{
+        .surface_id = self.surface_id,
         .cell_width = self.size.cell.width,
         .cell_height = self.size.cell.height,
         .renderer_health = @intCast(@intFromEnum(self.health.load(.seq_cst))),

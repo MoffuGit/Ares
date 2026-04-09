@@ -73,8 +73,8 @@ pub fn mouseMove(self: *Editio, event: inputpkg.MouseMoveEvent) void {
     self.state.mouseMove(event);
 }
 
-pub fn onEditorUpdate(self: *Editio, entry_id: u64) void {
-    self.state.onEditorUpdate(entry_id);
+pub fn onBufferUpdate(self: *Editio, entry_id: u64) void {
+    self.state.onBufferUpdate(entry_id);
 }
 
 pub fn readEditorState(self: *Editio, out: *globalpkg.ExternEditorState) bool {

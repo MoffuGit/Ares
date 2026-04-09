@@ -38,6 +38,7 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
         const Self = @This();
 
         alloc: Allocator,
+        surface_id: u64,
         grid: *Grid,
 
         renderer: Renderer,
@@ -52,6 +53,7 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
 
         pub fn create(
             alloc: Allocator,
+            surface_id: u64,
             grid: *Grid,
             layer_ptr: *anyopaque,
             screen_size: sizepkg.ScreenSize,
@@ -64,6 +66,7 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
             errdefer alloc.destroy(self);
 
             var renderer = try Renderer.init(alloc, settings, .{
+                .surface_id = surface_id,
                 .grid = grid,
                 .metal_layer = metal_layer,
                 .size = .{
@@ -104,6 +107,7 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
 
             self.* = .{
                 .alloc = alloc,
+                .surface_id = surface_id,
                 .grid = grid,
                 .renderer = renderer,
                 .renderer_thread = renderer_thread,
@@ -137,6 +141,7 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
 
         pub fn surfaceState(self: *Self, out: *globalpkg.ExternSurfaceState) void {
             out.* = .{
+                .surface_id = self.surface_id,
                 .cell_width = self.renderer.size.cell.width,
                 .cell_height = self.renderer.size.cell.height,
                 .renderer_health = @intCast(@intFromEnum(self.renderer.health.load(.seq_cst))),

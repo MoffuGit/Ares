@@ -15,6 +15,7 @@ const log = std.log.scoped(.editor);
 mutex: std.Thread.Mutex = .{},
 project: *Project,
 alloc: Allocator,
+surface_id: u64,
 
 buffer: ?*Buffer = null,
 selected_entry: ?u64 = null,
@@ -24,11 +25,13 @@ size: sizepkg.ScreenSize,
 
 pub fn init(
     alloc: Allocator,
+    surface_id: u64,
     project: *Project,
     size: sizepkg.ScreenSize,
 ) Editor {
     return .{
         .alloc = alloc,
+        .surface_id = surface_id,
         .project = project,
         .size = size,
     };
@@ -92,14 +95,16 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
 
     const text = buffer.text;
     out.* = .{
+        .surface_id = self.surface_id,
         .entry_id = buffer.entry_id,
         .row_count = text.rowCount,
     };
     return true;
 }
 
-fn emitEditorUpdate(_: *Editor, entry_id: u64, buffer: *Buffer) void {
+fn emitEditorUpdate(self: *Editor, entry_id: u64, buffer: *Buffer) void {
     _ = global.emit(.{ .editorUpdate = .{
+        .surface_id = self.surface_id,
         .entry_id = entry_id,
         .row_count = buffer.text.rowCount,
     } }, .instant);

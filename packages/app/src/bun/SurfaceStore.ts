@@ -40,7 +40,7 @@ export class SurfaceStore {
         }
 
         if (!this.app.coreProject) throw new Error(`There is no project for this surface ${surfaceId}`);
-        const corePtr = this.createCoreSurface(surface.kind, metalLayerPtr, width, height);
+        const corePtr = this.createCoreSurface(surface.kind, surfaceId, metalLayerPtr, width, height);
         if (!corePtr) {
             throw new Error(`Failed to create view (kind=${surface.kind}) for id ${surfaceId}`);
         }
@@ -144,32 +144,12 @@ export class SurfaceStore {
         return this.app.core.readEditorState(state.corePtr);
     }
 
-    readAllSurfaceStates(): Array<{ surfaceId: number; state: SurfaceState }> {
-        const updates: Array<{ surfaceId: number; state: SurfaceState }> = [];
-        for (const state of this.states.values()) {
-            const surfaceState = this.readSurfaceState(state.id);
-            if (surfaceState) {
-                updates.push({ surfaceId: state.id, state: surfaceState });
-            }
-        }
-        return updates;
-    }
-
-    readAllEditorStates(): Array<{ surfaceId: number; state: EditorState | null }> {
-        const updates: Array<{ surfaceId: number; state: EditorState | null }> = [];
-        for (const state of this.states.values()) {
-            if (state.surface.kind !== "editor") continue;
-            updates.push({ surfaceId: state.id, state: this.readEditorState(state.id) });
-        }
-        return updates;
-    }
-
-    private createCoreSurface(kind: SurfaceKind, metalLayerPtr: Pointer, width: number, height: number): Pointer | null {
+    private createCoreSurface(kind: SurfaceKind, surfaceId: number, metalLayerPtr: Pointer, width: number, height: number): Pointer | null {
         switch (kind) {
             case "editor":
-                return this.app.coreProject ? this.app.core.createEditor(this.app.coreApp, this.app.coreProject, metalLayerPtr, width, height) : null;
+                return this.app.coreProject ? this.app.core.createEditor(this.app.coreApp, this.app.coreProject, surfaceId, metalLayerPtr, width, height) : null;
             case "terminal":
-                return this.app.core.createTerminal(this.app.coreApp, metalLayerPtr, width, height);
+                return this.app.core.createTerminal(this.app.coreApp, surfaceId, metalLayerPtr, width, height);
         }
     }
 

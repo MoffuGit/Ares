@@ -29,6 +29,7 @@ function toNumber(value: number | bigint): number {
 }
 
 function mapSurfaceState(raw: {
+    surface_id?: number | bigint;
     cell_width: number | bigint;
     cell_height: number | bigint;
     renderer_health: number | bigint;
@@ -41,12 +42,36 @@ function mapSurfaceState(raw: {
 }
 
 function mapEditorState(raw: {
+    surface_id?: number | bigint;
     entry_id: number | bigint;
     row_count: number | bigint;
 }): EditorState {
     return {
         entryId: toNumber(raw.entry_id),
         rowCount: toNumber(raw.row_count),
+    };
+}
+
+function mapSurfaceUpdate(raw: {
+    surface_id: number | bigint;
+    cell_width: number | bigint;
+    cell_height: number | bigint;
+    renderer_health: number | bigint;
+}): { surfaceId: number; state: SurfaceState } {
+    return {
+        surfaceId: toNumber(raw.surface_id),
+        state: mapSurfaceState(raw),
+    };
+}
+
+function mapEditorUpdate(raw: {
+    surface_id: number | bigint;
+    entry_id: number | bigint;
+    row_count: number | bigint;
+}): { surfaceId: number; state: EditorState } {
+    return {
+        surfaceId: toNumber(raw.surface_id),
+        state: mapEditorState(raw),
     };
 }
 
@@ -168,7 +193,7 @@ function getCoreLib(libPath: string) {
                 return: FFIType.void,
             },
             createEditor: {
-                args: [FFIType.pointer, FFIType.pointer, FFIType.pointer, FFIType.u32, FFIType.u32],
+                args: [FFIType.pointer, FFIType.pointer, FFIType.u64, FFIType.pointer, FFIType.u32, FFIType.u32],
                 returns: FFIType.pointer,
             },
             resizeEditor: {
@@ -212,7 +237,7 @@ function getCoreLib(libPath: string) {
                 returns: FFIType.void,
             },
             createTerminal: {
-                args: [FFIType.pointer, FFIType.pointer, FFIType.u32, FFIType.u32],
+                args: [FFIType.pointer, FFIType.u64, FFIType.pointer, FFIType.u32, FFIType.u32],
                 returns: FFIType.pointer,
             },
             destroyTerminal: {
@@ -256,9 +281,9 @@ export class CoreLib extends EventEmitter {
                     };
                     const rawData = dataType.unpack(toArrayBuffer(ptr, 0, _len));
                     const data = _type === EventType.SurfaceUpdate
-                        ? mapSurfaceState(rawData)
+                        ? mapSurfaceUpdate(rawData)
                         : _type === EventType.EditorUpdate
-                            ? mapEditorState(rawData)
+                            ? mapEditorUpdate(rawData)
                         : _type === EventType.ModeUpdate
                             ? { mode: mapMode(rawData.mode) }
                             : _type === EventType.KeymapMatch
@@ -405,8 +430,8 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.drainMailbox();
     }
 
-    createEditor(app: Pointer, project: Pointer, metalLayerPtr: Pointer, width: number, height: number): Pointer | null {
-        return this.lib.symbols.createEditor(app, project, metalLayerPtr, width, height) as Pointer | null;
+    createEditor(app: Pointer, project: Pointer, surfaceId: number, metalLayerPtr: Pointer, width: number, height: number): Pointer | null {
+        return this.lib.symbols.createEditor(app, project, surfaceId, metalLayerPtr, width, height) as Pointer | null;
     }
 
     resizeEditor(editor: Pointer, width: number, height: number): void {
@@ -456,8 +481,8 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.destroyEditor(editor);
     }
 
-    createTerminal(app: Pointer, layer: Pointer, width: number, height: number): Pointer | null {
-        return this.lib.symbols.createTerminal(app, layer, width, height);
+    createTerminal(app: Pointer, surfaceId: number, layer: Pointer, width: number, height: number): Pointer | null {
+        return this.lib.symbols.createTerminal(app, surfaceId, layer, width, height);
     }
 
     destroyTerminal(terminal: Pointer) {

@@ -32,12 +32,14 @@ export const WorktreeEntry = defineStruct([
 ] as const);
 
 export const SurfaceState = defineStruct([
+    ["surface_id", "u64"],
     ["cell_width", "u32"],
     ["cell_height", "u32"],
     ["renderer_health", "u8"],
 ] as const);
 
 export const EditorState = defineStruct([
+    ["surface_id", "u64"],
     ["entry_id", "u64"],
     ["row_count", "u64"],
 ] as const);

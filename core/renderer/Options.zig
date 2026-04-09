@@ -7,6 +7,7 @@ const FrameCallback = @import("../Renderer.zig").FrameCallback;
 const MetalLayer = objc.Object;
 
 size: sizepkg.Size,
+surface_id: u64,
 metal_layer: MetalLayer,
 frame_callback: FrameCallback,
 state: *anyopaque,

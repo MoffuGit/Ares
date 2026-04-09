@@ -257,11 +257,12 @@ export fn readKeymapEntries(app: *App, scope: u8, mode: u8, out: [*]ExternKeymap
     return count;
 }
 
-export fn createEditor(app: *App, project: *Project, layer_ptr: *anyopaque, width: u32, height: u32) ?*EditorSurface {
-    const state = Editor.init(global.state.alloc, project, .{ .height = height, .width = width });
+export fn createEditor(app: *App, project: *Project, surface_id: u64, layer_ptr: *anyopaque, width: u32, height: u32) ?*EditorSurface {
+    const state = Editor.init(global.state.alloc, surface_id, project, .{ .height = height, .width = width });
 
     return EditorSurface.create(
         global.state.alloc,
+        surface_id,
         &app.grid,
         layer_ptr,
         .{ .width = width, .height = height },
@@ -270,7 +271,7 @@ export fn createEditor(app: *App, project: *Project, layer_ptr: *anyopaque, widt
     ) catch null;
 }
 
-export fn createTerminal(app: *App, layer_ptr: *anyopaque, width: u32, height: u32) ?*TerminalSurface {
+export fn createTerminal(app: *App, surface_id: u64, layer_ptr: *anyopaque, width: u32, height: u32) ?*TerminalSurface {
     const screen_size: sizepkg.ScreenSize = .{ .width = width, .height = height };
 
     const grid_size = (sizepkg.Size{ .screen = screen_size, .cell = app.grid.cellSize() }).grid();
@@ -283,6 +284,7 @@ export fn createTerminal(app: *App, layer_ptr: *anyopaque, width: u32, height: u
 
     return TerminalSurface.create(
         global.state.alloc,
+        surface_id,
         &app.grid,
         layer_ptr,
         screen_size,
