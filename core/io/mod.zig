@@ -155,14 +155,19 @@ pub fn onReadComplete(req: *ReadRequest, bytes_read: usize) void {
     // Remove from pending and emit before deinit (path is freed in deinit)
     req.io.removePendingRead(req);
 
+    const file = File{
+        .bytes = file_bytes,
+        .stat = file_stat,
+        .alloc = alloc,
+    };
+
     global.state.emitGlobal(.{ .ioReadComplete = .{
         .path = path,
-        .file = File{
-            .bytes = file_bytes,
-            .stat = file_stat,
-            .alloc = alloc,
-        },
+        .file = file,
     } });
+
+    // IO owns the read buffer; consumers must clone what they need.
+    file.deinit();
 
     req.deinit();
 }

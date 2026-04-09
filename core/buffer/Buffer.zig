@@ -67,8 +67,16 @@ pub fn setFile(self: *Buffer, file: Io.File) !void {
     defer self.mutex.unlock();
     self.clearUnlocked();
 
-    self.text = try TextBuffer.initFromBytes(self.alloc, file.bytes);
-    self.file = file;
+    const owned_bytes = try self.alloc.dupe(u8, file.bytes);
+    self.text = TextBuffer.initFromBytes(self.alloc, owned_bytes) catch |err| {
+        self.alloc.free(owned_bytes);
+        return err;
+    };
+    self.file = .{
+        .bytes = owned_bytes,
+        .stat = file.stat,
+        .alloc = self.alloc,
+    };
     self.state = .{ .raw = .ready };
 }
 

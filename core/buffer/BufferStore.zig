@@ -76,9 +76,6 @@ fn handleIoReadComplete(ctx: *anyopaque, event: global.GlobalEvents) void {
         global.state.emitGlobal(.{ .bufferUpdate = entry_id });
         return;
     }
-
-    // No buffer matched — free the file to avoid leaking
-    if (payload.file) |f| f.deinit();
 }
 
 pub fn get(self: *BufferStore, entry_id: u64) ?*Buffer {

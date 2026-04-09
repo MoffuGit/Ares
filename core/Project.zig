@@ -79,5 +79,5 @@ fn handleIoReadComplete(ctx: *anyopaque, event: global.GlobalEvents) void {
         return;
     }
 
-    if (payload.file) |f| f.deinit();
+
 }
