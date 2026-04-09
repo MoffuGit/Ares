@@ -41,6 +41,7 @@ const fontpkg = @import("font/mod.zig");
 const math = @import("math.zig");
 const ArrayList = std.ArrayList;
 const Settings = @import("settings/mod.zig");
+const TextBuffer = @import("buffer/Buffer.zig").TextBuffer;
 
 const log = std.log.scoped(.renderer);
 
@@ -350,7 +351,7 @@ pub fn updateFrame(self: *Renderer) !void {
     self.update_frame(self.state, self);
 }
 
-pub fn rebuildCells(self: *Renderer, row: u16, col: u16, new_cells: ArrayList([]u32)) !void {
+pub fn rebuildCells(self: *Renderer, row: u16, col: u16, new_rows: []const TextBuffer.Row) !void {
     self.mutex.lock();
     defer self.mutex.unlock();
 
@@ -369,24 +370,24 @@ pub fn rebuildCells(self: *Renderer, row: u16, col: u16, new_cells: ArrayList([]
     self.rebuild_cells = true;
 
     var total_cells: usize = 0;
-    for (new_cells.items) |row_cells| {
-        total_cells += row_cells.len;
+    for (new_rows) |row_data| {
+        total_cells += row_data.codepoints.len;
     }
 
-    var glyphs = try self.alloc.alloc(shaderpkg.CellText, total_cells);
+    var glyphs = try ArrayList(shaderpkg.CellText).initCapacity(self.alloc, total_cells);
+    defer glyphs.deinit(self.alloc);
 
-    var glyphs_idx: usize = 0;
-    for (new_cells.items, 0..) |row_cells, row_idx| {
+    for (new_rows, 0..) |row_data, row_idx| {
         if (row_idx >= self.grid_size.rows) break;
 
-        for (row_cells, 0..) |cell_codepoint, col_idx| {
+        for (row_data.codepoints, 0..) |cell_codepoint, col_idx| {
             if (col_idx >= self.grid_size.columns) break;
 
             const glyph = try self.grid.renderCodepoint(self.alloc, cell_codepoint) orelse {
                 continue;
             };
 
-            glyphs[glyphs_idx] = shaderpkg.CellText{
+            try glyphs.append(self.alloc, shaderpkg.CellText{
                 .grid_pos = .{ @intCast(col_idx), @intCast(row_idx) },
                 .color = self.text_color,
                 .glyph_pos = .{ glyph.atlas_x, glyph.atlas_y },
@@ -395,13 +396,12 @@ pub fn rebuildCells(self: *Renderer, row: u16, col: u16, new_cells: ArrayList([]
                     @intCast(glyph.offset_x),
                     @intCast(glyph.offset_y),
                 },
-            };
-            glyphs_idx += 1;
+            });
         }
     }
 
     self.alloc.free(self.cells);
-    self.cells = glyphs;
+    self.cells = try glyphs.toOwnedSlice(self.alloc);
 }
 
 fn syncAtlasTexture(

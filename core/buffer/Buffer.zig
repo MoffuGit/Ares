@@ -8,14 +8,97 @@ pub const Buffer = @This();
 
 pub const TextBuffer = struct {
     pub const History = struct {};
+    pub const Row = struct {
+        codepoints: []u32,
 
+        pub fn deinit(self: *Row, alloc: Allocator) void {
+            if (self.codepoints.len > 0) {
+                alloc.free(self.codepoints);
+            }
+            self.* = undefined;
+        }
+    };
+
+    pub const Layout = struct {
+        rows: []Row = &.{},
+
+        pub fn deinit(self: *Layout, alloc: Allocator) void {
+            for (self.rows) |*row| {
+                row.deinit(alloc);
+            }
+            if (self.rows.len > 0) {
+                alloc.free(self.rows);
+            }
+            self.rows = &.{};
+        }
+
+        pub fn rebuild(self: *Layout, alloc: Allocator, content: GapBuffer(u8)) !void {
+            self.deinit(alloc);
+
+            var rows = try std.ArrayList(Row).initCapacity(alloc, 0);
+            errdefer {
+                for (rows.items) |*row| {
+                    row.deinit(alloc);
+                }
+                rows.deinit(alloc);
+            }
+
+            var line_bytes = try std.ArrayList(u8).initCapacity(alloc, 0);
+            defer line_bytes.deinit(alloc);
+
+            try appendRowsFromBytes(alloc, &rows, &line_bytes, content.items);
+            try appendRowsFromBytes(alloc, &rows, &line_bytes, content.secondHalf());
+            try appendDecodedRow(alloc, &rows, line_bytes.items);
+
+            self.rows = try rows.toOwnedSlice(alloc);
+        }
+
+        pub fn visibleRows(self: *const Layout, scroll_row: u64, max_rows: usize) []const Row {
+            const start = @min(std.math.cast(usize, scroll_row) orelse self.rows.len, self.rows.len);
+            const count = @min(max_rows, self.rows.len - start);
+            return self.rows[start .. start + count];
+        }
+
+        fn appendRowsFromBytes(
+            alloc: Allocator,
+            rows: *std.ArrayList(Row),
+            line_bytes: *std.ArrayList(u8),
+            raw_bytes: []const u8,
+        ) !void {
+            var start: usize = 0;
+            for (raw_bytes, 0..) |byte, idx| {
+                if (byte != '\n') continue;
+
+                try line_bytes.appendSlice(alloc, raw_bytes[start..idx]);
+                try appendDecodedRow(alloc, rows, line_bytes.items);
+                line_bytes.clearRetainingCapacity();
+                start = idx + 1;
+            }
+
+            try line_bytes.appendSlice(alloc, raw_bytes[start..]);
+        }
+
+        fn appendDecodedRow(
+            alloc: Allocator,
+            rows: *std.ArrayList(Row),
+            row_bytes: []const u8,
+        ) !void {
+            try rows.append(alloc, .{ .codepoints = try decodeUtf8Line(alloc, row_bytes) });
+        }
+    };
+
+    alloc: Allocator,
     content: GapBuffer(u8),
     rowCount: usize,
+    version: u64,
+    layout: Layout = .{},
     history: History = .{},
 
     pub fn init(alloc: Allocator) TextBuffer {
         return .{
+            .alloc = alloc,
             .rowCount = 0,
+            .version = 0,
             .content = GapBuffer(u8).init(alloc),
         };
     }
@@ -23,19 +106,40 @@ pub const TextBuffer = struct {
     pub fn initFromBytes(alloc: Allocator, raw: []const u8) !TextBuffer {
         var content = try GapBuffer(u8).initCapacity(alloc, raw.len);
         content.appendSliceBeforeAssumeCapacity(raw);
-        return .{
-            .content = content,
-            .rowCount = countLines(raw),
-        };
+
+        var text = TextBuffer.init(alloc);
+        text.content = content;
+        try text.rebuildDerivedState();
+        return text;
     }
 
     pub fn deinit(self: *TextBuffer) void {
+        self.layout.deinit(self.alloc);
         self.content.deinit();
         self.* = undefined;
     }
 
-    fn countLines(raw: []const u8) usize {
-        return std.mem.count(u8, raw, "\n") + 1;
+    pub fn rebuildDerivedState(self: *TextBuffer) !void {
+        try self.layout.rebuild(self.alloc, self.content);
+        self.rowCount = self.layout.rows.len;
+        self.version +%= 1;
+    }
+
+    pub fn visibleRows(self: *const TextBuffer, scroll_row: u64, max_rows: usize) []const Row {
+        return self.layout.visibleRows(scroll_row, max_rows);
+    }
+
+    fn decodeUtf8Line(alloc: Allocator, raw_bytes: []const u8) ![]u32 {
+        var codepoints = try std.ArrayList(u32).initCapacity(alloc, 0);
+        errdefer codepoints.deinit(alloc);
+
+        const view = std.unicode.Utf8View.initUnchecked(raw_bytes);
+        var it = view.iterator();
+        while (it.nextCodepoint()) |cp| {
+            try codepoints.append(alloc, cp);
+        }
+
+        return codepoints.toOwnedSlice(alloc);
     }
 };
 
@@ -123,5 +227,35 @@ fn clearUnlocked(self: *Buffer) void {
     if (self.file) |file| {
         file.deinit();
         self.file = null;
+    }
+}
+
+test "text buffer caches visible rows and versions derived data" {
+    var text = try TextBuffer.initFromBytes(std.testing.allocator, "ab\ncd");
+    defer text.deinit();
+
+    try std.testing.expectEqual(@as(usize, 2), text.rowCount);
+    try std.testing.expectEqual(@as(u64, 1), text.version);
+    try expectAsciiRow(text.visibleRows(0, 2)[0], "ab");
+    try expectAsciiRow(text.visibleRows(0, 2)[1], "cd");
+
+    text.content.moveGap(1);
+    try text.rebuildDerivedState();
+
+    try std.testing.expectEqual(@as(usize, 2), text.rowCount);
+    try std.testing.expectEqual(@as(u64, 2), text.version);
+    try expectAsciiRow(text.visibleRows(1, 1)[0], "cd");
+
+    try text.content.insertBefore(text.content.realLength(), '!');
+    try text.rebuildDerivedState();
+
+    try std.testing.expectEqual(@as(u64, 3), text.version);
+    try expectAsciiRow(text.visibleRows(1, 1)[0], "cd!");
+}
+
+fn expectAsciiRow(row: TextBuffer.Row, expected: []const u8) !void {
+    try std.testing.expectEqual(expected.len, row.codepoints.len);
+    for (expected, 0..) |byte, idx| {
+        try std.testing.expectEqual(@as(u32, byte), row.codepoints[idx]);
     }
 }

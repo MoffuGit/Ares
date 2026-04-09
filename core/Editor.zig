@@ -20,6 +20,10 @@ surface_id: u64,
 buffer: ?*Buffer = null,
 selected_entry: ?u64 = null,
 scroll_row: u64 = 0,
+last_rendered_entry_id: u64 = std.math.maxInt(u64),
+last_rendered_version: u64 = 0,
+last_rendered_scroll_row: u64 = 0,
+last_rendered_grid: sizepkg.GridSize = .{},
 
 size: sizepkg.ScreenSize,
 
@@ -80,6 +84,7 @@ pub fn onBufferUpdate(self: *Editor, entry_id: u64) void {
     defer self.mutex.unlock();
 
     const buffer = self.buffer orelse return;
+    if (buffer.entry_id != entry_id) return;
     self.emitEditorUpdate(entry_id, buffer);
 }
 
@@ -103,6 +108,9 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
 }
 
 fn emitEditorUpdate(self: *Editor, entry_id: u64, buffer: *Buffer) void {
+    buffer.mutex.lock();
+    defer buffer.mutex.unlock();
+
     _ = global.emit(.{ .editorUpdate = .{
         .surface_id = self.surface_id,
         .entry_id = entry_id,
@@ -120,88 +128,20 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
     buffer.mutex.lock();
     defer buffer.mutex.unlock();
 
-    const text = buffer.text;
-    const first = text.content.items;
-    const second = text.content.secondHalf();
-
     const grid = renderer.size.grid();
-    const rows = grid.rows;
-    const cols = grid.columns;
+    const text = &buffer.text;
+    const should_rebuild =
+        self.last_rendered_entry_id != buffer.entry_id or
+        self.last_rendered_version != text.version or
+        self.last_rendered_scroll_row != self.scroll_row or
+        !self.last_rendered_grid.equals(grid);
 
-    var new_cells = try std.ArrayList([]u32).initCapacity(self.alloc, 0);
-    defer {
-        for (new_cells.items) |slice| {
-            self.alloc.free(slice);
-        }
-        new_cells.deinit(self.alloc);
-    }
+    if (!should_rebuild) return;
 
-    var line: u64 = 0;
-    var row: u16 = 0;
-    var remainder: []const u8 = first;
-    var in_second = false;
+    renderer.rebuildCells(grid.rows, grid.columns, text.visibleRows(self.scroll_row, grid.rows)) catch return;
 
-    while (true) {
-        if (std.mem.indexOfScalar(u8, remainder, '\n')) |nl| {
-            if (line >= self.scroll_row) {
-                if (row >= rows) break;
-                const line_bytes = remainder[0..nl];
-                const codepoints = decodeUtf8Line(self.alloc, line_bytes) catch return;
-                new_cells.append(self.alloc, codepoints) catch return;
-                row += 1;
-            }
-            remainder = remainder[nl + 1 ..];
-            line += 1;
-        } else if (!in_second) {
-            in_second = true;
-            if (second.len == 0) {
-                if (line >= self.scroll_row and row < rows) {
-                    const codepoints = decodeUtf8Line(self.alloc, remainder) catch return;
-                    new_cells.append(self.alloc, codepoints) catch return;
-                }
-                break;
-            }
-            if (std.mem.indexOfScalar(u8, second, '\n')) |nl| {
-                if (line >= self.scroll_row) {
-                    if (row >= rows) break;
-                    const joined = std.mem.concat(self.alloc, u8, &.{ remainder, second[0..nl] }) catch return;
-                    defer self.alloc.free(joined);
-                    const codepoints = decodeUtf8Line(self.alloc, joined) catch return;
-                    new_cells.append(self.alloc, codepoints) catch return;
-                    row += 1;
-                }
-                remainder = second[nl + 1 ..];
-                line += 1;
-            } else {
-                if (line >= self.scroll_row and row < rows) {
-                    const joined = std.mem.concat(self.alloc, u8, &.{ remainder, second }) catch return;
-                    defer self.alloc.free(joined);
-                    const codepoints = decodeUtf8Line(self.alloc, joined) catch return;
-                    new_cells.append(self.alloc, codepoints) catch return;
-                }
-                break;
-            }
-        } else {
-            if (line >= self.scroll_row and row < rows) {
-                const codepoints = decodeUtf8Line(self.alloc, remainder) catch return;
-                new_cells.append(self.alloc, codepoints) catch return;
-            }
-            break;
-        }
-    }
-
-    renderer.rebuildCells(rows, cols, new_cells) catch {};
-}
-
-fn decodeUtf8Line(alloc: Allocator, bytes: []const u8) ![]u32 {
-    var codepoints = try std.ArrayList(u32).initCapacity(alloc, 0);
-    errdefer codepoints.deinit(alloc);
-
-    const view = std.unicode.Utf8View.initUnchecked(bytes);
-    var it = view.iterator();
-    while (it.nextCodepoint()) |cp| {
-        try codepoints.append(alloc, cp);
-    }
-
-    return codepoints.toOwnedSlice(alloc);
+    self.last_rendered_entry_id = buffer.entry_id;
+    self.last_rendered_version = text.version;
+    self.last_rendered_scroll_row = self.scroll_row;
+    self.last_rendered_grid = grid;
 }
