@@ -172,7 +172,7 @@ function Sidebar({
                 data-slot="sidebar-gap"
                 className={cn(
                     "relative w-(--sidebar-width) bg-transparent",
-                    !isResizing && "transition-[width] duration-150 ease-out-quad",
+                    !isResizing && "transition-[width] duration-200 ease-out-quad",
                     "group-data-[collapsible=offcanvas]:w-0",
                     "group-data-[side=right]:rotate-180",
                     variant === "floating" || variant === "inset"
@@ -186,7 +186,7 @@ function Sidebar({
                 className={cn(
                     "absolute inset-y-0 z-10 h-full w-(--sidebar-width) flex data-[side=left]:left-0 data-[side=right]:right-0",
                     "group-data-[collapsible=offcanvas]:w-0",
-                    !isResizing && "transition-[width] duration-150 ease-out-quad",
+                    !isResizing && "transition-[width] duration-200 ease-out-quad",
                     // Adjust the padding for floating and inset variants.
                     variant === "floating" || variant === "inset"
                         ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
@@ -206,7 +206,7 @@ function Sidebar({
                         data-slot="sidebar-content-frame"
                         className={cn(
                             "flex size-full flex-col will-change-transform opacity-100",
-                            !isResizing && "transition-all duration-100 ease-out-cubic",
+                            !isResizing && "transition-all duration-200 ease-out",
                             "group-data-[collapsible=offcanvas]:opacity-10"
                         )}
                     >
