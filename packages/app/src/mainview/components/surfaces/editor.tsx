@@ -42,30 +42,18 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
             <div className="w-full h-8 flex items-center justify-start px-2">
                 {surface.entry && (() => {
                     const parts = surface.entry.path.split("/").slice(1);
-                    const collapsed = parts.length > 4;
-                    const visible = collapsed
-                        ? [parts[0], ...parts.slice(-3)]
-                        : parts;
                     return (
                         <Breadcrumb>
                             <BreadcrumbList>
-                                {visible.map((part, i) => (
-                                    <React.Fragment key={collapsed && i > 0 ? parts.length - 4 + i : i}>
+                                {parts.map((part, i) => (
+                                    <React.Fragment key={i}>
                                         {i > 0 && <BreadcrumbSeparator />}
-                                        {collapsed && i === 1 && (
-                                            <>
-                                                <BreadcrumbItem>
-                                                    <BreadcrumbEllipsis />
-                                                </BreadcrumbItem>
-                                                <BreadcrumbSeparator />
-                                            </>
-                                        )}
                                         <BreadcrumbItem>
-                                            <BreadcrumbPage>
-                                                {i === parts.length - 1 && surface.entry && (
+                                            {i === parts.length - 1 && surface.entry && (
+                                                <BreadcrumbPage>
                                                     <FileIcon entry={surface.entry} />
-                                                )}
-                                            </BreadcrumbPage>
+                                                </BreadcrumbPage>
+                                            )}
                                             <BreadcrumbPage>
                                                 {part}
                                             </BreadcrumbPage>
