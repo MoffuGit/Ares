@@ -42,6 +42,8 @@ export const EditorState = defineStruct([
     ["surface_id", "u64"],
     ["entry_id", "u64"],
     ["row_count", "u64"],
+    ["cursor_row", "u64"],
+    ["cursor_col", "u64"],
 ] as const);
 
 export const ModeUpdate = defineStruct([

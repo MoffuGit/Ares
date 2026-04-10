@@ -65,6 +65,10 @@ pub fn scroll(self: *Editio, row: u64) void {
     self.state.scroll(row);
 }
 
+pub fn setCursorPosition(self: *Editio, row: u64, col: u64) void {
+    self.state.setCursorPosition(row, col);
+}
+
 pub fn mouseButton(self: *Editio, event: inputpkg.MouseButtonEvent) void {
     self.state.mouseButton(event);
 }

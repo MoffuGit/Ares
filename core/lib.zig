@@ -317,6 +317,10 @@ export fn editorScrollTo(editor: *EditorSurface, row: u64) void {
     editor.sendIo(.{ .scroll = row });
 }
 
+export fn editorSetCursorPosition(editor: *EditorSurface, row: u64, col: u64) void {
+    editor.sendIo(.{ .set_cursor_position = .{ .row = row, .col = col } });
+}
+
 export fn surfaceMouseButton(surface: *anyopaque, is_editor: bool, button: u8, action: u8, x: f64, y: f64, mods: u8) void {
     if (button >= @typeInfo(inputpkg.MouseButton).@"enum".fields.len) return;
     if (action >= @typeInfo(inputpkg.MouseAction).@"enum".fields.len) return;

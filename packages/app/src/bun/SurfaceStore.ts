@@ -112,6 +112,12 @@ export class SurfaceStore {
         this.app.core.editorScrollTo(state.corePtr, row);
     }
 
+    setEditorCursorPosition(viewId: number, row: number, col: number) {
+        const state = this.states.get(viewId);
+        if (!state || state.surface.kind !== "editor") return;
+        this.app.core.editorSetCursorPosition(state.corePtr, row, col);
+    }
+
     surfaceMouseEvent(viewId: number, type: "mousedown" | "mousemove" | "mouseup", x: number, y: number, button: number, mods: number) {
         const state = this.states.get(viewId);
         if (!state) return;

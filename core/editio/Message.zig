@@ -6,6 +6,10 @@ pub const Message = union(enum) {
     select_entry: u64,
     resize: sizepkg.ScreenSize,
     scroll: u64,
+    set_cursor_position: struct {
+        row: u64,
+        col: u64,
+    },
     mouse_button: inputpkg.MouseButtonEvent,
     mouse_move: inputpkg.MouseMoveEvent,
 };

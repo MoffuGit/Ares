@@ -131,6 +131,13 @@ fn updateFontGridUniforms(self: *Renderer) void {
     };
 }
 
+pub fn setScreenSize(self: *Renderer, _: sizepkg.ScreenSize) void {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    self.updateScreenSizeUniforms();
+}
+
 fn updateScreenSizeUniforms(self: *Renderer) void {
     self.uniforms.projection_matrix = math.ortho2d(
         0,

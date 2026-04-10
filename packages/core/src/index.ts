@@ -45,10 +45,14 @@ function mapEditorState(raw: {
     surface_id?: number | bigint;
     entry_id: number | bigint;
     row_count: number | bigint;
+    cursor_row: number | bigint;
+    cursor_col: number | bigint;
 }): EditorState {
     return {
         entryId: toNumber(raw.entry_id),
         rowCount: toNumber(raw.row_count),
+        cursorRow: toNumber(raw.cursor_row),
+        cursorCol: toNumber(raw.cursor_col),
     };
 }
 
@@ -68,6 +72,8 @@ function mapEditorUpdate(raw: {
     surface_id: number | bigint;
     entry_id: number | bigint;
     row_count: number | bigint;
+    cursor_row: number | bigint;
+    cursor_col: number | bigint;
 }): { surfaceId: number; state: EditorState } {
     return {
         surfaceId: toNumber(raw.surface_id),
@@ -208,6 +214,10 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void
             },
+            editorSetCursorPosition: {
+                args: [FFIType.pointer, FFIType.u64, FFIType.u64],
+                returns: FFIType.void,
+            },
             surfaceMouseButton: {
                 args: [FFIType.pointer, FFIType.bool, FFIType.u8, FFIType.u8, FFIType.f64, FFIType.f64, FFIType.u8],
                 returns: FFIType.void,
@@ -284,14 +294,13 @@ export class CoreLib extends EventEmitter {
                         ? mapSurfaceUpdate(rawData)
                         : _type === EventType.EditorUpdate
                             ? mapEditorUpdate(rawData)
-                        : _type === EventType.ModeUpdate
-                            ? { mode: mapMode(rawData.mode) }
-                            : _type === EventType.KeymapMatch
-                                ? mapKeymapMatch(rawData)
-                                : rawData;
+                            : _type === EventType.ModeUpdate
+                                ? { mode: mapMode(rawData.mode) }
+                                : _type === EventType.KeymapMatch
+                                    ? mapKeymapMatch(rawData)
+                                    : rawData;
                     const event = EventsName[_type];
                     queueMicrotask(() => {
-                        console.log("event with data received", event, data);
                         this.emit(event, data);
                     })
 
@@ -444,6 +453,10 @@ export class CoreLib extends EventEmitter {
 
     editorScrollTo(editor: Pointer, row: number) {
         this.lib.symbols.editorScrollTo(editor, row);
+    }
+
+    editorSetCursorPosition(editor: Pointer, row: number, col: number) {
+        this.lib.symbols.editorSetCursorPosition(editor, row, col);
     }
 
     surfaceMouseButton(surface: Pointer, isEditor: boolean, button: number, action: number, x: number, y: number, mods: number) {

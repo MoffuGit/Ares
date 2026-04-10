@@ -84,6 +84,9 @@ const rpc = BrowserView.defineRPC<AppRPC>({
             surfaceScrollTo: ({ surfaceId, row }) => {
                 surfaceStore.surfaceScrollTo(surfaceId, row);
             },
+            setEditorCursorPosition: ({ surfaceId, row, col }) => {
+                surfaceStore.setEditorCursorPosition(surfaceId, row, col);
+            },
             surfaceMouseEvent: (event) => {
                 surfaceStore.surfaceMouseEvent(event.surfaceId, event.type, event.x, event.y, event.button, event.mods);
             },

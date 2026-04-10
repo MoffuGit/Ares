@@ -115,9 +115,14 @@ fn drainMailbox(self: *Thread) !void {
             },
             .resize => |size| {
                 self.io.resize(size);
+
+                self.io.renderer_thread.wakeup.notify() catch {};
             },
             .scroll => |row| {
                 self.io.scroll(row);
+            },
+            .set_cursor_position => |pos| {
+                self.io.setCursorPosition(pos.row, pos.col);
             },
             .mouse_button => |ev| {
                 self.io.mouseButton(ev);

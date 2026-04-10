@@ -297,7 +297,9 @@ fn drainMailbox(self: *Thread) !void {
                 const color = self.renderer.settings.readThemeTextColor();
                 self.renderer.setTextColor(color);
             },
-            .resize => {},
+            .resize => |size| {
+                self.renderer.setScreenSize(size);
+            },
         }
     }
 }

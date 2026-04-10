@@ -12,6 +12,8 @@ export type SurfaceState = {
 export type EditorState = {
     entryId: number;
     rowCount: number;
+    cursorRow: number;
+    cursorCol: number;
 };
 
 export type Project = {

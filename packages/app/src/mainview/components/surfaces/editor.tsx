@@ -2,7 +2,7 @@ import React, { useRef, useCallback } from "react";
 import { rpc } from "@/lib/app";
 import type { EditorSurface as EditorSurfaceData } from "@ares/shared";
 import { GpuTag } from "../gpu-tag";
-import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbSeparator, BreadcrumbEllipsis } from "../ui/breadcrumb";
+import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbSeparator } from "../ui/breadcrumb";
 import { FileIcon } from "../file-icons";
 import { useGpuSurface } from "./use-gpu-surface";
 

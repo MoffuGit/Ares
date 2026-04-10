@@ -12,6 +12,11 @@ const sizepkg = @import("size.zig");
 
 const log = std.log.scoped(.editor);
 
+pub const CursorPosition = struct {
+    row: u64 = 0,
+    col: u64 = 0,
+};
+
 mutex: std.Thread.Mutex = .{},
 project: *Project,
 alloc: Allocator,
@@ -20,6 +25,7 @@ surface_id: u64,
 buffer: ?*Buffer = null,
 selected_entry: ?u64 = null,
 scroll_row: u64 = 0,
+cursor: CursorPosition = .{},
 last_rendered_entry_id: u64 = std.math.maxInt(u64),
 last_rendered_version: u64 = 0,
 last_rendered_scroll_row: u64 = 0,
@@ -56,6 +62,7 @@ pub fn selectEntry(self: *Editor, id: u64) void {
     if (self.project.openBuffer(id)) |buffer| {
         self.buffer = buffer;
         self.selected_entry = id;
+        self.cursor = .{};
 
         self.emitEditorUpdate(id, buffer);
     }
@@ -66,6 +73,17 @@ pub fn scroll(self: *Editor, row: u64) void {
     defer self.mutex.unlock();
 
     self.scroll_row = row;
+}
+
+pub fn setCursorPosition(self: *Editor, row: u64, col: u64) void {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    self.cursor = .{ .row = row, .col = col };
+
+    const buffer = self.buffer orelse return;
+    self.clampCursorToBuffer(buffer);
+    self.emitEditorUpdate(buffer.entry_id, buffer);
 }
 
 pub fn resize(self: *Editor, size: sizepkg.ScreenSize) void {
@@ -85,6 +103,7 @@ pub fn onBufferUpdate(self: *Editor, entry_id: u64) void {
 
     const buffer = self.buffer orelse return;
     if (buffer.entry_id != entry_id) return;
+    self.clampCursorToBuffer(buffer);
     self.emitEditorUpdate(entry_id, buffer);
 }
 
@@ -103,6 +122,8 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
         .surface_id = self.surface_id,
         .entry_id = buffer.entry_id,
         .row_count = text.rowCount,
+        .cursor_row = self.cursor.row,
+        .cursor_col = self.cursor.col,
     };
     return true;
 }
@@ -115,7 +136,32 @@ fn emitEditorUpdate(self: *Editor, entry_id: u64, buffer: *Buffer) void {
         .surface_id = self.surface_id,
         .entry_id = entry_id,
         .row_count = buffer.text.rowCount,
+        .cursor_row = self.cursor.row,
+        .cursor_col = self.cursor.col,
     } }, .instant);
+}
+
+fn clampCursorToBuffer(self: *Editor, buffer: *Buffer) void {
+    if (buffer.getState() != .ready) return;
+
+    buffer.mutex.lock();
+    defer buffer.mutex.unlock();
+
+    const text = &buffer.text;
+    if (text.rowCount == 0) {
+        self.cursor = .{};
+        return;
+    }
+
+    const max_row = text.rowCount - 1;
+    const cursor_row = @min(std.math.cast(usize, self.cursor.row) orelse max_row, max_row);
+    const rows = text.visibleRows(cursor_row, 1);
+    const max_col = if (rows.len == 0) 0 else rows[0].codepoints.len;
+
+    self.cursor = .{
+        .row = cursor_row,
+        .col = @min(std.math.cast(usize, self.cursor.col) orelse max_col, max_col),
+    };
 }
 
 pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
@@ -144,4 +190,27 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
     self.last_rendered_version = text.version;
     self.last_rendered_scroll_row = self.scroll_row;
     self.last_rendered_grid = grid;
+}
+
+test "setCursorPosition clamps to the selected buffer layout" {
+    try global.init(null);
+    defer global.deinit();
+
+    var buffer = Buffer.init(std.testing.allocator, 42);
+    defer buffer.deinit();
+
+    buffer.text.deinit();
+    buffer.text = try Buffer.TextBuffer.initFromBytes(std.testing.allocator, "abc\nxy");
+    buffer.state.store(.ready, .release);
+
+    var editor = Editor.init(std.testing.allocator, 7, undefined, .{ .width = 80, .height = 40 });
+    editor.buffer = &buffer;
+    editor.selected_entry = buffer.entry_id;
+
+    editor.setCursorPosition(99, 99);
+
+    var out: globalpkg.ExternEditorState = undefined;
+    try std.testing.expect(editor.readEditorState(&out));
+    try std.testing.expectEqual(@as(u64, 1), out.cursor_row);
+    try std.testing.expectEqual(@as(u64, 2), out.cursor_col);
 }

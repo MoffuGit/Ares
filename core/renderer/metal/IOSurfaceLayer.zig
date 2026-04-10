@@ -95,6 +95,7 @@ fn setSurfaceCallback(
     // See explanation of why we retain and release in `setSurface`.
     defer surface.release();
 
+    //BUG:
     // We check to see if the surface is the appropriate size for
     // the layer, if it's not then we discard it. This is because
     // asynchronously drawn frames can sometimes finish just after
