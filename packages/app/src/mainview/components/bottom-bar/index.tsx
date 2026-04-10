@@ -13,7 +13,7 @@ export function BottomBar() {
     const tabsInSidebar = settings?.tabs_position === "vertical";
 
     return (
-        <div className="h-6 w-full flex flex-wrap items-center gap-1.5 text-xs wrap-break-word text-muted-foreground pl-0.5 pr-1.5">
+        <div className="h-6 w-full flex flex-wrap items-center gap-1.5 text-xs wrap-break-word text-muted-foreground">
             <Button
                 size="icon-xs"
                 variant={sidebarOpen && sidebarView === "filetree" ? "secondary" : "ghost"}

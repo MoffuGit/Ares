@@ -80,7 +80,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background p-1.5 pt-0  w-full h-screen content-stretch text-foreground font-geist flex flex-col gap-1.5;
+    @apply bg-background p-2 pt-0  w-full h-screen content-stretch text-foreground font-geist flex flex-col gap-1.5;
   }
 
   [data-slot="sidebar-content"]::-webkit-scrollbar {

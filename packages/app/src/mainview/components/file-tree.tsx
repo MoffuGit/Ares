@@ -18,7 +18,7 @@ export function FileTree() {
 
     return (
         <SidebarContent>
-            <SidebarGroup className="p-1">
+            <SidebarGroup className="pr-1">
                 <SidebarGroupContent>
                     <SidebarMenu>
                         {
