@@ -49,9 +49,6 @@ pub inline fn setSurface(self: *IOSurfaceLayer, surface: *IOSurface) !void {
     //
     // We release in the callback after setting the contents.
     surface.retain();
-    // NOTE: Since `self.layer` is passed as an `objc.c.id`, it's
-    //       automatically retained when the block is copied, so we
-    //       don't need to retain it ourselves like with the surface.
 
     var block = SetSurfaceBlock.init(.{
         .layer = self.layer.value,
@@ -63,10 +60,6 @@ pub inline fn setSurface(self: *IOSurfaceLayer, surface: *IOSurface) !void {
     if (NSThread.msgSend(bool, "isMainThread", .{})) {
         setSurfaceCallback(&block);
     } else {
-        // NOTE: The block will be copied when we pass it to dispatch_async,
-        //       and then automatically be deallocated by the objc runtime
-        //       once it's executed.
-
         macos.dispatch.dispatch_async(
             @ptrCast(macos.dispatch.queue.getMain()),
             @ptrCast(&block),

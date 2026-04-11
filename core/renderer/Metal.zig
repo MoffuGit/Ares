@@ -173,7 +173,13 @@ fn chooseDevice() error{NoMetalDevice}!objc.Object {
 }
 
 pub fn initTarget(self: *Metal, width: usize, height: usize) !Target {
-    return Target.init(.{ .device = self.device, .pixel_format = .bgra8unorm, .storage_mode = self.default_storage_mode, .width = width, .height = height });
+    return Target.init(.{
+        .device = self.device,
+        .pixel_format = .bgra8unorm,
+        .storage_mode = self.default_storage_mode,
+        .width = width,
+        .height = height,
+    });
 }
 
 pub inline fn present(self: *Metal, target: Target, sync: bool) !void {
