@@ -13,7 +13,7 @@ const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 
 const libPath = resolve(import.meta.dir, "../lib/libcore.dylib");
-const settingsPath = resolve(import.meta.dir, "../../../../../../../../../settings/");
+const settingsPath = resolve(import.meta.dir, "../settings/");
 
 const app = new App(settingsPath, libPath);
 const surfaceStore = new SurfaceStore(app);
