@@ -130,6 +130,8 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
                 self.io_thr.join();
             }
 
+            self.renderer.api.layer.setResizeCallback(resizeCallback, self);
+
             self.emitStateUpdate();
 
             return self;
@@ -165,6 +167,8 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
         }
 
         pub fn destroy(self: *Self) void {
+            self.renderer.api.layer.setResizeCallback(null, null);
+
             {
                 self.io_thread.stop.notify() catch |err|
                     log.err("error notifying io thread to stop, may stall err={}", .{err});
@@ -186,6 +190,21 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
             self.state.deinit();
 
             self.alloc.destroy(self);
+        }
+
+        fn resizeCallback(ctx: ?*anyopaque) callconv(.c) void {
+            const self: *Self = @ptrCast(@alignCast(ctx orelse return));
+            const size = self.renderer.api.surfaceSize() catch |err| {
+                log.err("failed to read surface size in resize callback err={}", .{err});
+                return;
+            };
+
+            if (size.width == 0 or size.height == 0) return;
+
+            self.sendIo(.{ .resize = .{
+                .width = size.width,
+                .height = size.height,
+            } });
         }
     };
 }

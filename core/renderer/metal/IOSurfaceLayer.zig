@@ -6,33 +6,15 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const objc = @import("objc");
 const macos = @import("macos");
-const c = @cImport({
-    @cInclude("objc/runtime.h");
-});
 
 const IOSurface = macos.iosurface.IOSurface;
 
 const log = std.log.scoped(.IOSurfaceLayer);
 
-// Unique keys for associated objects (addresses used as keys).
-var display_cb_key: u8 = 0;
-var display_ctx_key: u8 = 0;
-
-/// We subclass CALayer with a custom display handler, we only need
-/// to make the subclass once, and then we can use it as a singleton.
-var Subclass: ?objc.Class = null;
-
 /// The underlying CALayer
 layer: objc.Object,
 
-pub fn init(layer: objc.Object) !IOSurfaceLayer {
-    const sub_class = try getSubclass();
-
-    _ = c.object_setClass(@ptrCast(layer.value), @ptrCast(sub_class.value));
-    // // The layer gravity is set to top-left so that the contents aren't
-    // // stretched during resize operations before a new frame has been drawn.
-    layer.setProperty("contentsGravity", macos.animation.kCAGravityTopLeft);
-
+pub fn init(layer: objc.Object) IOSurfaceLayer {
     return .{ .layer = layer };
 }
 
@@ -109,66 +91,28 @@ fn setSurfaceCallback(
     layer.setProperty("contents", surface);
 }
 
-pub const DisplayCallback = ?*align(8) const fn (?*anyopaque) void;
+pub const LayerCallback = ?*const fn (?*anyopaque) callconv(.c) void;
+pub const DisplayCallback = LayerCallback;
+pub const ResizeCallback = LayerCallback;
 
 pub fn setDisplayCallback(
     self: *IOSurfaceLayer,
     display_cb: DisplayCallback,
     display_ctx: ?*anyopaque,
 ) void {
-    c.objc_setAssociatedObject(
-        @ptrCast(self.layer.value),
-        &display_cb_key,
-        @ptrCast(@constCast(display_cb)),
-        c.OBJC_ASSOCIATION_ASSIGN,
-    );
-    c.objc_setAssociatedObject(
-        @ptrCast(self.layer.value),
-        &display_ctx_key,
-        @ptrCast(@alignCast(display_ctx)),
-        c.OBJC_ASSOCIATION_ASSIGN,
-    );
+    self.layer.msgSend(void, objc.sel("setDisplayCallback:context:"), .{
+        display_cb,
+        display_ctx,
+    });
 }
 
-fn getSubclass() error{ObjCFailed}!objc.Class {
-    if (Subclass) |class| return class;
-
-    const CALayer =
-        objc.getClass("CALayer") orelse return error.ObjCFailed;
-
-    var subclass =
-        objc.allocateClassPair(CALayer, "IOSurfaceLayer") orelse return error.ObjCFailed;
-    errdefer objc.disposeClassPair(subclass);
-
-    subclass.replaceMethod("display", struct {
-        fn display(target: objc.c.id, sel: objc.c.SEL) callconv(.c) void {
-            _ = sel;
-            const display_cb: DisplayCallback = @ptrCast(
-                c.objc_getAssociatedObject(@ptrCast(target), &display_cb_key),
-            );
-            if (display_cb) |cb| cb(
-                @ptrCast(c.objc_getAssociatedObject(@ptrCast(target), &display_ctx_key)),
-            );
-        }
-    }.display);
-
-    // Disable all animations for this layer by returning null for all actions.
-    subclass.replaceMethod("actionForKey:", struct {
-        fn actionForKey(
-            target: objc.c.id,
-            sel: objc.c.SEL,
-            key: objc.c.id,
-        ) callconv(.c) objc.c.id {
-            _ = target;
-            _ = sel;
-            _ = key;
-            return objc.getClass("NSNull").?.msgSend(objc.c.id, "null", .{});
-        }
-    }.actionForKey);
-
-    objc.registerClassPair(subclass);
-
-    Subclass = subclass;
-
-    return subclass;
+pub fn setResizeCallback(
+    self: *IOSurfaceLayer,
+    resize_cb: ResizeCallback,
+    resize_ctx: ?*anyopaque,
+) void {
+    self.layer.msgSend(void, objc.sel("setResizeCallback:context:"), .{
+        resize_cb,
+        resize_ctx,
+    });
 }

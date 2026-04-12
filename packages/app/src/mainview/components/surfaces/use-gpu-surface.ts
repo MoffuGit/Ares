@@ -1,6 +1,5 @@
 import { rpc, useAppStore } from "@/lib/app";
 import type { Surface } from "@ares/shared";
-import useResizeObserver from "@react-hook/resize-observer";
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import type { GpuTagHandle } from "../gpu-tag";
 
@@ -95,15 +94,6 @@ export function useGpuSurface<TSurface extends Surface>({
             target.removeEventListener("mouseup", sendMouseEvent);
         };
     }, [eventRef, containerRef, surface.gpuSurfaceId]);
-
-    useResizeObserver(containerRef, (entry) => {
-        if (!surface.gpuSurfaceId) return;
-
-        rpc.send("gpuTagRect", {
-            id: surface.gpuSurfaceId,
-            rect: toGpuRect(entry.contentRect),
-        });
-    });
 
     return { gpuRef, handleReady };
 }

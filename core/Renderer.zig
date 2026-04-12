@@ -253,12 +253,6 @@ pub fn drawFrame(
                 .clear_color = .{ 0.0, 0.0, 0.0, 0.0 },
             },
         });
-        // render_pass.step(.{
-        //     .pipeline = self.shaders.pipelines.grid, // Assuming 'grid' pipeline is created
-        //     .uniforms = frame.uniforms.buffer,
-        //     .buffers = &.{frame.vertex.buffer}, // Use the same full-screen quad for the grid
-        //     .draw = .{ .vertex_count = 4, .type = .triangle_strip },
-        // });
         render_pass.step(.{
             .pipeline = self.shaders.pipelines.cell,
             .uniforms = frame.uniforms.buffer,

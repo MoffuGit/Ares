@@ -62,31 +62,8 @@ pub fn init(metal_layer: objc.Object) !Metal {
     // Create an IOSurfaceLayer which we can assign to the view to make
     // it in to a "layer-hosting view", so that we can manually control
     // the layer contents.
-    var layer = try IOSurfaceLayer.init(metal_layer);
+    var layer = IOSurfaceLayer.init(metal_layer);
     errdefer layer.release();
-
-    // Add our layer to the view.
-    //
-    // On macOS we do this by making the view "layer-hosting"
-    // by assigning it to the view's `layer` property BEFORE
-    // setting `wantsLayer` to `true`.
-    //
-    // On iOS, views are always layer-backed, and `layer`
-    // is readonly, so instead we add it as a sublayer.
-    // info.view.setProperty("layer", layer.layer.value);
-    // info.view.setProperty("wantsLayer", true);
-
-    // Ensure that if our layer is oversized it
-    // does not overflow the bounds of the view.
-    // info.view.setProperty("clipsToBounds", true);
-
-    // Ensure that our layer has a content scale set to
-    // match the scale factor of the window. This avoids
-    // magnification issues leading to blurry rendering.
-    // layer.layer.setProperty("contentsScale", info.scaleFactor);
-
-    // This makes it so that our display callback will actually be called.
-    layer.layer.setProperty("needsDisplayOnBoundsChange", true);
 
     return .{ .layer = layer, .device = device, .queue = queue, .default_storage_mode = default_storage_mode };
 }
@@ -139,13 +116,14 @@ pub fn surfaceSize(self: *const Metal) !struct { width: u32, height: u32 } {
 pub fn loopEnter(self: *Metal) void {
     const renderer: *align(1) Renderer = @fieldParentPtr("api", self);
     self.layer.setDisplayCallback(
-        @ptrCast(&displayCallback),
+        displayCallback,
         @ptrCast(renderer),
     );
 }
 
-fn displayCallback(renderer: *Renderer) align(8) void {
-    renderer.drawFrame(true) catch |err| {
+fn displayCallback(ctx: ?*anyopaque) callconv(.c) void {
+    const renderer: *Renderer = @ptrCast(@alignCast(ctx orelse return));
+    _ = renderer.drawFrame(true) catch |err| {
         log.warn("Error drawing frame in display callback, err={}", .{err});
     };
 }

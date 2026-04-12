@@ -53,8 +53,6 @@ pub fn threadExit(_: *Editio, thread: *Thread) void {
 
 pub fn resize(self: *Editio, size: sizepkg.ScreenSize) void {
     self.state.resize(size);
-
-    _ = self.renderer_thread.mailbox.push(.{ .resize = size }, .instant);
 }
 
 pub fn selectEntry(self: *Editio, id: u64) void {
