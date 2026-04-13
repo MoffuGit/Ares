@@ -26,10 +26,7 @@ buffer: ?*Buffer = null,
 selected_entry: ?u64 = null,
 scroll_row: u64 = 0,
 cursor: CursorPosition = .{},
-last_rendered_entry_id: u64 = std.math.maxInt(u64),
-last_rendered_version: u64 = 0,
-last_rendered_scroll_row: u64 = 0,
-last_rendered_grid: sizepkg.GridSize = .{},
+rebuild_cells: bool = false,
 
 size: sizepkg.ScreenSize,
 
@@ -63,6 +60,7 @@ pub fn selectEntry(self: *Editor, id: u64) void {
         self.buffer = buffer;
         self.selected_entry = id;
         self.cursor = .{};
+        self.rebuild_cells = true;
 
         self.emitEditorUpdate(id, buffer);
     }
@@ -73,6 +71,7 @@ pub fn scroll(self: *Editor, row: u64) void {
     defer self.mutex.unlock();
 
     self.scroll_row = row;
+    self.rebuild_cells = true;
 }
 
 pub fn setCursorPosition(self: *Editor, row: u64, col: u64) void {
@@ -84,6 +83,7 @@ pub fn setCursorPosition(self: *Editor, row: u64, col: u64) void {
     const buffer = self.buffer orelse return;
     self.clampCursorToBuffer(buffer);
     self.emitEditorUpdate(buffer.entry_id, buffer);
+    self.rebuild_cells = true;
 }
 
 pub fn resize(self: *Editor, size: sizepkg.ScreenSize) void {
@@ -91,6 +91,7 @@ pub fn resize(self: *Editor, size: sizepkg.ScreenSize) void {
     defer self.mutex.unlock();
 
     self.size = size;
+    self.rebuild_cells = true;
 }
 
 pub fn mouseButton(_: *Editor, _: inputpkg.MouseButtonEvent) void {}
@@ -105,6 +106,7 @@ pub fn onBufferUpdate(self: *Editor, entry_id: u64) void {
     if (buffer.entry_id != entry_id) return;
     self.clampCursorToBuffer(buffer);
     self.emitEditorUpdate(entry_id, buffer);
+    self.rebuild_cells = true;
 }
 
 pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
@@ -177,19 +179,13 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
     const grid = renderer.size.grid();
     const text = &buffer.text;
     const should_rebuild =
-        self.last_rendered_entry_id != buffer.entry_id or
-        self.last_rendered_version != text.version or
-        self.last_rendered_scroll_row != self.scroll_row or
-        !self.last_rendered_grid.equals(grid);
+        self.rebuild_cells or renderer.rebuild_cells;
 
     if (!should_rebuild) return;
 
     renderer.rebuildCells(grid.rows, grid.columns, text.visibleRows(self.scroll_row, grid.rows)) catch return;
 
-    self.last_rendered_entry_id = buffer.entry_id;
-    self.last_rendered_version = text.version;
-    self.last_rendered_scroll_row = self.scroll_row;
-    self.last_rendered_grid = grid;
+    self.rebuild_cells = false;
 }
 
 test "setCursorPosition clamps to the selected buffer layout" {
