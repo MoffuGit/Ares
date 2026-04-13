@@ -1,6 +1,7 @@
 pub const BlockingQueue = @import("blocking_queue.zig").BlockingQueue;
 pub const BPlusTree = @import("b_plus_tree.zig").BPlusTree;
 pub const GapBuffer = @import("gap_buffer.zig").GapBuffer;
+pub const ArrayListCollection = @import("array_list_collection.zig").ArrayListCollection;
 const trie = @import("trie.zig");
 pub const Trie = trie.Trie;
 pub const NodeType = trie.NodeType;

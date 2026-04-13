@@ -9,6 +9,7 @@ const Project = @import("Project.zig");
 const Buffer = @import("buffer/Buffer.zig");
 const Renderer = @import("Renderer.zig");
 const sizepkg = @import("size.zig");
+const shaderpkg = Renderer.GraphicsAPI.shaders;
 
 const log = std.log.scoped(.editor);
 
@@ -178,14 +179,45 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
 
     const grid = renderer.size.grid();
     const text = &buffer.text;
-    const should_rebuild =
-        self.rebuild_cells or renderer.rebuild_cells;
 
-    if (!should_rebuild) return;
+    if (!self.rebuild_cells) return;
 
-    renderer.rebuildCells(grid.rows, grid.columns, text.visibleRows(self.scroll_row, grid.rows)) catch return;
+    try rebuildCells(renderer, text.visibleRows(self.scroll_row, grid.rows));
 
     self.rebuild_cells = false;
+}
+
+fn rebuildCells(renderer: *Renderer, rows: []const Buffer.TextBuffer.Row) !void {
+    renderer.mutex.lock();
+    defer renderer.mutex.unlock();
+
+    const grid_size = renderer.size.grid();
+    try renderer.ensureCellStoreSize(grid_size);
+
+    renderer.cells.reset();
+
+    for (rows, 0..) |row_data, row_idx| {
+        if (row_idx >= grid_size.rows) break;
+
+        for (row_data.codepoints, 0..) |cell_codepoint, col_idx| {
+            if (col_idx >= grid_size.columns) break;
+
+            const glyph = try renderer.grid.renderCodepoint(renderer.alloc, cell_codepoint) orelse continue;
+
+            try renderer.cells.add(renderer.alloc, .text, shaderpkg.CellText{
+                .grid_pos = .{ @intCast(col_idx), @intCast(row_idx) },
+                .color = renderer.text_color,
+                .glyph_pos = .{ glyph.atlas_x, glyph.atlas_y },
+                .glyph_size = .{ glyph.width, glyph.height },
+                .bearings = .{
+                    @intCast(glyph.offset_x),
+                    @intCast(glyph.offset_y),
+                },
+            });
+        }
+    }
+
+    renderer.cells_rebuilt = true;
 }
 
 test "setCursorPosition clamps to the selected buffer layout" {

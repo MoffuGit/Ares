@@ -16,19 +16,21 @@ const log = std.log.scoped(.termio);
 
 alloc: Allocator,
 grid: *Grid,
+renderer_thread: *RendererThread,
 state: *Terminal,
 
 pub fn init(
     alloc: Allocator,
     grid: *Grid,
     _: *Renderer,
-    _: *RendererThread,
+    renderer_thread: *RendererThread,
     _: sizepkg.ScreenSize,
     state: *Terminal,
 ) !Termio {
     return .{
         .alloc = alloc,
         .grid = grid,
+        .renderer_thread = renderer_thread,
         .state = state,
     };
 }
@@ -46,6 +48,7 @@ pub fn resize(self: *Termio, size: sizepkg.ScreenSize) void {
     self.state.term.resize(self.alloc, grid_size.columns, grid_size.rows) catch |err| {
         log.err("failed to resize terminal err={}", .{err});
     };
+    self.state.rebuild_cells = true;
 }
 
 pub fn mouseButton(_: *Termio, event: inputpkg.MouseButtonEvent) void {

@@ -294,10 +294,6 @@ fn drainMailbox(self: *Thread) !void {
 
                 self.renderer.setVisible(v);
             },
-            .themeUpdate => {
-                const color = self.renderer.settings.readThemeTextColor();
-                self.renderer.setTextColor(color);
-            },
             .resize => |size| {
                 self.renderer.setScreenSize(size);
             },

@@ -39,9 +39,9 @@ const xev = globalpkg.xev;
 const sizepkg = @import("size.zig");
 const fontpkg = @import("font/mod.zig");
 const math = @import("math.zig");
-const ArrayList = std.ArrayList;
 const Settings = @import("settings/mod.zig");
-const TextBuffer = @import("buffer/Buffer.zig").TextBuffer;
+pub const GridSize = sizepkg.GridSize;
+const Contents = @import("renderer/Content.zig").Contents;
 
 const log = std.log.scoped(.renderer);
 
@@ -77,13 +77,13 @@ first: bool = true,
 size: sizepkg.Size,
 surface_id: u64,
 
-grid_size: sizepkg.GridSize = .{},
-cells: []shaderpkg.CellText,
-text_color: [4]u8,
+grid_size: GridSize = .{},
+cells: Contents = .{},
+text_color: [4]u8 = .{ 0, 0, 0, 255 },
 
 grid: *fontpkg.Grid,
 
-rebuild_cells: bool = false,
+cells_rebuilt: bool = false,
 
 settings: *Settings,
 
@@ -113,8 +113,7 @@ pub fn init(alloc: Allocator, settings: *Settings, opts: Options) !Renderer {
         .grid = opts.grid,
         .settings = settings,
         .text_color = settings.readThemeTextColor(),
-        .uniforms = .{ .grid_size = undefined, .cell_size = undefined, .screen_size = undefined, .projection_matrix = undefined },
-        .cells = &.{},
+        .uniforms = .{ .grid_size = .{ 0, 0 }, .cell_size = undefined, .screen_size = undefined, .projection_matrix = undefined },
     };
 
     try renderer.initShaders();
@@ -159,7 +158,7 @@ pub fn deinit(self: *Renderer) void {
         link.release();
     }
     self.deinitShaders();
-    self.alloc.free(self.cells);
+    self.cells.deinit(self.alloc);
     self.* = undefined;
 }
 
@@ -172,17 +171,6 @@ fn initShaders(self: *Renderer) !void {
     errdefer shaders.deinit(self.alloc);
 
     self.shaders = shaders;
-}
-
-pub fn setTextColor(self: *Renderer, color: [4]u8) void {
-    self.mutex.lock();
-    defer self.mutex.unlock();
-
-    self.text_color = color;
-    for (self.cells) |*cell| {
-        cell.color = color;
-    }
-    self.rebuild_cells = true;
 }
 
 pub fn drawFrame(
@@ -204,7 +192,7 @@ pub fn drawFrame(
         self.size.screen.height != surface_size.height;
 
     const needs_redraw =
-        size_changed or sync or self.rebuild_cells;
+        size_changed or sync or self.cells_rebuilt;
 
     if (!needs_redraw) return;
 
@@ -231,9 +219,9 @@ pub fn drawFrame(
 
     try frame.uniforms.sync(&.{self.uniforms});
 
-    try frame.cells.sync(self.cells);
+    const fg_count = try frame.cells.syncFromArrayLists(self.cells.fg_rows.lists);
 
-    self.rebuild_cells = false;
+    self.cells_rebuilt = false;
 
     {
         self.grid.lock.lockShared();
@@ -265,7 +253,7 @@ pub fn drawFrame(
             .draw = .{
                 .type = .triangle_strip,
                 .vertex_count = 4,
-                .instance_count = self.cells.len,
+                .instance_count = fg_count,
             },
         });
         //
@@ -315,27 +303,15 @@ pub fn loopEnter(self: *Renderer, thr: *Thread) !void {
         &thr.draw_now,
     );
 
-    try global.events.on(.themeUpdate, .{ .ctx = thr, .handle = onThemeUpdate });
-    errdefer global.events.off(.themeUpdate, .{ .ctx = thr, .handle = onThemeUpdate });
-
     display_link.start() catch {};
 }
 
-pub fn loopExit(self: *Renderer, thr: *Thread) void {
+pub fn loopExit(self: *Renderer, _: *Thread) void {
     // Stop our display link. If this fails its okay it just means
     // that we either never started it or the view its attached to
     // is gone which is fine.
     const display_link = self.display_link orelse return;
     display_link.stop() catch {};
-
-    global.events.off(.themeUpdate, .{ .ctx = thr, .handle = onThemeUpdate });
-}
-
-pub fn onThemeUpdate(ctx: *anyopaque, _: globalpkg.GlobalEvents) void {
-    const self: *Thread = @ptrCast(@alignCast(ctx));
-
-    _ = self.mailbox.push(.themeUpdate, .instant);
-    self.wakeup.notify() catch {};
 }
 
 fn displayLinkCallback(
@@ -352,57 +328,12 @@ pub fn updateFrame(self: *Renderer) !void {
     self.update_frame(self.state, self);
 }
 
-pub fn rebuildCells(self: *Renderer, row: u16, col: u16, new_rows: []const TextBuffer.Row) !void {
-    self.mutex.lock();
-    defer self.mutex.unlock();
+pub fn ensureCellStoreSize(self: *Renderer, size: GridSize) !void {
+    if (self.grid_size.equals(size)) return;
 
-    const grid_size_diff =
-        self.grid_size.rows != row or
-        self.grid_size.columns != col;
-
-    if (grid_size_diff) {
-        var new_size = self.grid_size;
-        new_size.rows = row;
-        new_size.columns = col;
-        self.grid_size = new_size;
-        self.uniforms.grid_size = .{ new_size.columns, new_size.rows };
-    }
-
-    self.rebuild_cells = true;
-
-    var total_cells: usize = 0;
-    for (new_rows) |row_data| {
-        total_cells += row_data.codepoints.len;
-    }
-
-    var glyphs = try ArrayList(shaderpkg.CellText).initCapacity(self.alloc, total_cells);
-    defer glyphs.deinit(self.alloc);
-
-    for (new_rows, 0..) |row_data, row_idx| {
-        if (row_idx >= self.grid_size.rows) break;
-
-        for (row_data.codepoints, 0..) |cell_codepoint, col_idx| {
-            if (col_idx >= self.grid_size.columns) break;
-
-            const glyph = try self.grid.renderCodepoint(self.alloc, cell_codepoint) orelse {
-                continue;
-            };
-
-            try glyphs.append(self.alloc, shaderpkg.CellText{
-                .grid_pos = .{ @intCast(col_idx), @intCast(row_idx) },
-                .color = self.text_color,
-                .glyph_pos = .{ glyph.atlas_x, glyph.atlas_y },
-                .glyph_size = .{ glyph.width, glyph.height },
-                .bearings = .{
-                    @intCast(glyph.offset_x),
-                    @intCast(glyph.offset_y),
-                },
-            });
-        }
-    }
-
-    self.alloc.free(self.cells);
-    self.cells = try glyphs.toOwnedSlice(self.alloc);
+    self.grid_size = size;
+    self.uniforms.grid_size = .{ size.columns, size.rows };
+    try self.cells.resize(self.alloc, size);
 }
 
 fn syncAtlasTexture(

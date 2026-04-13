@@ -8,6 +8,7 @@ const Terminal = @This();
 
 alloc: Allocator,
 term: ghostty_vt.Terminal,
+rebuild_cells: bool = true,
 
 pub fn init(alloc: Allocator, opts: ghostty_vt.Terminal.Options) !Terminal {
     return .{ .alloc = alloc, .term = try ghostty_vt.Terminal.init(alloc, opts) };
@@ -20,4 +21,5 @@ pub fn deinit(self: *Terminal) void {
 pub fn frameCallback(self: *Terminal, renderer: *Renderer) !void {
     _ = self;
     _ = renderer;
+    return;
 }
