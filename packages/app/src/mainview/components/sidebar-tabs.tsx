@@ -4,7 +4,7 @@ import {
     SidebarContent,
     SidebarGroup,
     SidebarGroupContent,
-    SidebarHeader,
+    SidebarGroupLabel,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
@@ -19,15 +19,11 @@ export function SidebarTabs() {
 
     return (
         <>
-            <SidebarHeader>
-                <SidebarMenu className="pl-1">
-                    <SidebarMenuItem className="p-2 h-7 text-xs">
-                        <span className="truncate font-medium">{project?.name}</span>
-                    </SidebarMenuItem>
-                </SidebarMenu>
-            </SidebarHeader>
             <SidebarContent>
-                <SidebarGroup className="p-1">
+                <SidebarGroup>
+                    <SidebarGroupLabel>
+                        {project?.name}
+                    </SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {tabs.map((tab) => (
@@ -50,7 +46,7 @@ function SidebarTabsItem({ tab }: { tab: Tab }) {
         <SidebarMenuItem>
             <SidebarMenuButton
                 isActive={tab.id === activeTabId}
-                className="pr-7 dark:text-sidebar-accent-foreground/50"
+                className="dark:text-sidebar-accent-foreground/50"
                 size="xs"
                 onClick={() => setActiveTab(tab.id)}
             >

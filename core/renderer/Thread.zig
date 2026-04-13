@@ -142,6 +142,7 @@ fn drawCallback(
 }
 
 fn drawFrame(self: *Thread, now: bool) void {
+    if (!self.flags.visible) return;
     if (!now and self.renderer.hasVsync()) return;
 
     self.renderer.drawFrame(false) catch |err|
@@ -289,7 +290,7 @@ fn drainMailbox(self: *Thread) !void {
 
                 self.setQosClass();
 
-                self.drawFrame(false);
+                if (v) self.drawFrame(false);
 
                 self.renderer.setVisible(v);
             },
