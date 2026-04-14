@@ -65,19 +65,19 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
                     data-active-tab={active}
                     ref={scrollRef}
                 >
-                    <div 
-                        className="inset-0 w-full h-full px-4"
+                    <div
+                        className="sticky top-0 w-full h-full px-4"
                     >
-                        <div 
+                        <div
                             className="w-full h-full"
                             ref={mouseRef}
                         />
                     </div>
-                        <div style={{
-                            height: surface.editorState && surface.surfaceState
-                                ? surface.editorState.rowCount * surface.surfaceState.cellHeight
-                                : 0,
-                        }} />
+                    <div style={{
+                        height: surface.editorState && surface.surfaceState
+                            ? surface.editorState.rowCount * surface.surfaceState.cellHeight
+                            : 0,
+                    }} />
                 </div>
                 <div className="w-full h-full grow" ref={containerRef}>
                     <GpuTag
