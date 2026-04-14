@@ -127,8 +127,8 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor, appe: ?*Appear
 fn appearanceChanged(ctx: *anyopaque, _: @import("../appearance/mac.zig").ObserverEvents) void {
     const self: *Settings = @ptrCast(@alignCast(ctx));
     {
-        self.rwlock.lockShared();
-        defer self.rwlock.unlockShared();
+        self.rwlock.lock();
+        defer self.rwlock.unlock();
 
         const a = self.appearance orelse return;
         self.system_scheme = if (a.isDark()) .dark else .light;
@@ -283,8 +283,8 @@ pub fn getThemeTextColor(self: *const Settings) ThemeColor {
 }
 
 pub fn readThemeTextColor(self: *Settings) ThemeColor {
-    self.rwlock.lock();
-    defer self.rwlock.unlock();
+    self.rwlock.lockShared();
+    defer self.rwlock.unlockShared();
 
     return self.getThemeTextColor();
 }
