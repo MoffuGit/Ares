@@ -102,13 +102,13 @@ pub const ExternSettings = extern struct {
 export fn lockSettings(app: *App) void {
     const settings = app.settings;
 
-    settings.mutex.lock();
+    settings.rwlock.lockShared();
 }
 
 export fn unlockSettings(app: *App) void {
     const settings = app.settings;
 
-    settings.mutex.unlock();
+    settings.rwlock.unlockShared();
 }
 
 export fn readSettings(app: *App, @"extern": *ExternSettings) void {

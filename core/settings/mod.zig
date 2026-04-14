@@ -41,7 +41,7 @@ const JsonSettings = struct {
 };
 
 alloc: Allocator,
-mutex: std.Thread.Mutex = .{},
+rwlock: std.Thread.RwLock = .{},
 
 scheme: Scheme = .system,
 system_scheme: ColorScheme = .dark,
@@ -127,8 +127,8 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor, appe: ?*Appear
 fn appearanceChanged(ctx: *anyopaque, _: @import("../appearance/mac.zig").ObserverEvents) void {
     const self: *Settings = @ptrCast(@alignCast(ctx));
     {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.rwlock.lockShared();
+        defer self.rwlock.unlockShared();
 
         const a = self.appearance orelse return;
         self.system_scheme = if (a.isDark()) .dark else .light;
@@ -145,8 +145,8 @@ fn settingsCallback(self: ?*Settings, _: u64, _: u32) void {
     const s = self orelse return;
 
     {
-        s.mutex.lock();
-        defer s.mutex.unlock();
+        s.rwlock.lock();
+        defer s.rwlock.unlock();
 
         var dir = std.fs.openDirAbsolute(s.settings_path, .{}) catch return;
         defer dir.close();
@@ -162,8 +162,8 @@ fn themeCallback(self: ?*Settings, _: u64, _: u32) void {
     const s = self orelse return;
 
     {
-        s.mutex.lock();
-        defer s.mutex.unlock();
+        s.rwlock.lock();
+        defer s.rwlock.unlock();
 
         var dir = std.fs.openDirAbsolute(s.settings_path, .{}) catch return;
         defer dir.close();
@@ -258,8 +258,8 @@ fn loadSettings(self: *Settings, dir: std.fs.Dir) !void {
 }
 
 pub fn applyTheme(self: *Settings) void {
-    self.mutex.lock();
-    defer self.mutex.unlock();
+    self.rwlock.lock();
+    defer self.rwlock.unlock();
     self.applyThemeLocked();
 }
 
@@ -283,8 +283,8 @@ pub fn getThemeTextColor(self: *const Settings) ThemeColor {
 }
 
 pub fn readThemeTextColor(self: *Settings) ThemeColor {
-    self.mutex.lock();
-    defer self.mutex.unlock();
+    self.rwlock.lock();
+    defer self.rwlock.unlock();
 
     return self.getThemeTextColor();
 }
@@ -300,8 +300,8 @@ fn deinitThemeColors(self: *Settings) void {
 
 pub fn setSystemScheme(self: *Settings, scheme: ColorScheme) void {
     {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.rwlock.lock();
+        defer self.rwlock.unlock();
         self.system_scheme = scheme;
         self.applyThemeLocked();
     }

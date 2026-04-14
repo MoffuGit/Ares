@@ -53,8 +53,8 @@ pub fn loadSettings(self: *App, path: []const u8) !void {
 }
 
 pub fn onKeyDown(self: *App, key_code: u32, modifiers: u32, is_repeat: bool) bool {
-    self.settings.mutex.lock();
-    defer self.settings.mutex.unlock();
+    self.settings.rwlock.lockShared();
+    defer self.settings.rwlock.unlockShared();
 
     return self.keymaps.handleKeyDown(self.settings, key_code, modifiers, is_repeat);
 }
