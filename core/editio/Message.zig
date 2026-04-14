@@ -12,4 +12,5 @@ pub const Message = union(enum) {
     },
     mouse_button: inputpkg.MouseButtonEvent,
     mouse_move: inputpkg.MouseMoveEvent,
+    themeUpdate: void,
 };

@@ -79,7 +79,6 @@ surface_id: u64,
 
 grid_size: GridSize = .{},
 cells: Contents = .{},
-text_color: [4]u8 = .{ 0, 0, 0, 255 },
 
 grid: *fontpkg.Grid,
 
@@ -112,7 +111,6 @@ pub fn init(alloc: Allocator, settings: *Settings, opts: Options) !Renderer {
         .display_link = display_link,
         .grid = opts.grid,
         .settings = settings,
-        .text_color = settings.readThemeTextColor(),
         .uniforms = .{
             .grid_size = .{ 0, 0 },
             .cell_size = undefined,

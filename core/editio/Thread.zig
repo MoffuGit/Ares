@@ -105,30 +105,35 @@ fn wakeupCallback(
 }
 
 fn drainMailbox(self: *Thread) !void {
+    var state = self.io.state;
+
     while (self.mailbox.pop()) |message| {
         switch (message) {
             .buffer_update => |entry_id| {
-                self.io.onBufferUpdate(entry_id);
+                state.onBufferUpdate(entry_id);
             },
             .select_entry => |id| {
-                self.io.selectEntry(id);
+                state.selectEntry(id);
             },
             .resize => |size| {
-                self.io.resize(size);
+                state.resize(size);
 
                 self.io.renderer_thread.wakeup.notify() catch {};
             },
             .scroll => |row| {
-                self.io.scroll(row);
+                state.scroll(row);
             },
             .set_cursor_position => |pos| {
-                self.io.setCursorPosition(pos.row, pos.col);
+                state.setCursorPosition(pos.row, pos.col);
             },
             .mouse_button => |ev| {
-                self.io.mouseButton(ev);
+                state.mouseButton(ev);
             },
             .mouse_move => |ev| {
-                self.io.mouseMove(ev);
+                state.mouseMove(ev);
+            },
+            .themeUpdate => {
+                state.themeUpdate();
             },
         }
     }

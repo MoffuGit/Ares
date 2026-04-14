@@ -45,38 +45,12 @@ pub fn deinit(self: *Editio) void {
 
 pub fn threadEnter(_: *Editio, thread: *Thread) !void {
     try global.events.on(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdate });
+    try global.events.on(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdate });
 }
 
 pub fn threadExit(_: *Editio, thread: *Thread) void {
     global.events.off(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdate });
-}
-
-pub fn resize(self: *Editio, size: sizepkg.Size) void {
-    self.state.resize(size);
-}
-
-pub fn selectEntry(self: *Editio, id: u64) void {
-    self.state.selectEntry(id);
-}
-
-pub fn scroll(self: *Editio, row: u64) void {
-    self.state.scroll(row);
-}
-
-pub fn setCursorPosition(self: *Editio, row: u64, col: u64) void {
-    self.state.setCursorPosition(row, col);
-}
-
-pub fn mouseButton(self: *Editio, event: inputpkg.MouseButtonEvent) void {
-    self.state.mouseButton(event);
-}
-
-pub fn mouseMove(self: *Editio, event: inputpkg.MouseMoveEvent) void {
-    self.state.mouseMove(event);
-}
-
-pub fn onBufferUpdate(self: *Editio, entry_id: u64) void {
-    self.state.onBufferUpdate(entry_id);
+    global.events.off(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdate });
 }
 
 pub fn readEditorState(self: *Editio, out: *globalpkg.ExternEditorState) bool {
@@ -92,4 +66,11 @@ fn handleBufferUpdate(ctx: *anyopaque, event: globalpkg.GlobalEvents) void {
         _ = self.mailbox.push(.{ .buffer_update = event.bufferUpdate }, .instant);
         self.wakeup.notify() catch {};
     }
+}
+
+fn handleThemeUpdate(ctx: *anyopaque, _: globalpkg.GlobalEvents) void {
+    const self: *Thread = @ptrCast(@alignCast(ctx));
+
+    _ = self.mailbox.push(.{ .themeUpdate = {} }, .instant);
+    self.wakeup.notify() catch {};
 }

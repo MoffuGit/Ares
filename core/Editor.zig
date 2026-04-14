@@ -11,6 +11,7 @@ const Renderer = @import("Renderer.zig");
 const fontpkg = @import("font/mod.zig");
 const sizepkg = @import("size.zig");
 const shaderpkg = Renderer.GraphicsAPI.shaders;
+const Settings = @import("settings/mod.zig");
 
 const log = std.log.scoped(.editor);
 
@@ -22,27 +23,32 @@ pub const CursorPosition = struct {
 mutex: std.Thread.Mutex = .{},
 project: *Project,
 alloc: Allocator,
-surface_id: u64,
+settings: *Settings,
+id: u64,
 
 buffer: ?*Buffer = null,
 selected_entry: ?u64 = null,
 scroll_row: u64 = 0,
 cursor: CursorPosition = .{},
 rebuild_cells: bool = false,
+color: [4]u8,
 
 size: sizepkg.Size,
 
 pub fn init(
     alloc: Allocator,
-    surface_id: u64,
+    id: u64,
     project: *Project,
+    settings: *Settings,
     size: sizepkg.Size,
 ) Editor {
     return .{
         .alloc = alloc,
-        .surface_id = surface_id,
+        .id = id,
         .project = project,
         .size = size,
+        .settings = settings,
+        .color = settings.readThemeTextColor(),
     };
 }
 
@@ -141,7 +147,7 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
 
     const text = buffer.text;
     out.* = .{
-        .surface_id = self.surface_id,
+        .surface_id = self.id,
         .entry_id = buffer.entry_id,
         .row_count = text.rowCount,
         .cursor_row = self.cursor.row,
@@ -155,7 +161,7 @@ fn emitEditorUpdate(self: *Editor, entry_id: u64, buffer: *Buffer) void {
     defer buffer.mutex.unlock();
 
     _ = global.emit(.{ .editorUpdate = .{
-        .surface_id = self.surface_id,
+        .surface_id = self.id,
         .entry_id = entry_id,
         .row_count = buffer.text.rowCount,
         .cursor_row = self.cursor.row,
@@ -201,7 +207,7 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
 
     if (!self.rebuild_cells) return;
 
-    try rebuildCells(renderer, text.visibleRows(self.scroll_row, grid.rows), self.scroll_row, self.cursor);
+    try rebuildCells(renderer, text.visibleRows(self.scroll_row, grid.rows), self.scroll_row, self.cursor, self.color);
 
     self.rebuild_cells = false;
 }
@@ -211,6 +217,7 @@ fn rebuildCells(
     rows: []const Buffer.TextBuffer.Row,
     scroll_row: u64,
     cursor: CursorPosition,
+    color: [4]u8,
 ) !void {
     renderer.mutex.lock();
     defer renderer.mutex.unlock();
@@ -239,7 +246,7 @@ fn rebuildCells(
 
         renderer.uniforms.cursor_pos = .{ @intCast(col_idx), @intCast(row_idx) };
 
-        break :blk try renderCellText(renderer, row_idx, col_idx, 0x2588);
+        break :blk try renderCellText(renderer, row_idx, col_idx, 0x2588, color);
     } else null;
     if (cursor_cell != null) {
         cursor_cell.?.bools.is_cursor_glyph = true;
@@ -253,7 +260,7 @@ fn rebuildCells(
         for (shaped) |placement| {
             if (placement.column >= grid_size.columns) continue;
 
-            const cell = try renderShapedGlyph(renderer, row_idx, placement) orelse continue;
+            const cell = try renderShapedGlyph(renderer, row_idx, placement, color) orelse continue;
             try renderer.cells.add(renderer.alloc, .text, cell);
         }
     }
@@ -261,36 +268,37 @@ fn rebuildCells(
     renderer.cells_rebuilt = true;
 }
 
-fn renderCellText(renderer: *Renderer, row_idx: usize, col_idx: usize, codepoint: u32) !?shaderpkg.CellText {
+fn renderCellText(renderer: *Renderer, row_idx: usize, col_idx: usize, codepoint: u32, color: [4]u8) !?shaderpkg.CellText {
     const glyph = try renderer.grid.renderCodepoint(renderer.alloc, codepoint) orelse return null;
 
-    return glyphToCellText(renderer, row_idx, col_idx, glyph, 0, 0);
+    return glyphToCellText(row_idx, col_idx, glyph, 0, 0, color);
 }
 
 fn renderShapedGlyph(
     renderer: *Renderer,
     row_idx: usize,
     placement: fontpkg.Shaper.ShapedGlyph,
+    color: [4]u8,
 ) !?shaderpkg.CellText {
     const glyph = try renderer.grid.renderGlyph(renderer.alloc, placement.glyph_index);
 
     return glyphToCellText(
-        renderer,
         row_idx,
         placement.column,
         glyph,
         placement.x_offset,
         placement.y_offset,
+        color,
     );
 }
 
 fn glyphToCellText(
-    renderer: *Renderer,
     row_idx: usize,
     col_idx: usize,
     glyph: fontpkg.Glyph,
     x_offset: i16,
     y_offset: i16,
+    color: [4]u8,
 ) !?shaderpkg.CellText {
     if (glyph.width == 0 or glyph.height == 0) return null;
 
@@ -299,7 +307,7 @@ fn glyphToCellText(
 
     return shaderpkg.CellText{
         .grid_pos = .{ @intCast(col_idx), @intCast(row_idx) },
-        .color = renderer.text_color,
+        .color = color,
         .glyph_pos = .{ glyph.atlas_x, glyph.atlas_y },
         .glyph_size = .{ glyph.width, glyph.height },
         .bearings = .{
@@ -307,6 +315,15 @@ fn glyphToCellText(
             bearing_y,
         },
     };
+}
+
+pub fn themeUpdate(self: *Editor) void {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    self.color = self.settings.readThemeTextColor();
+
+    self.rebuild_cells = true;
 }
 
 fn clampI16(v: i32) i16 {
