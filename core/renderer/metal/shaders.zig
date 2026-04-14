@@ -164,8 +164,8 @@ pub const Uniforms = extern struct {
     // min_contrast: f32 align(4),
 
     //   /// The cursor position and color.
-    // cursor_pos: [2]u16 align(4),
-    // cursor_color: [4]u8 align(4),
+    cursor_pos: [2]u16 align(4),
+    cursor_color: [4]u8 align(4),
 
     //  /// The background color for the whole surface.
     // bg_color: [4]u8 align(4),

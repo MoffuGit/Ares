@@ -4,6 +4,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Atlas = @import("Atlas.zig");
 const CodePointResolver = @import("CodePointResolver.zig");
+const Shaper = @import("Shaper.zig");
 const fontpkg = @import("../font/mod.zig");
 const facepkg = @import("face/mod.zig");
 const Face = facepkg.Face;
@@ -13,6 +14,7 @@ const sizepkg = @import("../size.zig");
 
 atlas_grayscale: Atlas,
 resolver: CodePointResolver,
+shaper: Shaper,
 lock: std.Thread.RwLock = .{},
 metrics: Metrics,
 glyphs: std.AutoHashMap(u32, fontpkg.Glyph),
@@ -25,10 +27,12 @@ pub fn init(alloc: Allocator, opts: facepkg.Options) !Grid {
     var grid = Grid{
         .atlas_grayscale = atlas_grayscale,
         .resolver = .{ .face = try Face.init(embedpkg.JetBrainsMono, opts) },
+        .shaper = try Shaper.init(),
         .metrics = undefined,
         .glyphs = std.AutoHashMap(u32, fontpkg.Glyph).init(alloc),
         .codepoints = std.AutoHashMap(u32, u32).init(alloc),
     };
+    errdefer grid.shaper.deinit();
     errdefer grid.glyphs.deinit();
     errdefer grid.codepoints.deinit();
 
@@ -50,8 +54,13 @@ pub fn cellSize(self: *Grid) sizepkg.CellSize {
 pub fn deinit(self: *Grid, alloc: Allocator) void {
     self.atlas_grayscale.deinit(alloc);
     self.resolver.deinit();
+    self.shaper.deinit();
     self.glyphs.deinit();
     self.codepoints.deinit();
+}
+
+pub fn shapeRow(self: *Grid, alloc: Allocator, codepoints: []const u32) ![]const Shaper.ShapedGlyph {
+    return self.shaper.shapeRow(alloc, &self.resolver.face, self.metrics, codepoints);
 }
 
 pub fn renderCodepoint(self: *Grid, alloc: Allocator, cp: u32) !?fontpkg.Glyph {

@@ -8,6 +8,7 @@ const inputpkg = @import("input.zig");
 const Project = @import("Project.zig");
 const Buffer = @import("buffer/Buffer.zig");
 const Renderer = @import("Renderer.zig");
+const fontpkg = @import("font/mod.zig");
 const sizepkg = @import("size.zig");
 const shaderpkg = Renderer.GraphicsAPI.shaders;
 
@@ -182,42 +183,106 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
 
     if (!self.rebuild_cells) return;
 
-    try rebuildCells(renderer, text.visibleRows(self.scroll_row, grid.rows));
+    try rebuildCells(renderer, text.visibleRows(self.scroll_row, grid.rows), self.scroll_row, self.cursor);
 
     self.rebuild_cells = false;
 }
 
-fn rebuildCells(renderer: *Renderer, rows: []const Buffer.TextBuffer.Row) !void {
+fn rebuildCells(
+    renderer: *Renderer,
+    rows: []const Buffer.TextBuffer.Row,
+    scroll_row: u64,
+    cursor: CursorPosition,
+) !void {
     renderer.mutex.lock();
     defer renderer.mutex.unlock();
+
+    var arena = std.heap.ArenaAllocator.init(renderer.alloc);
+    defer arena.deinit();
+    const arena_alloc = arena.allocator();
 
     const grid_size = renderer.size.grid();
     try renderer.ensureCellStoreSize(grid_size);
 
     renderer.cells.reset();
 
+    const cursor_cell = if (cursor.row >= scroll_row) blk: {
+        const row_idx = std.math.cast(usize, cursor.row - scroll_row) orelse break :blk null;
+        const col_idx = std.math.cast(usize, cursor.col) orelse break :blk null;
+
+        if (row_idx >= rows.len or row_idx >= grid_size.rows or col_idx >= grid_size.columns) {
+            break :blk null;
+        }
+
+        break :blk try renderCellText(renderer, row_idx, col_idx, 0x2588);
+    } else null;
+    renderer.cells.setCursor(cursor_cell);
+
     for (rows, 0..) |row_data, row_idx| {
         if (row_idx >= grid_size.rows) break;
 
-        for (row_data.codepoints, 0..) |cell_codepoint, col_idx| {
-            if (col_idx >= grid_size.columns) break;
+        const shaped = try renderer.grid.shapeRow(arena_alloc, row_data.codepoints);
+        for (shaped) |placement| {
+            if (placement.column >= grid_size.columns) continue;
 
-            const glyph = try renderer.grid.renderCodepoint(renderer.alloc, cell_codepoint) orelse continue;
-
-            try renderer.cells.add(renderer.alloc, .text, shaderpkg.CellText{
-                .grid_pos = .{ @intCast(col_idx), @intCast(row_idx) },
-                .color = renderer.text_color,
-                .glyph_pos = .{ glyph.atlas_x, glyph.atlas_y },
-                .glyph_size = .{ glyph.width, glyph.height },
-                .bearings = .{
-                    @intCast(glyph.offset_x),
-                    @intCast(glyph.offset_y),
-                },
-            });
+            const cell = try renderShapedGlyph(renderer, row_idx, placement) orelse continue;
+            try renderer.cells.add(renderer.alloc, .text, cell);
         }
     }
 
     renderer.cells_rebuilt = true;
+}
+
+fn renderCellText(renderer: *Renderer, row_idx: usize, col_idx: usize, codepoint: u32) !?shaderpkg.CellText {
+    const glyph = try renderer.grid.renderCodepoint(renderer.alloc, codepoint) orelse return null;
+
+    return glyphToCellText(renderer, row_idx, col_idx, glyph, 0, 0);
+}
+
+fn renderShapedGlyph(
+    renderer: *Renderer,
+    row_idx: usize,
+    placement: fontpkg.Shaper.ShapedGlyph,
+) !?shaderpkg.CellText {
+    const glyph = try renderer.grid.renderGlyph(renderer.alloc, placement.glyph_index);
+
+    return glyphToCellText(
+        renderer,
+        row_idx,
+        placement.column,
+        glyph,
+        placement.x_offset,
+        placement.y_offset,
+    );
+}
+
+fn glyphToCellText(
+    renderer: *Renderer,
+    row_idx: usize,
+    col_idx: usize,
+    glyph: fontpkg.Glyph,
+    x_offset: i16,
+    y_offset: i16,
+) !?shaderpkg.CellText {
+    if (glyph.width == 0 or glyph.height == 0) return null;
+
+    const bearing_x = clampI16(glyph.offset_x + x_offset);
+    const bearing_y = clampI16(glyph.offset_y + y_offset);
+
+    return shaderpkg.CellText{
+        .grid_pos = .{ @intCast(col_idx), @intCast(row_idx) },
+        .color = renderer.text_color,
+        .glyph_pos = .{ glyph.atlas_x, glyph.atlas_y },
+        .glyph_size = .{ glyph.width, glyph.height },
+        .bearings = .{
+            bearing_x,
+            bearing_y,
+        },
+    };
+}
+
+fn clampI16(v: i32) i16 {
+    return std.math.cast(i16, std.math.clamp(v, std.math.minInt(i16), std.math.maxInt(i16))) orelse unreachable;
 }
 
 test "setCursorPosition clamps to the selected buffer layout" {

@@ -7,6 +7,8 @@ struct Uniforms {
   float2 screen_size;
   float2 cell_size;
   ushort2 grid_size;
+  ushort2 cursor_pos;
+  uchar4 cursor_color;
 };
 
 struct VertexInput {

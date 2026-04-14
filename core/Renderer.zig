@@ -113,7 +113,14 @@ pub fn init(alloc: Allocator, settings: *Settings, opts: Options) !Renderer {
         .grid = opts.grid,
         .settings = settings,
         .text_color = settings.readThemeTextColor(),
-        .uniforms = .{ .grid_size = .{ 0, 0 }, .cell_size = undefined, .screen_size = undefined, .projection_matrix = undefined },
+        .uniforms = .{
+            .grid_size = .{ 0, 0 },
+            .cell_size = undefined,
+            .screen_size = undefined,
+            .projection_matrix = undefined,
+            .cursor_pos = .{ 0, 0 },
+            .cursor_color = .{ 0, 0, 0, 0 },
+        },
     };
 
     try renderer.initShaders();
