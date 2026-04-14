@@ -13,7 +13,7 @@ export function BottomBar() {
     const tabsInSidebar = settings?.tabs_position === "vertical";
 
     return (
-        <div className="h-6 w-full flex flex-wrap items-center gap-1.5 text-xs wrap-break-word text-muted-foreground">
+        <div className="h-auto w-full flex flex-wrap items-center gap-1.5 text-xs wrap-break-word text-muted-foreground">
             <Button
                 size="icon-xs"
                 variant={sidebarOpen && sidebarView === "filetree" ? "secondary" : "ghost"}
@@ -34,7 +34,7 @@ export function BottomBar() {
             ) : null}
             <Separator orientation="vertical" className="my-1" />
             <span
-                className="h-3.5 outline-2 outline-background w-1 rounded-full opacity-60 ml-auto mr-0"
+                className="size-5 outline-2 outline-background rounded-full ml-auto mr-0"
                 style={{
                     backgroundColor:
                         mode === "normal"

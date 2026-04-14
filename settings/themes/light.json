@@ -23,9 +23,9 @@
     "chart5": "#f4845f",
     "sidebar": "#E6E3E1",
     "sidebarFg": "#3F3F3F",
-    "modeNormal": "#FFFFFF",
-    "modeVisual": "#E8DEF8",
-    "modeInsert": "#D6E4F0"
+    "modeNormal": "#3e90dd",
+    "modeVisual": "#d27236",
+    "modeInsert": "#9e7ad9"
   },
   "theme": {
     "bg": "background",
