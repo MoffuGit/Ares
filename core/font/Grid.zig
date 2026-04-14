@@ -17,6 +17,8 @@ resolver: CodePointResolver,
 shaper: Shaper,
 lock: std.Thread.RwLock = .{},
 metrics: Metrics,
+metric_modifiers: Metrics.ModifierSet = .{},
+
 glyphs: std.AutoHashMap(u32, fontpkg.Glyph),
 codepoints: std.AutoHashMap(u32, u32),
 
@@ -36,6 +38,8 @@ pub fn init(alloc: Allocator, opts: facepkg.Options) !Grid {
     errdefer grid.glyphs.deinit();
     errdefer grid.codepoints.deinit();
 
+    try grid.metric_modifiers.put(alloc, .cell_width, .{ .absolute = -1 });
+
     try grid.reloadMetrics();
 
     return grid;
@@ -44,7 +48,11 @@ pub fn init(alloc: Allocator, opts: facepkg.Options) !Grid {
 fn reloadMetrics(self: *Grid) !void {
     const face = &self.resolver.face;
 
-    self.metrics = Metrics.calc(face.getMetrics());
+    var metrics = Metrics.calc(face.getMetrics());
+
+    metrics.apply(self.metric_modifiers);
+
+    self.metrics = metrics;
 }
 
 pub fn cellSize(self: *Grid) sizepkg.CellSize {
