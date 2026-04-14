@@ -27,7 +27,7 @@ pub fn init(alloc: Allocator, opts: facepkg.Options) !Grid {
     var grid = Grid{
         .atlas_grayscale = atlas_grayscale,
         .resolver = .{ .face = try Face.init(embedpkg.JetBrainsMono, opts) },
-        .shaper = try Shaper.init(),
+        .shaper = try Shaper.init(alloc),
         .metrics = undefined,
         .glyphs = std.AutoHashMap(u32, fontpkg.Glyph).init(alloc),
         .codepoints = std.AutoHashMap(u32, u32).init(alloc),
