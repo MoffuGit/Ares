@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from "react";
+import React, { useRef } from "react";
 import { rpc } from "@/lib/app";
 import type { EditorSurface as EditorSurfaceData } from "@ares/shared";
 import { GpuTag } from "../gpu-tag";
@@ -14,28 +14,21 @@ interface EditorSurfaceProps {
 
 export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
-    const overlayRef = useRef<HTMLDivElement | null>(null);
+    const scrollRef = useRef<HTMLDivElement | null>(null);
+    const mouseRef = useRef<HTMLDivElement | null>(null);
     const { gpuRef, handleReady } = useGpuSurface({
         id,
         surface,
         active,
         containerRef,
-        eventRef: overlayRef,
+        scrollRef,
+        mouseRef,
         onReadySuccess: (gpuSurfaceId) => {
             if (surface.entry != null) {
                 rpc.send("selectSurfaceEntry", { surfaceId: gpuSurfaceId, id: surface.entry.id });
             }
         },
     });
-
-    const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-        if (!surface.gpuSurfaceId || !surface.surfaceState) return;
-        const cellHeight = surface.surfaceState.cellHeight;
-        if (cellHeight <= 0) return;
-        const scrollTop = e.currentTarget.scrollTop;
-        const row = Math.floor(scrollTop / cellHeight);
-        rpc.send("surfaceScrollTo", { surfaceId: surface.gpuSurfaceId, row });
-    }, [surface.gpuSurfaceId, surface.surfaceState]);
 
     return (
         <div className="w-full flex flex-col grow data-[surface-active=true]:z-10 -z-10 data-[surface-active=true]:visible invisible" data-surface-active={active}>
@@ -67,17 +60,24 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
             </div>
             <div className="w-full grow relative flex px-4">
                 <div
-                    ref={overlayRef}
-                    className="absolute top-0 inset-0 w-full h-full overflow-auto data-[active-tab=true]:flex hidden"
-                    data-active-tab={active}
+                    className="absolute inset-0 overflow-auto data-[active-tab=true]:flex hidden"
                     data-slot="editor-content"
-                    onScroll={handleScroll}
+                    data-active-tab={active}
+                    ref={scrollRef}
                 >
-                    <div style={{
-                        height: surface.editorState && surface.surfaceState
-                            ? surface.editorState.rowCount * surface.surfaceState.cellHeight
-                            : 0,
-                    }} />
+                    <div 
+                        className="inset-0 w-full h-full px-4"
+                    >
+                        <div 
+                            className="w-full h-full"
+                            ref={mouseRef}
+                        />
+                    </div>
+                        <div style={{
+                            height: surface.editorState && surface.surfaceState
+                                ? surface.editorState.rowCount * surface.surfaceState.cellHeight
+                                : 0,
+                        }} />
                 </div>
                 <div className="w-full h-full grow" ref={containerRef}>
                     <GpuTag

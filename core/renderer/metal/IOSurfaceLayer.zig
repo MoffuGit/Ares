@@ -19,7 +19,7 @@ pub fn init(layer: objc.Object) IOSurfaceLayer {
 }
 
 pub fn release(self: *IOSurfaceLayer) void {
-    self.layer.release();
+    _ = self;
 }
 
 /// Sets the layer's `contents` to the provided IOSurface.

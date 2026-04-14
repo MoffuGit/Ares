@@ -10,7 +10,8 @@ type UseGpuSurfaceOptions<TSurface extends Surface> = {
     surface: TSurface;
     active: boolean;
     containerRef: RefObject<HTMLElement | null>;
-    eventRef?: RefObject<HTMLElement | null>;
+    scrollRef?: RefObject<HTMLElement | null>;
+    mouseRef?: RefObject<HTMLElement | null>;
     onReadySuccess?: (gpuSurfaceId: number) => void | Promise<void>;
 };
 
@@ -28,7 +29,8 @@ export function useGpuSurface<TSurface extends Surface>({
     surface,
     active,
     containerRef,
-    eventRef,
+    scrollRef,
+    mouseRef,
     onReadySuccess,
 }: UseGpuSurfaceOptions<TSurface>) {
     const gpuRef = useRef<GpuTagHandle>(null);
@@ -63,7 +65,23 @@ export function useGpuSurface<TSurface extends Surface>({
     }, [active, surface.gpuSurfaceId]);
 
     useEffect(() => {
-        const target = eventRef?.current ?? containerRef.current;
+        const target = scrollRef?.current;
+        if (!target) return;
+
+        const handleScroll = () => {
+            if (!surface.gpuSurfaceId || !surface.surfaceState) return;
+            const cellHeight = surface.surfaceState.cellHeight;
+            if (cellHeight <= 0) return;
+            const row = Math.floor(target.scrollTop / cellHeight);
+            rpc.send("surfaceScrollTo", { surfaceId: surface.gpuSurfaceId, row });
+        };
+
+        target.addEventListener("scroll", handleScroll, { passive: true });
+        return () => target.removeEventListener("scroll", handleScroll);
+    }, [scrollRef, surface.gpuSurfaceId, surface.surfaceState]);
+
+    useEffect(() => {
+        const target = mouseRef?.current ?? containerRef.current;
         if (!target) return;
 
         const sendMouseEvent = (e: MouseEvent) => {
@@ -93,7 +111,7 @@ export function useGpuSurface<TSurface extends Surface>({
             target.removeEventListener("mousemove", sendMouseEvent);
             target.removeEventListener("mouseup", sendMouseEvent);
         };
-    }, [eventRef, containerRef, surface.gpuSurfaceId]);
+    }, [mouseRef, containerRef, surface.gpuSurfaceId]);
 
     return { gpuRef, handleReady };
 }

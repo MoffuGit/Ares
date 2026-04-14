@@ -167,8 +167,6 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
         }
 
         pub fn destroy(self: *Self) void {
-            self.renderer.api.layer.setResizeCallback(null, null);
-
             {
                 self.io_thread.stop.notify() catch |err|
                     log.err("error notifying io thread to stop, may stall err={}", .{err});
