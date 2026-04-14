@@ -201,10 +201,7 @@ pub fn Surface(comptime Io: type, comptime State: type) type {
 
             if (size.width == 0 or size.height == 0) return;
 
-            self.sendIo(.{ .resize = .{
-                .width = size.width,
-                .height = size.height,
-            } });
+            self.sendIo(.{ .resize = .{ .screen = .{ .height = size.height, .width = size.width }, .cell = self.grid.cellSize() } });
         }
     };
 }

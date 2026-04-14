@@ -39,11 +39,8 @@ pub fn deinit(self: *Termio) void {
     _ = self;
 }
 
-pub fn resize(self: *Termio, size: sizepkg.ScreenSize) void {
-    const grid_size = (sizepkg.Size{
-        .screen = size,
-        .cell = self.grid.cellSize(),
-    }).grid();
+pub fn resize(self: *Termio, size: sizepkg.Size) void {
+    const grid_size = size.grid();
 
     self.state.term.resize(self.alloc, grid_size.columns, grid_size.rows) catch |err| {
         log.err("failed to resize terminal err={}", .{err});

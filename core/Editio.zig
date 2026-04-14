@@ -51,7 +51,7 @@ pub fn threadExit(_: *Editio, thread: *Thread) void {
     global.events.off(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdate });
 }
 
-pub fn resize(self: *Editio, size: sizepkg.ScreenSize) void {
+pub fn resize(self: *Editio, size: sizepkg.Size) void {
     self.state.resize(size);
 }
 

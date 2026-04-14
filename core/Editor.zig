@@ -30,13 +30,13 @@ scroll_row: u64 = 0,
 cursor: CursorPosition = .{},
 rebuild_cells: bool = false,
 
-size: sizepkg.ScreenSize,
+size: sizepkg.Size,
 
 pub fn init(
     alloc: Allocator,
     surface_id: u64,
     project: *Project,
-    size: sizepkg.ScreenSize,
+    size: sizepkg.Size,
 ) Editor {
     return .{
         .alloc = alloc,
@@ -88,7 +88,7 @@ pub fn setCursorPosition(self: *Editor, row: u64, col: u64) void {
     self.rebuild_cells = true;
 }
 
-pub fn resize(self: *Editor, size: sizepkg.ScreenSize) void {
+pub fn resize(self: *Editor, size: sizepkg.Size) void {
     self.mutex.lock();
     defer self.mutex.unlock();
 
@@ -96,7 +96,25 @@ pub fn resize(self: *Editor, size: sizepkg.ScreenSize) void {
     self.rebuild_cells = true;
 }
 
-pub fn mouseButton(_: *Editor, _: inputpkg.MouseButtonEvent) void {}
+pub fn mouseButton(self: *Editor, evt: inputpkg.MouseButtonEvent) void {
+    if (evt.button != .left or evt.action != .release) return;
+
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    const buffer = self.buffer orelse return;
+
+    const cell_width: f64 = @floatFromInt(self.size.cell.width);
+    const cell_height: f64 = @floatFromInt(self.size.cell.height);
+
+    const col: u64 = if (evt.x >= 0) @intFromFloat(evt.x / cell_width) else 0;
+    const row: u64 = if (evt.y >= 0) @intFromFloat(evt.y / cell_height) else 0;
+
+    self.cursor = .{ .row = self.scroll_row + row, .col = col };
+    // self.clampCursorToBuffer(buffer);
+    self.emitEditorUpdate(buffer.entry_id, buffer);
+    self.rebuild_cells = true;
+}
 
 pub fn mouseMove(_: *Editor, _: inputpkg.MouseMoveEvent) void {}
 
@@ -206,6 +224,11 @@ fn rebuildCells(
 
     renderer.cells.reset();
 
+    renderer.uniforms.cursor_pos = .{
+        std.math.maxInt(u16),
+        std.math.maxInt(u16),
+    };
+
     var cursor_cell = if (cursor.row >= scroll_row) blk: {
         const row_idx = std.math.cast(usize, cursor.row - scroll_row) orelse break :blk null;
         const col_idx = std.math.cast(usize, cursor.col) orelse break :blk null;
@@ -213,6 +236,8 @@ fn rebuildCells(
         if (row_idx >= rows.len or row_idx >= grid_size.rows or col_idx >= grid_size.columns) {
             break :blk null;
         }
+
+        renderer.uniforms.cursor_pos = .{ @intCast(col_idx), @intCast(row_idx) };
 
         break :blk try renderCellText(renderer, row_idx, col_idx, 0x2588);
     } else null;

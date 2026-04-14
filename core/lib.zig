@@ -258,7 +258,7 @@ export fn readKeymapEntries(app: *App, scope: u8, mode: u8, out: [*]ExternKeymap
 }
 
 export fn createEditor(app: *App, project: *Project, surface_id: u64, layer_ptr: *anyopaque, width: u32, height: u32) ?*EditorSurface {
-    const state = Editor.init(global.state.alloc, surface_id, project, .{ .height = height, .width = width });
+    const state = Editor.init(global.state.alloc, surface_id, project, .{ .cell = app.grid.cellSize(), .screen = .{ .height = height, .width = width } });
 
     return EditorSurface.create(
         global.state.alloc,
@@ -298,7 +298,7 @@ export fn destroyTerminal(terminal: *TerminalSurface) void {
 }
 
 export fn resizeEditor(editor: *EditorSurface, width: u32, height: u32) void {
-    editor.sendIo(.{ .resize = .{ .height = height, .width = width } });
+    editor.sendIo(.{ .resize = .{ .screen = .{ .height = height, .width = width }, .cell = editor.grid.cellSize() } });
 }
 
 export fn destroyEditor(editor: *EditorSurface) void {
