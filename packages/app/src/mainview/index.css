@@ -7,6 +7,9 @@
 
 @theme inline {
   --font-geist: "Geist", sans-serif;
+  --color-mode-normal: var(--mode-normal);
+  --color-mode-visual: var(--mode-visual);
+  --color-mode-insert: var(--mode-insert);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

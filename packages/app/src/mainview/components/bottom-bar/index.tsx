@@ -13,7 +13,7 @@ export function BottomBar() {
     const tabsInSidebar = settings?.tabs_position === "vertical";
 
     return (
-        <div className="h-auto w-full flex flex-wrap items-center gap-1.5 text-xs wrap-break-word text-muted-foreground">
+        <div className="h-auto w-full flex flex-wrap items-center gap-1 text-xs wrap-break-word text-muted-foreground">
             <Button
                 size="icon-xs"
                 variant={sidebarOpen && sidebarView === "filetree" ? "secondary" : "ghost"}
@@ -34,15 +34,8 @@ export function BottomBar() {
             ) : null}
             <Separator orientation="vertical" className="my-1" />
             <span
-                className="h-4 w-1 outline-2 outline-background rounded-full ml-auto mr-1"
-                style={{
-                    backgroundColor:
-                        mode === "normal"
-                            ? "var(--mode-normal)"
-                            : mode === "visual"
-                                ? "var(--mode-visual)"
-                                : "var(--mode-insert)",
-                }}
+                data-mode={mode}
+                className="size-4 rounded-md ml-auto bg-linear-to-t data-[mode=normal]:from-mode-normal data-[mode=normal]:to-mode-normal/20 data-[mode=visual]:from-mode-visual data-[mode=visual]:to-mode-visual/20 data-[mode=insert]:from-mode-insert data-[mode=insert]:to-mode-insert/20  mr-1"
             />
         </div>
     )
