@@ -211,6 +211,11 @@ pub const CellText = extern struct {
     bearings: [2]i16 align(4) = .{ 0, 0 },
     grid_pos: [2]u16 align(4),
     color: [4]u8 align(4),
+    bools: packed struct(u8) {
+        no_min_contrast: bool = false,
+        is_cursor_glyph: bool = false,
+        _padding: u6 = 0,
+    } align(1) = .{},
 };
 
 /// This is a single parameter for the cell bg shader.

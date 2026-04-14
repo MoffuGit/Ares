@@ -47,6 +47,14 @@ fragment float4 fragmentShader(VertexOutput in [[stage_in]],
     return in.color;
 }
 
+// We use a packed struct of bools for misc properties of the glyph.
+enum CellTextBools : uint8_t {
+  // Don't apply min contrast to this glyph.
+  NO_MIN_CONTRAST = 1u,
+  // This is the cursor glyph.
+  IS_CURSOR_GLYPH = 2u,
+};
+
 struct CellTextVertexIn {
   // The position of the glyph in the texture (x, y)
   uint2 glyph_pos [[attribute(0)]];
@@ -62,6 +70,9 @@ struct CellTextVertexIn {
 
   // The color of the rendered text glyph.
   uchar4 color [[attribute(4)]];
+
+  // Misc properties of the glyph.
+  uint8_t bools [[attribute(5)]];
 };
 
 struct CellTextVertexOut {
@@ -142,6 +153,18 @@ vertex CellTextVertexOut cell_text_vertex(
   // Get our color. We always fetch a linearized version to
   // make it easier to handle minimum contrast calculations.
   out.color = float4(in.color) / 255.0f;
+
+  // Check if current position is under cursor (including wide cursor)
+  bool is_cursor_pos = (
+      in.grid_pos.x == uniforms.cursor_pos.x
+    ) && in.grid_pos.y == uniforms.cursor_pos.y;
+
+  // If this cell is the cursor cell, but we're not processing
+  // the cursor glyph itself, then we need to change the color.
+  if ((in.bools & IS_CURSOR_GLYPH) == 0 && is_cursor_pos) {
+    out.color = float4(1.0f, 0.0f, 0.0f, 1.0f);
+  }
+
 
   return out;
 }

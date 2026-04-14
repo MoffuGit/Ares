@@ -206,7 +206,7 @@ fn rebuildCells(
 
     renderer.cells.reset();
 
-    const cursor_cell = if (cursor.row >= scroll_row) blk: {
+    var cursor_cell = if (cursor.row >= scroll_row) blk: {
         const row_idx = std.math.cast(usize, cursor.row - scroll_row) orelse break :blk null;
         const col_idx = std.math.cast(usize, cursor.col) orelse break :blk null;
 
@@ -216,6 +216,9 @@ fn rebuildCells(
 
         break :blk try renderCellText(renderer, row_idx, col_idx, 0x2588);
     } else null;
+    if (cursor_cell != null) {
+        cursor_cell.?.bools.is_cursor_glyph = true;
+    }
     renderer.cells.setCursor(cursor_cell);
 
     for (rows, 0..) |row_data, row_idx| {

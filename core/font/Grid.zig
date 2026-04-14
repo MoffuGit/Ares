@@ -64,6 +64,7 @@ pub fn deinit(self: *Grid, alloc: Allocator) void {
     self.resolver.deinit();
     self.shaper.deinit();
     self.glyphs.deinit();
+    self.metric_modifiers.deinit(alloc);
     self.codepoints.deinit();
 }
 
