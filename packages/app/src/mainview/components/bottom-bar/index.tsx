@@ -34,7 +34,7 @@ export function BottomBar() {
             ) : null}
             <Separator orientation="vertical" className="my-1" />
             <span
-                className="size-5 outline-2 outline-background rounded-full ml-auto mr-0"
+                className="h-4 w-1 outline-2 outline-background rounded-full ml-auto mr-1"
                 style={{
                     backgroundColor:
                         mode === "normal"
