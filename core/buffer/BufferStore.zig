@@ -11,7 +11,6 @@ const log = std.log.scoped(.buffer_store);
 pub const BufferStore = @This();
 
 alloc: Allocator,
-instance: zintect.Instance,
 buffers: std.AutoHashMap(u64, Buffer),
 io: *Io,
 worktree: *Worktree,
@@ -19,7 +18,6 @@ listener: global.EventEmitter.Listener = undefined,
 
 pub fn init(alloc: Allocator, io: *Io, worktree: *Worktree) BufferStore {
     return .{
-        .instance = zintect.Instance.init() catch @panic("fuck"),
         .alloc = alloc,
         .buffers = std.AutoHashMap(u64, Buffer).init(alloc),
         .io = io,
@@ -42,7 +40,6 @@ pub fn deinit(self: *BufferStore) void {
     while (it.next()) |buf| {
         buf.deinit();
     }
-    self.instance.deinit();
     self.buffers.deinit();
 }
 

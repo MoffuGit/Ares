@@ -35,7 +35,7 @@ export function BottomBar() {
             <Separator orientation="vertical" className="my-1" />
             <span
                 data-mode={mode}
-                className="size-4 rounded-md ml-auto bg-linear-to-t data-[mode=normal]:from-mode-normal data-[mode=normal]:to-mode-normal/20 data-[mode=visual]:from-mode-visual data-[mode=visual]:to-mode-visual/20 data-[mode=insert]:from-mode-insert data-[mode=insert]:to-mode-insert/20  mr-1"
+                className="h-4 w-1 shadow-inset rounded-full ml-auto bg-linear-to-t data-[mode=normal]:from-mode-normal data-[mode=normal]:to-mode-normal/20 data-[mode=visual]:from-mode-visual data-[mode=visual]:to-mode-visual/20 data-[mode=insert]:from-mode-insert data-[mode=insert]:to-mode-insert/20  mr-1"
             />
         </div>
     )

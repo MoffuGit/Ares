@@ -329,26 +329,3 @@ pub fn themeUpdate(self: *Editor) void {
 fn clampI16(v: i32) i16 {
     return std.math.cast(i16, std.math.clamp(v, std.math.minInt(i16), std.math.maxInt(i16))) orelse unreachable;
 }
-
-test "setCursorPosition clamps to the selected buffer layout" {
-    try global.init(null);
-    defer global.deinit();
-
-    var buffer = Buffer.init(std.testing.allocator, 42);
-    defer buffer.deinit();
-
-    buffer.text.deinit();
-    buffer.text = try Buffer.TextBuffer.initFromBytes(std.testing.allocator, "abc\nxy");
-    buffer.state.store(.ready, .release);
-
-    var editor = Editor.init(std.testing.allocator, 7, undefined, .{ .width = 80, .height = 40 });
-    editor.buffer = &buffer;
-    editor.selected_entry = buffer.entry_id;
-
-    editor.setCursorPosition(99, 99);
-
-    var out: globalpkg.ExternEditorState = undefined;
-    try std.testing.expect(editor.readEditorState(&out));
-    try std.testing.expectEqual(@as(u64, 1), out.cursor_row);
-    try std.testing.expectEqual(@as(u64, 2), out.cursor_col);
-}

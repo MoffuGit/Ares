@@ -6,8 +6,15 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+void *zintect_create_runtime(void);
+
+void zintect_destroy_runtime(void *handle);
+
 void *zintect_create_instance(void);
 
-void zintect_destroy_instace(void *handle);
+void zintect_destroy_instance(void *handle);
 
-bool ping_rust(bool ping);
+void zintect_initial_parse(void *runtime,
+                           void *instance,
+                           const char *buffer,
+                           const char *extension);

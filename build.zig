@@ -47,13 +47,20 @@ pub fn build(b: *std.Build) void {
     const lib_install = b.addInstallArtifact(core_lib, .{});
 
     const zintect_build = b.addSystemCommand(&.{
-        "cargo", "build", "--release", "--manifest-path",
+        "cargo", "build", "--release", "--quiet", "--manifest-path",
     });
 
     zintect_build.addFileArg(b.path("zintect/Cargo.toml"));
 
+    const zintect_cbindgen = b.addSystemCommand(&.{
+        "cbindgen", "--config", "cbindgen.toml", "--crate", "zintect", "--output", "include/zintect.h",
+    });
+    zintect_cbindgen.setCwd(b.path("zintect"));
+    zintect_cbindgen.step.dependOn(&zintect_build.step);
+
+    core_lib.step.dependOn(&zintect_cbindgen.step);
+
     const core_step = b.step("core", "Build Core Lib");
-    core_step.dependOn(&zintect_build.step);
     core_step.dependOn(&core_lib.step);
     core_step.dependOn(&lib_install.step);
 
