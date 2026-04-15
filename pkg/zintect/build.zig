@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
     module.addIncludePath(b.path("../../zintect/include"));
-    module.addObjectFile(.{ .cwd_relative = "../../zintect/target/release/libzintect.a" });
+    module.addObjectFile(.{ .cwd_relative = "zintect/target/release/libzintect.a" });
 
     const lib = b.addLibrary(.{
         .name = "zintect",
