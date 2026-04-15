@@ -32,6 +32,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     }).module("macos"));
 
+    core_mod.addImport("zintect", b.dependency("zintect", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("zintect"));
+
     const core_lib = b.addLibrary(.{
         .name = "core",
         .root_module = core_mod,
@@ -41,7 +46,14 @@ pub fn build(b: *std.Build) void {
     core_lib.linkFramework("QuartzCore");
     const lib_install = b.addInstallArtifact(core_lib, .{});
 
+    const zintect_build = b.addSystemCommand(&.{
+        "cargo", "build", "--release", "--manifest-path",
+    });
+
+    zintect_build.addFileArg(b.path("zintect/Cargo.toml"));
+
     const core_step = b.step("core", "Build Core Lib");
+    core_step.dependOn(&zintect_build.step);
     core_step.dependOn(&core_lib.step);
     core_step.dependOn(&lib_install.step);
 

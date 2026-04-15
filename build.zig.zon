@@ -50,6 +50,7 @@
         },
         .macos = .{ .path = "./pkg/macos" },
         .apple_sdk = .{ .path = "./pkg/apple-sdk" },
+        .zintect = .{ .path = "./pkg/zintect" },
     },
     .paths = .{""},
 }
