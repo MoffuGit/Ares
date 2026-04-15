@@ -52,7 +52,7 @@ function FileTreeItem({ entry }: { entry: WorktreeEntry }) {
                         selectSurfaceEntry(entry)
                     }
                 }}
-                size="xs" style={{ paddingLeft: `${18 * (entry.depth) + 8}px` }} >
+                size="xs" style={{ paddingLeft: `${22 * (entry.depth)}px` }} >
                 <FileIcon
                     entry={entry}
                 />
