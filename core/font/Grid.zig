@@ -28,7 +28,10 @@ pub fn init(alloc: Allocator, opts: facepkg.Options) !Grid {
 
     var grid = Grid{
         .atlas_grayscale = atlas_grayscale,
-        .resolver = .{ .face = try Face.init(embedpkg.JetBrainsMono, opts) },
+        .resolver = .{
+            .face = try Face.init(embedpkg.GeistMono, opts),
+            .fallback = try Face.init(embedpkg.JetBrainsMono, opts),
+        },
         .shaper = try Shaper.init(alloc),
         .metrics = undefined,
         .glyphs = std.AutoHashMap(u32, fontpkg.Glyph).init(alloc),
@@ -78,6 +81,9 @@ pub fn renderCodepoint(self: *Grid, alloc: Allocator, cp: u32) !?fontpkg.Glyph {
     return try self.renderGlyph(alloc, index);
 }
 
+/// Bit flag to mark glyph indices that belong to the fallback face.
+const fallback_flag: u32 = 1 << 31;
+
 pub fn getIndex(self: *Grid, cp: u32) !?u32 {
     {
         self.lock.lockShared();
@@ -90,11 +96,20 @@ pub fn getIndex(self: *Grid, cp: u32) !?u32 {
     self.lock.lock();
     self.lock.unlock();
 
-    const index = self.resolver.face.glyphIndex(cp) orelse return null;
+    if (self.resolver.face.glyphIndex(cp)) |index| {
+        try self.codepoints.put(cp, index);
+        return index;
+    }
 
-    try self.codepoints.put(cp, index);
+    if (self.resolver.fallback) |*fb| {
+        if (fb.glyphIndex(cp)) |index| {
+            const tagged = index | fallback_flag;
+            try self.codepoints.put(cp, tagged);
+            return tagged;
+        }
+    }
 
-    return index;
+    return null;
 }
 
 pub fn renderGlyph(self: *Grid, alloc: Allocator, index: u32) !fontpkg.Glyph {
@@ -111,8 +126,11 @@ pub fn renderGlyph(self: *Grid, alloc: Allocator, index: u32) !fontpkg.Glyph {
     defer self.lock.unlock();
 
     const atlas = &self.atlas_grayscale;
+    const is_fallback = (index & fallback_flag) != 0;
+    const raw_index = index & ~fallback_flag;
 
-    const glyph = try self.resolver.face.renderGlyph(alloc, atlas, index, .{
+    const face = if (is_fallback) &(self.resolver.fallback.?) else &self.resolver.face;
+    const glyph = try face.renderGlyph(alloc, atlas, raw_index, .{
         .grid_metrics = self.metrics,
     });
     try self.glyphs.put(index, glyph);

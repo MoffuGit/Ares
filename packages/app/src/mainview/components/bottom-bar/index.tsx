@@ -33,12 +33,12 @@ export function BottomBar() {
                 </Button>
             ) : null}
             <Separator orientation="vertical" className="my-1" />
-            <div className="ml-auto font-normal text-xs text-muted-foreground/80 leading-none uppercase mt-0.5">
+            <div className="ml-auto font-geist-mono font-normal text-xs text-muted-foreground/80 leading-none uppercase mt-0.5">
                 {mode}
             </div>
             <span
                 data-mode={mode}
-                className="h-3.5 w-1 shadow-xs data=[mode=normal]:shadow-mode-normal data=[mode=visual]:shadow-mode-visual data=[mode=insert]:shadow-mode-insert rounded-full bg-radial-[at_75%_75%] from-5% data-[mode=normal]:from-mode-normal data-[mode=normal]:to-mode-normal/20 data-[mode=visual]:from-mode-visual data-[mode=visual]:to-mode-visual/20 data-[mode=insert]:from-mode-insert data-[mode=insert]:to-mode-insert/20  mr-1 ml-0.5"
+                className="size-2 rounded-xs bg-radial-[at_75%_75%] from-5% to-80% data-[mode=normal]:from-mode-normal data-[mode=normal]:to-mode-normal/20 data-[mode=visual]:from-mode-visual data-[mode=visual]:to-mode-visual/20 data-[mode=insert]:from-mode-insert data-[mode=insert]:to-mode-insert/20  mr-1 ml-0.5"
             />
         </div>
     )

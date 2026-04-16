@@ -21,7 +21,7 @@ export function SidebarTabs() {
         <>
             <SidebarContent>
                 <SidebarGroup>
-                    <SidebarGroupLabel>
+                    <SidebarGroupLabel className="font-instrument mb-3 px-1 h-auto text-2xl font-normal leading-none antialiased text-sidebar-foreground">
                         {project?.name}
                     </SidebarGroupLabel>
                     <SidebarGroupContent>

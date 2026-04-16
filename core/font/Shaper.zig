@@ -253,7 +253,7 @@ test "shapeRow keeps combining sequence in one cluster" {
     var shaper = try @This().init(std.testing.allocator);
     defer shaper.deinit();
 
-    var face = try facepkg.Face.init(embedpkg.JetBrainsMono, .{
+    var face = try facepkg.Face.init(embedpkg.GeistMono, .{
         .size = .{ .points = 12 },
     });
     defer face.deinit();
@@ -271,7 +271,7 @@ test "shapeRow caches identical rows" {
     var shaper = try @This().init(std.testing.allocator);
     defer shaper.deinit();
 
-    var face = try facepkg.Face.init(embedpkg.JetBrainsMono, .{
+    var face = try facepkg.Face.init(embedpkg.GeistMono, .{
         .size = .{ .points = 12 },
     });
     defer face.deinit();
