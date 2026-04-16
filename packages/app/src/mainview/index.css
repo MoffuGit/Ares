@@ -1,6 +1,5 @@
 @import url("https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap");
 
 @import "tailwindcss";
 @import "shadcn/tailwind.css";
@@ -10,7 +9,6 @@
 @theme inline {
   --font-geist: "Geist", sans-serif;
   --font-geist-mono: "Geist Mono", monospace;
-  --font-instrument: "Instrument Serif", serif;
   --color-mode-normal: var(--mode-normal);
   --color-mode-visual: var(--mode-visual);
   --color-mode-insert: var(--mode-insert);
@@ -87,7 +85,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background select-none px-2 pt-0 pb-1.5 w-full h-screen content-stretch text-foreground  font-geist  flex flex-col gap-1.5;
+    @apply bg-background antialiased select-none px-2 pt-0 pb-1.5 w-full h-screen content-stretch text-foreground  font-geist  flex flex-col gap-1.5;
   }
 
   [data-slot="sidebar-content"]::-webkit-scrollbar {
