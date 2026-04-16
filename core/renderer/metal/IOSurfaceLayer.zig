@@ -15,11 +15,11 @@ const log = std.log.scoped(.IOSurfaceLayer);
 layer: objc.Object,
 
 pub fn init(layer: objc.Object) IOSurfaceLayer {
-    return .{ .layer = layer };
+    return .{ .layer = layer.retain() };
 }
 
 pub fn release(self: *IOSurfaceLayer) void {
-    _ = self;
+    self.layer.release();
 }
 
 /// Sets the layer's `contents` to the provided IOSurface.
