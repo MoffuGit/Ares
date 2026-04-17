@@ -1,13 +1,14 @@
 const std = @import("std");
 const global = @import("../global.zig");
 const xev = global.xev;
+const xev_pkg = @import("xev");
 
 const Allocator = std.mem.Allocator;
 const Thread = @import("Thread.zig");
 
-pub const io_types = @import("types.zig");
-pub const File = io_types.File;
-pub const Stat = io_types.Stat;
+pub const types = @import("types.zig");
+pub const File = types.File;
+pub const Stat = types.Stat;
 
 const log = std.log.scoped(.io);
 
@@ -63,12 +64,12 @@ thread: Thread,
 thr: std.Thread,
 pending_reads: std.ArrayListUnmanaged(*ReadRequest),
 
-pub fn create(alloc: Allocator) !*Io {
+pub fn create(alloc: Allocator, thread_pool: *xev_pkg.ThreadPool) !*Io {
     var io = try alloc.create(Io);
 
     io.* = .{
         .alloc = alloc,
-        .thread = try Thread.init(alloc, io),
+        .thread = try Thread.init(alloc, io, thread_pool),
         .thr = undefined,
         .pending_reads = .{},
     };

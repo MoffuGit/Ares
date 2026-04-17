@@ -5,6 +5,7 @@ const Monitor = @import("monitor/mod.zig");
 const Io = @import("io/mod.zig");
 const Grid = @import("font/Grid.zig");
 const KeymapRuntime = @import("keymaps/runtime.zig").Runtime;
+const xev_pkg = @import("xev");
 
 pub const App = @This();
 
@@ -12,6 +13,7 @@ settings: *Settings,
 appearance: *Appearance,
 monitor: *Monitor,
 io: *Io,
+thread_pool: *xev_pkg.ThreadPool,
 grid: Grid,
 keymaps: KeymapRuntime,
 
@@ -28,7 +30,15 @@ pub fn create() !*App {
     const monitor = try Monitor.create(global.alloc);
     errdefer global.alloc.destroy(monitor);
 
-    const io = try Io.create(global.alloc);
+    const thread_pool = try global.alloc.create(xev_pkg.ThreadPool);
+    errdefer global.alloc.destroy(thread_pool);
+    thread_pool.* = xev_pkg.ThreadPool.init(.{});
+    errdefer {
+        thread_pool.shutdown();
+        thread_pool.deinit();
+    }
+
+    const io = try Io.create(global.alloc, thread_pool);
     errdefer global.alloc.destroy(io);
 
     var grid = try Grid.init(global.alloc, .{ .size = .{
@@ -42,6 +52,7 @@ pub fn create() !*App {
         .appearance = appearance,
         .monitor = monitor,
         .io = io,
+        .thread_pool = thread_pool,
         .keymaps = KeymapRuntime.init(global.alloc),
     };
 
@@ -66,5 +77,8 @@ pub fn destroy(self: *App) void {
     self.appearance.destroy();
     self.monitor.destroy();
     self.io.destroy();
+    self.thread_pool.shutdown();
+    self.thread_pool.deinit();
+    global.alloc.destroy(self.thread_pool);
     global.alloc.destroy(self);
 }

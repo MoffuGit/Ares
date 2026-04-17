@@ -92,6 +92,10 @@ pub fn build(b: *std.Build) void {
     test_core.addImport("xev", xev_dep.module("xev"));
     test_core.addImport("datastruct", datastruct);
     test_core.addImport("objc", objc_dep.module("objc"));
+    test_core.addImport("zintect", b.dependency("zintect", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("zintect"));
     test_core.addAnonymousImport("ares_metallib", .{
         .root_source_file = metallib.?.output,
     });
@@ -103,6 +107,7 @@ pub fn build(b: *std.Build) void {
     });
     test_core_exe.linkFramework("Metal");
     test_core_exe.linkFramework("QuartzCore");
+    test_core_exe.step.dependOn(&zintect_cbindgen.step);
 
     const test_core_run = b.addRunArtifact(test_core_exe);
     const test_step = b.step("test", "Run unit tests");

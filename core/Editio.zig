@@ -45,11 +45,13 @@ pub fn deinit(self: *Editio) void {
 
 pub fn threadEnter(_: *Editio, thread: *Thread) !void {
     try global.events.on(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdate });
+    try global.events.on(.highlightUpdate, .{ .ctx = thread, .handle = handleHighlightUpdate });
     try global.events.on(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdate });
 }
 
 pub fn threadExit(_: *Editio, thread: *Thread) void {
     global.events.off(.bufferUpdate, .{ .ctx = thread, .handle = handleBufferUpdate });
+    global.events.off(.highlightUpdate, .{ .ctx = thread, .handle = handleHighlightUpdate });
     global.events.off(.themeUpdate, .{ .ctx = thread, .handle = handleThemeUpdate });
 }
 
@@ -64,6 +66,16 @@ fn handleBufferUpdate(ctx: *anyopaque, event: globalpkg.GlobalEvents) void {
 
     if (self.io.state.selected_entry == data) {
         _ = self.mailbox.push(.{ .buffer_update = event.bufferUpdate }, .instant);
+        self.wakeup.notify() catch {};
+    }
+}
+
+fn handleHighlightUpdate(ctx: *anyopaque, event: globalpkg.GlobalEvents) void {
+    const self: *Thread = @ptrCast(@alignCast(ctx));
+    const data = event.highlightUpdate;
+
+    if (self.io.state.selected_entry == data) {
+        _ = self.mailbox.push(.{ .highlight_update = event.highlightUpdate }, .instant);
         self.wakeup.notify() catch {};
     }
 }

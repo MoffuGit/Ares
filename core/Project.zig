@@ -30,7 +30,7 @@ pub fn create(alloc: std.mem.Allocator, app: *App, abs_path: []const u8) !*Proje
         .app = app,
         .worktree = worktree,
         .filetree = filetree,
-        .buffer_store = BufferStore.init(alloc, app.io, worktree),
+        .buffer_store = try BufferStore.init(alloc, app.io, worktree, app.thread_pool),
     };
 
     try project.buffer_store.start();

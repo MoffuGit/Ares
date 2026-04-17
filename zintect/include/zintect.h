@@ -6,15 +6,32 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+typedef struct Span {
+  uint32_t start_byte;
+  uint32_t end_byte;
+  uint8_t r;
+  uint8_t g;
+  uint8_t b;
+  uint8_t a;
+} Span;
+
+typedef void (*EmitSpanFn)(void *ctx, uint32_t line_index, struct Span span);
+
 void *zintect_create_runtime(void);
 
 void zintect_destroy_runtime(void *handle);
 
-void *zintect_create_instance(void);
+void *zintect_create_session(void);
 
-void zintect_destroy_instance(void *handle);
+void zintect_destroy_session(void *handle);
 
-void zintect_initial_parse(void *runtime,
-                           void *instance,
-                           const char *buffer,
-                           const char *extension);
+bool zintect_session_set_syntax_by_ext(void *session, void *runtime, const char *ext);
+
+bool zintect_session_reset(void *session, void *runtime);
+
+bool zintect_session_highlight_line(void *session,
+                                    void *runtime,
+                                    const char *line,
+                                    uint32_t line_index,
+                                    void *ctx,
+                                    EmitSpanFn emit);

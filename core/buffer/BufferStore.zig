@@ -4,7 +4,8 @@ const Buffer = @import("Buffer.zig");
 const Io = @import("../io/mod.zig");
 const Worktree = @import("../worktree/mod.zig").Worktree;
 const global = @import("../global.zig");
-const zintect = @import("zintect");
+const Zinio = @import("../Zinio.zig");
+const xev_pkg = @import("xev");
 
 const log = std.log.scoped(.buffer_store);
 
@@ -15,13 +16,15 @@ buffers: std.AutoHashMap(u64, Buffer),
 io: *Io,
 worktree: *Worktree,
 listener: global.EventEmitter.Listener = undefined,
+zinio: Zinio,
 
-pub fn init(alloc: Allocator, io: *Io, worktree: *Worktree) BufferStore {
+pub fn init(alloc: Allocator, io: *Io, worktree: *Worktree, thread_pool: *xev_pkg.ThreadPool) !BufferStore {
     return .{
         .alloc = alloc,
         .buffers = std.AutoHashMap(u64, Buffer).init(alloc),
         .io = io,
         .worktree = worktree,
+        .zinio = try Zinio.init(alloc, thread_pool),
     };
 }
 
@@ -35,6 +38,8 @@ pub fn start(self: *BufferStore) !void {
 
 pub fn deinit(self: *BufferStore) void {
     global.state.events.off(.ioReadComplete, self.listener);
+
+    self.zinio.deinit();
 
     var it = self.buffers.valueIterator();
     while (it.next()) |buf| {
@@ -71,6 +76,7 @@ fn handleIoReadComplete(ctx: *anyopaque, event: global.GlobalEvents) void {
 
         if (payload.file) |f| {
             buf.applyFile(f);
+            self.requestHighlight(entry_id, buf, abs_path);
         } else {
             buf.applyError();
         }
@@ -79,6 +85,35 @@ fn handleIoReadComplete(ctx: *anyopaque, event: global.GlobalEvents) void {
 
         return;
     }
+}
+
+fn requestHighlight(self: *BufferStore, entry_id: u64, buf: *Buffer, abs_path: []const u8) void {
+    buf.mutex.lock();
+    defer buf.mutex.unlock();
+
+    const file = buf.file orelse return;
+    const text_snapshot = self.alloc.dupe(u8, file.bytes) catch return;
+
+    const ext = fileExtension(abs_path);
+    const ext_owned = self.alloc.dupe(u8, ext) catch {
+        self.alloc.free(text_snapshot);
+        return;
+    };
+
+    self.zinio.schedule(.{
+        .entry_id = entry_id,
+        .version = buf.text.version,
+        .text = text_snapshot,
+        .extension = ext_owned,
+        .buffer = buf,
+    });
+}
+
+fn fileExtension(path: []const u8) []const u8 {
+    if (std.mem.lastIndexOfScalar(u8, path, '.')) |dot| {
+        return path[dot + 1 ..];
+    }
+    return "";
 }
 
 pub fn get(self: *BufferStore, entry_id: u64) ?*Buffer {

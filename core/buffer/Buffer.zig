@@ -6,6 +6,40 @@ const GapBuffer = @import("datastruct").GapBuffer;
 
 pub const Buffer = @This();
 
+pub const HighlightSpan = struct {
+    start_col: u32,
+    end_col: u32,
+    color: [4]u8,
+};
+
+pub const Highlights = struct {
+    lines: [][]HighlightSpan = &.{},
+    version: u64 = 0,
+
+    pub fn deinit(self: *Highlights, alloc: Allocator) void {
+        for (self.lines) |line| {
+            if (line.len > 0) alloc.free(line);
+        }
+        if (self.lines.len > 0) alloc.free(self.lines);
+        self.* = .{};
+    }
+
+    pub fn colorAt(self: *const Highlights, row: usize, col: usize, default: [4]u8) [4]u8 {
+        if (row >= self.lines.len) return default;
+        for (self.lines[row]) |span| {
+            if (col >= span.start_col and col < span.end_col) return span.color;
+            if (col < span.start_col) break;
+        }
+        return default;
+    }
+
+    pub fn visibleLines(self: *const Highlights, scroll_row: u64, max_rows: usize) []const []HighlightSpan {
+        const start = @min(std.math.cast(usize, scroll_row) orelse self.lines.len, self.lines.len);
+        const count = @min(max_rows, self.lines.len - start);
+        return self.lines[start .. start + count];
+    }
+};
+
 pub const TextBuffer = struct {
     pub const History = struct {};
     pub const Row = struct {
@@ -156,6 +190,7 @@ state: std.atomic.Value(State) = .{ .raw = .empty },
 mutex: std.Thread.Mutex = .{},
 file: ?Io.File = null,
 text: TextBuffer,
+highlights: Highlights = .{},
 
 pub fn init(alloc: Allocator, entry_id: u64) Buffer {
     return .{
@@ -222,6 +257,7 @@ pub fn getState(self: *const Buffer) State {
 }
 
 fn clearUnlocked(self: *Buffer) void {
+    self.highlights.deinit(self.alloc);
     self.text.deinit();
 
     if (self.file) |file| {

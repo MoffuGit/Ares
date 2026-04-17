@@ -1,4 +1,5 @@
-use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
+use syntect::highlighting::{Theme, ThemeSet};
+use syntect::parsing::SyntaxSet;
 
 pub struct Runtime {
     pub syntax_set: SyntaxSet,
@@ -11,5 +12,9 @@ impl Runtime {
             syntax_set: SyntaxSet::load_defaults_newlines(),
             theme_set: ThemeSet::load_defaults(),
         }
+    }
+
+    pub fn default_theme(&self) -> Option<&Theme> {
+        self.theme_set.themes.get("base16-ocean.dark")
     }
 }

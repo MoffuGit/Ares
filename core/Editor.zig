@@ -135,6 +135,15 @@ pub fn onBufferUpdate(self: *Editor, entry_id: u64) void {
     self.rebuild_cells = true;
 }
 
+pub fn onHighlightUpdate(self: *Editor, entry_id: u64) void {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    const buffer = self.buffer orelse return;
+    if (buffer.entry_id != entry_id) return;
+    self.rebuild_cells = true;
+}
+
 pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
     self.mutex.lock();
     defer self.mutex.unlock();
@@ -207,7 +216,8 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
 
     if (!self.rebuild_cells) return;
 
-    try rebuildCells(renderer, text.visibleRows(self.scroll_row, grid.rows), self.scroll_row, self.cursor, self.color);
+    const hl_lines = buffer.highlights.visibleLines(self.scroll_row, grid.rows);
+    try rebuildCells(renderer, text.visibleRows(self.scroll_row, grid.rows), hl_lines, self.scroll_row, self.cursor, self.color);
 
     self.rebuild_cells = false;
 }
@@ -215,9 +225,10 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
 fn rebuildCells(
     renderer: *Renderer,
     rows: []const Buffer.TextBuffer.Row,
+    hl_lines: []const []Buffer.HighlightSpan,
     scroll_row: u64,
     cursor: CursorPosition,
-    color: [4]u8,
+    default_color: [4]u8,
 ) !void {
     renderer.mutex.lock();
     defer renderer.mutex.unlock();
@@ -246,7 +257,7 @@ fn rebuildCells(
 
         renderer.uniforms.cursor_pos = .{ @intCast(col_idx), @intCast(row_idx) };
 
-        break :blk try renderCellText(renderer, row_idx, col_idx, 0x2588, color);
+        break :blk try renderCellText(renderer, row_idx, col_idx, 0x2588, default_color);
     } else null;
     if (cursor_cell != null) {
         cursor_cell.?.bools.is_cursor_glyph = true;
@@ -256,16 +267,27 @@ fn rebuildCells(
     for (rows, 0..) |row_data, row_idx| {
         if (row_idx >= grid_size.rows) break;
 
+        const hl = if (row_idx < hl_lines.len) hl_lines[row_idx] else &[_]Buffer.HighlightSpan{};
+
         const shaped = try renderer.grid.shapeRow(arena_alloc, row_data.codepoints);
         for (shaped) |placement| {
             if (placement.column >= grid_size.columns) continue;
 
-            const cell = try renderShapedGlyph(renderer, row_idx, placement, color) orelse continue;
+            const glyph_color = colorAt(hl, placement.column, default_color);
+            const cell = try renderShapedGlyph(renderer, row_idx, placement, glyph_color) orelse continue;
             try renderer.cells.add(renderer.alloc, .text, cell);
         }
     }
 
     renderer.cells_rebuilt = true;
+}
+
+fn colorAt(spans: []const Buffer.HighlightSpan, col: usize, default: [4]u8) [4]u8 {
+    for (spans) |span| {
+        if (col >= span.start_col and col < span.end_col) return span.color;
+        if (col < span.start_col) break;
+    }
+    return default;
 }
 
 fn renderCellText(renderer: *Renderer, row_idx: usize, col_idx: usize, codepoint: u32, color: [4]u8) !?shaderpkg.CellText {

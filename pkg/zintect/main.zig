@@ -2,54 +2,103 @@ const std = @import("std");
 
 pub const c = @cImport(@cInclude("zintect.h"));
 
-pub const Runtime = struct {
-    const Self = @This();
+pub const Span = extern struct {
+    start_byte: u32,
+    end_byte: u32,
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
 
+    pub fn color(self: Span) [4]u8 {
+        return .{ self.r, self.g, self.b, self.a };
+    }
+};
+
+pub const EmitSpanFn = *const fn (ctx: *anyopaque, line_index: u32, span: Span) callconv(.c) void;
+
+pub const Runtime = struct {
     handler: *anyopaque,
 
-    pub fn init() !Self {
+    pub fn init() !Runtime {
         const inst = c.zintect_create_runtime() orelse return error.CreateRuntimeFailed;
-
         return .{ .handler = inst };
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *Runtime) void {
         c.zintect_destroy_runtime(self.handler);
     }
 };
 
-pub const Instance = struct {
-    const Self = @This();
-
+pub const Session = struct {
     handler: *anyopaque,
 
-    pub fn init() !Self {
-        const inst = c.zintect_create_instance() orelse return error.CreateInstanceFailed;
-
+    pub fn init() !Session {
+        const inst = c.zintect_create_session() orelse return error.CreateSessionFailed;
         return .{ .handler = inst };
     }
 
-    pub fn deinit(self: *Self) void {
-        c.zintect_destroy_instance(self.handler);
+    pub fn deinit(self: *Session) void {
+        c.zintect_destroy_session(self.handler);
     }
 
-    pub fn initialParse(self: *const Self, runtime: *const Runtime, buffer: [:0]const u8, extension: [:0]const u8) void {
-        c.zintect_initial_parse(runtime.handler, self.handler, buffer.ptr, extension.ptr);
+    pub fn setSyntaxByExt(self: *Session, runtime: *const Runtime, ext: [:0]const u8) bool {
+        return c.zintect_session_set_syntax_by_ext(self.handler, runtime.handler, ext.ptr);
+    }
+
+    pub fn reset(self: *Session, runtime: *const Runtime) bool {
+        return c.zintect_session_reset(self.handler, runtime.handler);
+    }
+
+    pub fn highlightLine(
+        self: *Session,
+        runtime: *const Runtime,
+        line: [:0]const u8,
+        line_index: u32,
+        ctx: *anyopaque,
+        emit: EmitSpanFn,
+    ) bool {
+        return c.zintect_session_highlight_line(
+            self.handler,
+            runtime.handler,
+            line.ptr,
+            line_index,
+            ctx,
+            @ptrCast(emit),
+        );
     }
 };
 
-test "initial parse rust source buffer" {
+test "highlight rust source line by line" {
     var runtime = try Runtime.init();
     defer runtime.deinit();
 
-    var instance = try Instance.init();
-    defer instance.deinit();
+    var session = try Session.init();
+    defer session.deinit();
 
-    instance.initialParse(
-        &runtime,
-        "pub struct Wow { hi: u64 }\nfn blah() -> u64 {}",
-        "rs",
-    );
+    try std.testing.expect(session.setSyntaxByExt(&runtime, "rs"));
 
-    try std.testing.expect(true);
+    const lines = [_][:0]const u8{
+        "pub struct Wow { hi: u64 }\n",
+        "fn blah() -> u64 {}\n",
+    };
+
+    var span_count: u32 = 0;
+
+    for (lines, 0..) |line, i| {
+        _ = session.highlightLine(
+            &runtime,
+            line,
+            @intCast(i),
+            @ptrCast(&span_count),
+            countSpans,
+        );
+    }
+
+    try std.testing.expect(span_count > 0);
+}
+
+fn countSpans(ctx: *anyopaque, _: u32, _: Span) callconv(.c) void {
+    const count: *u32 = @ptrCast(@alignCast(ctx));
+    count.* += 1;
 }

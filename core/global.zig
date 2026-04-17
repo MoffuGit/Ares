@@ -16,6 +16,7 @@ pub var state: GlobalState = undefined;
 pub const GlobalEvents = union(enum) {
     worktreeUpdate: UpdatedEntriesSet,
     bufferUpdate: u64,
+    highlightUpdate: u64,
     themeUpdate: void,
     ioReadComplete: io_types.ReadResult,
 };

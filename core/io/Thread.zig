@@ -14,7 +14,6 @@ pub const Thread = @This();
 
 alloc: Allocator,
 loop: xev.Loop,
-thread_pool: *xev_pkg.ThreadPool,
 
 io: *Io,
 mailbox: *Mailbox,
@@ -25,15 +24,7 @@ wakeup_c: xev.Completion = .{},
 stop: xev.Async,
 stop_c: xev.Completion = .{},
 
-pub fn init(alloc: Allocator, io: *Io) !Thread {
-    const thread_pool = try alloc.create(xev_pkg.ThreadPool);
-    thread_pool.* = xev_pkg.ThreadPool.init(.{});
-    errdefer {
-        thread_pool.shutdown();
-        thread_pool.deinit();
-        alloc.destroy(thread_pool);
-    }
-
+pub fn init(alloc: Allocator, io: *Io, thread_pool: *xev_pkg.ThreadPool) !Thread {
     var loop = try xev.Loop.init(.{ .thread_pool = thread_pool });
     errdefer loop.deinit();
 
@@ -50,7 +41,6 @@ pub fn init(alloc: Allocator, io: *Io) !Thread {
         .alloc = alloc,
         .loop = loop,
         .mailbox = mailbox,
-        .thread_pool = thread_pool,
         .wakeup = wakeup_h,
         .stop = stop_h,
         .io = io,
@@ -61,9 +51,6 @@ pub fn deinit(self: *Thread) void {
     self.wakeup.deinit();
     self.stop.deinit();
     self.loop.deinit();
-    self.thread_pool.shutdown();
-    self.thread_pool.deinit();
-    self.alloc.destroy(self.thread_pool);
     self.mailbox.destroy(self.alloc);
 }
 
