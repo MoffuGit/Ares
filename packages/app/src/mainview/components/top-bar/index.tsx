@@ -74,7 +74,7 @@ export function TopBar() {
                     <TopBarInfo />
                 </div>
             </div>
-            <div className="flex min-w-0 justify-end px-2">
+            <div className="flex min-w-0 justify-end">
                 {project && (
                     <Button
                         size="xs"
