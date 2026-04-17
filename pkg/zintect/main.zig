@@ -28,6 +28,10 @@ pub const Runtime = struct {
     pub fn deinit(self: *Runtime) void {
         c.zintect_destroy_runtime(self.handler);
     }
+
+    pub fn setTheme(self: *Runtime, theme_json: []const u8) bool {
+        return c.zintect_runtime_set_theme(self.handler, theme_json.ptr);
+    }
 };
 
 pub const Session = struct {
@@ -43,7 +47,11 @@ pub const Session = struct {
     }
 
     pub fn setSyntaxByExt(self: *Session, runtime: *const Runtime, ext: [:0]const u8) bool {
-        return c.zintect_session_set_syntax_by_ext(self.handler, runtime.handler, ext.ptr);
+        return c.zintect_session_set_syntax_by_ext(
+            self.handler,
+            runtime.handler,
+            ext.ptr,
+        );
     }
 
     pub fn reset(self: *Session, runtime: *const Runtime) bool {

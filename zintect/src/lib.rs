@@ -1,7 +1,8 @@
 mod runtime;
 mod session;
+mod theme;
 
-use std::ffi::{c_char, c_void, CStr};
+use std::ffi::{CStr, c_char, c_void};
 
 use runtime::Runtime;
 use session::{EmitSpanFn, Session};
@@ -19,6 +20,14 @@ unsafe fn runtime_ref<'a>(handle: *mut c_void) -> Option<&'a Runtime> {
         None
     } else {
         Some(unsafe { &*(handle as *const Runtime) })
+    }
+}
+
+unsafe fn runtime_mut<'a>(handle: *mut c_void) -> Option<&'a mut Runtime> {
+    if handle.is_null() {
+        None
+    } else {
+        Some(unsafe { &mut *(handle as *mut Runtime) })
     }
 }
 
@@ -44,6 +53,22 @@ pub unsafe extern "C" fn zintect_destroy_runtime(handle: *mut c_void) {
         return;
     }
     let _ = unsafe { Box::from_raw(handle as *mut Runtime) };
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn zintect_runtime_set_theme(
+    handle: *mut c_void,
+    theme_json: *const c_char,
+) -> bool {
+    let runtime = match unsafe { runtime_mut(handle) } {
+        Some(r) => r,
+        None => return false,
+    };
+    let json = match unsafe { cstr_to_str(theme_json) } {
+        Some(s) => s,
+        None => return false,
+    };
+    runtime.set_theme_from_json(json)
 }
 
 // --- Session ---
@@ -84,10 +109,7 @@ pub unsafe extern "C" fn zintect_session_set_syntax_by_ext(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn zintect_session_reset(
-    session: *mut c_void,
-    runtime: *mut c_void,
-) -> bool {
+pub unsafe extern "C" fn zintect_session_reset(session: *mut c_void, runtime: *mut c_void) -> bool {
     let session = match unsafe { session_mut(session) } {
         Some(s) => s,
         None => return false,

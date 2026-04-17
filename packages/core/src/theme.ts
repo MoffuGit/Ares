@@ -4,6 +4,7 @@ export function resolveTheme(json: string): Theme {
     const raw = JSON.parse(json) as Partial<RawThemeFile>;
     const colors = raw.colors ?? {};
     const theme = raw.theme ?? {};
+    const highlightSource = raw.highlights ?? raw;
 
     const resolved: Record<string, string> = {};
     for (const key of THEME_KEYS) {
@@ -18,10 +19,49 @@ export function resolveTheme(json: string): Theme {
         }
     }
 
+    const highlightGlobals: Record<string, string> = {};
+    for (const [key, value] of Object.entries(highlightSource.globals ?? {})) {
+        const resolvedColor = resolveOptionalColor(value, colors);
+        if (resolvedColor) {
+            highlightGlobals[key] = resolvedColor;
+        }
+    }
+
+    const highlightRules = (highlightSource.rules ?? []).map((rule) => {
+        const resolvedRule: Theme["highlights"]["rules"][number] = {};
+
+        if (rule.name) resolvedRule.name = rule.name;
+        if (rule.scope) resolvedRule.scope = rule.scope;
+        if (rule.scopes) {
+            resolvedRule.scopes = rule.scopes.filter((scope) => scope.length > 0);
+        }
+
+        const foreground = rule.foreground ? resolveOptionalColor(rule.foreground, colors) : undefined;
+        if (foreground) resolvedRule.foreground = foreground;
+
+        const background = rule.background ? resolveOptionalColor(rule.background, colors) : undefined;
+        if (background) resolvedRule.background = background;
+
+        const selectionForeground = rule.selection_foreground
+            ? resolveOptionalColor(rule.selection_foreground, colors)
+            : undefined;
+        if (selectionForeground) {
+            resolvedRule.selection_foreground = selectionForeground;
+        }
+
+        if (rule.font_style) resolvedRule.font_style = rule.font_style;
+
+        return resolvedRule;
+    });
+
     return {
         name: raw.name ?? "unknown",
         ...resolved,
         fileType,
+        highlights: {
+            globals: highlightGlobals,
+            rules: highlightRules,
+        },
     } as Theme;
 }
 
@@ -31,6 +71,24 @@ type RawThemeFile = {
     theme: Record<string, string> & {
         fileType?: Record<string, string>;
     };
+    highlights?: RawHighlights;
+    globals?: Record<string, string>;
+    rules?: RawHighlightRule[];
+};
+
+type RawHighlights = {
+    globals?: Record<string, string>;
+    rules?: RawHighlightRule[];
+};
+
+type RawHighlightRule = {
+    name?: string;
+    scope?: string;
+    scopes?: string[];
+    foreground?: string;
+    background?: string;
+    selection_foreground?: string;
+    font_style?: string;
 };
 
 const THEME_KEYS = [
@@ -52,8 +110,12 @@ function normalizeHex(hex: string): string {
 }
 
 function resolveColor(value: string, colors: Record<string, string>): string {
+    return resolveOptionalColor(value, colors) ?? "#000000ff";
+}
+
+function resolveOptionalColor(value: string, colors: Record<string, string>): string | undefined {
     if (value.startsWith("#")) return normalizeHex(value);
     const resolved = colors[value];
     if (resolved) return normalizeHex(resolved);
-    return "#000000ff";
+    return undefined;
 }

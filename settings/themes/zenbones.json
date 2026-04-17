@@ -14,6 +14,16 @@
     "defaultFileColor": "#f0eeee",
     "destructive": "#ff6467",
     "destructiveFg": "#fafafa",
+    "selection": "#1e1b1b",
+    "selectionFg": "#fafafa",
+    "syntaxComment": "#8b8685",
+    "syntaxKeyword": "#ff7b72",
+    "syntaxString": "#8ad58a",
+    "syntaxNumber": "#91c5ff",
+    "syntaxType": "#f7be95",
+    "syntaxFunction": "#b58cf8",
+    "syntaxVariable": "#f0eeee",
+    "syntaxConstant": "#74c7b8",
     "chart1": "#91c5ff",
     "chart2": "#3a81f6",
     "chart3": "#2563ef",
@@ -74,5 +84,60 @@
     "fileType": {
       "default": "accentFg"
     }
+  },
+  "highlights": {
+    "globals": {
+      "background": "background",
+      "foreground": "foreground",
+      "caret": "foreground",
+      "line_highlight": "mutedBg",
+      "selection": "selection",
+      "selection_foreground": "selectionFg",
+      "gutter": "background",
+      "gutter_foreground": "mutedFg"
+    },
+    "rules": [
+      {
+        "name": "Comments",
+        "scope": "comment",
+        "foreground": "syntaxComment",
+        "font_style": "italic"
+      },
+      {
+        "name": "Keywords",
+        "scopes": ["keyword", "storage"],
+        "foreground": "syntaxKeyword"
+      },
+      {
+        "name": "Strings",
+        "scope": "string",
+        "foreground": "syntaxString"
+      },
+      {
+        "name": "Numbers",
+        "scope": "constant.numeric",
+        "foreground": "syntaxNumber"
+      },
+      {
+        "name": "Types",
+        "scopes": ["entity.name.type", "support.type", "storage.type"],
+        "foreground": "syntaxType"
+      },
+      {
+        "name": "Functions",
+        "scopes": ["entity.name.function", "support.function"],
+        "foreground": "syntaxFunction"
+      },
+      {
+        "name": "Constants",
+        "scopes": ["constant.language", "support.constant"],
+        "foreground": "syntaxConstant"
+      },
+      {
+        "name": "Variables",
+        "scopes": ["variable", "variable.parameter"],
+        "foreground": "syntaxVariable"
+      }
+    ]
   }
 }

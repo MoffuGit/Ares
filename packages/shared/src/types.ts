@@ -29,6 +29,21 @@ export type Settings = {
     dark_theme: string;
 };
 
+export type ThemeHighlightRule = {
+    name?: string;
+    scope?: string;
+    scopes?: string[];
+    foreground?: string;
+    background?: string;
+    selection_foreground?: string;
+    font_style?: string;
+};
+
+export type ThemeHighlights = {
+    globals: Record<string, string>;
+    rules: ThemeHighlightRule[];
+};
+
 export type Theme = {
     name: string;
     fg: string;
@@ -69,6 +84,7 @@ export type Theme = {
     modeVisual: string;
     modeInsert: string;
     fileType: Record<string, string>;
+    highlights: ThemeHighlights;
 };
 
 export type WorktreeEntry = {

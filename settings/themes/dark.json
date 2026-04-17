@@ -14,6 +14,16 @@
     "defaultFileColor": "#888888",
     "destructive": "#7f1d1d",
     "destructiveFg": "#ffffff",
+    "selection": "#1c2833",
+    "selectionFg": "#f5f8fa",
+    "syntaxComment": "#6f7d89",
+    "syntaxKeyword": "#ff7b72",
+    "syntaxString": "#a5d6ff",
+    "syntaxNumber": "#79c0ff",
+    "syntaxType": "#ffa657",
+    "syntaxFunction": "#d2a8ff",
+    "syntaxVariable": "#e6edf3",
+    "syntaxConstant": "#7ee787",
     "chart1": "#e76f51",
     "chart2": "#2a9d8f",
     "chart3": "#e9c46a",
@@ -64,5 +74,60 @@
     "fileType": {
       "default": "defaultFileColor"
     }
+  },
+  "highlights": {
+    "globals": {
+      "background": "background",
+      "foreground": "foreground",
+      "caret": "foreground",
+      "line_highlight": "primaryBg",
+      "selection": "selection",
+      "selection_foreground": "selectionFg",
+      "gutter": "background",
+      "gutter_foreground": "mutedFg"
+    },
+    "rules": [
+      {
+        "name": "Comments",
+        "scope": "comment",
+        "foreground": "syntaxComment",
+        "font_style": "italic"
+      },
+      {
+        "name": "Keywords",
+        "scopes": ["keyword", "storage"],
+        "foreground": "syntaxKeyword"
+      },
+      {
+        "name": "Strings",
+        "scope": "string",
+        "foreground": "syntaxString"
+      },
+      {
+        "name": "Numbers",
+        "scope": "constant.numeric",
+        "foreground": "syntaxNumber"
+      },
+      {
+        "name": "Types",
+        "scopes": ["entity.name.type", "support.type", "storage.type"],
+        "foreground": "syntaxType"
+      },
+      {
+        "name": "Functions",
+        "scopes": ["entity.name.function", "support.function"],
+        "foreground": "syntaxFunction"
+      },
+      {
+        "name": "Constants",
+        "scopes": ["constant.language", "support.constant"],
+        "foreground": "syntaxConstant"
+      },
+      {
+        "name": "Variables",
+        "scopes": ["variable", "variable.parameter"],
+        "foreground": "syntaxVariable"
+      }
+    ]
   }
 }

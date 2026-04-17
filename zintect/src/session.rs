@@ -33,20 +33,7 @@ impl Session {
     }
 
     pub fn set_syntax_by_ext(&mut self, runtime: &Runtime, ext: &str) -> bool {
-        let syntax = match runtime.syntax_set.find_syntax_by_extension(ext) {
-            Some(s) => s,
-            None => return false,
-        };
-        let theme = match runtime.default_theme() {
-            Some(t) => t,
-            None => return false,
-        };
-        let highlighter = Highlighter::new(theme);
-
-        self.extension = Some(ext.to_string());
-        self.parse_state = Some(ParseState::new(syntax));
-        self.highlight_state = Some(HighlightState::new(&highlighter, ScopeStack::new()));
-        true
+        self.configure(runtime, ext)
     }
 
     pub fn reset(&mut self, runtime: &Runtime) -> bool {
@@ -54,7 +41,26 @@ impl Session {
             Some(e) => e.clone(),
             None => return false,
         };
-        self.set_syntax_by_ext(runtime, &ext)
+        self.configure(runtime, &ext)
+    }
+
+    fn configure(&mut self, runtime: &Runtime, ext: &str) -> bool {
+        let syntax = match runtime.syntax_set.find_syntax_by_extension(ext) {
+            Some(s) => s,
+            None => return false,
+        };
+
+        if let Ok(theme) = runtime.theme.read() {
+            let highlighter = Highlighter::new(&*theme);
+
+            self.extension = Some(ext.to_string());
+            self.parse_state = Some(ParseState::new(syntax));
+            self.highlight_state = Some(HighlightState::new(&highlighter, ScopeStack::new()));
+
+            return true;
+        }
+
+        false
     }
 
     pub fn highlight_line(
@@ -74,41 +80,41 @@ impl Session {
             None => return false,
         };
 
-        let theme = match runtime.default_theme() {
-            Some(t) => t,
-            None => return false,
-        };
-        let highlighter = Highlighter::new(theme);
+        if let Ok(theme) = runtime.theme.read() {
+            let highlighter = Highlighter::new(&*theme);
 
-        let ops = match parse_state.parse_line(line, &runtime.syntax_set) {
-            Ok(ops) => ops,
-            Err(_) => return false,
-        };
+            let ops = match parse_state.parse_line(line, &runtime.syntax_set) {
+                Ok(ops) => ops,
+                Err(_) => return false,
+            };
 
-        let iter = HighlightIterator::new(highlight_state, &ops, line, &highlighter);
+            let iter = HighlightIterator::new(highlight_state, &ops, line, &highlighter);
 
-        let mut byte_offset: u32 = 0;
-        for (style, text) in iter {
-            let len = text.len() as u32;
-            if len > 0 {
-                unsafe {
-                    emit(
-                        ctx,
-                        line_index,
-                        Span {
-                            start_byte: byte_offset,
-                            end_byte: byte_offset + len,
-                            r: style.foreground.r,
-                            g: style.foreground.g,
-                            b: style.foreground.b,
-                            a: style.foreground.a,
-                        },
-                    );
+            let mut byte_offset: u32 = 0;
+            for (style, text) in iter {
+                let len = text.len() as u32;
+                if len > 0 {
+                    unsafe {
+                        emit(
+                            ctx,
+                            line_index,
+                            Span {
+                                start_byte: byte_offset,
+                                end_byte: byte_offset + len,
+                                r: style.foreground.r,
+                                g: style.foreground.g,
+                                b: style.foreground.b,
+                                a: style.foreground.a,
+                            },
+                        );
+                    }
                 }
+                byte_offset += len;
             }
-            byte_offset += len;
+
+            return true;
         }
 
-        true
+        false
     }
 }

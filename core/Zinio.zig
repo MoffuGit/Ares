@@ -33,9 +33,11 @@ runtime: zintect.Runtime,
 pending: std.atomic.Value(usize) = .{ .raw = 0 },
 closing: std.atomic.Value(bool) = .{ .raw = false },
 
-pub fn init(alloc: Allocator, thread_pool: *xev.ThreadPool) !Zinio {
+pub fn init(alloc: Allocator, theme_json: []const u8, thread_pool: *xev.ThreadPool) !Zinio {
     var runtime = try zintect.Runtime.init();
     errdefer runtime.deinit();
+
+    _ = runtime.setTheme(theme_json);
 
     return .{
         .alloc = alloc,
@@ -106,7 +108,6 @@ fn processHighlight(self: *Zinio, msg: Message) void {
     defer self.alloc.free(ext_z);
 
     if (!session.setSyntaxByExt(&self.runtime, ext_z)) return;
-    _ = session.reset(&self.runtime);
 
     var lines_list = std.ArrayList([]Buffer.HighlightSpan).initCapacity(msg.buffer.alloc, 0) catch return;
     defer {

@@ -189,7 +189,7 @@ pub fn parseColors(allocator: std.mem.Allocator, json: []const u8) ParseColorsEr
 }
 
 pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
-    const parsed = std.json.parseFromSlice(JsonTheme, allocator, json, .{}) catch {
+    const parsed = std.json.parseFromSlice(JsonTheme, allocator, json, .{ .ignore_unknown_fields = true }) catch {
         return ParseError.InvalidJson;
     };
     defer parsed.deinit();

@@ -21,6 +21,8 @@ void *zintect_create_runtime(void);
 
 void zintect_destroy_runtime(void *handle);
 
+bool zintect_runtime_set_theme(void *handle, const char *theme_json);
+
 void *zintect_create_session(void);
 
 void zintect_destroy_session(void *handle);
