@@ -1,11 +1,12 @@
-const global = &@import("global.zig").state;
+const globalpkg = @import("global.zig");
+const global = &globalpkg.state;
 const Settings = @import("settings/mod.zig");
 const Appearance = @import("Appearance.zig");
 const Monitor = @import("monitor/mod.zig");
 const Io = @import("io/mod.zig");
 const Grid = @import("font/Grid.zig");
 const KeymapRuntime = @import("keymaps/runtime.zig").Runtime;
-const xev_pkg = @import("xev");
+const xev = globalpkg.xev;
 
 pub const App = @This();
 
@@ -13,7 +14,7 @@ settings: *Settings,
 appearance: *Appearance,
 monitor: *Monitor,
 io: *Io,
-thread_pool: *xev_pkg.ThreadPool,
+thread_pool: *xev.ThreadPool,
 grid: Grid,
 keymaps: KeymapRuntime,
 
@@ -30,9 +31,9 @@ pub fn create() !*App {
     const monitor = try Monitor.create(global.alloc);
     errdefer global.alloc.destroy(monitor);
 
-    const thread_pool = try global.alloc.create(xev_pkg.ThreadPool);
+    const thread_pool = try global.alloc.create(xev.ThreadPool);
     errdefer global.alloc.destroy(thread_pool);
-    thread_pool.* = xev_pkg.ThreadPool.init(.{});
+    thread_pool.* = xev.ThreadPool.init(.{});
     errdefer {
         thread_pool.shutdown();
         thread_pool.deinit();

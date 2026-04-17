@@ -1,7 +1,6 @@
 const std = @import("std");
 const global = @import("../global.zig");
 const xev = global.xev;
-const xev_pkg = @import("xev");
 
 const Allocator = std.mem.Allocator;
 const Thread = @import("Thread.zig");
@@ -64,7 +63,7 @@ thread: Thread,
 thr: std.Thread,
 pending_reads: std.ArrayListUnmanaged(*ReadRequest),
 
-pub fn create(alloc: Allocator, thread_pool: *xev_pkg.ThreadPool) !*Io {
+pub fn create(alloc: Allocator, thread_pool: *xev.ThreadPool) !*Io {
     var io = try alloc.create(Io);
 
     io.* = .{
