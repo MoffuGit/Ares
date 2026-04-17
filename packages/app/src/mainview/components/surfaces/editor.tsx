@@ -1,9 +1,7 @@
-import React, { useRef } from "react";
+import { useRef } from "react";
 import { rpc } from "@/lib/app";
 import type { EditorSurface as EditorSurfaceData } from "@ares/shared";
 import { GpuTag } from "../gpu-tag";
-import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbSeparator } from "../ui/breadcrumb";
-import { FileIcon } from "../file-icons";
 import { useGpuSurface } from "./use-gpu-surface";
 
 interface EditorSurfaceProps {
@@ -32,33 +30,7 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
 
     return (
         <div className="w-full flex flex-col grow data-[surface-active=true]:z-10 -z-10 data-[surface-active=true]:visible invisible" data-surface-active={active}>
-            <div className="w-full h-8 flex items-center justify-start px-2 tracking-wide">
-                {surface.entry && (() => {
-                    const parts = surface.entry.path.split("/").slice(1);
-                    return (
-                        <Breadcrumb>
-                            <BreadcrumbList>
-                                {parts.map((part, i) => (
-                                    <React.Fragment key={i}>
-                                        {i > 0 && <BreadcrumbSeparator />}
-                                        <BreadcrumbItem>
-                                            {i === parts.length - 1 && surface.entry && (
-                                                <BreadcrumbPage>
-                                                    <FileIcon entry={surface.entry} />
-                                                </BreadcrumbPage>
-                                            )}
-                                            <BreadcrumbPage>
-                                                {part}
-                                            </BreadcrumbPage>
-                                        </BreadcrumbItem>
-                                    </React.Fragment>
-                                ))}
-                            </BreadcrumbList>
-                        </Breadcrumb>
-                    );
-                })()}
-            </div>
-            <div className="w-full grow relative flex px-4">
+            <div className="w-full grow relative flex p-2">
                 <div
                     className="absolute inset-0 overflow-auto data-[active-tab=true]:flex hidden"
                     data-slot="editor-content"
@@ -66,7 +38,7 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
                     ref={scrollRef}
                 >
                     <div
-                        className="sticky top-0 w-full h-full px-4"
+                        className="sticky top-0 w-full h-full p-2"
                     >
                         <div
                             className="w-full h-full"
