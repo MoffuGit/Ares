@@ -1,5 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Libertinus+Serif:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&display=swap");
 
 @import "tailwindcss";
 @import "shadcn/tailwind.css";
@@ -9,6 +10,7 @@
 @theme inline {
   --font-geist: "Geist", sans-serif;
   --font-geist-mono: "Geist Mono", monospace;
+  --font-libertinus: "Libertinus Serif", serif;
   --color-mode-normal: var(--mode-normal);
   --color-mode-visual: var(--mode-visual);
   --color-mode-insert: var(--mode-insert);

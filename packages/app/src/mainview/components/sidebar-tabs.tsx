@@ -4,7 +4,6 @@ import {
     SidebarContent,
     SidebarGroup,
     SidebarGroupContent,
-    SidebarGroupLabel,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
@@ -15,15 +14,11 @@ import { X } from "lucide-react";
 
 export function SidebarTabs() {
     const tabs = useAppStore((state) => state.tabs);
-    const project = useAppStore((state) => state.project);
 
     return (
         <>
             <SidebarContent>
                 <SidebarGroup>
-                    <SidebarGroupLabel>
-                        {project?.name}
-                    </SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {tabs.map((tab) => (
