@@ -49,36 +49,42 @@ export function TopBar() {
     const showTopTabs = tabsPosition === "horizontal";
 
     return (
-        <div className='shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag pt-1.5 flex items-center'>
-            <div className="h-6 max-w-full w-fit flex items-center gap-1.5 overflow-hidden electrobun-webkit-app-region-no-drag pl-17">
-                {showTopTabs && (
-                    <Tabs
-                        value={activeTabId}
-                        onValueChange={(val) => setActiveTab(val)}
+        <div className='shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag pt-1.5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center'>
+            <div className="min-w-0 pl-17">
+                <div className="h-6 max-w-full w-fit flex items-center gap-1.5 overflow-hidden electrobun-webkit-app-region-no-drag">
+                    {showTopTabs && (
+                        <Tabs
+                            value={activeTabId}
+                            onValueChange={(val) => setActiveTab(val)}
+                        >
+                            <TabsList className="h-6 bg-sidebar gap-1">
+                                {tabs.map((tab) => (
+                                    <TabTrigger
+                                        key={tab.id}
+                                        tab={tab}
+                                    />
+                                ))}
+                            </TabsList>
+                        </Tabs>
+                    )}
+                </div>
+            </div>
+            <div className="flex min-w-0 items-center justify-center px-2">
+                <div className="electrobun-webkit-app-region-no-drag">
+                    <TopBarInfo />
+                </div>
+            </div>
+            <div className="flex min-w-0 justify-end px-2">
+                {project && (
+                    <Button
+                        size="xs"
+                        variant="ghost"
+                        className="font-normal electrobun-webkit-app-region-no-drag px-1.5 text-xs text-muted-foreground/80 hover:bg-muted/60 hover:text-foreground/80"
                     >
-                        <TabsList className="h-6 bg-sidebar gap-1">
-                            {tabs.map((tab) => (
-                                <TabTrigger
-                                    key={tab.id}
-                                    tab={tab}
-                                />
-                            ))}
-                        </TabsList>
-                    </Tabs>
+                        <span className="min-w-0 truncate">{project.name}</span>
+                    </Button>
                 )}
             </div>
-            <div className="flex items-center px-2 electrobun-webkit-app-region-no-drag">
-                <TopBarInfo />
-            </div>
-            {project && (
-                <Button
-                    size="xs"
-                    variant="ghost"
-                    className="ml-auto mr-0 font-normal electrobun-webkit-app-region-no-drag px-1.5 text-xs text-muted-foreground/80 hover:bg-muted/60 hover:text-foreground/80"
-                >
-                    <span className="min-w-0 truncate">{project.name}</span>
-                </Button>
-            )}
         </div>
     )
 }
