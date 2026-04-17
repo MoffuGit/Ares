@@ -20,14 +20,13 @@ export function EmptyState() {
                     <EmptyMedia variant="icon">
                         <FolderOpenIcon />
                     </EmptyMedia>
-                    <EmptyTitle className="font-libertinus text-xl leading-none">No project open</EmptyTitle>
+                    <EmptyTitle className="font-libertinus text-2xl leading-none italic">No project open</EmptyTitle>
                     <EmptyDescription>
                         You haven't created any projects yet. Get started by creating your first project.
                     </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
                     <Button size="sm" variant="outline" onClick={() => void openProjectDialog()}>
-                        <FolderOpenIcon data-icon="inline-start" />
                         Open folder
                     </Button>
                 </EmptyContent>
