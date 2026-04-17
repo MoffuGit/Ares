@@ -20,7 +20,7 @@ export function EmptyState() {
                     <EmptyMedia variant="icon">
                         <FolderOpenIcon />
                     </EmptyMedia>
-                    <EmptyTitle>No project open</EmptyTitle>
+                    <EmptyTitle className="font-libertinus text-xl leading-none">No project open</EmptyTitle>
                     <EmptyDescription>
                         You haven't created any projects yet. Get started by creating your first project.
                     </EmptyDescription>
