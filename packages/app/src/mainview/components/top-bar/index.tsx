@@ -1,10 +1,7 @@
-import React from "react";
 import { useAppStore } from "@/lib/app";
 import { Tabs, TabsList } from "../ui/tabs";
 import { TabTrigger } from "../tab-trigger";
 import { Button } from "../ui/button";
-import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbSeparator } from "../ui/breadcrumb";
-import { FileIcon } from "../file-icons";
 import { Terminal } from "lucide-react";
 
 function TopBarInfo() {
@@ -17,25 +14,11 @@ function TopBarInfo() {
     const surface = activeTab.surface;
 
     if (surface.kind === "editor" && surface.entry) {
-        const parts = surface.entry.path.split("/").slice(1);
+        const parts = surface.entry.path.split("/").slice(1).join("/");
         return (
-            <Breadcrumb>
-                <BreadcrumbList>
-                    {parts.map((part, i) => (
-                        <React.Fragment key={i}>
-                            {i > 0 && <BreadcrumbSeparator />}
-                            <BreadcrumbItem>
-                                {i === parts.length - 1 && surface.entry && (
-                                    <BreadcrumbPage>
-                                        <FileIcon entry={surface.entry} />
-                                    </BreadcrumbPage>
-                                )}
-                                <BreadcrumbPage>{part}</BreadcrumbPage>
-                            </BreadcrumbItem>
-                        </React.Fragment>
-                    ))}
-                </BreadcrumbList>
-            </Breadcrumb>
+            <div className="font-normal dark:text-foreground/70 text-foreground text-xs leading-none">
+                {parts}
+            </div>
         );
     }
 
