@@ -17,7 +17,7 @@ export function FileTree() {
     if (!filetree) return null;
 
     return (
-        <SidebarContent>
+        <SidebarContent className="overflow-x-hidden">
             <SidebarGroup className="pr-1">
                 <SidebarGroupContent>
                     <SidebarMenu>
@@ -56,7 +56,7 @@ function FileTreeItem({ entry }: { entry: WorktreeEntry }) {
                 <FileIcon
                     entry={entry}
                 />
-                <div className="text-clip text-nowrap">{entry.name}</div>
+                <span className="min-w-0 truncate">{entry.name}</span>
             </SidebarMenuButton>
         </SidebarMenuItem>
     )
