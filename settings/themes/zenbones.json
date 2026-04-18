@@ -11,6 +11,7 @@
     "floatingWindow": "#0d0d0d",
     "mutedBg": "#110E0E",
     "mutedFg": "#989696",
+    "gutter": "#989696",
     "defaultFileColor": "#f0eeee",
     "destructive": "#ff6467",
     "destructiveFg": "#fafafa",
@@ -50,6 +51,7 @@
     "primaryFg": "primaryFg",
     "mutedBg": "mutedBg",
     "mutedFg": "mutedFg",
+    "gutter": "gutter",
     "scrollThumb": "scrollThumb",
     "scrollTrack": "scrollTrack",
     "border": "border",
@@ -93,7 +95,7 @@
       "line_highlight": "mutedBg",
       "selection": "selection",
       "selection_foreground": "selectionFg",
-      "gutter": "background",
+      "gutter": "gutter",
       "gutter_foreground": "mutedFg"
     },
     "rules": [

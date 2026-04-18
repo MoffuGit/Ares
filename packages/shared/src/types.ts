@@ -52,6 +52,7 @@ export type Theme = {
     primaryFg: string;
     mutedBg: string;
     mutedFg: string;
+    gutter: string;
     scrollThumb: string;
     scrollTrack: string;
     border: string;

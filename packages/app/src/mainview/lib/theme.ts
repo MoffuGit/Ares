@@ -7,6 +7,7 @@ const themeVarMap: Record<string, keyof Theme> = {
     "--primary-foreground": "primaryFg",
     "--muted": "mutedBg",
     "--muted-foreground": "mutedFg",
+    "--gutter": "gutter",
     "--border": "border",
     "--card": "card",
     "--card-foreground": "cardFg",

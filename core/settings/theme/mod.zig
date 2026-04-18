@@ -12,6 +12,7 @@ primaryBg: Color,
 primaryFg: Color,
 mutedBg: Color,
 mutedFg: Color,
+gutter: Color,
 scrollThumb: Color,
 scrollTrack: Color,
 border: Color,
@@ -53,6 +54,7 @@ pub const fallback = Theme{
     .primaryFg = Color{ 200, 200, 200, 255 },
     .mutedBg = Color{ 60, 60, 60, 255 },
     .mutedFg = Color{ 160, 160, 160, 255 },
+    .gutter = Color{ 160, 160, 160, 255 },
     .scrollThumb = Color{ 100, 100, 100, 255 },
     .scrollTrack = Color{ 50, 50, 50, 255 },
     .border = Color{ 0, 255, 0, 255 },
@@ -126,6 +128,7 @@ const JsonTheme = struct {
         primaryFg: []const u8,
         mutedBg: []const u8,
         mutedFg: []const u8,
+        gutter: []const u8,
         scrollThumb: []const u8,
         scrollTrack: []const u8,
         border: []const u8,
@@ -210,6 +213,7 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
     const primaryFg = colors.get(json_theme.theme.primaryFg) orelse return ParseError.ColorNotFound;
     const mutedBg = colors.get(json_theme.theme.mutedBg) orelse return ParseError.ColorNotFound;
     const mutedFg = colors.get(json_theme.theme.mutedFg) orelse return ParseError.ColorNotFound;
+    const gutter = colors.get(json_theme.theme.gutter) orelse return ParseError.ColorNotFound;
     const scrollThumb = colors.get(json_theme.theme.scrollThumb) orelse return ParseError.ColorNotFound;
     const scrollTrack = colors.get(json_theme.theme.scrollTrack) orelse return ParseError.ColorNotFound;
     const border = colors.get(json_theme.theme.border) orelse return ParseError.ColorNotFound;
@@ -270,6 +274,7 @@ pub fn parse(allocator: std.mem.Allocator, json: []const u8) ParseError!Theme {
         .primaryFg = primaryFg,
         .mutedBg = mutedBg,
         .mutedFg = mutedFg,
+        .gutter = gutter,
         .scrollThumb = scrollThumb,
         .scrollTrack = scrollTrack,
         .border = border,
@@ -364,6 +369,7 @@ test "parse theme" {
         \\    "primaryFg": "#ffffff",
         \\    "mutedBg": "#2a2a2a",
         \\    "mutedFg": "#888888",
+        \\    "gutter": "#888888",
         \\    "destructive": "#dc2626",
         \\    "destructiveFg": "#ffffff",
         \\    "chart1": "#e76f51",
@@ -379,6 +385,7 @@ test "parse theme" {
         \\    "primaryFg": "primaryFg",
         \\    "mutedBg": "mutedBg",
         \\    "mutedFg": "mutedFg",
+        \\    "gutter": "gutter",
         \\    "scrollThumb": "scrollThumb",
         \\    "scrollTrack": "scrollTrack",
         \\    "border": "scrollTrack",
@@ -424,6 +431,7 @@ test "parse theme" {
     try std.testing.expectEqual(Color{ 255, 255, 255, 255 }, theme.primaryFg);
     try std.testing.expectEqual(Color{ 42, 42, 42, 255 }, theme.mutedBg);
     try std.testing.expectEqual(Color{ 136, 136, 136, 255 }, theme.mutedFg);
+    try std.testing.expectEqual(Color{ 136, 136, 136, 255 }, theme.gutter);
     try std.testing.expectEqual(Color{ 102, 102, 102, 255 }, theme.scrollThumb);
     try std.testing.expectEqual(Color{ 51, 51, 51, 255 }, theme.scrollTrack);
     try std.testing.expectEqual(Color{ 10, 10, 10, 255 }, theme.card);
@@ -469,6 +477,7 @@ test "parse theme with fileType" {
         \\    "primaryFg": "#ffffff",
         \\    "mutedBg": "#2a2a2a",
         \\    "mutedFg": "#888888",
+        \\    "gutter": "#888888",
         \\    "rustColor": "#dea584",
         \\    "zigColor": "#f7a41d",
         \\    "defaultFileColor": "#cccccc",
@@ -487,6 +496,7 @@ test "parse theme with fileType" {
         \\    "primaryFg": "primaryFg",
         \\    "mutedBg": "mutedBg",
         \\    "mutedFg": "mutedFg",
+        \\    "gutter": "gutter",
         \\    "scrollThumb": "scrollThumb",
         \\    "scrollTrack": "scrollTrack",
         \\    "border": "scrollTrack",
@@ -551,6 +561,7 @@ test "parse theme fileType missing fallback" {
         \\    "primaryFg": "#ffffff",
         \\    "mutedBg": "#2a2a2a",
         \\    "mutedFg": "#888888",
+        \\    "gutter": "#888888",
         \\    "rustColor": "#dea584",
         \\    "destructive": "#dc2626",
         \\    "destructiveFg": "#ffffff",
@@ -567,6 +578,7 @@ test "parse theme fileType missing fallback" {
         \\    "primaryFg": "primaryFg",
         \\    "mutedBg": "mutedBg",
         \\    "mutedFg": "mutedFg",
+        \\    "gutter": "gutter",
         \\    "scrollThumb": "scrollThumb",
         \\    "scrollTrack": "scrollTrack",
         \\    "border": "scrollTrack",

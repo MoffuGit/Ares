@@ -21,7 +21,7 @@ const DEFAULT_DARK: []const u8 = "dark.json";
 const DEFAULT_LIGHT: []const u8 = "light.json";
 
 const FALLBACK_THEME_JSON: []const u8 =
-    \\{"name":"fallback","colors":{},"theme":{"bg":"","fg":"","primaryBg":"","primaryFg":"","mutedBg":"","mutedFg":"","scrollThumb":"","scrollTrack":"","border":"","card":"","cardFg":"","popover":"","popoverFg":"","secondary":"","secondaryFg":"","accent":"","accentFg":"","destructive":"","destructiveFg":"","input":"","ring":"","chart1":"","chart2":"","chart3":"","chart4":"","chart5":"","sidebar":"","sidebarFg":"","sidebarPrimary":"","sidebarPrimaryFg":"","sidebarAccent":"","sidebarAccentFg":"","sidebarBorder":"","sidebarRing":""}}
+    \\{"name":"fallback","colors":{},"theme":{"bg":"","fg":"","primaryBg":"","primaryFg":"","mutedBg":"","mutedFg":"","gutter":"","scrollThumb":"","scrollTrack":"","border":"","card":"","cardFg":"","popover":"","popoverFg":"","secondary":"","secondaryFg":"","accent":"","accentFg":"","destructive":"","destructiveFg":"","input":"","ring":"","chart1":"","chart2":"","chart3":"","chart4":"","chart5":"","sidebar":"","sidebarFg":"","sidebarPrimary":"","sidebarPrimaryFg":"","sidebarAccent":"","sidebarAccentFg":"","sidebarBorder":"","sidebarRing":""}}
 ;
 
 pub const LoadError = error{
@@ -280,6 +280,13 @@ pub fn getThemeColor(self: *const Settings, name: []const u8) ?ThemeColor {
 
 pub fn getThemeTextColor(self: *const Settings) ThemeColor {
     return self.getThemeColor("foreground") orelse themepkg.fallback.fg;
+}
+
+pub fn readThemeColor(self: *Settings, name: []const u8, fallback: ThemeColor) ThemeColor {
+    self.rwlock.lockShared();
+    defer self.rwlock.unlockShared();
+
+    return self.getThemeColor(name) orelse fallback;
 }
 
 pub fn readThemeTextColor(self: *Settings) ThemeColor {

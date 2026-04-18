@@ -92,7 +92,7 @@ type RawHighlightRule = {
 };
 
 const THEME_KEYS = [
-    "bg", "fg", "primaryBg", "primaryFg", "mutedBg", "mutedFg",
+    "bg", "fg", "primaryBg", "primaryFg", "mutedBg", "mutedFg", "gutter",
     "scrollThumb", "scrollTrack", "border", "card", "cardFg",
     "popover", "popoverFg", "secondary", "secondaryFg",
     "accent", "accentFg", "destructive", "destructiveFg",
