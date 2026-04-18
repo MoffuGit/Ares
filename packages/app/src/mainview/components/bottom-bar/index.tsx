@@ -17,7 +17,7 @@ export function BottomBar() {
             <Button
                 size="icon-xs"
                 variant="ghost"
-                className="hover:bg-accent/60 data-[active=true]:bg-accent"
+                className="hover:bg-accent/60 data-[active=true]:bg-accent/60 dark:data-[active=true]:bg-accent"
                 onClick={() => toggleSidebarKind("filetree")}
                 data-active={sidebarOpen && sidebarView === "filetree"}
             >
@@ -27,7 +27,7 @@ export function BottomBar() {
                 <Button
                     size="icon-xs"
                     variant="ghost"
-                    className="hover:bg-accent/60 data-[active=true]:bg-accent"
+                    className="hover:bg-accent/60 data-[active=true]:bg-accent/60 dark:data-[active=true]:bg-accent"
                     onClick={() => toggleSidebarKind("tabs")}
                     data-active={sidebarOpen && sidebarView === "tabs"}
                 >
