@@ -49,9 +49,9 @@ export function TopBar() {
     const showTopTabs = tabsPosition === "horizontal";
 
     return (
-        <div className='shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag pt-1.5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center'>
-            <div className="min-w-0 pl-17">
-                <div className="h-6 max-w-full w-fit flex items-center gap-1.5 overflow-hidden electrobun-webkit-app-region-no-drag">
+        <div className='shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag pt-1.5 grid grid-cols-[minmax(0,1fr)_minmax(33%,auto)_minmax(0,1fr)] items-center'>
+            <div className="min-w-0">
+                <div className="h-6 ml-17 max-w-full w-fit flex items-center gap-1.5 overflow-hidden electrobun-webkit-app-region-no-drag">
                     {showTopTabs && (
                         <Tabs
                             value={activeTabId}
@@ -69,7 +69,7 @@ export function TopBar() {
                     )}
                 </div>
             </div>
-            <div className="flex min-w-0 items-center justify-center px-2">
+            <div className="flex min-w-0 items-center justify-center px-2 bg-muted h-6 rounded-md shadow-inset dark:border border-border/50">
                 <div className="electrobun-webkit-app-region-no-drag">
                     <TopBarInfo />
                 </div>

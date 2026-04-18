@@ -13,7 +13,7 @@ export function BottomBar() {
     const tabsInSidebar = settings?.tabs_position === "vertical";
 
     return (
-        <div className="h-auto w-full flex flex-wrap items-center align-middle gap-1 text-xs wrap-break-word text-muted-foreground">
+        <div className="h-auto w-full flex flex-wrap items-center align-middle gap-1 text-xs wrap-break-word text-muted-foreground px-1">
             <Button
                 size="icon-xs"
                 variant={sidebarOpen && sidebarView === "filetree" ? "secondary" : "ghost"}
@@ -36,10 +36,6 @@ export function BottomBar() {
             <div className="ml-auto font-geist-mono font-normal text-xs text-muted-foreground/80 leading-none uppercase mt-0.5">
                 {mode}
             </div>
-            <span
-                data-mode={mode}
-                className="w-2 h-3 rounded-full bg-radial-[at_75%_110%] from-5% to-80% data-[mode=normal]:from-mode-normal data-[mode=normal]:to-mode-normal/20 data-[mode=visual]:from-mode-visual data-[mode=visual]:to-mode-visual/20 data-[mode=insert]:from-mode-insert data-[mode=insert]:to-mode-insert/20  mx-1"
-            />
         </div>
     )
 }
