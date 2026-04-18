@@ -16,18 +16,20 @@ export function BottomBar() {
         <div className="h-auto w-full flex flex-wrap items-center align-middle gap-1 text-xs wrap-break-word text-muted-foreground px-1">
             <Button
                 size="icon-xs"
-                variant={sidebarOpen && sidebarView === "filetree" ? "secondary" : "ghost"}
-                className="gap-1 hover:bg-accent/40"
+                variant="ghost"
+                className="hover:bg-accent/60 data-[active=true]:bg-accent"
                 onClick={() => toggleSidebarKind("filetree")}
+                data-active={sidebarOpen && sidebarView === "filetree"}
             >
                 <FolderTree />
             </Button>
             {tabsInSidebar ? (
                 <Button
                     size="icon-xs"
-                    variant={sidebarOpen && sidebarView === "tabs" ? "secondary" : "ghost"}
-                    className="hover:bg-accent/40"
+                    variant="ghost"
+                    className="hover:bg-accent/60 data-[active=true]:bg-accent"
                     onClick={() => toggleSidebarKind("tabs")}
+                    data-active={sidebarOpen && sidebarView === "tabs"}
                 >
                     <ListTree />
                 </Button>
