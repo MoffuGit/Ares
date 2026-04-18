@@ -40,6 +40,14 @@ function TopBarInfo() {
     return null;
 }
 
+function useTopBarInfo() {
+    const activeTabId = useAppStore((s) => s.activeTabId);
+    const tabs = useAppStore((s) => s.tabs);
+    const activeTab = tabs.find((t) => t.id === activeTabId);
+    if (!activeTab) return null;
+    return activeTab.surface;
+}
+
 export function TopBar() {
     const { setActiveTab } = useAppStore.getState();
     const tabsPosition = useAppStore((s) => s.settings?.tabs_position ?? "horizontal");
@@ -47,6 +55,8 @@ export function TopBar() {
     const tabs = useAppStore((s) => s.tabs);
     const project = useAppStore((s) => s.project);
     const showTopTabs = tabsPosition === "horizontal";
+    const surface = useTopBarInfo();
+    const hasInfo = surface !== null && (surface.kind === "terminal" || surface.kind === "editor");
 
     return (
         <div className='shrink-0 bg-sidebar cursor-default electrobun-webkit-app-region-drag pt-1.5 grid grid-cols-[minmax(0,1fr)_minmax(33%,auto)_minmax(0,1fr)] items-center'>
@@ -69,10 +79,14 @@ export function TopBar() {
                     )}
                 </div>
             </div>
-            <div className="flex min-w-0 items-center justify-center px-2 bg-muted h-6 rounded-md shadow-inset dark:border border-border/50">
-                <div className="electrobun-webkit-app-region-no-drag">
-                    <TopBarInfo />
-                </div>
+            <div className="min-w-0">
+                {hasInfo && (
+                    <div className="flex min-w-0 w-full items-center justify-center px-2 bg-muted h-6 rounded-md shadow-inset dark:border border-border/50">
+                        <div className="electrobun-webkit-app-region-no-drag">
+                            <TopBarInfo />
+                        </div>
+                    </div>
+                )}
             </div>
             <div className="flex min-w-0 justify-end">
                 {project && (
