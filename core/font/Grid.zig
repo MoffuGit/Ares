@@ -12,6 +12,7 @@ const embedpkg = @import("embedded/mod.zig");
 const Metrics = facepkg.Metrics;
 const sizepkg = @import("../size.zig");
 const Style = fontpkg.Style;
+const Collection = @import("Collection.zig");
 
 const CodepointKey = struct {
     style: Style,
@@ -22,8 +23,7 @@ atlas_grayscale: Atlas,
 resolver: CodePointResolver,
 shaper: Shaper,
 lock: std.Thread.RwLock = .{},
-metrics: Metrics,
-metric_modifiers: Metrics.ModifierSet = .{},
+metrics: Metrics = undefined,
 
 glyphs: std.AutoHashMap(u32, fontpkg.Glyph),
 codepoints: std.AutoHashMapUnmanaged(CodepointKey, u32) = .{},
@@ -32,35 +32,43 @@ pub fn init(alloc: Allocator, opts: facepkg.Options) !Grid {
     var atlas_grayscale = try Atlas.init(alloc, 512, .grayscale);
     errdefer atlas_grayscale.deinit(alloc);
 
+    var collection = Collection.init();
+
+    const regular = try Face.init(embedpkg.GeistMono, opts);
+
+    var bold = try Face.init(embedpkg.GeistMono, opts);
+
+    try bold.setVariations(
+        &.{
+            .{ .id = facepkg.Variation.Id.init("wght"), .value = 800 },
+        },
+        opts,
+    );
+    collection.add(regular, .regular);
+    collection.add(bold, .bold);
+
+    try collection.metric_modifiers.put(alloc, .cell_width, .{ .absolute = -1 });
+    collection.reloadMetrics();
+
     var grid = Grid{
         .atlas_grayscale = atlas_grayscale,
         .resolver = .{
-            .face = try Face.init(embedpkg.GeistMono, opts),
-            .fallback = try Face.init(embedpkg.JetBrainsMono, opts),
+            .collection = collection,
         },
+        .metrics = collection.metrics,
         .shaper = try Shaper.init(alloc),
-        .metrics = undefined,
         .glyphs = std.AutoHashMap(u32, fontpkg.Glyph).init(alloc),
     };
     errdefer grid.shaper.deinit();
     errdefer grid.glyphs.deinit();
     errdefer grid.codepoints.deinit(alloc);
 
-    try grid.metric_modifiers.put(alloc, .cell_width, .{ .absolute = -1 });
-
-    try grid.reloadMetrics();
-
     return grid;
 }
 
 fn reloadMetrics(self: *Grid) !void {
-    const face = &self.resolver.face;
-
-    var metrics = Metrics.calc(face.getMetrics());
-
-    metrics.apply(self.metric_modifiers);
-
-    self.metrics = metrics;
+    self.resolver.collection.reloadMetrics();
+    self.metrics = self.resolver.collection.metrics;
 }
 
 pub fn cellSize(self: *Grid) sizepkg.CellSize {
@@ -69,21 +77,20 @@ pub fn cellSize(self: *Grid) sizepkg.CellSize {
 
 pub fn deinit(self: *Grid, alloc: Allocator) void {
     self.atlas_grayscale.deinit(alloc);
-    self.resolver.deinit();
+    self.resolver.deinit(alloc);
     self.shaper.deinit();
     self.glyphs.deinit();
-    self.metric_modifiers.deinit(alloc);
     self.codepoints.deinit(alloc);
 }
 
 pub fn shapeRow(self: *Grid, alloc: Allocator, codepoints: []const u32) ![]const Shaper.ShapedGlyph {
-    return self.shaper.shapeRow(alloc, &self.resolver.face, self.metrics, codepoints);
+    return self.shaper.shapeRow(alloc, self.resolver.collection.faces.getPtr(.regular), self.metrics, codepoints);
 }
 
 pub fn renderCodepoint(self: *Grid, alloc: Allocator, cp: u32, style: Style) !?fontpkg.Glyph {
     const index = try self.getIndex(alloc, cp, style) orelse return null;
 
-    return try self.renderGlyph(alloc, index);
+    return try self.renderGlyph(alloc, index, style);
 }
 
 pub fn getIndex(self: *Grid, alloc: Allocator, cp: u32, style: Style) !?u32 {
@@ -98,23 +105,17 @@ pub fn getIndex(self: *Grid, alloc: Allocator, cp: u32, style: Style) !?u32 {
     self.lock.lock();
     self.lock.unlock();
 
-    if (self.resolver.face.glyphIndex(cp)) |index| {
+    const face = self.resolver.getFace(style);
+
+    if (face.glyphIndex(cp)) |index| {
         try self.codepoints.put(alloc, .{ .codepoint = cp, .style = style }, index);
         return index;
-    }
-
-    if (self.resolver.fallback) |*fb| {
-        if (fb.glyphIndex(cp)) |index| {
-            const tagged = index;
-            try self.codepoints.put(alloc, .{ .codepoint = cp, .style = style }, tagged);
-            return tagged;
-        }
     }
 
     return null;
 }
 
-pub fn renderGlyph(self: *Grid, alloc: Allocator, index: u32) !fontpkg.Glyph {
+pub fn renderGlyph(self: *Grid, alloc: Allocator, index: u32, style: Style) !fontpkg.Glyph {
     {
         self.lock.lockShared();
         defer self.lock.unlockShared();
@@ -130,7 +131,7 @@ pub fn renderGlyph(self: *Grid, alloc: Allocator, index: u32) !fontpkg.Glyph {
     const atlas = &self.atlas_grayscale;
     const raw_index = index;
 
-    const face = &self.resolver.face;
+    const face = self.resolver.getFace(style);
     const glyph = try face.renderGlyph(alloc, atlas, raw_index, .{
         .grid_metrics = self.metrics,
     });

@@ -335,7 +335,7 @@ fn renderShapedGlyph(
     placement: fontpkg.Shaper.ShapedGlyph,
     color: [4]u8,
 ) !?shaderpkg.CellText {
-    const glyph = try renderer.grid.renderGlyph(renderer.alloc, placement.glyph_index);
+    const glyph = try renderer.grid.renderGlyph(renderer.alloc, placement.glyph_index, .bold);
 
     return glyphToCellText(
         row_idx,
