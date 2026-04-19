@@ -13,6 +13,7 @@ pub struct Span {
     pub g: u8,
     pub b: u8,
     pub a: u8,
+    pub font_style: u8,
 }
 
 pub type EmitSpanFn = unsafe extern "C" fn(ctx: *mut c_void, line_index: u32, span: Span);
@@ -105,6 +106,7 @@ impl Session {
                                 g: style.foreground.g,
                                 b: style.foreground.b,
                                 a: style.foreground.a,
+                                font_style: style.font_style.bits(),
                             },
                         );
                     }

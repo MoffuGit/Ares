@@ -183,10 +183,21 @@ fn collectSpan(ctx: *anyopaque, _: u32, span: zintect.Span) callconv(.c) void {
     const start_col = byteToCodepoint(collector.current_line, span.start_byte);
     const end_col = byteToCodepoint(collector.current_line, span.end_byte);
 
+    const fs = span.fontStyle();
+    const style: @import("font/mod.zig").Style = if (fs.bold and fs.italic)
+        .bold_italic
+    else if (fs.bold)
+        .bold
+    else if (fs.italic)
+        .italic
+    else
+        .regular;
+
     collector.spans.append(collector.alloc, .{
         .start_col = start_col,
         .end_col = end_col,
         .color = span.color(),
+        .style = style,
     }) catch return;
 }
 

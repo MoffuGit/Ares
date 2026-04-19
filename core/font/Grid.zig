@@ -49,8 +49,21 @@ pub fn init(alloc: Allocator, opts: facepkg.Options) !Grid {
         },
         opts,
     );
+    const italic = try Face.init(embedpkg.GeistMonoItalic, opts);
+
+    var bold_italic = try Face.init(embedpkg.GeistMonoItalic, opts);
+
+    try bold_italic.setVariations(
+        &.{
+            .{ .id = facepkg.Variation.Id.init("wght"), .value = 800 },
+        },
+        opts,
+    );
+
     collection.add(regular, .regular);
     collection.add(bold, .bold);
+    collection.add(italic, .italic);
+    collection.add(bold_italic, .bold_italic);
 
     try collection.metric_modifiers.put(alloc, .cell_width, .{ .absolute = -1 });
     collection.reloadMetrics();

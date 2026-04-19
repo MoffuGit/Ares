@@ -9,10 +9,22 @@ pub const Span = extern struct {
     g: u8,
     b: u8,
     a: u8,
+    font_style: u8,
 
     pub fn color(self: Span) [4]u8 {
         return .{ self.r, self.g, self.b, self.a };
     }
+
+    pub fn fontStyle(self: Span) FontStyle {
+        return @bitCast(self.font_style);
+    }
+};
+
+pub const FontStyle = packed struct(u8) {
+    bold: bool = false,
+    italic: bool = false,
+    underline: bool = false,
+    _padding: u5 = 0,
 };
 
 pub const EmitSpanFn = *const fn (ctx: *anyopaque, line_index: u32, span: Span) callconv(.c) void;

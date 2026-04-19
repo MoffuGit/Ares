@@ -306,8 +306,8 @@ fn rebuildCells(
             const col_idx = gutter_width + placement.column;
             if (col_idx >= grid_size.columns) continue;
 
-            const glyph_color = colorAt(hl, placement.column, default_color);
-            const cell = try renderShapedGlyph(renderer, row_idx, col_idx, placement, glyph_color, .regular) orelse continue;
+            const span_info = spanAt(hl, placement.column, default_color);
+            const cell = try renderShapedGlyph(renderer, row_idx, col_idx, placement, span_info.color, span_info.style) orelse continue;
             try renderer.cells.add(renderer.alloc, .text, cell);
         }
     }
@@ -315,12 +315,17 @@ fn rebuildCells(
     renderer.cells_rebuilt = true;
 }
 
-fn colorAt(spans: []const Buffer.HighlightSpan, col: usize, default: [4]u8) [4]u8 {
+const SpanResult = struct {
+    color: [4]u8,
+    style: Style,
+};
+
+fn spanAt(spans: []const Buffer.HighlightSpan, col: usize, default_color: [4]u8) SpanResult {
     for (spans) |span| {
-        if (col >= span.start_col and col < span.end_col) return span.color;
+        if (col >= span.start_col and col < span.end_col) return .{ .color = span.color, .style = span.style };
         if (col < span.start_col) break;
     }
-    return default;
+    return .{ .color = default_color, .style = .regular };
 }
 
 fn renderCellText(renderer: *Renderer, row_idx: usize, col_idx: usize, codepoint: u32, color: [4]u8, style: Style) !?shaderpkg.CellText {
