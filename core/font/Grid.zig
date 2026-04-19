@@ -11,6 +11,12 @@ const Face = facepkg.Face;
 const embedpkg = @import("embedded/mod.zig");
 const Metrics = facepkg.Metrics;
 const sizepkg = @import("../size.zig");
+const Style = fontpkg.Style;
+
+const CodepointKey = struct {
+    style: Style,
+    codepoint: u32,
+};
 
 atlas_grayscale: Atlas,
 resolver: CodePointResolver,
@@ -20,7 +26,7 @@ metrics: Metrics,
 metric_modifiers: Metrics.ModifierSet = .{},
 
 glyphs: std.AutoHashMap(u32, fontpkg.Glyph),
-codepoints: std.AutoHashMap(u32, u32),
+codepoints: std.AutoHashMapUnmanaged(CodepointKey, u32) = .{},
 
 pub fn init(alloc: Allocator, opts: facepkg.Options) !Grid {
     var atlas_grayscale = try Atlas.init(alloc, 512, .grayscale);
@@ -35,11 +41,10 @@ pub fn init(alloc: Allocator, opts: facepkg.Options) !Grid {
         .shaper = try Shaper.init(alloc),
         .metrics = undefined,
         .glyphs = std.AutoHashMap(u32, fontpkg.Glyph).init(alloc),
-        .codepoints = std.AutoHashMap(u32, u32).init(alloc),
     };
     errdefer grid.shaper.deinit();
     errdefer grid.glyphs.deinit();
-    errdefer grid.codepoints.deinit();
+    errdefer grid.codepoints.deinit(alloc);
 
     try grid.metric_modifiers.put(alloc, .cell_width, .{ .absolute = -1 });
 
@@ -68,28 +73,25 @@ pub fn deinit(self: *Grid, alloc: Allocator) void {
     self.shaper.deinit();
     self.glyphs.deinit();
     self.metric_modifiers.deinit(alloc);
-    self.codepoints.deinit();
+    self.codepoints.deinit(alloc);
 }
 
 pub fn shapeRow(self: *Grid, alloc: Allocator, codepoints: []const u32) ![]const Shaper.ShapedGlyph {
     return self.shaper.shapeRow(alloc, &self.resolver.face, self.metrics, codepoints);
 }
 
-pub fn renderCodepoint(self: *Grid, alloc: Allocator, cp: u32) !?fontpkg.Glyph {
-    const index = try self.getIndex(cp) orelse return null;
+pub fn renderCodepoint(self: *Grid, alloc: Allocator, cp: u32, style: Style) !?fontpkg.Glyph {
+    const index = try self.getIndex(alloc, cp, style) orelse return null;
 
     return try self.renderGlyph(alloc, index);
 }
 
-/// Bit flag to mark glyph indices that belong to the fallback face.
-const fallback_flag: u32 = 1 << 31;
-
-pub fn getIndex(self: *Grid, cp: u32) !?u32 {
+pub fn getIndex(self: *Grid, alloc: Allocator, cp: u32, style: Style) !?u32 {
     {
         self.lock.lockShared();
         defer self.lock.unlockShared();
 
-        if (self.codepoints.get(cp)) |cached_index| {
+        if (self.codepoints.get(.{ .codepoint = cp, .style = style })) |cached_index| {
             return cached_index;
         }
     }
@@ -97,14 +99,14 @@ pub fn getIndex(self: *Grid, cp: u32) !?u32 {
     self.lock.unlock();
 
     if (self.resolver.face.glyphIndex(cp)) |index| {
-        try self.codepoints.put(cp, index);
+        try self.codepoints.put(alloc, .{ .codepoint = cp, .style = style }, index);
         return index;
     }
 
     if (self.resolver.fallback) |*fb| {
         if (fb.glyphIndex(cp)) |index| {
-            const tagged = index | fallback_flag;
-            try self.codepoints.put(cp, tagged);
+            const tagged = index;
+            try self.codepoints.put(alloc, .{ .codepoint = cp, .style = style }, tagged);
             return tagged;
         }
     }
@@ -126,10 +128,9 @@ pub fn renderGlyph(self: *Grid, alloc: Allocator, index: u32) !fontpkg.Glyph {
     defer self.lock.unlock();
 
     const atlas = &self.atlas_grayscale;
-    const is_fallback = (index & fallback_flag) != 0;
-    const raw_index = index & ~fallback_flag;
+    const raw_index = index;
 
-    const face = if (is_fallback) &(self.resolver.fallback.?) else &self.resolver.face;
+    const face = &self.resolver.face;
     const glyph = try face.renderGlyph(alloc, atlas, raw_index, .{
         .grid_metrics = self.metrics,
     });

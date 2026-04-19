@@ -1,2 +1,2 @@
-pub const GeistMono = @embedFile("GeistMono-Regular.ttf");
+pub const GeistMono = @embedFile("GeistMono.ttf");
 pub const JetBrainsMono = @embedFile("JetBrainsMonoNerdFont-Regular.ttf");

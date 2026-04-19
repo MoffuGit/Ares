@@ -323,7 +323,7 @@ fn colorAt(spans: []const Buffer.HighlightSpan, col: usize, default: [4]u8) [4]u
 }
 
 fn renderCellText(renderer: *Renderer, row_idx: usize, col_idx: usize, codepoint: u32, color: [4]u8) !?shaderpkg.CellText {
-    const glyph = try renderer.grid.renderCodepoint(renderer.alloc, codepoint) orelse return null;
+    const glyph = try renderer.grid.renderCodepoint(renderer.alloc, codepoint, .regular) orelse return null;
 
     return glyphToCellText(row_idx, col_idx, glyph, 0, 0, color);
 }
