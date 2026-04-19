@@ -23,3 +23,8 @@ pub const ReadResult = struct {
     path: []const u8,
     file: ?File,
 };
+
+pub const WriteResult = struct {
+    path: []const u8,
+    bytes_written: ?usize,
+};

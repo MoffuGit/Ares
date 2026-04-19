@@ -121,6 +121,21 @@ fn drainMailbox(self: *Thread) !void {
                     readCallback,
                 );
             },
+            .write => |req| {
+                req.init() catch {
+                    Io.onWriteError(req);
+                    continue;
+                };
+                self.io.addPendingWrite(req);
+                req.xev_file.write(
+                    &self.loop,
+                    &req.completion,
+                    .{ .slice = req.data },
+                    Io.WriteRequest,
+                    req,
+                    writeCallback,
+                );
+            },
         }
     }
 }
@@ -140,6 +155,26 @@ fn readCallback(
     } else |err| {
         log.err("read error: {}", .{err});
         Io.onReadError(request);
+    }
+
+    return .disarm;
+}
+
+fn writeCallback(
+    req: ?*Io.WriteRequest,
+    _: *xev.Loop,
+    _: *xev.Completion,
+    _: xev.File,
+    _: xev.WriteBuffer,
+    r: xev.WriteError!usize,
+) xev.CallbackAction {
+    const request = req orelse return .disarm;
+
+    if (r) |bytes_written| {
+        Io.onWriteComplete(request, bytes_written);
+    } else |err| {
+        log.err("write error: {}", .{err});
+        Io.onWriteError(request);
     }
 
     return .disarm;

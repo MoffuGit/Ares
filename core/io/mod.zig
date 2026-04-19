@@ -58,10 +58,41 @@ pub const ReadRequest = struct {
     }
 };
 
+pub const WriteRequest = struct {
+    path: []u8,
+    data: []u8,
+    completion: xev.Completion = .{},
+
+    xev_file: xev.File = undefined,
+    fd: ?std.fs.File = null,
+
+    alloc: Allocator,
+
+    io: *Io,
+
+    pub fn init(self: *WriteRequest) !void {
+        var file = try std.fs.createFileAbsolute(self.path, .{ .truncate = true });
+        errdefer file.close();
+
+        const xev_file = try xev.File.init(file);
+
+        self.xev_file = xev_file;
+        self.fd = file;
+    }
+
+    pub fn deinit(self: *WriteRequest) void {
+        if (self.fd) |fd| fd.close();
+        self.alloc.free(self.data);
+        self.alloc.free(self.path);
+        self.alloc.destroy(self);
+    }
+};
+
 alloc: Allocator,
 thread: Thread,
 thr: std.Thread,
 pending_reads: std.ArrayListUnmanaged(*ReadRequest),
+pending_writes: std.ArrayListUnmanaged(*WriteRequest),
 
 pub fn create(alloc: Allocator, thread_pool: *xev.ThreadPool) !*Io {
     var io = try alloc.create(Io);
@@ -71,6 +102,7 @@ pub fn create(alloc: Allocator, thread_pool: *xev.ThreadPool) !*Io {
         .thread = try Thread.init(alloc, io, thread_pool),
         .thr = undefined,
         .pending_reads = .{},
+        .pending_writes = .{},
     };
 
     io.thr = try std.Thread.spawn(.{}, Thread.threadMain, .{&io.thread});
@@ -90,6 +122,7 @@ pub fn destroy(self: *Io) void {
     while (self.thread.mailbox.pop()) |message| {
         switch (message) {
             .read => |req| req.deinit(),
+            .write => |req| req.deinit(),
         }
     }
 
@@ -98,6 +131,12 @@ pub fn destroy(self: *Io) void {
         req.deinit();
     }
     self.pending_reads.deinit(self.alloc);
+
+    // Clean up any pending writes that were submitted but never completed
+    for (self.pending_writes.items) |req| {
+        req.deinit();
+    }
+    self.pending_writes.deinit(self.alloc);
 
     self.thread.deinit();
     self.alloc.destroy(self);
@@ -177,6 +216,70 @@ pub fn onReadError(req: *ReadRequest) void {
     req.io.removePendingRead(req);
 
     global.state.emitGlobal(.{ .ioReadComplete = .{ .path = path, .file = null } });
+
+    req.deinit();
+}
+
+pub fn writeFile(self: *Io, abs_path: []const u8, data: []const u8) !void {
+    const path = try self.alloc.dupe(u8, abs_path);
+    errdefer self.alloc.free(path);
+
+    const data_copy = try self.alloc.dupe(u8, data);
+    errdefer self.alloc.free(data_copy);
+
+    const req = try self.alloc.create(WriteRequest);
+
+    req.* = .{
+        .path = path,
+        .data = data_copy,
+        .alloc = self.alloc,
+        .io = self,
+    };
+
+    if (self.thread.mailbox.push(.{ .write = req }, .instant) != 0) {
+        self.thread.wakeup.notify() catch |err| {
+            log.err("error notifying io thread to wakeup: {}", .{err});
+        };
+    } else {
+        self.alloc.free(data_copy);
+        self.alloc.free(path);
+        self.alloc.destroy(req);
+    }
+}
+
+pub fn addPendingWrite(self: *Io, req: *WriteRequest) void {
+    self.pending_writes.append(self.alloc, req) catch |err| {
+        log.err("failed to track pending write: {}", .{err});
+    };
+}
+
+pub fn removePendingWrite(self: *Io, req: *WriteRequest) void {
+    for (self.pending_writes.items, 0..) |item, i| {
+        if (item == req) {
+            _ = self.pending_writes.swapRemove(i);
+            return;
+        }
+    }
+}
+
+pub fn onWriteComplete(req: *WriteRequest, bytes_written: usize) void {
+    const path = req.path;
+
+    req.io.removePendingWrite(req);
+
+    global.state.emitGlobal(.{ .ioWriteComplete = .{
+        .path = path,
+        .bytes_written = bytes_written,
+    } });
+
+    req.deinit();
+}
+
+pub fn onWriteError(req: *WriteRequest) void {
+    const path = req.path;
+    req.io.removePendingWrite(req);
+
+    global.state.emitGlobal(.{ .ioWriteComplete = .{ .path = path, .bytes_written = null } });
 
     req.deinit();
 }

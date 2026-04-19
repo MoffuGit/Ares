@@ -19,6 +19,7 @@ pub const GlobalEvents = union(enum) {
     highlightUpdate: u64,
     themeUpdate: void,
     ioReadComplete: io_types.ReadResult,
+    ioWriteComplete: io_types.WriteResult,
 };
 
 pub const ExternSurfaceState = extern struct {
