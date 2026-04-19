@@ -19,13 +19,18 @@ const CodepointKey = struct {
     codepoint: u32,
 };
 
+const GlyphKey = struct {
+    index: u32,
+    style: Style,
+};
+
 atlas_grayscale: Atlas,
 resolver: CodePointResolver,
 shaper: Shaper,
 lock: std.Thread.RwLock = .{},
 metrics: Metrics = undefined,
 
-glyphs: std.AutoHashMap(u32, fontpkg.Glyph),
+glyphs: std.AutoHashMap(GlyphKey, fontpkg.Glyph),
 codepoints: std.AutoHashMapUnmanaged(CodepointKey, u32) = .{},
 
 pub fn init(alloc: Allocator, opts: facepkg.Options) !Grid {
@@ -57,7 +62,7 @@ pub fn init(alloc: Allocator, opts: facepkg.Options) !Grid {
         },
         .metrics = collection.metrics,
         .shaper = try Shaper.init(alloc),
-        .glyphs = std.AutoHashMap(u32, fontpkg.Glyph).init(alloc),
+        .glyphs = std.AutoHashMap(GlyphKey, fontpkg.Glyph).init(alloc),
     };
     errdefer grid.shaper.deinit();
     errdefer grid.glyphs.deinit();
@@ -120,7 +125,7 @@ pub fn renderGlyph(self: *Grid, alloc: Allocator, index: u32, style: Style) !fon
         self.lock.lockShared();
         defer self.lock.unlockShared();
 
-        if (self.glyphs.get(index)) |cached_glyph| {
+        if (self.glyphs.get(.{ .index = index, .style = style })) |cached_glyph| {
             return cached_glyph;
         }
     }
@@ -135,7 +140,7 @@ pub fn renderGlyph(self: *Grid, alloc: Allocator, index: u32, style: Style) !fon
     const glyph = try face.renderGlyph(alloc, atlas, raw_index, .{
         .grid_metrics = self.metrics,
     });
-    try self.glyphs.put(index, glyph);
+    try self.glyphs.put(.{ .index = index, .style = style }, glyph);
 
     return glyph;
 }

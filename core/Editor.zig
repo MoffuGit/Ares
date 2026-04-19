@@ -9,6 +9,7 @@ const Project = @import("Project.zig");
 const Buffer = @import("buffer/Buffer.zig");
 const Renderer = @import("Renderer.zig");
 const fontpkg = @import("font/mod.zig");
+const Style = fontpkg.Style;
 const sizepkg = @import("size.zig");
 const shaderpkg = Renderer.GraphicsAPI.shaders;
 const Settings = @import("settings/mod.zig");
@@ -277,7 +278,7 @@ fn rebuildCells(
 
         renderer.uniforms.cursor_pos = .{ @intCast(col_idx), @intCast(row_idx) };
 
-        break :blk try renderCellText(renderer, row_idx, col_idx, 0x2588, default_color);
+        break :blk try renderCellText(renderer, row_idx, col_idx, 0x2588, default_color, .regular);
     } else null;
     if (cursor_cell != null) {
         cursor_cell.?.bools.is_cursor_glyph = true;
@@ -306,7 +307,7 @@ fn rebuildCells(
             if (col_idx >= grid_size.columns) continue;
 
             const glyph_color = colorAt(hl, placement.column, default_color);
-            const cell = try renderShapedGlyph(renderer, row_idx, col_idx, placement, glyph_color) orelse continue;
+            const cell = try renderShapedGlyph(renderer, row_idx, col_idx, placement, glyph_color, .regular) orelse continue;
             try renderer.cells.add(renderer.alloc, .text, cell);
         }
     }
@@ -322,8 +323,8 @@ fn colorAt(spans: []const Buffer.HighlightSpan, col: usize, default: [4]u8) [4]u
     return default;
 }
 
-fn renderCellText(renderer: *Renderer, row_idx: usize, col_idx: usize, codepoint: u32, color: [4]u8) !?shaderpkg.CellText {
-    const glyph = try renderer.grid.renderCodepoint(renderer.alloc, codepoint, .regular) orelse return null;
+fn renderCellText(renderer: *Renderer, row_idx: usize, col_idx: usize, codepoint: u32, color: [4]u8, style: Style) !?shaderpkg.CellText {
+    const glyph = try renderer.grid.renderCodepoint(renderer.alloc, codepoint, style) orelse return null;
 
     return glyphToCellText(row_idx, col_idx, glyph, 0, 0, color);
 }
@@ -334,8 +335,9 @@ fn renderShapedGlyph(
     col_idx: usize,
     placement: fontpkg.Shaper.ShapedGlyph,
     color: [4]u8,
+    style: Style,
 ) !?shaderpkg.CellText {
-    const glyph = try renderer.grid.renderGlyph(renderer.alloc, placement.glyph_index, .bold);
+    const glyph = try renderer.grid.renderGlyph(renderer.alloc, placement.glyph_index, style);
 
     return glyphToCellText(
         row_idx,
@@ -375,9 +377,10 @@ fn renderRelativeLineNumber(
         0;
     const first_digit = digits.len - visible_digit_count;
     const color = if (relative == 0) current_line_color else gutter_color;
+    const style: Style = if (relative == 0) .bold else .regular;
 
     for (digits[first_digit..], 0..) |digit, digit_idx| {
-        const cell = try renderCellText(renderer, row_idx, start_col + digit_idx, digit, color) orelse continue;
+        const cell = try renderCellText(renderer, row_idx, start_col + digit_idx, digit, color, style) orelse continue;
         try renderer.cells.add(renderer.alloc, .text, cell);
     }
 }
