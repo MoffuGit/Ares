@@ -152,6 +152,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
             const project = await rpc.request.openProjectDialog({});
             if (!project) return;
             set({ project, sidebarKind: "filetree" });
+            get().newTab({ kind: "editor" });
         } catch (error) {
             console.error("openProjectDialog failed", error);
         }

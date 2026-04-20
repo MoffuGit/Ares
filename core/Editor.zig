@@ -13,6 +13,7 @@ const Style = fontpkg.Style;
 const sizepkg = @import("size.zig");
 const shaderpkg = Renderer.GraphicsAPI.shaders;
 const Settings = @import("settings/mod.zig");
+const Modifiers = @import("keymaps/KeyStroke.zig").Modifiers;
 
 const log = std.log.scoped(.editor);
 
@@ -94,6 +95,33 @@ pub fn setCursorPosition(self: *Editor, row: u64, col: u64) void {
     self.cursor = .{ .row = row, .col = col };
 
     const buffer = self.buffer orelse return;
+    self.clampCursorToBuffer(buffer);
+    self.emitEditorUpdate(buffer.entry_id, buffer);
+    self.rebuild_cells = true;
+}
+
+pub fn keyEvent(self: *Editor, event: inputpkg.KeyEvent) void {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    const buffer = self.buffer orelse return;
+    if (buffer.getState() != .ready) return;
+    if (hasCommandModifiers(event.mods)) return;
+
+    self.clampCursorToBuffer(buffer);
+
+    buffer.mutex.lock();
+    const changed = switch (event.input) {
+        .text => |cp| self.insertCodepoint(buffer, cp),
+        .enter => self.insertAscii(buffer, '\n', .{ .row = self.cursor.row + 1, .col = 0 }),
+        .tab => self.insertAscii(buffer, '\t', .{ .row = self.cursor.row, .col = self.cursor.col + 1 }),
+        .backspace => self.backspace(buffer),
+        .delete => self.delete(buffer),
+    };
+    buffer.mutex.unlock();
+
+    if (!changed) return;
+
     self.clampCursorToBuffer(buffer);
     self.emitEditorUpdate(buffer.entry_id, buffer);
     self.rebuild_cells = true;
@@ -206,6 +234,52 @@ fn clampCursorToBuffer(self: *Editor, buffer: *Buffer) void {
         .row = cursor_row,
         .col = @min(std.math.cast(usize, self.cursor.col) orelse max_col, max_col),
     };
+}
+
+fn insertCodepoint(self: *Editor, buffer: *Buffer, cp: u21) bool {
+    var utf8: [4]u8 = undefined;
+    const len = std.unicode.utf8Encode(cp, &utf8) catch return false;
+
+    return self.insertBytes(buffer, utf8[0..len], .{ .row = self.cursor.row, .col = self.cursor.col + 1 });
+}
+
+fn insertAscii(self: *Editor, buffer: *Buffer, byte: u8, next_cursor: CursorPosition) bool {
+    var raw = [1]u8{byte};
+    return self.insertBytes(buffer, &raw, next_cursor);
+}
+
+fn insertBytes(self: *Editor, buffer: *Buffer, bytes: []const u8, next_cursor: CursorPosition) bool {
+    buffer.text.insertUtf8At(@intCast(self.cursor.row), @intCast(self.cursor.col), bytes) catch return false;
+    self.cursor = next_cursor;
+    return true;
+}
+
+fn backspace(self: *Editor, buffer: *Buffer) bool {
+    if (self.cursor.row == 0 and self.cursor.col == 0) return false;
+
+    if (self.cursor.col > 0) {
+        if (!(buffer.text.backspaceAt(@intCast(self.cursor.row), @intCast(self.cursor.col)) catch return false)) return false;
+        self.cursor.col -= 1;
+    } else {
+        const previous_row = self.cursor.row - 1;
+        const previous_col = if (previous_row < buffer.text.layout.rows.len)
+            buffer.text.layout.rows[@intCast(previous_row)].codepoints.len
+        else
+            0;
+        if (!(buffer.text.backspaceAt(@intCast(self.cursor.row), @intCast(self.cursor.col)) catch return false)) return false;
+        self.cursor = .{ .row = previous_row, .col = previous_col };
+    }
+
+    return true;
+}
+
+fn delete(self: *Editor, buffer: *Buffer) bool {
+    const changed = buffer.text.deleteAt(@intCast(self.cursor.row), @intCast(self.cursor.col)) catch return false;
+    return changed;
+}
+
+fn hasCommandModifiers(mods: Modifiers) bool {
+    return mods.alt or mods.ctrl or mods.super or mods.hyper or mods.meta;
 }
 
 pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {

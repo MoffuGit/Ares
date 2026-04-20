@@ -71,7 +71,7 @@ pub const Runtime = struct {
             if (pending) |terminal| {
                 self.dispatchMatch(terminal);
                 if (allow_retry) {
-                    _ = self.processStroke(settings, stroke, now, false);
+                    return self.processStroke(settings, stroke, now, false);
                 }
                 return true;
             }

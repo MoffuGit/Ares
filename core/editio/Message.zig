@@ -11,6 +11,7 @@ pub const Message = union(enum) {
         row: u64,
         col: u64,
     },
+    key: inputpkg.KeyEvent,
     mouse_button: inputpkg.MouseButtonEvent,
     mouse_move: inputpkg.MouseMoveEvent,
     themeUpdate: void,

@@ -41,8 +41,34 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
                         className="sticky top-0 w-full h-full p-2"
                     >
                         <div
-                            className="w-full h-full"
+                            className="w-full h-full outline-none"
                             ref={mouseRef}
+                            tabIndex={active ? 0 : -1}
+                            onMouseDown={(event) => {
+                                event.currentTarget.focus();
+                            }}
+                            onKeyDown={(event) => {
+                                console.log(event.key);
+
+                                // if (surface.gpuSurfaceId == null) return;
+                                // if (event.altKey || event.ctrlKey || event.metaKey) return;
+                                //
+                                // event.preventDefault();
+                                //
+                                // let mods = 0;
+                                // if (event.shiftKey) mods |= 1 << 0;
+                                // if (event.altKey) mods |= 1 << 1;
+                                // if (event.ctrlKey) mods |= 1 << 2;
+                                // if (event.metaKey) mods |= 1 << 3;
+                                //
+                                // rpc.send("surfaceKeyEvent", {
+                                //     surfaceId: surface.gpuSurfaceId,
+                                //     key: event.key,
+                                //     code: event.code,
+                                //     mods,
+                                //     repeat: event.repeat,
+                                // });
+                            }}
                         />
                     </div>
                     <div style={{

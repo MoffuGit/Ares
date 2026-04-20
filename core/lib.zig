@@ -327,7 +327,7 @@ export fn editorSetCursorPosition(editor: *EditorSurface, row: u64, col: u64) vo
     editor.sendIo(.{ .set_cursor_position = .{ .row = row, .col = col } });
 }
 
-export fn surfaceMouseButton(surface: *anyopaque, is_editor: bool, button: u8, action: u8, x: f64, y: f64, mods: u8) void {
+export fn editorSurfaceMouseButton(surface: *EditorSurface, button: u8, action: u8, x: f64, y: f64, mods: u8) void {
     if (button >= @typeInfo(inputpkg.MouseButton).@"enum".fields.len) return;
     if (action >= @typeInfo(inputpkg.MouseAction).@"enum".fields.len) return;
 
@@ -339,29 +339,17 @@ export fn surfaceMouseButton(surface: *anyopaque, is_editor: bool, button: u8, a
         .mods = @bitCast(mods),
     };
 
-    if (is_editor) {
-        const editor: *EditorSurface = @ptrCast(@alignCast(surface));
-        editor.sendIo(.{ .mouse_button = event });
-    } else {
-        const terminal: *TerminalSurface = @ptrCast(@alignCast(surface));
-        terminal.sendIo(.{ .mouse_button = event });
-    }
+    surface.sendIo(.{ .mouse_button = event });
 }
 
-export fn surfaceMouseMove(surface: *anyopaque, is_editor: bool, x: f64, y: f64, mods: u8) void {
+export fn editorSurfaceMouseMove(surface: *EditorSurface, x: f64, y: f64, mods: u8) void {
     const event = inputpkg.MouseMoveEvent{
         .x = x,
         .y = y,
         .mods = @bitCast(mods),
     };
 
-    if (is_editor) {
-        const editor: *EditorSurface = @ptrCast(@alignCast(surface));
-        editor.sendIo(.{ .mouse_move = event });
-    } else {
-        const terminal: *TerminalSurface = @ptrCast(@alignCast(surface));
-        terminal.sendIo(.{ .mouse_move = event });
-    }
+    surface.sendIo(.{ .mouse_move = event });
 }
 
 pub const ExternSurfaceState = global.ExternSurfaceState;

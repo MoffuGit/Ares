@@ -129,6 +129,9 @@ fn drainMailbox(self: *Thread) !void {
             .set_cursor_position => |pos| {
                 state.setCursorPosition(pos.row, pos.col);
             },
+            .key => |ev| {
+                state.keyEvent(ev);
+            },
             .mouse_button => |ev| {
                 state.mouseButton(ev);
             },

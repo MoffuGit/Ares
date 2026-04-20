@@ -160,8 +160,81 @@ pub const TextBuffer = struct {
         self.version +%= 1;
     }
 
+    pub fn insertUtf8At(self: *TextBuffer, row: usize, col: usize, raw_bytes: []const u8) !void {
+        const raw = try self.content.dupeLogicalSlice(self.alloc, 0, self.content.realLength());
+        defer self.alloc.free(raw);
+
+        const offset = try byteOffsetForPosition(raw, row, col);
+        try self.content.replaceRangeBefore(offset, 0, raw_bytes);
+        try self.rebuildDerivedState();
+    }
+
+    pub fn backspaceAt(self: *TextBuffer, row: usize, col: usize) !bool {
+        const raw = try self.content.dupeLogicalSlice(self.alloc, 0, self.content.realLength());
+        defer self.alloc.free(raw);
+
+        const cursor_offset = try byteOffsetForPosition(raw, row, col);
+        if (cursor_offset == 0) return false;
+
+        const start = previousScalarStart(raw, cursor_offset);
+        try self.content.replaceRangeBefore(start, cursor_offset - start, &.{});
+        try self.rebuildDerivedState();
+        return true;
+    }
+
+    pub fn deleteAt(self: *TextBuffer, row: usize, col: usize) !bool {
+        const raw = try self.content.dupeLogicalSlice(self.alloc, 0, self.content.realLength());
+        defer self.alloc.free(raw);
+
+        const offset = try byteOffsetForPosition(raw, row, col);
+        if (offset >= raw.len) return false;
+
+        const len = if (raw[offset] == '\n') 1 else std.unicode.utf8ByteSequenceLength(raw[offset]) catch return false;
+        try self.content.replaceRangeBefore(offset, len, &.{});
+        try self.rebuildDerivedState();
+        return true;
+    }
+
     pub fn visibleRows(self: *const TextBuffer, scroll_row: u64, max_rows: usize) []const Row {
         return self.layout.visibleRows(scroll_row, max_rows);
+    }
+
+    fn byteOffsetForPosition(raw: []const u8, target_row: usize, target_col: usize) !usize {
+        var row: usize = 0;
+        var col: usize = 0;
+        var offset: usize = 0;
+
+        while (offset < raw.len) {
+            if (row == target_row and col >= target_col) return offset;
+
+            if (raw[offset] == '\n') {
+                if (row == target_row) return offset;
+                row += 1;
+                col = 0;
+                offset += 1;
+                continue;
+            }
+
+            const len = std.unicode.utf8ByteSequenceLength(raw[offset]) catch return error.InvalidUtf8;
+            if (offset + len > raw.len) return error.InvalidUtf8;
+
+            offset += len;
+            col += 1;
+        }
+
+        return raw.len;
+    }
+
+    fn previousScalarStart(raw: []const u8, offset: usize) usize {
+        var idx = offset - 1;
+        while (idx > 0 and isUtf8ContinuationByte(raw[idx])) {
+            idx -= 1;
+        }
+        return idx;
+    }
+
+    fn isUtf8ContinuationByte(byte: u8) bool {
+        return (byte & 0b1100_0000) == 0b1000_0000;
     }
 
     fn decodeUtf8Line(alloc: Allocator, raw_bytes: []const u8) ![]u32 {
@@ -288,6 +361,21 @@ test "text buffer caches visible rows and versions derived data" {
 
     try std.testing.expectEqual(@as(u64, 3), text.version);
     try expectAsciiRow(text.visibleRows(1, 1)[0], "cd!");
+}
+
+test "text buffer edits by row and column" {
+    var text = try TextBuffer.initFromBytes(std.testing.allocator, "ab\ncd");
+    defer text.deinit();
+
+    try text.insertUtf8At(0, 1, "X");
+    try expectAsciiRow(text.visibleRows(0, 2)[0], "aXb");
+
+    try std.testing.expect(try text.backspaceAt(1, 0));
+    try std.testing.expectEqual(@as(usize, 1), text.rowCount);
+    try expectAsciiRow(text.visibleRows(0, 1)[0], "aXbcd");
+
+    try std.testing.expect(try text.deleteAt(0, 2));
+    try expectAsciiRow(text.visibleRows(0, 1)[0], "aXcd");
 }
 
 fn expectAsciiRow(row: TextBuffer.Row, expected: []const u8) !void {

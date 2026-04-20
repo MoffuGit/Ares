@@ -218,12 +218,12 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.u64, FFIType.u64],
                 returns: FFIType.void,
             },
-            surfaceMouseButton: {
-                args: [FFIType.pointer, FFIType.bool, FFIType.u8, FFIType.u8, FFIType.f64, FFIType.f64, FFIType.u8],
+            editorSurfaceMouseButton: {
+                args: [FFIType.pointer, FFIType.u8, FFIType.u8, FFIType.f64, FFIType.f64, FFIType.u8],
                 returns: FFIType.void,
             },
-            surfaceMouseMove: {
-                args: [FFIType.pointer, FFIType.bool, FFIType.f64, FFIType.f64, FFIType.u8],
+            editorSurfaceMouseMove: {
+                args: [FFIType.pointer, FFIType.f64, FFIType.f64, FFIType.u8],
                 returns: FFIType.void,
             },
             readEditorSurfaceState: {
@@ -459,12 +459,12 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.editorSetCursorPosition(editor, row, col);
     }
 
-    surfaceMouseButton(surface: Pointer, isEditor: boolean, button: number, action: number, x: number, y: number, mods: number) {
-        this.lib.symbols.surfaceMouseButton(surface, isEditor, button, action, x, y, mods);
+    editorSurfaceMouseButton(surface: Pointer, button: number, action: number, x: number, y: number, mods: number) {
+        this.lib.symbols.editorSurfaceMouseButton(surface, button, action, x, y, mods);
     }
 
-    surfaceMouseMove(surface: Pointer, isEditor: boolean, x: number, y: number, mods: number) {
-        this.lib.symbols.surfaceMouseMove(surface, isEditor, x, y, mods);
+    editorSurfaceMouseMove(surface: Pointer, x: number, y: number, mods: number) {
+        this.lib.symbols.editorSurfaceMouseMove(surface, x, y, mods);
     }
 
     readEditorSurfaceState(editor: Pointer): SurfaceState {

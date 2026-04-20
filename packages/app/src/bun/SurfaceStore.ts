@@ -122,13 +122,13 @@ export class SurfaceStore {
         const state = this.states.get(viewId);
         if (!state) return;
 
-        const isEditor = state.surface.kind === "editor";
+        if (state.surface.kind !== "editor") return;
 
         if (type === "mousemove") {
-            this.app.core.surfaceMouseMove(state.corePtr, isEditor, x, y, mods);
+            this.app.core.editorSurfaceMouseMove(state.corePtr, x, y, mods);
         } else {
             const action = type === "mousedown" ? 0 : 1;
-            this.app.core.surfaceMouseButton(state.corePtr, isEditor, button, action, x, y, mods);
+            this.app.core.editorSurfaceMouseButton(state.corePtr, button, action, x, y, mods);
         }
     }
 
