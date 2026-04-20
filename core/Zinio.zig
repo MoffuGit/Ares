@@ -5,7 +5,7 @@ const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.zinio);
 const global = @import("global.zig");
 const zintect = @import("zintect");
-const Buffer = @import("buffer/Buffer.zig");
+const Buffer = @import("Buffer.zig");
 const xev = global.xev;
 
 pub const Message = struct {

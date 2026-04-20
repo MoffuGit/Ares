@@ -1,11 +1,11 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Buffer = @import("Buffer.zig");
-const Io = @import("../io/mod.zig");
-const Settings = @import("../settings/mod.zig");
-const Worktree = @import("../worktree/mod.zig").Worktree;
-const global = @import("../global.zig");
-const Zinio = @import("../Zinio.zig");
+const Io = @import("io/mod.zig");
+const Settings = @import("settings/mod.zig");
+const Worktree = @import("worktree/mod.zig").Worktree;
+const global = @import("global.zig");
+const Zinio = @import("Zinio.zig");
 const xev_pkg = @import("xev");
 
 const log = std.log.scoped(.buffer_store);

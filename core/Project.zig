@@ -1,7 +1,7 @@
 const std = @import("std");
 
-const BufferStore = @import("./buffer/BufferStore.zig");
-const Buffer = @import("buffer/Buffer.zig");
+const BufferStore = @import("BufferStore.zig");
+const Buffer = @import("Buffer.zig");
 const Io = @import("./io/mod.zig");
 const Monitor = @import("./monitor/mod.zig");
 const Worktree = @import("./worktree/mod.zig").Worktree;

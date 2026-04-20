@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Io = @import("../io/mod.zig");
+const Io = @import("io/mod.zig");
 const Stat = Io.Stat;
 const GapBuffer = @import("datastruct").GapBuffer;
 
@@ -10,7 +10,7 @@ pub const HighlightSpan = struct {
     start_col: u32,
     end_col: u32,
     color: [4]u8,
-    style: @import("../font/mod.zig").Style = .regular,
+    style: @import("font/mod.zig").Style = .regular,
 };
 
 pub const Highlights = struct {
