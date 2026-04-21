@@ -38,11 +38,11 @@ export function BottomBar() {
                     <ListTree />
                 </Button>
             ) : null}
-            <Separator orientation="vertical" className="my-1" />
-            <div className="ml-auto flex items-center gap-2">
+            <Separator orientation="vertical" className="my-1 mx-1.5" />
+            <div className="ml-auto flex items-center gap-2.5">
                 {editorState && (
                     <span className="font-geist-mono font-normal text-xs text-muted-foreground/80 leading-none mt-0.5">
-                        {editorState.cursorRow}:{editorState.cursorCol}
+                        {editorState.cursorRow + 1}:{editorState.cursorCol + 1}
                     </span>
                 )}
                 <span className="font-geist-mono font-normal text-xs text-muted-foreground/80 leading-none uppercase mt-0.5">
