@@ -7,6 +7,7 @@ const Allocator = std.mem.Allocator;
 const inputpkg = @import("input.zig");
 const Project = @import("Project.zig");
 const Buffer = @import("Buffer.zig");
+const TextBuffer = @import("Text.zig");
 const Renderer = @import("Renderer.zig");
 const fontpkg = @import("font/mod.zig");
 const Style = fontpkg.Style;
@@ -148,7 +149,7 @@ pub fn mouseButton(self: *Editor, evt: inputpkg.MouseButtonEvent) void {
 
     const raw_col: u64 = if (evt.x >= 0) @intFromFloat(evt.x / cell_width) else 0;
     const row: u64 = if (evt.y >= 0) @intFromFloat(evt.y / cell_height) else 0;
-    const gutter_width: u64 = @intCast(lineNumberGutterWidth(buffer.text.rowCount));
+    const gutter_width: u64 = @intCast(lineNumberGutterWidth(buffer.text.rows()));
     const col = raw_col -| gutter_width;
 
     self.cursor = .{ .row = self.scroll_row + row, .col = col };
@@ -184,7 +185,7 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
     out.* = .{
         .surface_id = self.id,
         .entry_id = buffer.id,
-        .row_count = text.rowCount,
+        .row_count = text.rows(),
         .cursor_row = self.cursor.row,
         .cursor_col = self.cursor.col,
     };
@@ -198,7 +199,7 @@ fn emitEditorUpdate(self: *Editor, entry_id: u64, buffer: *Buffer) void {
     _ = global.emit(.{ .editorUpdate = .{
         .surface_id = self.id,
         .entry_id = entry_id,
-        .row_count = buffer.text.rowCount,
+        .row_count = buffer.text.rows(),
         .cursor_row = self.cursor.row,
         .cursor_col = self.cursor.col,
     } }, .instant);
@@ -211,12 +212,12 @@ fn clampCursorToBuffer(self: *Editor, buffer: *Buffer) void {
     defer buffer.mutex.unlock();
 
     const text = &buffer.text;
-    if (text.rowCount == 0) {
+    if (text.rows() == 0) {
         self.cursor = .{};
         return;
     }
 
-    const max_row = text.rowCount - 1;
+    const max_row = text.rows() - 1;
     const cursor_row = @min(std.math.cast(usize, self.cursor.row) orelse max_row, max_row);
     const rows = text.visibleRows(cursor_row, 1);
     const max_col = if (rows.len == 0) 0 else rows[0].codepoints.len;
@@ -293,7 +294,7 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
         renderer,
         text.visibleRows(self.scroll_row, grid.rows),
         hl_lines,
-        text.rowCount,
+        text.rows(),
         self.scroll_row,
         self.cursor,
         self.color,
@@ -305,7 +306,7 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
 
 fn rebuildCells(
     renderer: *Renderer,
-    rows: []const Buffer.TextBuffer.Row,
+    rows: []const TextBuffer.Row,
     hl_lines: []const []Buffer.HighlightSpan,
     row_count: usize,
     scroll_row: u64,

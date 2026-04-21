@@ -2,10 +2,10 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Buffer = @import("Buffer.zig");
 const Io = @import("io/mod.zig");
-const Settings = @import("settings/mod.zig");
 const Worktree = @import("worktree/mod.zig").Worktree;
 const global = @import("global.zig");
-const xev_pkg = @import("xev");
+const xev = global.xev;
+const Runtime = @import("zintect").Runtime;
 
 const log = std.log.scoped(.buffer_store);
 
@@ -17,15 +17,23 @@ rwlock: std.Thread.RwLock = .{},
 buffers: std.AutoHashMap(u64, Buffer),
 path_to_id: std.StringHashMapUnmanaged(u64) = .{},
 worktree: *Worktree,
-settings: *Settings,
+pool: *xev.ThreadPool,
+runtime: Runtime,
 
-pub fn init(alloc: Allocator, settings: *Settings, worktree: *Worktree, _: *xev_pkg.ThreadPool) !BufferStore {
+pub fn init(alloc: Allocator, worktree: *Worktree, pool: *xev.ThreadPool) !BufferStore {
+    const runtime = try Runtime.init();
+
     return .{
         .alloc = alloc,
         .buffers = std.AutoHashMap(u64, Buffer).init(alloc),
         .worktree = worktree,
-        .settings = settings,
+        .pool = pool,
+        .runtime = runtime,
     };
+}
+
+pub fn setRuntimeTheme(self: *BufferStore, json: []const u8) void {
+    _ = self.runtime.setTheme(json);
 }
 
 pub fn deinit(self: *BufferStore) void {
@@ -34,6 +42,7 @@ pub fn deinit(self: *BufferStore) void {
         buf.deinit();
     }
     self.buffers.deinit();
+    self.runtime.deinit();
     self.path_to_id.clearAndFree(self.alloc);
 }
 
