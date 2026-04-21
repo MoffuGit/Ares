@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 const Monitor = @import("../monitor/mod.zig");
 const Scanner = @import("scanner/mod.zig");
 const ScannerThread = @import("scanner/Thread.zig");
+const Io = @import("../io/mod.zig");
 pub const Entry = Snapshot.Entry;
 
 const Snapshot = @import("Snapshot.zig");
@@ -21,9 +22,11 @@ pub const Worktree = struct {
     scanner_thread: ScannerThread,
     scanner_thr: std.Thread,
 
-    pub fn create(abs_path: []const u8, monitor: *Monitor, alloc: Allocator) !*Worktree {
+    io: *Io,
+
+    pub fn create(abs_path: []const u8, io: *Io, monitor: *Monitor, alloc: Allocator) !*Worktree {
         const worktree = try alloc.create(Worktree);
-        try worktree.init(monitor, abs_path, alloc);
+        try worktree.init(io, monitor, abs_path, alloc);
 
         return worktree;
     }
@@ -33,7 +36,7 @@ pub const Worktree = struct {
         self.alloc.destroy(self);
     }
 
-    pub fn init(self: *Worktree, monitor: *Monitor, abs_path: []const u8, alloc: Allocator) !void {
+    pub fn init(self: *Worktree, io: *Io, monitor: *Monitor, abs_path: []const u8, alloc: Allocator) !void {
         const _abs_path = try alloc.dupe(u8, abs_path);
         errdefer alloc.free(_abs_path);
 
@@ -53,6 +56,7 @@ pub const Worktree = struct {
             .scanner = scanner,
             .scanner_thread = scanner_thread,
             .scanner_thr = undefined,
+            .io = io,
         };
 
         self.scanner_thr = try std.Thread.spawn(.{}, ScannerThread.threadMain, .{&self.scanner_thread});
@@ -75,6 +79,14 @@ pub const Worktree = struct {
         defer self.snapshot.rwlock.unlockShared();
 
         return self.snapshot.getAbsPathById(id);
+    }
+
+    pub fn loadFile(self: *Worktree, id: u64) ![]const u8 {
+        const abs_path = self.getAbsPath(id) orelse return error.EntryNotFound;
+
+        try self.io.readFile(abs_path);
+
+        return abs_path;
     }
 
     pub fn deinit(self: *Worktree) void {

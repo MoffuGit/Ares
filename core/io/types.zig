@@ -17,6 +17,15 @@ pub const File = struct {
     pub fn deinit(self: File) void {
         self.alloc.free(self.bytes);
     }
+
+    pub fn clone(self: File, alloc: Allocator) !File {
+        const bytes = try self.alloc.dupe(u8, self.bytes);
+        return .{
+            .alloc = alloc,
+            .stat = self.stat,
+            .bytes = bytes,
+        };
+    }
 };
 
 pub const ReadResult = struct {

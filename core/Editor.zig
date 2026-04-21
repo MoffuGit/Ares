@@ -67,7 +67,7 @@ pub fn selectEntry(self: *Editor, id: u64) void {
     defer self.mutex.unlock();
 
     if (self.buffer) |curr| {
-        if (curr.entry_id == id) return;
+        if (curr.id == id) return;
     }
 
     if (self.project.openBuffer(id)) |buffer| {
@@ -96,7 +96,7 @@ pub fn setCursorPosition(self: *Editor, row: u64, col: u64) void {
 
     const buffer = self.buffer orelse return;
     self.clampCursorToBuffer(buffer);
-    self.emitEditorUpdate(buffer.entry_id, buffer);
+    self.emitEditorUpdate(buffer.id, buffer);
     self.rebuild_cells = true;
 }
 
@@ -123,7 +123,7 @@ pub fn keyEvent(self: *Editor, event: inputpkg.KeyEvent) void {
     if (!changed) return;
 
     self.clampCursorToBuffer(buffer);
-    self.emitEditorUpdate(buffer.entry_id, buffer);
+    self.emitEditorUpdate(buffer.id, buffer);
     self.rebuild_cells = true;
 }
 
@@ -153,7 +153,7 @@ pub fn mouseButton(self: *Editor, evt: inputpkg.MouseButtonEvent) void {
 
     self.cursor = .{ .row = self.scroll_row + row, .col = col };
     // self.clampCursorToBuffer(buffer);
-    self.emitEditorUpdate(buffer.entry_id, buffer);
+    self.emitEditorUpdate(buffer.id, buffer);
     self.rebuild_cells = true;
 }
 
@@ -164,18 +164,9 @@ pub fn onBufferUpdate(self: *Editor, entry_id: u64) void {
     defer self.mutex.unlock();
 
     const buffer = self.buffer orelse return;
-    if (buffer.entry_id != entry_id) return;
+    if (buffer.id != entry_id) return;
     self.clampCursorToBuffer(buffer);
     self.emitEditorUpdate(entry_id, buffer);
-    self.rebuild_cells = true;
-}
-
-pub fn onHighlightUpdate(self: *Editor, entry_id: u64) void {
-    self.mutex.lock();
-    defer self.mutex.unlock();
-
-    const buffer = self.buffer orelse return;
-    if (buffer.entry_id != entry_id) return;
     self.rebuild_cells = true;
 }
 
@@ -192,7 +183,7 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
     const text = buffer.text;
     out.* = .{
         .surface_id = self.id,
-        .entry_id = buffer.entry_id,
+        .entry_id = buffer.id,
         .row_count = text.rowCount,
         .cursor_row = self.cursor.row,
         .cursor_col = self.cursor.col,

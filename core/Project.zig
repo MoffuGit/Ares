@@ -20,22 +20,35 @@ pub fn create(alloc: std.mem.Allocator, app: *App, abs_path: []const u8) !*Proje
     const project = try alloc.create(Project);
     errdefer alloc.destroy(project);
 
-    const worktree = try Worktree.create(abs_path, app.monitor, alloc);
+    const worktree = try Worktree.create(abs_path, app.io, app.monitor, alloc);
     errdefer worktree.destroy();
 
     const filetree = try FileTree.create(alloc, worktree);
     errdefer filetree.destroy();
 
+    var store = try BufferStore.init(alloc, app.settings, worktree, app.thread_pool);
+    errdefer store.deinit();
+
     project.* = .{
         .app = app,
         .worktree = worktree,
         .filetree = filetree,
-        .buffer_store = try BufferStore.init(alloc, app.io, app.settings, worktree, app.thread_pool),
+        .buffer_store = store,
     };
 
-    try project.buffer_store.start();
+    try global.state.events.on(.ioReadComplete, .{
+        .ctx = project,
+        .handle = ioRead,
+    });
 
     return project;
+}
+
+pub fn ioRead(ctx: *anyopaque, event: global.GlobalEvents) void {
+    const self: *Project = @ptrCast(@alignCast(ctx));
+    const data = event.ioReadComplete;
+
+    self.buffer_store.fileLoaded(data.path, data.file);
 }
 
 pub fn openBuffer(self: *Project, entry_id: u64) ?*Buffer {
@@ -43,6 +56,11 @@ pub fn openBuffer(self: *Project, entry_id: u64) ?*Buffer {
 }
 
 pub fn destroy(self: *Project, alloc: std.mem.Allocator) void {
+    global.state.events.off(.ioReadComplete, .{
+        .ctx = self,
+        .handle = ioRead,
+    });
+
     self.buffer_store.deinit();
     self.filetree.destroy();
     self.worktree.destroy();

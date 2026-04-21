@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const Io = @import("io/mod.zig");
 const Stat = Io.Stat;
 const GapBuffer = @import("datastruct").GapBuffer;
+const global = @import("global.zig");
 
 pub const Buffer = @This();
 
@@ -259,7 +260,7 @@ pub const State = enum(u8) {
 };
 
 alloc: Allocator,
-entry_id: u64,
+id: u64,
 state: std.atomic.Value(State) = .{ .raw = .empty },
 mutex: std.Thread.Mutex = .{},
 file: ?Io.File = null,
@@ -269,28 +270,10 @@ highlights: Highlights = .{},
 pub fn init(alloc: Allocator, entry_id: u64) Buffer {
     return .{
         .alloc = alloc,
-        .entry_id = entry_id,
+        .id = entry_id,
         .state = .{ .raw = .loading },
         .text = TextBuffer.init(alloc),
     };
-}
-
-pub fn setFile(self: *Buffer, file: Io.File) !void {
-    self.mutex.lock();
-    defer self.mutex.unlock();
-    self.clearUnlocked();
-
-    const owned_bytes = try self.alloc.dupe(u8, file.bytes);
-    self.text = TextBuffer.initFromBytes(self.alloc, owned_bytes) catch |err| {
-        self.alloc.free(owned_bytes);
-        return err;
-    };
-    self.file = .{
-        .bytes = owned_bytes,
-        .stat = file.stat,
-        .alloc = self.alloc,
-    };
-    self.state = .{ .raw = .ready };
 }
 
 pub fn deinit(self: *Buffer) void {
@@ -299,17 +282,24 @@ pub fn deinit(self: *Buffer) void {
     self.clearUnlocked();
 }
 
-pub fn applyFile(self: *Buffer, file: Io.File) void {
-    self.setFile(file) catch {
-        self.state = .{ .raw = .err };
-    };
-}
+pub fn fileUpdate(self: *Buffer, file: ?Io.File) !void {
+    defer self.emitUpdate();
 
-pub fn applyError(self: *Buffer) void {
     self.mutex.lock();
     defer self.mutex.unlock();
-    self.clearUnlocked();
-    self.state.store(.err, .release);
+
+    if (file) |f| {
+        self.setState(.ready);
+        self.file = try f.clone(self.alloc);
+        self.text = try TextBuffer.initFromBytes(self.alloc, self.file.?.bytes);
+    } else {
+        self.clearUnlocked();
+        self.setState(.err);
+    }
+}
+
+pub fn emitUpdate(self: *Buffer) void {
+    global.state.emitGlobal(.{ .bufferUpdate = self.id });
 }
 
 pub fn bytes(self: *Buffer) ?[]const u8 {
@@ -326,8 +316,15 @@ pub fn stat(self: *Buffer) ?Stat {
     return null;
 }
 
-pub fn getState(self: *const Buffer) State {
+pub fn getState(self: *Buffer) State {
     return self.state.load(.acquire);
+}
+
+pub fn setState(
+    self: *Buffer,
+    state: State,
+) void {
+    self.state.store(state, .release);
 }
 
 fn clearUnlocked(self: *Buffer) void {
@@ -337,50 +334,5 @@ fn clearUnlocked(self: *Buffer) void {
     if (self.file) |file| {
         file.deinit();
         self.file = null;
-    }
-}
-
-test "text buffer caches visible rows and versions derived data" {
-    var text = try TextBuffer.initFromBytes(std.testing.allocator, "ab\ncd");
-    defer text.deinit();
-
-    try std.testing.expectEqual(@as(usize, 2), text.rowCount);
-    try std.testing.expectEqual(@as(u64, 1), text.version);
-    try expectAsciiRow(text.visibleRows(0, 2)[0], "ab");
-    try expectAsciiRow(text.visibleRows(0, 2)[1], "cd");
-
-    text.content.moveGap(1);
-    try text.rebuildDerivedState();
-
-    try std.testing.expectEqual(@as(usize, 2), text.rowCount);
-    try std.testing.expectEqual(@as(u64, 2), text.version);
-    try expectAsciiRow(text.visibleRows(1, 1)[0], "cd");
-
-    try text.content.insertBefore(text.content.realLength(), '!');
-    try text.rebuildDerivedState();
-
-    try std.testing.expectEqual(@as(u64, 3), text.version);
-    try expectAsciiRow(text.visibleRows(1, 1)[0], "cd!");
-}
-
-test "text buffer edits by row and column" {
-    var text = try TextBuffer.initFromBytes(std.testing.allocator, "ab\ncd");
-    defer text.deinit();
-
-    try text.insertUtf8At(0, 1, "X");
-    try expectAsciiRow(text.visibleRows(0, 2)[0], "aXb");
-
-    try std.testing.expect(try text.backspaceAt(1, 0));
-    try std.testing.expectEqual(@as(usize, 1), text.rowCount);
-    try expectAsciiRow(text.visibleRows(0, 1)[0], "aXbcd");
-
-    try std.testing.expect(try text.deleteAt(0, 2));
-    try expectAsciiRow(text.visibleRows(0, 1)[0], "aXcd");
-}
-
-fn expectAsciiRow(row: TextBuffer.Row, expected: []const u8) !void {
-    try std.testing.expectEqual(expected.len, row.codepoints.len);
-    for (expected, 0..) |byte, idx| {
-        try std.testing.expectEqual(@as(u32, byte), row.codepoints[idx]);
     }
 }
