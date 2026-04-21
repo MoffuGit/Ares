@@ -5,7 +5,9 @@ mod theme;
 use std::ffi::{CStr, c_char, c_void};
 
 use runtime::Runtime;
-use session::{EmitSpanFn, Session};
+use session::Session;
+
+use crate::session::{FffHighlightResult, FffResult};
 
 unsafe fn cstr_to_str<'a>(s: *const c_char) -> Option<&'a str> {
     if s.is_null() {
@@ -126,21 +128,60 @@ pub unsafe extern "C" fn zintect_session_highlight_line(
     session: *mut c_void,
     runtime: *mut c_void,
     line: *const c_char,
-    line_index: u32,
-    ctx: *mut c_void,
-    emit: EmitSpanFn,
-) -> bool {
+) -> FffResult {
     let session = match unsafe { session_mut(session) } {
         Some(s) => s,
-        None => return false,
+        None => return FffResult::err(),
     };
     let runtime = match unsafe { runtime_ref(runtime) } {
         Some(r) => r,
-        None => return false,
+        None => return FffResult::err(),
     };
     let line = match unsafe { cstr_to_str(line) } {
         Some(s) => s,
-        None => return false,
+        None => return FffResult::err(),
     };
-    session.highlight_line(runtime, line, line_index, ctx, emit)
+
+    session.highlight_line(runtime, line)
+}
+
+/// Free a result returned by any `fff_*` function.
+///
+/// ## Safety
+/// `result_ptr` must be a valid pointer returned by a `fff_*` function.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn fff_free_result(result_ptr: *mut FffResult) {
+    if result_ptr.is_null() {
+        return;
+    }
+
+    unsafe {
+        _ = Box::from_raw(result_ptr);
+        // Note: `handle` is NOT freed here — the caller must free it
+        // with the appropriate function (fff_destroy, fff_free_search_result,
+        // fff_free_grep_result, fff_free_string, fff_free_scan_progress, etc.).
+    }
+}
+
+/// Free a result returned by any `fff_*` function.
+///
+/// ## Safety
+/// `result_ptr` must be a valid pointer returned by a `fff_*` function.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn fff_free_highlight_result(result_ptr: *mut FffHighlightResult) {
+    if result_ptr.is_null() {
+        return;
+    }
+
+    unsafe {
+        let result = Box::from_raw(result_ptr);
+
+        if !result.items.is_null() {
+            let count = result.count as usize;
+            _ = Vec::from_raw_parts(result.items, count, count);
+        }
+        // Note: `handle` is NOT freed here — the caller must free it
+        // with the appropriate function (fff_destroy, fff_free_search_result,
+        // fff_free_grep_result, fff_free_string, fff_free_scan_progress, etc.).
+    }
 }

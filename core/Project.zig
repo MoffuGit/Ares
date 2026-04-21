@@ -2,10 +2,10 @@ const std = @import("std");
 
 const BufferStore = @import("BufferStore.zig");
 const Buffer = @import("Buffer.zig");
-const Io = @import("./io/mod.zig");
-const Monitor = @import("./monitor/mod.zig");
-const Worktree = @import("./worktree/mod.zig").Worktree;
-const FileTree = @import("filetree/mod.zig");
+const Io = @import("io/mod.zig");
+const Monitor = @import("monitor/mod.zig");
+const Worktree = @import("worktree/mod.zig").Worktree;
+const FileTree = @import("filetree.zig");
 const App = @import("App.zig");
 const global = @import("global.zig");
 

@@ -6,17 +6,28 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef struct Span {
+typedef struct FffResult {
+  /**
+   * Whether the operation succeeded.
+   */
+  bool success;
+  /**
+   * Opaque pointer payload. May be null.
+   */
+  void *handle;
+} FffResult;
+
+typedef struct FffSpan {
   uint32_t start_byte;
   uint32_t end_byte;
-  uint8_t r;
-  uint8_t g;
-  uint8_t b;
-  uint8_t a;
+  uint8_t color[4];
   uint8_t font_style;
-} Span;
+} FffSpan;
 
-typedef void (*EmitSpanFn)(void *ctx, uint32_t line_index, struct Span span);
+typedef struct FffHighlightResult {
+  struct FffSpan *items;
+  uint32_t count;
+} FffHighlightResult;
 
 void *zintect_create_runtime(void);
 
@@ -32,9 +43,20 @@ bool zintect_session_set_syntax_by_ext(void *session, void *runtime, const char 
 
 bool zintect_session_reset(void *session, void *runtime);
 
-bool zintect_session_highlight_line(void *session,
-                                    void *runtime,
-                                    const char *line,
-                                    uint32_t line_index,
-                                    void *ctx,
-                                    EmitSpanFn emit);
+struct FffResult zintect_session_highlight_line(void *session, void *runtime, const char *line);
+
+/**
+ * Free a result returned by any `fff_*` function.
+ *
+ * ## Safety
+ * `result_ptr` must be a valid pointer returned by a `fff_*` function.
+ */
+void fff_free_result(struct FffResult *result_ptr);
+
+/**
+ * Free a result returned by any `fff_*` function.
+ *
+ * ## Safety
+ * `result_ptr` must be a valid pointer returned by a `fff_*` function.
+ */
+void fff_free_highlight_result(struct FffHighlightResult *result_ptr);

@@ -1,24 +1,20 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 pub const c = @cImport(@cInclude("zintect.h"));
 
-pub const Span = extern struct {
+pub const FffSpan = extern struct {
     start_byte: u32,
     end_byte: u32,
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
+    color: [4]u8,
     font_style: u8,
 
-    pub fn color(self: Span) [4]u8 {
-        return .{ self.r, self.g, self.b, self.a };
-    }
-
-    pub fn fontStyle(self: Span) FontStyle {
+    pub fn fontStyle(self: FffSpan) FontStyle {
         return @bitCast(self.font_style);
     }
 };
+
+pub const Span = FffSpan;
 
 pub const FontStyle = packed struct(u8) {
     bold: bool = false,
@@ -27,7 +23,15 @@ pub const FontStyle = packed struct(u8) {
     _padding: u5 = 0,
 };
 
-pub const EmitSpanFn = *const fn (ctx: *anyopaque, line_index: u32, span: Span) callconv(.c) void;
+pub const FffResult = extern struct {
+    success: bool,
+    handle: ?*anyopaque,
+};
+
+pub const FffHighlightResult = extern struct {
+    items: [*c]FffSpan,
+    count: u32,
+};
 
 pub const Runtime = struct {
     handler: *anyopaque,
@@ -72,20 +76,22 @@ pub const Session = struct {
 
     pub fn highlightLine(
         self: *Session,
+        alloc: Allocator,
         runtime: *const Runtime,
         line: [:0]const u8,
-        line_index: u32,
-        ctx: *anyopaque,
-        emit: EmitSpanFn,
-    ) bool {
-        return c.zintect_session_highlight_line(
-            self.handler,
-            runtime.handler,
-            line.ptr,
-            line_index,
-            ctx,
-            @ptrCast(emit),
-        );
+    ) ![]FffSpan {
+        const res = c.zintect_session_highlight_line(self.handler, runtime.handler, line.ptr);
+        if (!res.success) return error.HighlightError;
+
+        const handle = res.handle orelse return error.HighlightError;
+        const highlight_result: *FffHighlightResult = @ptrCast(@alignCast(handle));
+        defer c.fff_free_highlight_result(@ptrCast(highlight_result));
+
+        const count: usize = @intCast(highlight_result.count);
+        if (count == 0) return alloc.alloc(FffSpan, 0);
+        if (highlight_result.items == null) return error.HighlightError;
+
+        return alloc.dupe(FffSpan, highlight_result.items[0..count]);
     }
 };
 
@@ -105,20 +111,11 @@ test "highlight rust source line by line" {
 
     var span_count: u32 = 0;
 
-    for (lines, 0..) |line, i| {
-        _ = session.highlightLine(
-            &runtime,
-            line,
-            @intCast(i),
-            @ptrCast(&span_count),
-            countSpans,
-        );
+    for (lines) |line| {
+        const spans = try session.highlightLine(std.testing.allocator, &runtime, line);
+        defer std.testing.allocator.free(spans);
+        span_count += @intCast(spans.len);
     }
 
     try std.testing.expect(span_count > 0);
-}
-
-fn countSpans(ctx: *anyopaque, _: u32, _: Span) callconv(.c) void {
-    const count: *u32 = @ptrCast(@alignCast(ctx));
-    count.* += 1;
 }

@@ -127,21 +127,35 @@ fn processHighlight(self: *Zinio, msg: Message) void {
         const line_z = self.alloc.dupeZ(u8, line) catch return;
         defer self.alloc.free(line_z);
 
-        var collector = Collector{
-            .alloc = msg.buffer.alloc,
-            .current_line = line,
-            .spans = std.ArrayList(Buffer.HighlightSpan).initCapacity(msg.buffer.alloc, 0) catch return,
+        const spans = session.highlightLine(msg.buffer.alloc, &self.runtime, line_z) catch return;
+        defer msg.buffer.alloc.free(spans);
+
+        const highlight_spans = msg.buffer.alloc.alloc(Buffer.HighlightSpan, spans.len) catch return;
+        for (spans, 0..) |span, i| {
+            const start_col = byteToCodepoint(line, span.start_byte);
+            const end_col = byteToCodepoint(line, span.end_byte);
+            const fs = span.fontStyle();
+            const style: @import("font/mod.zig").Style = if (fs.bold and fs.italic)
+                .bold_italic
+            else if (fs.bold)
+                .bold
+            else if (fs.italic)
+                .italic
+            else
+                .regular;
+
+            highlight_spans[i] = .{
+                .start_col = start_col,
+                .end_col = end_col,
+                .color = span.color,
+                .style = style,
+            };
+        }
+
+        lines_list.append(msg.buffer.alloc, highlight_spans) catch {
+            msg.buffer.alloc.free(highlight_spans);
+            return;
         };
-
-        _ = session.highlightLine(
-            &self.runtime,
-            line_z,
-            line_index,
-            @ptrCast(&collector),
-            collectSpan,
-        );
-
-        lines_list.append(msg.buffer.alloc, collector.spans.toOwnedSlice(msg.buffer.alloc) catch return) catch return;
 
         if (line_end >= msg.text.len) break;
         line_start = line_end + 1;

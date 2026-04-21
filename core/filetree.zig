@@ -1,7 +1,7 @@
 const std = @import("std");
-const global = @import("../global.zig");
+const global = @import("global.zig");
 
-const worktreepkg = @import("../worktree/mod.zig");
+const worktreepkg = @import("worktree/mod.zig");
 const Worktree = worktreepkg.Worktree;
 const Entry = worktreepkg.Entry;
 
