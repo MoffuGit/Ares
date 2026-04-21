@@ -75,7 +75,7 @@ pub fn themeUpdate(ctx: *anyopaque, _: global.GlobalEvents) void {
 }
 
 pub fn openBuffer(self: *Project, entry_id: u64) ?*Buffer {
-    return self.buffer_store.open(entry_id);
+    return self.buffer_store.open(entry_id) catch null;
 }
 
 pub fn destroy(self: *Project, alloc: std.mem.Allocator) void {

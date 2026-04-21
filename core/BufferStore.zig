@@ -34,6 +34,14 @@ pub fn init(alloc: Allocator, worktree: *Worktree, pool: *xev.ThreadPool) !Buffe
 
 pub fn setRuntimeTheme(self: *BufferStore, json: []const u8) void {
     _ = self.runtime.setTheme(json);
+
+    self.rwlock.lockShared();
+    defer self.rwlock.unlockShared();
+
+    var it = self.buffers.valueIterator();
+    while (it.next()) |buffer| {
+        buffer.requestHighlight();
+    }
 }
 
 pub fn deinit(self: *BufferStore) void {
@@ -46,7 +54,7 @@ pub fn deinit(self: *BufferStore) void {
     self.path_to_id.clearAndFree(self.alloc);
 }
 
-pub fn open(self: *BufferStore, id: u64) ?*Buffer {
+pub fn open(self: *BufferStore, id: u64) !*Buffer {
     {
         self.rwlock.lockShared();
         defer self.rwlock.unlockShared();
@@ -57,15 +65,32 @@ pub fn open(self: *BufferStore, id: u64) ?*Buffer {
     self.rwlock.lock();
     defer self.rwlock.unlock();
 
-    const path = self.worktree.loadFile(id) catch return null;
+    const path = try self.worktree.loadFile(id);
 
-    var buffer = Buffer.init(self.alloc, id);
+    const extension = extension: {
+        const ext = std.fs.path.extension(path);
+
+        if (ext.len > 1) {
+            break :extension try self.alloc.dupe(u8, ext[1..]);
+        } else {
+            break :extension null;
+        }
+    };
+
+    var buffer = Buffer.init(self.alloc, .{
+        .extension = extension,
+        .pool = self.pool,
+        .runtime = self.runtime,
+        .id = id,
+    }) catch return null;
+    errdefer buffer.deinit();
+
     buffer.setState(.loading);
 
-    self.buffers.put(id, buffer) catch return null;
-    _ = self.path_to_id.fetchPut(self.alloc, path, id) catch return null;
+    try self.buffers.put(id, buffer);
+    _ = try self.path_to_id.fetchPut(self.alloc, path, id);
 
-    return self.get(id);
+    return self.get(id).?;
 }
 
 pub fn fileLoaded(self: *BufferStore, path: []const u8, file: ?Io.File) void {

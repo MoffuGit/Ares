@@ -78,6 +78,19 @@ pub fn visibleRows(self: *const TextBuffer, scroll_row: u64, max_rows: usize) []
     return self.layout.visibleRows(scroll_row, max_rows);
 }
 
+test "text version increments when content changes" {
+    var text = TextBuffer.init(std.testing.allocator);
+    defer text.deinit();
+
+    try std.testing.expectEqual(@as(u64, 0), text.version);
+
+    try text.insertUtf8At(0, 0, "hi");
+    try std.testing.expectEqual(@as(u64, 1), text.version);
+
+    try std.testing.expect(try text.backspaceAt(0, 2));
+    try std.testing.expectEqual(@as(u64, 2), text.version);
+}
+
 fn byteOffsetForPosition(raw: []const u8, target_row: usize, target_col: usize) !usize {
     var row: usize = 0;
     var col: usize = 0;
