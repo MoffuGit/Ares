@@ -112,9 +112,6 @@ fn drainMailbox(self: *Thread) !void {
             .buffer_update => |entry_id| {
                 state.onBufferUpdate(entry_id);
             },
-            .highlight_update => |entry_id| {
-                state.onHighlightUpdate(entry_id);
-            },
             .select_entry => |id| {
                 state.selectEntry(id);
             },

@@ -3,7 +3,6 @@ const inputpkg = @import("../input.zig");
 
 pub const Message = union(enum) {
     buffer_update: u64,
-    highlight_update: u64,
     select_entry: u64,
     resize: sizepkg.Size,
     scroll: u64,

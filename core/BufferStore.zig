@@ -5,7 +5,6 @@ const Io = @import("io/mod.zig");
 const Settings = @import("settings/mod.zig");
 const Worktree = @import("worktree/mod.zig").Worktree;
 const global = @import("global.zig");
-const Zinio = @import("Zinio.zig");
 const xev_pkg = @import("xev");
 
 const log = std.log.scoped(.buffer_store);
@@ -17,9 +16,8 @@ buffers: std.AutoHashMap(u64, Buffer),
 io: *Io,
 worktree: *Worktree,
 settings: *Settings,
-zinio: Zinio,
 
-pub fn init(alloc: Allocator, io: *Io, settings: *Settings, worktree: *Worktree, thread_pool: *xev_pkg.ThreadPool) !BufferStore {
+pub fn init(alloc: Allocator, io: *Io, settings: *Settings, worktree: *Worktree, _: *xev_pkg.ThreadPool) !BufferStore {
     settings.rwlock.lockShared();
     defer settings.rwlock.unlockShared();
 
@@ -29,7 +27,6 @@ pub fn init(alloc: Allocator, io: *Io, settings: *Settings, worktree: *Worktree,
         .io = io,
         .worktree = worktree,
         .settings = settings,
-        .zinio = try Zinio.init(alloc, settings.theme_json, thread_pool),
     };
 }
 
@@ -54,8 +51,6 @@ pub fn deinit(self: *BufferStore) void {
         .ctx = self,
         .handle = handleThemeUpdate,
     });
-
-    self.zinio.deinit();
 
     var it = self.buffers.valueIterator();
     while (it.next()) |buf| {
@@ -92,7 +87,6 @@ fn handleIoReadComplete(ctx: *anyopaque, event: global.GlobalEvents) void {
 
         if (payload.file) |f| {
             buf.applyFile(f);
-            self.requestHighlight(entry_id, buf, abs_path);
         } else {
             buf.applyError();
         }
@@ -105,52 +99,53 @@ fn handleIoReadComplete(ctx: *anyopaque, event: global.GlobalEvents) void {
 
 fn handleThemeUpdate(ctx: *anyopaque, _: global.GlobalEvents) void {
     const self: *BufferStore = @ptrCast(@alignCast(ctx));
+    _ = self;
 
-    {
-        self.settings.rwlock.lockShared();
-        defer self.settings.rwlock.unlockShared();
-
-        _ = self.zinio.runtime.setTheme(self.settings.theme_json);
-    }
-
-    var it = self.buffers.iterator();
-    while (it.next()) |entry| {
-        const entry_id = entry.key_ptr.*;
-        const buf = entry.value_ptr;
-        const abs_path = self.worktree.getAbsPath(entry_id) orelse continue;
-        self.requestHighlight(entry_id, buf, abs_path);
-    }
+    // {
+    //     self.settings.rwlock.lockShared();
+    //     defer self.settings.rwlock.unlockShared();
+    //
+    //     _ = self.zinio.runtime.setTheme(self.settings.theme_json);
+    // }
+    //
+    // var it = self.buffers.iterator();
+    // while (it.next()) |entry| {
+    //     const entry_id = entry.key_ptr.*;
+    //     const buf = entry.value_ptr;
+    //     const abs_path = self.worktree.getAbsPath(entry_id) orelse continue;
+    //     self.requestHighlight(entry_id, buf, abs_path);
+    // }
 }
 
-fn requestHighlight(self: *BufferStore, entry_id: u64, buf: *Buffer, abs_path: []const u8) void {
-    buf.mutex.lock();
-    defer buf.mutex.unlock();
+// fn requestHighlight(self: *BufferStore, entry_id: u64, buf: *Buffer, abs_path: []const u8) void {
+//     buf.mutex.lock();
+//     defer buf.mutex.unlock();
+//
+//     const file = buf.file orelse return;
+//     const text_snapshot = self.alloc.dupe(u8, file.bytes) catch return;
+//     errdefer self.alloc.free(text_snapshot);
+//
+//     const ext = fileExtension(abs_path);
+//     const ext_owned = self.alloc.dupe(u8, ext) catch {
+//         return;
+//     };
+//     errdefer self.alloc.free(ext_owned);
+//
+//     self.zinio.schedule(.{
+//         .entry_id = entry_id,
+//         .version = buf.text.version,
+//         .text = text_snapshot,
+//         .extension = ext_owned,
+//         .buffer = buf,
+//     });
+// }
 
-    const file = buf.file orelse return;
-    const text_snapshot = self.alloc.dupe(u8, file.bytes) catch return;
-    errdefer self.alloc.free(text_snapshot);
-
-    const ext = fileExtension(abs_path);
-    const ext_owned = self.alloc.dupe(u8, ext) catch {
-        return;
-    };
-    errdefer self.alloc.free(ext_owned);
-
-    self.zinio.schedule(.{
-        .entry_id = entry_id,
-        .version = buf.text.version,
-        .text = text_snapshot,
-        .extension = ext_owned,
-        .buffer = buf,
-    });
-}
-
-fn fileExtension(path: []const u8) []const u8 {
-    if (std.mem.lastIndexOfScalar(u8, path, '.')) |dot| {
-        return path[dot + 1 ..];
-    }
-    return "";
-}
+// fn fileExtension(path: []const u8) []const u8 {
+//     if (std.mem.lastIndexOfScalar(u8, path, '.')) |dot| {
+//         return path[dot + 1 ..];
+//     }
+//     return "";
+// }
 
 pub fn get(self: *BufferStore, entry_id: u64) ?*Buffer {
     return self.buffers.getPtr(entry_id);
