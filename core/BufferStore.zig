@@ -16,9 +16,7 @@ alloc: Allocator,
 buffers: std.AutoHashMap(u64, Buffer),
 io: *Io,
 worktree: *Worktree,
-io_listener: global.EventEmitter.Listener = undefined,
 settings: *Settings,
-theme_listener: global.EventEmitter.Listener = undefined,
 zinio: Zinio,
 
 pub fn init(alloc: Allocator, io: *Io, settings: *Settings, worktree: *Worktree, thread_pool: *xev_pkg.ThreadPool) !BufferStore {
@@ -36,22 +34,26 @@ pub fn init(alloc: Allocator, io: *Io, settings: *Settings, worktree: *Worktree,
 }
 
 pub fn start(self: *BufferStore) !void {
-    self.io_listener = .{
+    try global.state.events.on(.ioReadComplete, .{
         .ctx = self,
         .handle = handleIoReadComplete,
-    };
-    try global.state.events.on(.ioReadComplete, self.io_listener);
+    });
 
-    self.theme_listener = .{
+    try global.state.events.on(.themeUpdate, .{
         .ctx = self,
         .handle = handleThemeUpdate,
-    };
-    try global.state.events.on(.themeUpdate, self.theme_listener);
+    });
 }
 
 pub fn deinit(self: *BufferStore) void {
-    global.state.events.off(.ioReadComplete, self.io_listener);
-    global.state.events.off(.themeUpdate, self.theme_listener);
+    global.state.events.off(.ioReadComplete, .{
+        .ctx = self,
+        .handle = handleIoReadComplete,
+    });
+    global.state.events.off(.themeUpdate, .{
+        .ctx = self,
+        .handle = handleThemeUpdate,
+    });
 
     self.zinio.deinit();
 
