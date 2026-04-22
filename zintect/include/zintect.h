@@ -18,8 +18,14 @@ typedef struct FffResult {
 } FffResult;
 
 typedef struct FffSpan {
-  uint32_t start_byte;
-  uint32_t end_byte;
+  /**
+   * Start offset as a Unicode scalar-value index within the UTF-8 input line.
+   */
+  uint32_t start;
+  /**
+   * End offset as a Unicode scalar-value index within the UTF-8 input line.
+   */
+  uint32_t end;
   uint8_t color[4];
   uint8_t font_style;
 } FffSpan;

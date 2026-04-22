@@ -37,9 +37,12 @@ pub struct FffHighlightResult {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FffSpan {
-    pub start_byte: u32,
-    pub end_byte: u32,
+    /// Start offset as a Unicode scalar-value index within the UTF-8 input line.
+    pub start: u32,
+    /// End offset as a Unicode scalar-value index within the UTF-8 input line.
+    pub end: u32,
     pub color: [u8; 4],
     pub font_style: u8,
 }
@@ -49,7 +52,7 @@ impl FffHighlightResult {
         let mut offset: u32 = 0;
         let items: Vec<FffSpan> = iter
             .filter_map(|(style, text)| {
-                let len = text.len() as u32;
+                let len = text.chars().count() as u32;
                 if len == 0 {
                     return None;
                 }
@@ -61,9 +64,9 @@ impl FffHighlightResult {
                 let color = [fg.r, fg.g, fg.b, fg.a];
 
                 Some(FffSpan {
-                    start_byte: start,
-                    end_byte: start + len,
-                    color: color,
+                    start,
+                    end: start + len,
+                    color,
                     font_style: style.font_style.bits(),
                 })
             })
@@ -164,4 +167,62 @@ fn vec_to_raw<T>(v: Vec<T>) -> (*mut T, u32) {
     let p = boxed.as_mut_ptr();
     std::mem::forget(boxed);
     (p, count)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::slice;
+
+    use super::*;
+
+    fn collect_spans(result: FffResult) -> Vec<FffSpan> {
+        assert!(result.success);
+
+        let handle = result.handle as *mut FffHighlightResult;
+        assert!(!handle.is_null());
+
+        unsafe {
+            let highlight_result = Box::from_raw(handle);
+            let spans = if highlight_result.count == 0 || highlight_result.items.is_null() {
+                Vec::new()
+            } else {
+                slice::from_raw_parts(highlight_result.items, highlight_result.count as usize)
+                    .to_vec()
+            };
+
+            if !highlight_result.items.is_null() {
+                let count = highlight_result.count as usize;
+                _ = Vec::from_raw_parts(highlight_result.items, count, count);
+            }
+
+            spans
+        }
+    }
+
+    #[test]
+    fn highlight_spans_use_unicode_scalar_offsets() {
+        let runtime = Runtime::new();
+        let mut session = Session::new();
+
+        assert!(session.set_syntax_by_ext(&runtime, "rs"));
+
+        let line = "let café = \"π😊\";\n";
+        let spans = collect_spans(session.highlight_line(&runtime, line));
+
+        assert!(!spans.is_empty());
+
+        let expected_len = line.chars().count() as u32;
+        assert!(expected_len < line.len() as u32);
+        assert_eq!(spans.first().unwrap().start, 0);
+        assert_eq!(spans.last().unwrap().end, expected_len);
+
+        for span in &spans {
+            assert!(span.start < span.end);
+            assert!(span.end <= expected_len);
+        }
+
+        for pair in spans.windows(2) {
+            assert_eq!(pair[0].end, pair[1].start);
+        }
+    }
 }

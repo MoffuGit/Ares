@@ -7,6 +7,7 @@ pub const TextBuffer = @This();
 alloc: Allocator,
 content: GapBuffer(u8),
 layout: Layout = .{},
+version: usize = 0,
 
 pub fn init(alloc: Allocator) TextBuffer {
     return .{

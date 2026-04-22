@@ -111,7 +111,7 @@ pub fn keyEvent(self: *Editor, event: inputpkg.KeyEvent) void {
 
     self.clampCursorToBuffer(buffer);
 
-    buffer.mutex.lock();
+    buffer.rwlock.lock();
     const changed = switch (event.input) {
         .text => |cp| self.insertCodepoint(buffer, cp),
         .enter => self.insertAscii(buffer, '\n', .{ .row = self.cursor.row + 1, .col = 0 }),
@@ -119,7 +119,7 @@ pub fn keyEvent(self: *Editor, event: inputpkg.KeyEvent) void {
         .backspace => self.backspace(buffer),
         .delete => self.delete(buffer),
     };
-    buffer.mutex.unlock();
+    buffer.rwlock.unlock();
 
     if (!changed) return;
 
@@ -178,8 +178,8 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
     const buffer = self.buffer orelse return false;
     if (buffer.getState() != .ready) return false;
 
-    buffer.mutex.lock();
-    defer buffer.mutex.unlock();
+    buffer.rwlock.lock();
+    defer buffer.rwlock.unlock();
 
     const text = buffer.text;
     out.* = .{
@@ -193,8 +193,8 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
 }
 
 fn emitEditorUpdate(self: *Editor, entry_id: u64, buffer: *Buffer) void {
-    buffer.mutex.lock();
-    defer buffer.mutex.unlock();
+    buffer.rwlock.lock();
+    defer buffer.rwlock.unlock();
 
     _ = global.emit(.{ .editorUpdate = .{
         .surface_id = self.id,
@@ -208,8 +208,8 @@ fn emitEditorUpdate(self: *Editor, entry_id: u64, buffer: *Buffer) void {
 fn clampCursorToBuffer(self: *Editor, buffer: *Buffer) void {
     if (buffer.getState() != .ready) return;
 
-    buffer.mutex.lock();
-    defer buffer.mutex.unlock();
+    buffer.rwlock.lock();
+    defer buffer.rwlock.unlock();
 
     const text = &buffer.text;
     if (text.rows() == 0) {
@@ -281,8 +281,8 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
     const buffer = self.buffer orelse return;
     if (buffer.getState() != .ready) return;
 
-    buffer.mutex.lock();
-    defer buffer.mutex.unlock();
+    buffer.rwlock.lock();
+    defer buffer.rwlock.unlock();
 
     const grid = renderer.size.grid();
     const text = &buffer.text;
@@ -307,7 +307,7 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
 fn rebuildCells(
     renderer: *Renderer,
     rows: []const TextBuffer.Row,
-    hl_lines: []const []Buffer.HighlightSpan,
+    hl_lines: []const []Buffer.Span,
     row_count: usize,
     scroll_row: u64,
     cursor: CursorPosition,
@@ -354,7 +354,7 @@ fn rebuildCells(
     for (rows, 0..) |row_data, row_idx| {
         if (row_idx >= grid_size.rows) break;
 
-        const hl = if (row_idx < hl_lines.len) hl_lines[row_idx] else &[_]Buffer.HighlightSpan{};
+        const hl = if (row_idx < hl_lines.len) hl_lines[row_idx] else &[_]Buffer.Span{};
         const line_number = scroll_row + row_idx;
 
         try renderRelativeLineNumber(
@@ -386,10 +386,12 @@ const SpanResult = struct {
     style: Style,
 };
 
-fn spanAt(spans: []const Buffer.HighlightSpan, col: usize, default_color: [4]u8) SpanResult {
+fn spanAt(spans: []const Buffer.Span, col: usize, default_color: [4]u8) SpanResult {
     for (spans) |span| {
-        if (col >= span.start_col and col < span.end_col) return .{ .color = span.color, .style = span.style };
-        if (col < span.start_col) break;
+        if (col >= span.start and col < span.end) {
+            return .{ .color = span.color, .style = span.style };
+        }
+        if (col < span.start) break;
     }
     return .{ .color = default_color, .style = .regular };
 }
