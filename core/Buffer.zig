@@ -200,12 +200,20 @@ fn highlight(self: *Buffer) !bool {
         try lines.append(self.alloc, try converted.toOwnedSlice(self.alloc));
     }
 
-    {
-        self.rwlock.lock();
-        self.rwlock.unlock();
-        self.highlights.deinit(self.alloc);
-        self.highlights.lines = lines.items;
+    var next_highlights: Highlights = .{
+        .lines = try lines.toOwnedSlice(self.alloc),
+    };
+    errdefer next_highlights.deinit(self.alloc);
+
+    self.rwlock.lock();
+    defer self.rwlock.unlock();
+
+    if (self.text.version != version) {
+        return false;
     }
+
+    self.highlights.deinit(self.alloc);
+    self.highlights = next_highlights;
 
     return true;
 }
@@ -234,3 +242,24 @@ pub const Highlights = struct {
         return self.lines[start .. start + count];
     }
 };
+
+test "buffer highlight results deinit cleanly" {
+    const alloc = std.testing.allocator;
+
+    var runtime = try zintect.Runtime.init();
+    defer runtime.deinit();
+
+    var buffer = try Buffer.init(alloc, .{
+        .id = 1,
+        .extension = try alloc.dupe(u8, "rs"),
+        .runtime = runtime,
+        .pool = undefined,
+    });
+    defer buffer.deinit();
+
+    buffer.text.deinit();
+    buffer.text = try TextBuffer.initFromBytes(alloc, "let value = 42;\nfn main() {}\n");
+
+    try std.testing.expect(try buffer.highlight());
+    try std.testing.expect(buffer.highlights.lines.len > 0);
+}
