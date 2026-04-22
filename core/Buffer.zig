@@ -7,8 +7,6 @@ const TextBuffer = @import("Text.zig");
 const ThreadPool = global.xev.ThreadPool;
 const Style = @import("font/mod.zig").Style;
 const zintect = @import("zintect");
-const Highlights = @import("Highlights.zig");
-pub const Span = Highlights.Span;
 
 pub const Buffer = @This();
 
@@ -165,7 +163,7 @@ fn highlight(self: *Buffer) !bool {
     var iter = session.highlightIterator(&self.runtime, raw[0..], self.alloc);
     defer iter.deinit();
 
-    var lines = try std.ArrayList([]Highlights.Span).initCapacity(self.alloc, 0);
+    var lines = try std.ArrayList([]Span).initCapacity(self.alloc, 0);
     errdefer {
         for (lines.items) |line| {
             if (line.len > 0) self.alloc.free(line);
@@ -188,7 +186,7 @@ fn highlight(self: *Buffer) !bool {
             }
         }
 
-        var converted = try std.ArrayList(Highlights.Span).initCapacity(self.alloc, 0);
+        var converted = try std.ArrayList(Span).initCapacity(self.alloc, 0);
         errdefer converted.deinit(self.alloc);
 
         for (spans) |span| {
@@ -211,3 +209,28 @@ fn highlight(self: *Buffer) !bool {
 
     return true;
 }
+
+pub const Span = struct {
+    start: u32,
+    end: u32,
+    color: [4]u8,
+    style: Style = .regular,
+};
+
+pub const Highlights = struct {
+    lines: [][]Span = &.{},
+
+    pub fn deinit(self: *Highlights, alloc: Allocator) void {
+        for (self.lines) |line| {
+            if (line.len > 0) alloc.free(line);
+        }
+        if (self.lines.len > 0) alloc.free(self.lines);
+        self.* = .{};
+    }
+
+    pub fn visibleLines(self: *const Highlights, scroll_row: u64, max_rows: usize) []const []Span {
+        const start = @min(std.math.cast(usize, scroll_row) orelse self.lines.len, self.lines.len);
+        const count = @min(max_rows, self.lines.len - start);
+        return self.lines[start .. start + count];
+    }
+};
