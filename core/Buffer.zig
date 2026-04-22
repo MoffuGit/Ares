@@ -135,10 +135,7 @@ pub fn highlightTask(task: *ThreadPool.Task) void {
     const buffer: *Buffer = @alignCast(@fieldParentPtr("task", task));
 
     while (!buffer.stopped.load(.acquire)) {
-        const res = buffer.highlight() catch {
-            break;
-        };
-        if (res) break;
+        if (buffer.highlight() catch true) break;
     }
 
     buffer.active.store(false, .release);
