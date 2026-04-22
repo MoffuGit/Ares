@@ -388,9 +388,7 @@ const SpanResult = struct {
 
 fn spanAt(spans: []const Buffer.Span, col: usize, default_color: [4]u8) SpanResult {
     for (spans) |span| {
-        if (col >= span.start and col < span.end) {
-            return .{ .color = span.color, .style = span.style };
-        }
+        if (col >= span.start and col < span.end) return .{ .color = span.color, .style = span.style };
         if (col < span.start) break;
     }
     return .{ .color = default_color, .style = .regular };

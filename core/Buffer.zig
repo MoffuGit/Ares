@@ -82,7 +82,6 @@ pub fn requestHighlight(self: *Buffer) void {
     if (self.file == null or self.extension == null) return;
     if (self.stopped.load(.acquire) or self.active.load(.acquire)) return;
 
-    std.log.debug("dka;dsfkj", .{});
     self.active.store(true, .release);
     self.pool.schedule(.from(&self.task));
 }
@@ -150,7 +149,10 @@ fn highlight(self: *Buffer) !bool {
     var session = try zintect.Session.init();
     defer session.deinit();
 
-    _ = session.setSyntaxByExt(&self.runtime, self.extension.?[0..]);
+    const valid = try session.setSyntaxByExt(self.alloc, &self.runtime, self.extension.?);
+    if (!valid) {
+        std.log.debug("the extension is invalid: {?s}", .{self.extension});
+    }
 
     var version: usize = 0;
     const raw = raw: {

@@ -120,11 +120,14 @@ pub const Session = struct {
         c.zintect_destroy_session(self.handler);
     }
 
-    pub fn setSyntaxByExt(self: *Session, runtime: *const Runtime, ext: []const u8) bool {
+    pub fn setSyntaxByExt(self: *Session, alloc: Allocator, runtime: *const Runtime, ext: []const u8) !bool {
+        const null_ext = try alloc.dupeZ(u8, ext);
+        defer alloc.free(null_ext);
+
         return c.zintect_session_set_syntax_by_ext(
             self.handler,
             runtime.handler,
-            ext.ptr,
+            null_ext,
         );
     }
 
