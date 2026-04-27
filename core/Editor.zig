@@ -46,16 +46,14 @@ pub fn init(
     settings: *Settings,
     size: sizepkg.Size,
 ) Editor {
-    const text_color = settings.readThemeTextColor();
-    const muted_color = settings.readThemeColor("mutedFg", text_color);
     return .{
         .alloc = alloc,
         .id = id,
         .project = project,
         .size = size,
         .settings = settings,
-        .color = text_color,
-        .gutter_color = settings.readThemeColor("gutter", muted_color),
+        .color = settings.getColor(.fg),
+        .gutter_color = settings.getColor(.gutter),
     };
 }
 
@@ -95,6 +93,7 @@ pub fn setCursorPosition(self: *Editor, row: u64, col: u64) void {
 
     self.cursor = .{ .row = row, .col = col };
 
+    //WARN:
     const buffer = self.buffer orelse return;
     self.clampCursorToBuffer(buffer);
     self.emitEditorUpdate(buffer.id, buffer);
@@ -109,8 +108,10 @@ pub fn keyEvent(self: *Editor, event: inputpkg.KeyEvent) void {
     if (buffer.getState() != .ready) return;
     if (hasCommandModifiers(event.mods)) return;
 
+    //WARN:
     self.clampCursorToBuffer(buffer);
 
+    //WARN:
     buffer.rwlock.lock();
     const changed = switch (event.input) {
         .text => |cp| self.insertCodepoint(buffer, cp),
@@ -123,6 +124,7 @@ pub fn keyEvent(self: *Editor, event: inputpkg.KeyEvent) void {
 
     if (!changed) return;
 
+    //WARN:
     self.clampCursorToBuffer(buffer);
     self.emitEditorUpdate(buffer.id, buffer);
     self.rebuild_cells = true;
@@ -142,6 +144,7 @@ pub fn mouseButton(self: *Editor, evt: inputpkg.MouseButtonEvent) void {
     self.mutex.lock();
     defer self.mutex.unlock();
 
+    //WARN:
     const buffer = self.buffer orelse return;
 
     const cell_width: f64 = @floatFromInt(self.size.cell.width);
@@ -149,6 +152,7 @@ pub fn mouseButton(self: *Editor, evt: inputpkg.MouseButtonEvent) void {
 
     const raw_col: u64 = if (evt.x >= 0) @intFromFloat(evt.x / cell_width) else 0;
     const row: u64 = if (evt.y >= 0) @intFromFloat(evt.y / cell_height) else 0;
+    //WARN:
     const gutter_width: u64 = @intCast(lineNumberGutterWidth(buffer.text.rows()));
     const col = raw_col -| gutter_width;
 
@@ -160,6 +164,7 @@ pub fn mouseButton(self: *Editor, evt: inputpkg.MouseButtonEvent) void {
 
 pub fn mouseMove(_: *Editor, _: inputpkg.MouseMoveEvent) void {}
 
+//WARN:
 pub fn onBufferUpdate(self: *Editor, entry_id: u64) void {
     self.mutex.lock();
     defer self.mutex.unlock();
@@ -178,6 +183,7 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
     const buffer = self.buffer orelse return false;
     if (buffer.getState() != .ready) return false;
 
+    //WARN:
     buffer.rwlock.lock();
     defer buffer.rwlock.unlock();
 
@@ -193,6 +199,7 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
 }
 
 fn emitEditorUpdate(self: *Editor, entry_id: u64, buffer: *Buffer) void {
+    //WARN:
     buffer.rwlock.lock();
     defer buffer.rwlock.unlock();
 
@@ -208,6 +215,7 @@ fn emitEditorUpdate(self: *Editor, entry_id: u64, buffer: *Buffer) void {
 fn clampCursorToBuffer(self: *Editor, buffer: *Buffer) void {
     if (buffer.getState() != .ready) return;
 
+    //WARN:
     buffer.rwlock.lock();
     defer buffer.rwlock.unlock();
 
@@ -228,6 +236,7 @@ fn clampCursorToBuffer(self: *Editor, buffer: *Buffer) void {
     };
 }
 
+//WARN:
 fn insertCodepoint(self: *Editor, buffer: *Buffer, cp: u21) bool {
     var utf8: [4]u8 = undefined;
     const len = std.unicode.utf8Encode(cp, &utf8) catch return false;
@@ -235,17 +244,20 @@ fn insertCodepoint(self: *Editor, buffer: *Buffer, cp: u21) bool {
     return self.insertBytes(buffer, utf8[0..len], .{ .row = self.cursor.row, .col = self.cursor.col + 1 });
 }
 
+//WARN:
 fn insertAscii(self: *Editor, buffer: *Buffer, byte: u8, next_cursor: CursorPosition) bool {
     var raw = [1]u8{byte};
     return self.insertBytes(buffer, &raw, next_cursor);
 }
 
+//WARN:
 fn insertBytes(self: *Editor, buffer: *Buffer, bytes: []const u8, next_cursor: CursorPosition) bool {
     buffer.text.insertUtf8At(@intCast(self.cursor.row), @intCast(self.cursor.col), bytes) catch return false;
     self.cursor = next_cursor;
     return true;
 }
 
+//WARN:
 fn backspace(self: *Editor, buffer: *Buffer) bool {
     if (self.cursor.row == 0 and self.cursor.col == 0) return false;
 
@@ -265,6 +277,7 @@ fn backspace(self: *Editor, buffer: *Buffer) bool {
     return true;
 }
 
+//WARN:
 fn delete(self: *Editor, buffer: *Buffer) bool {
     const changed = buffer.text.deleteAt(@intCast(self.cursor.row), @intCast(self.cursor.col)) catch return false;
     return changed;
@@ -281,6 +294,7 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
     const buffer = self.buffer orelse return;
     if (buffer.getState() != .ready) return;
 
+    //WARN:
     buffer.rwlock.lock();
     defer buffer.rwlock.unlock();
 
@@ -304,6 +318,7 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
     self.rebuild_cells = false;
 }
 
+//WARN:
 fn rebuildCells(
     renderer: *Renderer,
     rows: []const TextBuffer.Row,
@@ -386,6 +401,7 @@ const SpanResult = struct {
     style: Style,
 };
 
+//WARN:
 fn spanAt(spans: []const Buffer.Span, col: usize, default_color: [4]u8) SpanResult {
     for (spans) |span| {
         if (col >= span.start and col < span.end) return .{ .color = span.color, .style = span.style };
@@ -485,8 +501,8 @@ pub fn themeUpdate(self: *Editor) void {
     self.mutex.lock();
     defer self.mutex.unlock();
 
-    self.color = self.settings.readThemeTextColor();
-    self.gutter_color = self.settings.readThemeColor("gutter", self.settings.readThemeColor("mutedFg", self.color));
+    self.color = self.settings.getColor(.fg);
+    self.gutter_color = self.settings.getColor(.gutter);
 
     self.rebuild_cells = true;
 }
