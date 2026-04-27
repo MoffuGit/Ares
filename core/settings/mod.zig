@@ -5,7 +5,7 @@ const keymapspkg = @import("../keymaps/mod.zig");
 const Keymaps = keymapspkg.Keymaps;
 const Monitor = @import("../monitor/mod.zig");
 const Appearance = @import("../Appearance.zig");
-const themepkg = @import("theme/mod.zig");
+const themepkg = @import("theme.zig");
 
 pub const Settings = @This();
 
@@ -13,7 +13,9 @@ pub const Scheme = enum { light, dark, system };
 pub const ColorScheme = enum { light, dark };
 pub const TabsPosition = enum { horizontal, vertical };
 pub const ThemeColor = themepkg.Color;
-pub const ThemeColors = themepkg.Colors;
+pub const ThemeRole = themepkg.ThemeRole;
+
+const ResolvedThemeColors = std.EnumArray(ThemeRole, ThemeColor);
 
 const Themes = std.StringHashMapUnmanaged([]const u8);
 
@@ -53,7 +55,7 @@ light_theme: []const u8 = DEFAULT_LIGHT,
 dark_theme: []const u8 = DEFAULT_DARK,
 
 theme_json: []const u8 = FALLBACK_THEME_JSON,
-theme_colors: ThemeColors = .{},
+theme: ResolvedThemeColors = themepkg.DEFAULT_THEME_COLORS,
 
 keymaps: Keymaps = undefined,
 keymaps_initialized: bool = false,
@@ -80,7 +82,6 @@ pub fn destroy(self: *Settings) void {
     if (self.settings_path.len > 0) self.alloc.free(self.settings_path);
     if (self.light_theme.len > 0 and self.light_theme.ptr != DEFAULT_LIGHT.ptr) self.alloc.free(self.light_theme);
     if (self.dark_theme.len > 0 and self.dark_theme.ptr != DEFAULT_DARK.ptr) self.alloc.free(self.dark_theme);
-    self.deinitThemeColors();
     var it = self.themes.iterator();
     while (it.next()) |entry| {
         self.alloc.free(entry.key_ptr.*);
@@ -267,42 +268,49 @@ fn applyThemeLocked(self: *Settings) void {
     const dark = self.scheme == .dark or (self.scheme == .system and self.system_scheme == .dark);
     const name = if (dark) self.dark_theme else self.light_theme;
     const theme_json = self.themes.get(name) orelse FALLBACK_THEME_JSON;
-    const theme_colors = themepkg.parseColors(self.alloc, theme_json) catch ThemeColors{};
 
-    self.deinitThemeColors();
     self.theme_json = theme_json;
-    self.theme_colors = theme_colors;
+    self.theme = resolveThemeColors(self.alloc, theme_json);
 }
 
-pub fn getThemeColor(self: *const Settings, name: []const u8) ?ThemeColor {
-    return self.theme_colors.get(name);
-}
+fn resolveThemeColors(alloc: Allocator, theme_json: []const u8) ResolvedThemeColors {
+    var resolved = themepkg.DEFAULT_THEME_COLORS;
 
-pub fn getThemeTextColor(self: *const Settings) ThemeColor {
-    return self.getThemeColor("foreground") orelse themepkg.fallback.fg;
-}
+    const parsed = std.json.parseFromSlice(themepkg.JsonTheme, alloc, theme_json, .{
+        .ignore_unknown_fields = true,
+        .allocate = .alloc_always,
+    }) catch return resolved;
+    defer parsed.deinit();
 
-pub fn readThemeColor(self: *Settings, name: []const u8, fallback: ThemeColor) ThemeColor {
-    self.rwlock.lockShared();
-    defer self.rwlock.unlockShared();
-
-    return self.getThemeColor(name) orelse fallback;
-}
-
-pub fn readThemeTextColor(self: *Settings) ThemeColor {
-    self.rwlock.lockShared();
-    defer self.rwlock.unlockShared();
-
-    return self.getThemeTextColor();
-}
-
-fn deinitThemeColors(self: *Settings) void {
-    var it = self.theme_colors.keyIterator();
-    while (it.next()) |key| {
-        self.alloc.free(key.*);
+    inline for (std.meta.fields(ThemeRole)) |f| {
+        const role: ThemeRole = @field(ThemeRole, f.name);
+        const palette_name = @field(parsed.value.theme, f.name);
+        if (palette_name.len != 0) {
+            if (parsed.value.colors.map.get(palette_name)) |hex| {
+                if (themepkg.parseColor(hex)) |color| {
+                    resolved.set(role, color);
+                } else |_| {}
+            }
+        }
     }
-    self.theme_colors.deinit(self.alloc);
-    self.theme_colors = .{};
+
+    return resolved;
+}
+
+/// Returns the resolved color for a role. Caller must already hold the
+/// settings lock (shared or exclusive). For self-locking access use
+/// `readColor`.
+pub fn getColor(self: *const Settings, role: ThemeRole) ThemeColor {
+    return self.theme.get(role);
+}
+
+/// Self-locking read of a resolved theme color. Always returns a color —
+/// roles missing from the active theme fall back to `DEFAULT_THEME_COLORS`.
+pub fn readColor(self: *Settings, role: ThemeRole) ThemeColor {
+    self.rwlock.lockShared();
+    defer self.rwlock.unlockShared();
+
+    return self.getColor(role);
 }
 
 pub fn setSystemScheme(self: *Settings, scheme: ColorScheme) void {
@@ -424,7 +432,6 @@ test "loadSettings parses settings.json" {
     defer {
         if (self.light_theme.ptr != DEFAULT_LIGHT.ptr) alloc.free(self.light_theme);
         if (self.dark_theme.ptr != DEFAULT_DARK.ptr) alloc.free(self.dark_theme);
-        self.deinitThemeColors();
         if (self.keymaps_initialized) self.keymaps.deinit();
     }
 
@@ -454,7 +461,6 @@ test "loadSettings returns error for missing settings.json" {
     };
 
     defer {
-        self.deinitThemeColors();
         if (self.keymaps_initialized) self.keymaps.deinit();
     }
 
@@ -472,7 +478,6 @@ test "loadSettings returns error for invalid json" {
     };
 
     defer {
-        self.deinitThemeColors();
         if (self.keymaps_initialized) self.keymaps.deinit();
     }
 
@@ -485,7 +490,7 @@ test "loadSettings returns error for invalid json" {
     try std.testing.expectError(error.SyntaxError, result);
 }
 
-test "applyThemeLocked parses active theme colors" {
+test "applyThemeLocked resolves roles through palette and falls back per-role" {
     const alloc = std.testing.allocator;
     var self = Settings{
         .alloc = alloc,
@@ -493,7 +498,6 @@ test "applyThemeLocked parses active theme colors" {
     defer {
         if (self.light_theme.ptr != DEFAULT_LIGHT.ptr) alloc.free(self.light_theme);
         if (self.dark_theme.ptr != DEFAULT_DARK.ptr) alloc.free(self.dark_theme);
-        self.deinitThemeColors();
         if (self.keymaps_initialized) self.keymaps.deinit();
 
         var it = self.themes.iterator();
@@ -505,8 +509,10 @@ test "applyThemeLocked parses active theme colors" {
     }
 
     const theme_name = try alloc.dupe(u8, "sunrise");
+    // `theme.bg` is the role -> palette mapping, `colors` is the palette.
+    // `gutter` is left unset so it must fall back to DEFAULT_THEME_COLORS.
     const theme_json = try alloc.dupe(u8,
-        \\{"name":"sunrise","colors":{"accent":"#112233","overlay":"#aabbccdd"},"theme":{"bg":"accent"}}
+        \\{"name":"sunrise","colors":{"brand":"#112233","ink":"#aabbccdd"},"theme":{"bg":"brand","fg":"ink"}}
     );
     try self.themes.put(alloc, theme_name, theme_json);
 
@@ -516,6 +522,8 @@ test "applyThemeLocked parses active theme colors" {
     self.applyThemeLocked();
 
     try std.testing.expectEqualStrings(theme_json, self.theme_json);
-    try std.testing.expectEqual(ThemeColor{ 0x11, 0x22, 0x33, 0xff }, self.getThemeColor("accent").?);
-    try std.testing.expectEqual(ThemeColor{ 0xaa, 0xbb, 0xcc, 0xdd }, self.getThemeColor("overlay").?);
+    try std.testing.expectEqual(ThemeColor{ 0x11, 0x22, 0x33, 0xff }, self.getColor(.bg));
+    try std.testing.expectEqual(ThemeColor{ 0xaa, 0xbb, 0xcc, 0xdd }, self.getColor(.fg));
+    // Unset role inherits the built-in default.
+    try std.testing.expectEqual(themepkg.DEFAULT_THEME_COLORS.get(.gutter), self.getColor(.gutter));
 }
