@@ -7,9 +7,9 @@ export class App {
 
     coreProject: Pointer | null = null;
 
-    constructor(settingsPath: string, libPath?: string) {
+    constructor(window: Pointer, settingsPath: string, libPath?: string) {
         this.core = resolveCoreLib(libPath);
-        const coreApp = this.core.createApp();
+        const coreApp = this.core.createApp(window);
 
         if (!coreApp) throw new Error("An error happen while creating the core app");
         this.coreApp = coreApp;
@@ -24,10 +24,6 @@ export class App {
 
     readTheme() {
         return this.core.readTheme(this.coreApp);
-    }
-
-    onKeyDown(data: { keyCode: number; modifiers: number; isRepeat: boolean }) {
-        return this.core.onKeyDown(this.coreApp, data.keyCode, data.modifiers, data.isRepeat);
     }
 
     readFileTree() {

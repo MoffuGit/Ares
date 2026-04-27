@@ -15,26 +15,6 @@ const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 const libPath = resolve(import.meta.dir, "../lib/libcore.dylib");
 const settingsPath = resolve(import.meta.dir, "../settings/");
 
-const app = new App(settingsPath, libPath);
-const surfaceStore = new SurfaceStore(app);
-
-async function getMainSurfaceUrl(): Promise<string> {
-    const channel = await Updater.localInfo.channel();
-    if (channel === "dev") {
-        try {
-            await fetch(DEV_SERVER_URL, { method: "HEAD" });
-            console.log(`HMR enabled: Using Vite dev server at ${DEV_SERVER_URL}`);
-            return DEV_SERVER_URL;
-        } catch {
-            console.log(
-                "Vite dev server not running. Run 'bun run dev:hmr' for HMR support.",
-            );
-        }
-    }
-    return "views://mainview/index.html";
-}
-
-
 const rpc = BrowserView.defineRPC<AppRPC>({
     maxRequestTime: 600000,
     handlers: {
@@ -117,6 +97,27 @@ const mainWindow = new BrowserWindow({
     transparent: false,
     rpc: rpc,
 });
+
+const app = new App(mainWindow.ptr, settingsPath, libPath);
+const surfaceStore = new SurfaceStore(app);
+
+async function getMainSurfaceUrl(): Promise<string> {
+    const channel = await Updater.localInfo.channel();
+    if (channel === "dev") {
+        try {
+            await fetch(DEV_SERVER_URL, { method: "HEAD" });
+            console.log(`HMR enabled: Using Vite dev server at ${DEV_SERVER_URL}`);
+            return DEV_SERVER_URL;
+        } catch {
+            console.log(
+                "Vite dev server not running. Run 'bun run dev:hmr' for HMR support.",
+            );
+        }
+    }
+    return "views://mainview/index.html";
+}
+
+
 
 mainWindow.setWindowButtonPosition(MAC_TRAFFIC_LIGHTS_X, MAC_TRAFFIC_LIGHTS_Y);
 

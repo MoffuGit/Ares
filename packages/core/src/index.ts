@@ -127,16 +127,12 @@ function getCoreLib(libPath: string) {
                 returns: FFIType.void,
             },
             createApp: {
-                args: [],
+                args: [FFIType.pointer],
                 returns: FFIType.pointer,
             },
             destroyApp: {
                 args: [FFIType.pointer],
                 returns: FFIType.void,
-            },
-            onKeyDown: {
-                args: [FFIType.pointer, FFIType.u32, FFIType.u32, FFIType.bool],
-                returns: FFIType.bool,
             },
             lockSettings: {
                 args: [FFIType.pointer],
@@ -181,14 +177,6 @@ function getCoreLib(libPath: string) {
             expandEntry: {
                 args: [FFIType.pointer, FFIType.u64],
                 returns: FFIType.void,
-            },
-            getKeymapEntryCount: {
-                args: [FFIType.pointer, FFIType.u8, FFIType.u8],
-                returns: FFIType.u64,
-            },
-            readKeymapEntries: {
-                args: [FFIType.pointer, FFIType.u8, FFIType.u8, FFIType.pointer, FFIType.u64],
-                returns: FFIType.u64,
             },
             setSystemScheme: {
                 args: [FFIType.pointer, FFIType.u8],
@@ -328,16 +316,12 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.deinitState();
     }
 
-    createApp(): Pointer | null {
-        return this.lib.symbols.createApp();
+    createApp(window: Pointer): Pointer | null {
+        return this.lib.symbols.createApp(window);
     }
 
     destroyApp(app: Pointer) {
         this.lib.symbols.destroyApp(app);
-    }
-
-    onKeyDown(app: Pointer, keyCode: number, modifiers: number, isRepeat: boolean): boolean {
-        return this.lib.symbols.onKeyDown(app, keyCode, modifiers, isRepeat) as boolean;
     }
 
     loadSettings(app: Pointer, path: string): void {
@@ -403,32 +387,6 @@ export class CoreLib extends EventEmitter {
 
     expandEntry(project: Pointer, id: number): void {
         this.lib.symbols.expandEntry(project, id);
-    }
-
-    readKeymapEntries(app: Pointer, scope: number, mode: number): KeymapBinding[] {
-        this.lib.symbols.lockSettings(app);
-        try {
-            const count = Number(this.lib.symbols.getKeymapEntryCount(app, scope, mode));
-            if (count === 0) return [];
-
-            const entrySize = KeymapEntry.size;
-            const buf = new ArrayBuffer(count * entrySize);
-            const actual = Number(
-                this.lib.symbols.readKeymapEntries(app, scope, mode, ptr(buf), count),
-            );
-
-            const entries: KeymapBinding[] = [];
-            for (let i = 0; i < actual; i++) {
-                const slice = buf.slice(i * entrySize, (i + 1) * entrySize);
-                const { sequence, action } = KeymapEntry.unpack(slice);
-                if (sequence && action) {
-                    entries.push({ sequence, action });
-                }
-            }
-            return entries;
-        } finally {
-            this.lib.symbols.unlockSettings(app);
-        }
     }
 
     setSystemScheme(app: Pointer, scheme: number): void {

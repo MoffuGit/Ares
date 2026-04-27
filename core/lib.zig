@@ -66,8 +66,8 @@ export fn drainMailbox() void {
     }
 }
 
-export fn createApp() ?*App {
-    const app = App.create() catch |err| {
+export fn createApp(window: *anyopaque) ?*App {
+    const app = App.create(window) catch |err| {
         std.log.debug("error when creating the app: {}", .{err});
         return null;
     };
@@ -83,10 +83,6 @@ export fn loadSettings(app: *App, path: [*]const u8, len: u64) void {
     app.loadSettings(path[0..len]) catch |err| {
         std.log.err("error while loading the settings: {}", .{err});
     };
-}
-
-export fn onKeyDown(app: *App, key_code: u32, modifiers: u32, is_repeat: bool) bool {
-    return app.onKeyDown(key_code, modifiers, is_repeat);
 }
 
 pub const ExternSettings = extern struct {
@@ -210,51 +206,6 @@ fn countDepth(path: []const u8) u16 {
         if (c == '/') depth += 1;
     }
     return depth;
-}
-
-const keymapspkg = @import("keymaps/mod.zig");
-
-pub const ExternKeymapEntry = extern struct {
-    sequence_ptr: usize,
-    sequence_len: usize,
-    action_ptr: usize,
-    action_len: usize,
-};
-
-export fn getKeymapEntryCount(app: *App, scope: u8, mode: u8) u64 {
-    const settings = app.settings;
-
-    if (!settings.keymaps_initialized) return 0;
-    if (scope >= @typeInfo(keymapspkg.Scope).@"enum".fields.len) return 0;
-    if (mode >= @typeInfo(keymapspkg.Mode).@"enum".fields.len) return 0;
-
-    const s: keymapspkg.Scope = @enumFromInt(scope);
-    const m: keymapspkg.Mode = @enumFromInt(mode);
-    return settings.keymaps.entries(s, m).len;
-}
-
-export fn readKeymapEntries(app: *App, scope: u8, mode: u8, out: [*]ExternKeymapEntry, max_count: u64) u64 {
-    const settings = app.settings;
-
-    if (!settings.keymaps_initialized) return 0;
-    if (scope >= @typeInfo(keymapspkg.Scope).@"enum".fields.len) return 0;
-    if (mode >= @typeInfo(keymapspkg.Mode).@"enum".fields.len) return 0;
-
-    const s: keymapspkg.Scope = @enumFromInt(scope);
-    const m: keymapspkg.Mode = @enumFromInt(mode);
-    const entries = settings.keymaps.entries(s, m);
-
-    const count = @min(entries.len, max_count);
-    for (0..count) |i| {
-        const entry = entries[i];
-        out[i] = .{
-            .sequence_ptr = @intFromPtr(entry.sequence.ptr),
-            .sequence_len = entry.sequence.len,
-            .action_ptr = @intFromPtr(entry.action.ptr),
-            .action_len = entry.action.len,
-        };
-    }
-    return count;
 }
 
 export fn createEditor(app: *App, project: *Project, surface_id: u64, layer_ptr: *anyopaque, width: u32, height: u32) ?*EditorSurface {
