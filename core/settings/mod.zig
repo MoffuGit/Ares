@@ -15,7 +15,7 @@ pub const TabsPosition = enum { horizontal, vertical };
 pub const ThemeColor = themepkg.Color;
 pub const ThemeRole = themepkg.ThemeRole;
 
-const ResolvedThemeColors = std.EnumArray(ThemeRole, ThemeColor);
+const Theme = std.EnumArray(ThemeRole, ThemeColor);
 
 const Themes = std.StringHashMapUnmanaged([]const u8);
 
@@ -55,7 +55,7 @@ light_theme: []const u8 = DEFAULT_LIGHT,
 dark_theme: []const u8 = DEFAULT_DARK,
 
 theme_json: []const u8 = FALLBACK_THEME_JSON,
-theme: ResolvedThemeColors = themepkg.DEFAULT_THEME_COLORS,
+theme: Theme = themepkg.DEFAULT_THEME_COLORS,
 
 keymaps: Keymaps = undefined,
 keymaps_initialized: bool = false,
@@ -273,7 +273,7 @@ fn applyThemeLocked(self: *Settings) void {
     self.theme = resolveThemeColors(self.alloc, theme_json);
 }
 
-fn resolveThemeColors(alloc: Allocator, theme_json: []const u8) ResolvedThemeColors {
+fn resolveThemeColors(alloc: Allocator, theme_json: []const u8) Theme {
     var resolved = themepkg.DEFAULT_THEME_COLORS;
 
     const parsed = std.json.parseFromSlice(themepkg.JsonTheme, alloc, theme_json, .{
