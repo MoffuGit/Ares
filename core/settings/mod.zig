@@ -297,20 +297,8 @@ fn resolveThemeColors(alloc: Allocator, theme_json: []const u8) ResolvedThemeCol
     return resolved;
 }
 
-/// Returns the resolved color for a role. Caller must already hold the
-/// settings lock (shared or exclusive). For self-locking access use
-/// `readColor`.
 pub fn getColor(self: *const Settings, role: ThemeRole) ThemeColor {
     return self.theme.get(role);
-}
-
-/// Self-locking read of a resolved theme color. Always returns a color —
-/// roles missing from the active theme fall back to `DEFAULT_THEME_COLORS`.
-pub fn readColor(self: *Settings, role: ThemeRole) ThemeColor {
-    self.rwlock.lockShared();
-    defer self.rwlock.unlockShared();
-
-    return self.getColor(role);
 }
 
 pub fn setSystemScheme(self: *Settings, scheme: ColorScheme) void {
