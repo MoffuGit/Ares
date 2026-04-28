@@ -30,7 +30,7 @@ settings: *Settings,
 id: u64,
 
 buffer: ?*Buffer = null,
-selected_entry: ?u64 = null,
+entry_id: ?u64 = null,
 scroll_row: u64 = 0,
 cursor: CursorPosition = .{},
 rebuild_cells: bool = false,
@@ -71,11 +71,11 @@ pub fn selectEntry(self: *Editor, id: u64) void {
 
     if (self.project.openBuffer(id)) |buffer| {
         self.buffer = buffer;
-        self.selected_entry = id;
+        self.entry_id = id;
         self.cursor = .{};
         self.rebuild_cells = true;
 
-        self.emitEditorUpdate(id, buffer);
+        self.emitUpdate();
     }
 }
 
@@ -96,7 +96,7 @@ pub fn setCursorPosition(self: *Editor, row: u64, col: u64) void {
     //WARN:
     const buffer = self.buffer orelse return;
     self.clampCursorToBuffer(buffer);
-    self.emitEditorUpdate(buffer.id, buffer);
+    self.emitUpdate();
     self.rebuild_cells = true;
 }
 
@@ -126,7 +126,7 @@ pub fn keyEvent(self: *Editor, event: inputpkg.KeyEvent) void {
 
     //WARN:
     self.clampCursorToBuffer(buffer);
-    self.emitEditorUpdate(buffer.id, buffer);
+    self.emitUpdate();
     self.rebuild_cells = true;
 }
 
@@ -158,7 +158,7 @@ pub fn mouseButton(self: *Editor, evt: inputpkg.MouseButtonEvent) void {
 
     self.cursor = .{ .row = self.scroll_row + row, .col = col };
     // self.clampCursorToBuffer(buffer);
-    self.emitEditorUpdate(buffer.id, buffer);
+    self.emitUpdate();
     self.rebuild_cells = true;
 }
 
@@ -172,7 +172,7 @@ pub fn onBufferUpdate(self: *Editor, entry_id: u64) void {
     const buffer = self.buffer orelse return;
     if (buffer.id != entry_id) return;
     self.clampCursorToBuffer(buffer);
-    self.emitEditorUpdate(entry_id, buffer);
+    self.emitUpdate();
     self.rebuild_cells = true;
 }
 
@@ -198,15 +198,14 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
     return true;
 }
 
-fn emitEditorUpdate(self: *Editor, entry_id: u64, buffer: *Buffer) void {
-    //WARN:
-    buffer.rwlock.lock();
-    defer buffer.rwlock.unlock();
+fn emitUpdate(self: *Editor) void {
+    const buffer = self.buffer orelse return;
+    const entry_id = self.entry_id orelse return;
 
     _ = global.emit(.{ .editorUpdate = .{
         .surface_id = self.id,
         .entry_id = entry_id,
-        .row_count = buffer.text.rows(),
+        .row_count = buffer.rows(),
         .cursor_row = self.cursor.row,
         .cursor_col = self.cursor.col,
     } }, .instant);

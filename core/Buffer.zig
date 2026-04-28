@@ -129,6 +129,13 @@ pub fn setState(
     self.state.store(state, .release);
 }
 
+pub fn rows(self: *Buffer) usize {
+    self.rwlock.lockShared();
+    defer self.rwlock.unlockShared();
+
+    return self.text.rows();
+}
+
 pub fn highlightTask(task: *ThreadPool.Task) void {
     const buffer: *Buffer = @alignCast(@fieldParentPtr("task", task));
 

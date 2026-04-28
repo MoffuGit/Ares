@@ -60,10 +60,10 @@ pub fn readEditorState(self: *Editio, out: *globalpkg.ExternEditorState) bool {
 fn handleBufferUpdate(ctx: *anyopaque, event: globalpkg.GlobalEvents) void {
     const self: *Thread = @ptrCast(@alignCast(ctx));
 
-    const data = event.bufferUpdate;
+    const entry = event.bufferUpdate;
 
-    if (self.io.state.selected_entry == data) {
-        _ = self.mailbox.push(.{ .buffer_update = event.bufferUpdate }, .instant);
+    if (self.io.state.entry_id == entry) {
+        _ = self.mailbox.push(.{ .buffer_update = entry }, .instant);
         self.wakeup.notify() catch {};
     }
 }
