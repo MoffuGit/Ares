@@ -92,10 +92,30 @@ pub fn setCursorPosition(self: *Editor, row: u64, col: u64) void {
     defer self.mutex.unlock();
 
     self.cursor = .{ .row = row, .col = col };
+    self.clampCursor();
 
     self.emitUpdate();
 
     self.rebuild_cells = true;
+}
+
+fn clampCursor(self: *Editor) void {
+    const buffer = self.buffer orelse {
+        self.cursor = .{};
+        return;
+    };
+
+    const row_count = buffer.rows();
+    if (row_count == 0) {
+        self.cursor = .{};
+        return;
+    }
+
+    const max_row: u64 = @intCast(row_count - 1);
+    if (self.cursor.row > max_row) self.cursor.row = max_row;
+
+    const col_count: u64 = @intCast(buffer.getColsCountAt(@intCast(self.cursor.row)));
+    if (self.cursor.col > col_count) self.cursor.col = col_count;
 }
 
 pub fn keyEvent(self: *Editor, event: inputpkg.KeyEvent) void {
@@ -144,6 +164,7 @@ pub fn mouseButton(self: *Editor, evt: inputpkg.MouseButtonEvent) void {
     const col = raw_col -| gutter_width;
 
     self.cursor = .{ .row = self.scroll_row + row, .col = col };
+    self.clampCursor();
 
     self.emitUpdate();
 
@@ -157,6 +178,8 @@ pub fn onBufferUpdate(self: *Editor, entry_id: u64) void {
     defer self.mutex.unlock();
 
     if (self.buffer != null and self.buffer.?.id != entry_id) return;
+
+    self.clampCursor();
 
     self.emitUpdate();
 
