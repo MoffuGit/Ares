@@ -47,6 +47,8 @@ pub fn insertUtf8At(self: *TextBuffer, row: usize, col: usize, raw_bytes: []cons
     const offset = try byteOffsetForPosition(raw, row, col);
     try self.content.replaceRangeBefore(offset, 0, raw_bytes);
     try self.rebuildDerivedState();
+
+    self.version += 1;
 }
 
 pub fn backspaceAt(self: *TextBuffer, row: usize, col: usize) !bool {
@@ -59,6 +61,9 @@ pub fn backspaceAt(self: *TextBuffer, row: usize, col: usize) !bool {
     const start = previousScalarStart(raw, cursor_offset);
     try self.content.replaceRangeBefore(start, cursor_offset - start, &.{});
     try self.rebuildDerivedState();
+
+    self.version += 1;
+
     return true;
 }
 
@@ -72,6 +77,9 @@ pub fn deleteAt(self: *TextBuffer, row: usize, col: usize) !bool {
     const len = if (raw[offset] == '\n') 1 else std.unicode.utf8ByteSequenceLength(raw[offset]) catch return false;
     try self.content.replaceRangeBefore(offset, len, &.{});
     try self.rebuildDerivedState();
+
+    self.version += 1;
+
     return true;
 }
 
