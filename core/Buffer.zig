@@ -77,24 +77,45 @@ pub fn deinit(self: *Buffer) void {
 }
 
 pub fn insertUtf8At(self: *Buffer, row: usize, col: usize, bytes: []const u8) !void {
-    self.rwlock.lock();
-    defer self.rwlock.unlock();
+    {
+        self.rwlock.lock();
+        defer self.rwlock.unlock();
 
-    try self.text.insertUtf8At(row, col, bytes);
+        try self.text.insertUtf8At(row, col, bytes);
+    }
+
+    self.requestHighlight();
+    self.emitUpdate();
 }
 
 pub fn deleteAt(self: *Buffer, row: usize, col: usize) !bool {
-    self.rwlock.lock();
-    defer self.rwlock.unlock();
+    const changed = blk: {
+        self.rwlock.lock();
+        defer self.rwlock.unlock();
 
-    return try self.text.deleteAt(row, col);
+        break :blk try self.text.deleteAt(row, col);
+    };
+
+    if (changed) {
+        self.requestHighlight();
+        self.emitUpdate();
+    }
+    return changed;
 }
 
 pub fn backspaceAt(self: *Buffer, row: usize, col: usize) !bool {
-    self.rwlock.lock();
-    defer self.rwlock.unlock();
+    const changed = blk: {
+        self.rwlock.lock();
+        defer self.rwlock.unlock();
 
-    return try self.text.backspaceAt(row, col);
+        break :blk try self.text.backspaceAt(row, col);
+    };
+
+    if (changed) {
+        self.requestHighlight();
+        self.emitUpdate();
+    }
+    return changed;
 }
 
 pub fn getColsCountAt(self: *Buffer, row: usize) usize {

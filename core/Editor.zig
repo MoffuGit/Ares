@@ -115,9 +115,7 @@ pub fn keyEvent(self: *Editor, event: inputpkg.KeyEvent) void {
 
     if (!changed) return;
 
-    self.buffer.?.requestHighlight();
     self.emitUpdate();
-    self.rebuild_cells = true;
 }
 
 pub fn resize(self: *Editor, size: sizepkg.Size) void {
