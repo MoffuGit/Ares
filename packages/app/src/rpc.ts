@@ -21,6 +21,7 @@ export type AppRPC = {
             gpuTagRect: { id: number; rect: GpuRect };
             gpuTagStop: { id: number };
             gpuTagVisibility: { id: number; visible: boolean };
+            surfaceKeyEvent: { id: number, key: string, code: string, mods: number, repeat: boolean };
         };
     }>;
     webview: RPCSchema<{

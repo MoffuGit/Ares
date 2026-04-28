@@ -48,26 +48,24 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
                                 event.currentTarget.focus();
                             }}
                             onKeyDown={(event) => {
-                                console.log(event.key);
+                                if (surface.gpuSurfaceId == null) return;
+                                if (event.altKey || event.ctrlKey || event.metaKey) return;
 
-                                // if (surface.gpuSurfaceId == null) return;
-                                // if (event.altKey || event.ctrlKey || event.metaKey) return;
-                                //
-                                // event.preventDefault();
-                                //
-                                // let mods = 0;
-                                // if (event.shiftKey) mods |= 1 << 0;
-                                // if (event.altKey) mods |= 1 << 1;
-                                // if (event.ctrlKey) mods |= 1 << 2;
-                                // if (event.metaKey) mods |= 1 << 3;
-                                //
-                                // rpc.send("surfaceKeyEvent", {
-                                //     surfaceId: surface.gpuSurfaceId,
-                                //     key: event.key,
-                                //     code: event.code,
-                                //     mods,
-                                //     repeat: event.repeat,
-                                // });
+                                event.preventDefault();
+
+                                let mods: number = 0;
+                                if (event.shiftKey) mods |= 1 << 0;
+                                if (event.altKey) mods |= 1 << 1;
+                                if (event.ctrlKey) mods |= 1 << 2;
+                                if (event.metaKey) mods |= 1 << 3;
+
+                                rpc.send("surfaceKeyEvent", {
+                                    id: surface.gpuSurfaceId,
+                                    key: event.key,
+                                    code: event.code,
+                                    mods,
+                                    repeat: event.repeat,
+                                });
                             }}
                         />
                     </div>

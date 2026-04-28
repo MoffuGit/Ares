@@ -214,6 +214,10 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.f64, FFIType.f64, FFIType.u8],
                 returns: FFIType.void,
             },
+            editorSurfaceKeyEvent: {
+                args: [FFIType.pointer, FFIType.pointer, FFIType.u64, FFIType.u8, FFIType.bool],
+                returns: FFIType.void,
+            },
             readEditorSurfaceState: {
                 args: [FFIType.pointer, FFIType.pointer],
                 returns: FFIType.void,
@@ -423,6 +427,11 @@ export class CoreLib extends EventEmitter {
 
     editorSurfaceMouseMove(surface: Pointer, x: number, y: number, mods: number) {
         this.lib.symbols.editorSurfaceMouseMove(surface, x, y, mods);
+    }
+
+    editorSurfaceKeyEvent(surface: Pointer, key: string, mods: number, repeat: boolean) {
+        const buf = new TextEncoder().encode(key);
+        this.lib.symbols.editorSurfaceKeyEvent(surface, buf, buf.byteLength, mods, repeat);
     }
 
     readEditorSurfaceState(editor: Pointer): SurfaceState {

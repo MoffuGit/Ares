@@ -98,10 +98,9 @@ pub fn setCursorPosition(self: *Editor, row: u64, col: u64) void {
     self.rebuild_cells = true;
 }
 
-//WARN:
 pub fn keyEvent(self: *Editor, event: inputpkg.KeyEvent) void {
     _ = self;
-    _ = event;
+    log.debug("event: {}", .{event});
     // self.mutex.lock();
     // defer self.mutex.unlock();
     //

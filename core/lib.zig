@@ -303,6 +303,18 @@ export fn editorSurfaceMouseMove(surface: *EditorSurface, x: f64, y: f64, mods: 
     surface.sendIo(.{ .mouse_move = event });
 }
 
+export fn editorSurfaceKeyEvent(
+    surface: *EditorSurface,
+    key_ptr: [*]const u8,
+    key_len: u64,
+    mods: u8,
+    repeat: bool,
+) void {
+    const key = key_ptr[0..key_len];
+    const event = inputpkg.parseDomKeyEvent(key, @bitCast(mods), repeat) orelse return;
+    surface.sendIo(.{ .key = event });
+}
+
 pub const ExternSurfaceState = global.ExternSurfaceState;
 pub const ExternEditorState = global.ExternEditorState;
 

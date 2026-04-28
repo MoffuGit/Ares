@@ -150,6 +150,13 @@ export class SurfaceStore {
         return this.app.core.readEditorState(state.corePtr);
     }
 
+    keyEvent({ id, key, code: _code, mods, repeat }: { id: number, key: string, code: string, mods: number, repeat: boolean }): void {
+        const state = this.states.get(id);
+        if (!state || state.surface.kind !== "editor") return;
+
+        this.app.core.editorSurfaceKeyEvent(state.corePtr, key, mods, repeat);
+    }
+
     private createCoreSurface(kind: SurfaceKind, surfaceId: number, metalLayerPtr: Pointer, width: number, height: number): Pointer | null {
         switch (kind) {
             case "editor":

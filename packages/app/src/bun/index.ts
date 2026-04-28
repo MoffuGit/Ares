@@ -1,5 +1,5 @@
 import { App } from "@ares/core";
-import { Project } from "@ares/shared";
+import type { EditorState, KeymapMatch, Mode, Project, Settings, SurfaceState, Theme } from "@ares/shared";
 import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
 import { homedir } from "os";
 import { join, resolve, basename } from "path";
@@ -19,7 +19,7 @@ const rpc = BrowserView.defineRPC<AppRPC>({
     maxRequestTime: 600000,
     handlers: {
         requests: {
-            initialLoad: () => {
+            initialLoad: (): { settings: Settings; theme: Theme } => {
                 return {
                     settings: app.readSettings(),
                     theme: app.readTheme(),
@@ -79,6 +79,9 @@ const rpc = BrowserView.defineRPC<AppRPC>({
             gpuTagVisibility: ({ id, visible }) => {
                 surfaceStore.setVisibility(id, visible);
             },
+            surfaceKeyEvent: (data) => {
+                surfaceStore.keyEvent(data)
+            }
         },
     },
 });
@@ -136,19 +139,19 @@ app.core.on("FiletreeUpdate", () => {
     mainWindow.webview.rpc?.send.filetreeUpdate(fileTree);
 });
 
-app.core.on("SurfaceUpdate", (update) => {
+app.core.on("SurfaceUpdate", (update: { surfaceId: number; state: SurfaceState }) => {
     mainWindow.webview.rpc?.send.surfaceUpdate(update);
 });
 
-app.core.on("EditorUpdate", (update) => {
+app.core.on("EditorUpdate", (update: { surfaceId: number; state: EditorState | null }) => {
     mainWindow.webview.rpc?.send.editorStateUpdate(update);
 });
 
-app.core.on("ModeUpdate", ({ mode }) => {
+app.core.on("ModeUpdate", ({ mode }: { mode: Mode }) => {
     mainWindow.webview.rpc?.send.modeUpdate(mode);
 });
 
-app.core.on("KeymapMatch", (match) => {
+app.core.on("KeymapMatch", (match: KeymapMatch) => {
     mainWindow.webview.rpc?.send.keymapMatch(match);
 });
 
