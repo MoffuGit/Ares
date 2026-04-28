@@ -8,7 +8,7 @@ import { SidebarTabs } from "./sidebar-tabs"
 import { useAppStore } from "@/lib/app"
 import type { SidebarKind } from "@ares/shared"
 
-const SIDEBAR_SWITCH_DURATION = 200
+const SIDEBAR_SWITCH_DURATION = 250
 const SIDEBAR_KIND_ORDER: Record<SidebarKind, number> = {
     filetree: 0,
     tabs: 1,
