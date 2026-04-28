@@ -37,7 +37,8 @@ pub const GridSize = struct {
         const screen_width: f32 = @floatFromInt(screen.width);
         const screen_height: f32 = @floatFromInt(screen.height);
         const calc_cols: Unit = @intFromFloat(screen_width / cell_width);
-        const calc_rows: Unit = @intFromFloat(screen_height / cell_height);
+        // Use @ceil so a partially visible bottom row is still rendered.
+        const calc_rows: Unit = @intFromFloat(@ceil(screen_height / cell_height));
         self.columns = @max(1, calc_cols);
         self.rows = @max(1, calc_rows);
     }

@@ -72,7 +72,7 @@ export function useGpuSurface<TSurface extends Surface>({
             if (!surface.gpuSurfaceId || !surface.surfaceState) return;
             const cellHeight = surface.surfaceState.cellHeight;
             if (cellHeight <= 0) return;
-            const row = Math.floor(target.scrollTop / cellHeight);
+            const row = Math.ceil(target.scrollTop / cellHeight);
             rpc.send("surfaceScrollTo", { surfaceId: surface.gpuSurfaceId, row });
         };
 
