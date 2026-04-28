@@ -76,6 +76,34 @@ pub fn deinit(self: *Buffer) void {
     }
 }
 
+pub fn insertUtf8At(self: *Buffer, row: usize, col: usize, bytes: []const u8) !void {
+    self.rwlock.lock();
+    defer self.rwlock.unlock();
+
+    try self.text.insertUtf8At(row, col, bytes);
+}
+
+pub fn deleteAt(self: *Buffer, row: usize, col: usize) !bool {
+    self.rwlock.lock();
+    defer self.rwlock.unlock();
+
+    return try self.text.deleteAt(row, col);
+}
+
+pub fn backspaceAt(self: *Buffer, row: usize, col: usize) !bool {
+    self.rwlock.lock();
+    defer self.rwlock.unlock();
+
+    return try self.text.backspaceAt(row, col);
+}
+
+pub fn getColsCountAt(self: *Buffer, row: usize) usize {
+    self.rwlock.lock();
+    defer self.rwlock.unlock();
+
+    return self.text.layout.rows[row].codepoints.len;
+}
+
 pub fn requestHighlight(self: *Buffer) void {
     if (self.file == null or self.extension == null) return;
     if (self.stopped.load(.acquire) or self.active.load(.acquire)) return;

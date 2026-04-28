@@ -312,6 +312,7 @@ export fn editorSurfaceKeyEvent(
 ) void {
     const key = key_ptr[0..key_len];
     const event = inputpkg.parseDomKeyEvent(key, @bitCast(mods), repeat) orelse return;
+
     surface.sendIo(.{ .key = event });
 }
 
