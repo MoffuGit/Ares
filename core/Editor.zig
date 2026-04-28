@@ -23,6 +23,11 @@ pub const CursorPosition = struct {
     col: u64 = 0,
 };
 
+pub const SavedPosition = struct {
+    scroll_row: u64 = 0,
+    cursor: CursorPosition = .{},
+};
+
 mutex: std.Thread.Mutex = .{},
 project: *Project,
 alloc: Allocator,
@@ -33,6 +38,7 @@ buffer: ?*Buffer = null,
 entry_id: ?u64 = null,
 scroll_row: u64 = 0,
 cursor: CursorPosition = .{},
+saved_positions: std.AutoHashMapUnmanaged(u64, SavedPosition) = .{},
 rebuild_cells: bool = false,
 color: [4]u8,
 gutter_color: [4]u8,
@@ -58,7 +64,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *Editor) void {
-    _ = self;
+    self.saved_positions.deinit(self.alloc);
 }
 
 pub fn selectEntry(self: *Editor, id: u64) void {
@@ -70,9 +76,25 @@ pub fn selectEntry(self: *Editor, id: u64) void {
     }
 
     if (self.project.openBuffer(id)) |buffer| {
+        if (self.entry_id) |prev_id| {
+            self.saved_positions.put(self.alloc, prev_id, .{
+                .scroll_row = self.scroll_row,
+                .cursor = self.cursor,
+            }) catch {};
+        }
+
         self.buffer = buffer;
         self.entry_id = id;
-        self.cursor = .{};
+
+        if (self.saved_positions.get(id)) |saved| {
+            self.scroll_row = saved.scroll_row;
+            self.cursor = saved.cursor;
+        } else {
+            self.scroll_row = 0;
+            self.cursor = .{};
+        }
+        self.clampCursor();
+
         self.rebuild_cells = true;
 
         self.emitUpdate();
