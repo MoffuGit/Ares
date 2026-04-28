@@ -170,12 +170,12 @@ fn highlight(self: *Buffer) !bool {
     var iter = session.highlightIterator(&self.runtime, raw[0..], self.alloc);
     defer iter.deinit();
 
-    var lines = try std.ArrayList([]Span).initCapacity(self.alloc, 0);
+    var hl_rows = try std.ArrayList([]Span).initCapacity(self.alloc, 0);
     errdefer {
-        for (lines.items) |line| {
-            if (line.len > 0) self.alloc.free(line);
+        for (hl_rows.items) |row| {
+            if (row.len > 0) self.alloc.free(row);
         }
-        lines.deinit(self.alloc);
+        hl_rows.deinit(self.alloc);
     }
 
     while (try iter.next()) |spans| {
@@ -184,10 +184,10 @@ fn highlight(self: *Buffer) !bool {
             defer self.rwlock.unlockShared();
 
             if (self.text.version != version) {
-                for (lines.items) |l| {
-                    if (l.len > 0) self.alloc.free(l);
+                for (hl_rows.items) |r| {
+                    if (r.len > 0) self.alloc.free(r);
                 }
-                lines.deinit(self.alloc);
+                hl_rows.deinit(self.alloc);
 
                 return false;
             }
@@ -204,11 +204,11 @@ fn highlight(self: *Buffer) !bool {
                 .style = Style.fromSpan(span),
             });
         }
-        try lines.append(self.alloc, try converted.toOwnedSlice(self.alloc));
+        try hl_rows.append(self.alloc, try converted.toOwnedSlice(self.alloc));
     }
 
     var next_highlights: Highlights = .{
-        .lines = try lines.toOwnedSlice(self.alloc),
+        .rows = try hl_rows.toOwnedSlice(self.alloc),
     };
     errdefer next_highlights.deinit(self.alloc);
 
@@ -233,22 +233,65 @@ pub const Span = struct {
 };
 
 pub const Highlights = struct {
-    lines: [][]Span = &.{},
+    rows: [][]Span = &.{},
 
     pub fn deinit(self: *Highlights, alloc: Allocator) void {
-        for (self.lines) |line| {
-            if (line.len > 0) alloc.free(line);
+        for (self.rows) |row| {
+            if (row.len > 0) alloc.free(row);
         }
-        if (self.lines.len > 0) alloc.free(self.lines);
+        if (self.rows.len > 0) alloc.free(self.rows);
         self.* = .{};
     }
 
-    pub fn visibleLines(self: *const Highlights, scroll_row: u64, max_rows: usize) []const []Span {
-        const start = @min(std.math.cast(usize, scroll_row) orelse self.lines.len, self.lines.len);
-        const count = @min(max_rows, self.lines.len - start);
-        return self.lines[start .. start + count];
+    pub fn visibleRows(self: *const Highlights, scroll_row: u64, max_rows: usize) []const []Span {
+        const start = @min(std.math.cast(usize, scroll_row) orelse self.rows.len, self.rows.len);
+        const count = @min(max_rows, self.rows.len - start);
+        return self.rows[start .. start + count];
     }
 };
+
+pub const Snapshot = struct {
+    row_count: usize,
+    rows: []TextBuffer.Row,
+    hl_rows: [][]Span,
+};
+
+pub fn snapshot(
+    self: *Buffer,
+    alloc: Allocator,
+    scroll_row: u64,
+    max_rows: usize,
+) !Snapshot {
+    self.rwlock.lockShared();
+    defer self.rwlock.unlockShared();
+
+    const src_rows = self.text.visibleRows(scroll_row, max_rows);
+    const src_hl = self.highlights.visibleRows(scroll_row, max_rows);
+
+    const text_rows = try alloc.alloc(TextBuffer.Row, src_rows.len);
+    for (src_rows, 0..) |src, i| {
+        text_rows[i] = .{
+            .codepoints = if (src.codepoints.len == 0)
+                &.{}
+            else
+                try alloc.dupe(u32, src.codepoints),
+        };
+    }
+
+    const hl_rows = try alloc.alloc([]Span, src_hl.len);
+    for (src_hl, 0..) |src, i| {
+        hl_rows[i] = if (src.len == 0)
+            &.{}
+        else
+            try alloc.dupe(Span, src);
+    }
+
+    return .{
+        .row_count = self.text.rows(),
+        .rows = text_rows,
+        .hl_rows = hl_rows,
+    };
+}
 
 test "buffer highlight results deinit cleanly" {
     const alloc = std.testing.allocator;
@@ -268,5 +311,5 @@ test "buffer highlight results deinit cleanly" {
     buffer.text = try TextBuffer.initFromBytes(alloc, "let value = 42;\nfn main() {}\n");
 
     try std.testing.expect(try buffer.highlight());
-    try std.testing.expect(buffer.highlights.lines.len > 0);
+    try std.testing.expect(buffer.highlights.rows.len > 0);
 }

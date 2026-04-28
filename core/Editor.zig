@@ -93,41 +93,36 @@ pub fn setCursorPosition(self: *Editor, row: u64, col: u64) void {
 
     self.cursor = .{ .row = row, .col = col };
 
-    //WARN:
-    const buffer = self.buffer orelse return;
-    self.clampCursorToBuffer(buffer);
     self.emitUpdate();
+
     self.rebuild_cells = true;
 }
 
+//WARN:
 pub fn keyEvent(self: *Editor, event: inputpkg.KeyEvent) void {
-    self.mutex.lock();
-    defer self.mutex.unlock();
-
-    const buffer = self.buffer orelse return;
-    if (buffer.getState() != .ready) return;
-    if (hasCommandModifiers(event.mods)) return;
-
-    //WARN:
-    self.clampCursorToBuffer(buffer);
-
-    //WARN:
-    buffer.rwlock.lock();
-    const changed = switch (event.input) {
-        .text => |cp| self.insertCodepoint(buffer, cp),
-        .enter => self.insertAscii(buffer, '\n', .{ .row = self.cursor.row + 1, .col = 0 }),
-        .tab => self.insertAscii(buffer, '\t', .{ .row = self.cursor.row, .col = self.cursor.col + 1 }),
-        .backspace => self.backspace(buffer),
-        .delete => self.delete(buffer),
-    };
-    buffer.rwlock.unlock();
-
-    if (!changed) return;
-
-    //WARN:
-    self.clampCursorToBuffer(buffer);
-    self.emitUpdate();
-    self.rebuild_cells = true;
+    _ = self;
+    _ = event;
+    // self.mutex.lock();
+    // defer self.mutex.unlock();
+    //
+    // const buffer = self.buffer orelse return;
+    // if (buffer.getState() != .ready) return;
+    // if (hasCommandModifiers(event.mods)) return;
+    //
+    // buffer.rwlock.lock();
+    // const changed = switch (event.input) {
+    //     .text => |cp| self.insertCodepoint(buffer, cp),
+    //     .enter => self.insertAscii(buffer, '\n', .{ .row = self.cursor.row + 1, .col = 0 }),
+    //     .tab => self.insertAscii(buffer, '\t', .{ .row = self.cursor.row, .col = self.cursor.col + 1 }),
+    //     .backspace => self.backspace(buffer),
+    //     .delete => self.delete(buffer),
+    // };
+    // buffer.rwlock.unlock();
+    //
+    // if (!changed) return;
+    //
+    // self.emitUpdate();
+    // self.rebuild_cells = true;
 }
 
 pub fn resize(self: *Editor, size: sizepkg.Size) void {
@@ -144,7 +139,6 @@ pub fn mouseButton(self: *Editor, evt: inputpkg.MouseButtonEvent) void {
     self.mutex.lock();
     defer self.mutex.unlock();
 
-    //WARN:
     const buffer = self.buffer orelse return;
 
     const cell_width: f64 = @floatFromInt(self.size.cell.width);
@@ -152,27 +146,27 @@ pub fn mouseButton(self: *Editor, evt: inputpkg.MouseButtonEvent) void {
 
     const raw_col: u64 = if (evt.x >= 0) @intFromFloat(evt.x / cell_width) else 0;
     const row: u64 = if (evt.y >= 0) @intFromFloat(evt.y / cell_height) else 0;
-    //WARN:
-    const gutter_width: u64 = @intCast(lineNumberGutterWidth(buffer.text.rows()));
+
+    const gutter_width: u64 = @intCast(lineNumberGutterWidth(buffer.rows()));
     const col = raw_col -| gutter_width;
 
     self.cursor = .{ .row = self.scroll_row + row, .col = col };
-    // self.clampCursorToBuffer(buffer);
+
     self.emitUpdate();
+
     self.rebuild_cells = true;
 }
 
 pub fn mouseMove(_: *Editor, _: inputpkg.MouseMoveEvent) void {}
 
-//WARN:
 pub fn onBufferUpdate(self: *Editor, entry_id: u64) void {
     self.mutex.lock();
     defer self.mutex.unlock();
 
-    const buffer = self.buffer orelse return;
-    if (buffer.id != entry_id) return;
-    self.clampCursorToBuffer(buffer);
+    if (self.buffer != null and self.buffer.?.id != entry_id) return;
+
     self.emitUpdate();
+
     self.rebuild_cells = true;
 }
 
@@ -183,18 +177,16 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
     const buffer = self.buffer orelse return false;
     if (buffer.getState() != .ready) return false;
 
-    //WARN:
-    buffer.rwlock.lock();
-    defer buffer.rwlock.unlock();
+    const rows = buffer.rows();
 
-    const text = buffer.text;
     out.* = .{
         .surface_id = self.id,
         .entry_id = buffer.id,
-        .row_count = text.rows(),
+        .row_count = rows,
         .cursor_row = self.cursor.row,
         .cursor_col = self.cursor.col,
     };
+
     return true;
 }
 
@@ -211,76 +203,52 @@ fn emitUpdate(self: *Editor) void {
     } }, .instant);
 }
 
-fn clampCursorToBuffer(self: *Editor, buffer: *Buffer) void {
-    if (buffer.getState() != .ready) return;
-
-    //WARN:
-    buffer.rwlock.lock();
-    defer buffer.rwlock.unlock();
-
-    const text = &buffer.text;
-    if (text.rows() == 0) {
-        self.cursor = .{};
-        return;
-    }
-
-    const max_row = text.rows() - 1;
-    const cursor_row = @min(std.math.cast(usize, self.cursor.row) orelse max_row, max_row);
-    const rows = text.visibleRows(cursor_row, 1);
-    const max_col = if (rows.len == 0) 0 else rows[0].codepoints.len;
-
-    self.cursor = .{
-        .row = cursor_row,
-        .col = @min(std.math.cast(usize, self.cursor.col) orelse max_col, max_col),
-    };
-}
-
-//WARN:
-fn insertCodepoint(self: *Editor, buffer: *Buffer, cp: u21) bool {
-    var utf8: [4]u8 = undefined;
-    const len = std.unicode.utf8Encode(cp, &utf8) catch return false;
-
-    return self.insertBytes(buffer, utf8[0..len], .{ .row = self.cursor.row, .col = self.cursor.col + 1 });
-}
-
-//WARN:
-fn insertAscii(self: *Editor, buffer: *Buffer, byte: u8, next_cursor: CursorPosition) bool {
-    var raw = [1]u8{byte};
-    return self.insertBytes(buffer, &raw, next_cursor);
-}
-
-//WARN:
-fn insertBytes(self: *Editor, buffer: *Buffer, bytes: []const u8, next_cursor: CursorPosition) bool {
-    buffer.text.insertUtf8At(@intCast(self.cursor.row), @intCast(self.cursor.col), bytes) catch return false;
-    self.cursor = next_cursor;
-    return true;
-}
-
-//WARN:
-fn backspace(self: *Editor, buffer: *Buffer) bool {
-    if (self.cursor.row == 0 and self.cursor.col == 0) return false;
-
-    if (self.cursor.col > 0) {
-        if (!(buffer.text.backspaceAt(@intCast(self.cursor.row), @intCast(self.cursor.col)) catch return false)) return false;
-        self.cursor.col -= 1;
-    } else {
-        const previous_row = self.cursor.row - 1;
-        const previous_col = if (previous_row < buffer.text.layout.rows.len)
-            buffer.text.layout.rows[@intCast(previous_row)].codepoints.len
-        else
-            0;
-        if (!(buffer.text.backspaceAt(@intCast(self.cursor.row), @intCast(self.cursor.col)) catch return false)) return false;
-        self.cursor = .{ .row = previous_row, .col = previous_col };
-    }
-
-    return true;
-}
-
-//WARN:
-fn delete(self: *Editor, buffer: *Buffer) bool {
-    const changed = buffer.text.deleteAt(@intCast(self.cursor.row), @intCast(self.cursor.col)) catch return false;
-    return changed;
-}
+// //WARN:
+// fn insertCodepoint(self: *Editor, buffer: *Buffer, cp: u21) bool {
+//     var utf8: [4]u8 = undefined;
+//     const len = std.unicode.utf8Encode(cp, &utf8) catch return false;
+//
+//     return self.insertBytes(buffer, utf8[0..len], .{ .row = self.cursor.row, .col = self.cursor.col + 1 });
+// }
+//
+// //WARN:
+// fn insertAscii(self: *Editor, buffer: *Buffer, byte: u8, next_cursor: CursorPosition) bool {
+//     var raw = [1]u8{byte};
+//     return self.insertBytes(buffer, &raw, next_cursor);
+// }
+//
+// //WARN:
+// fn insertBytes(self: *Editor, buffer: *Buffer, bytes: []const u8, next_cursor: CursorPosition) bool {
+//     buffer.text.insertUtf8At(@intCast(self.cursor.row), @intCast(self.cursor.col), bytes) catch return false;
+//     self.cursor = next_cursor;
+//     return true;
+// }
+//
+// //WARN:
+// fn backspace(self: *Editor, buffer: *Buffer) bool {
+//     if (self.cursor.row == 0 and self.cursor.col == 0) return false;
+//
+//     if (self.cursor.col > 0) {
+//         if (!(buffer.text.backspaceAt(@intCast(self.cursor.row), @intCast(self.cursor.col)) catch return false)) return false;
+//         self.cursor.col -= 1;
+//     } else {
+//         const previous_row = self.cursor.row - 1;
+//         const previous_col = if (previous_row < buffer.text.layout.rows.len)
+//             buffer.text.layout.rows[@intCast(previous_row)].codepoints.len
+//         else
+//             0;
+//         if (!(buffer.text.backspaceAt(@intCast(self.cursor.row), @intCast(self.cursor.col)) catch return false)) return false;
+//         self.cursor = .{ .row = previous_row, .col = previous_col };
+//     }
+//
+//     return true;
+// }
+//
+// //WARN:
+// fn delete(self: *Editor, buffer: *Buffer) bool {
+//     const changed = buffer.text.deleteAt(@intCast(self.cursor.row), @intCast(self.cursor.col)) catch return false;
+//     return changed;
+// }
 
 fn hasCommandModifiers(mods: Modifiers) bool {
     return mods.alt or mods.ctrl or mods.super or mods.hyper or mods.meta;
@@ -292,22 +260,22 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
 
     const buffer = self.buffer orelse return;
     if (buffer.getState() != .ready) return;
-
-    //WARN:
-    buffer.rwlock.lock();
-    defer buffer.rwlock.unlock();
-
-    const grid = renderer.size.grid();
-    const text = &buffer.text;
-
     if (!self.rebuild_cells) return;
 
-    const hl_lines = buffer.highlights.visibleLines(self.scroll_row, grid.rows);
+    var arena = std.heap.ArenaAllocator.init(renderer.alloc);
+    defer arena.deinit();
+    const arena_alloc = arena.allocator();
+
+    const grid = renderer.size.grid();
+
+    const snap = try buffer.snapshot(arena_alloc, self.scroll_row, grid.rows);
+
     try rebuildCells(
         renderer,
-        text.visibleRows(self.scroll_row, grid.rows),
-        hl_lines,
-        text.rows(),
+        arena_alloc,
+        snap.rows,
+        snap.hl_rows,
+        snap.row_count,
         self.scroll_row,
         self.cursor,
         self.color,
@@ -317,11 +285,11 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
     self.rebuild_cells = false;
 }
 
-//WARN:
 fn rebuildCells(
     renderer: *Renderer,
+    arena_alloc: Allocator,
     rows: []const TextBuffer.Row,
-    hl_lines: []const []Buffer.Span,
+    hl_rows: []const []Buffer.Span,
     row_count: usize,
     scroll_row: u64,
     cursor: CursorPosition,
@@ -330,10 +298,6 @@ fn rebuildCells(
 ) !void {
     renderer.mutex.lock();
     defer renderer.mutex.unlock();
-
-    var arena = std.heap.ArenaAllocator.init(renderer.alloc);
-    defer arena.deinit();
-    const arena_alloc = arena.allocator();
 
     const grid_size = renderer.size.grid();
     try renderer.ensureCellStoreSize(grid_size);
@@ -368,7 +332,7 @@ fn rebuildCells(
     for (rows, 0..) |row_data, row_idx| {
         if (row_idx >= grid_size.rows) break;
 
-        const hl = if (row_idx < hl_lines.len) hl_lines[row_idx] else &[_]Buffer.Span{};
+        const hl = if (row_idx < hl_rows.len) hl_rows[row_idx] else &[_]Buffer.Span{};
         const line_number = scroll_row + row_idx;
 
         try renderRelativeLineNumber(
@@ -400,7 +364,6 @@ const SpanResult = struct {
     style: Style,
 };
 
-//WARN:
 fn spanAt(spans: []const Buffer.Span, col: usize, default_color: [4]u8) SpanResult {
     for (spans) |span| {
         if (col >= span.start and col < span.end) return .{ .color = span.color, .style = span.style };
