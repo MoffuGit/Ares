@@ -221,6 +221,7 @@ pub fn readEditorState(self: *Editor, out: *globalpkg.ExternEditorState) bool {
         .surface_id = self.id,
         .entry_id = buffer.id,
         .row_count = rows,
+        .scroll_row = self.scroll_row,
         .cursor_row = self.cursor.row,
         .cursor_col = self.cursor.col,
     };
@@ -236,6 +237,7 @@ fn emitUpdate(self: *Editor) void {
         .surface_id = self.id,
         .entry_id = entry_id,
         .row_count = buffer.rows(),
+        .scroll_row = self.scroll_row,
         .cursor_row = self.cursor.row,
         .cursor_col = self.cursor.col,
     } }, .instant);

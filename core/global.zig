@@ -32,6 +32,7 @@ pub const ExternEditorState = extern struct {
     surface_id: u64,
     entry_id: u64,
     row_count: u64,
+    scroll_row: u64,
     cursor_row: u64,
     cursor_col: u64,
 };

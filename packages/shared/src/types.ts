@@ -12,6 +12,7 @@ export type SurfaceState = {
 export type EditorState = {
     entryId: number;
     rowCount: number;
+    scrollRow: number;
     cursorRow: number;
     cursorCol: number;
 };

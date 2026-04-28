@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { rpc } from "@/lib/app";
 import type { EditorSurface as EditorSurfaceData } from "@ares/shared";
 import { GpuTag } from "../gpu-tag";
@@ -14,6 +14,7 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const mouseRef = useRef<HTMLDivElement | null>(null);
+    const lastSyncedEntryRef = useRef<number | null>(null);
     const { gpuRef, handleReady } = useGpuSurface({
         id,
         surface,
@@ -27,6 +28,21 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
             }
         },
     });
+
+    const editorState = surface.editorState;
+    const cellHeight = surface.surfaceState?.cellHeight;
+
+    useEffect(() => {
+        if (!editorState || !cellHeight || cellHeight <= 0) return;
+
+        const target = scrollRef.current;
+        if (!target) return;
+
+        if (lastSyncedEntryRef.current === editorState.entryId) return;
+        lastSyncedEntryRef.current = editorState.entryId;
+
+        target.scrollTop = editorState.scrollRow * cellHeight;
+    }, [editorState, cellHeight]);
 
     return (
         <div className="w-full flex flex-col grow data-[surface-active=true]:z-10 -z-10 data-[surface-active=true]:visible invisible" data-surface-active={active}>

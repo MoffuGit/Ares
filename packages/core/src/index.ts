@@ -5,7 +5,6 @@ import { EventType, Events, EventsName } from "./events";
 import {
     EditorState as RawEditorState,
     KeymapMatch as RawKeymapMatch,
-    KeymapEntry,
     Settings as RawSettings,
     SurfaceState as RawSurfaceState,
     WorktreeEntry as RawWorktreeEntry,
@@ -13,7 +12,6 @@ import {
 import { resolveTheme } from "./theme";
 import type {
     EditorState,
-    KeymapBinding,
     KeymapMatch,
     Mode,
     Settings,
@@ -45,12 +43,14 @@ function mapEditorState(raw: {
     surface_id?: number | bigint;
     entry_id: number | bigint;
     row_count: number | bigint;
+    scroll_row: number | bigint;
     cursor_row: number | bigint;
     cursor_col: number | bigint;
 }): EditorState {
     return {
         entryId: toNumber(raw.entry_id),
         rowCount: toNumber(raw.row_count),
+        scrollRow: toNumber(raw.scroll_row),
         cursorRow: toNumber(raw.cursor_row),
         cursorCol: toNumber(raw.cursor_col),
     };
@@ -72,6 +72,7 @@ function mapEditorUpdate(raw: {
     surface_id: number | bigint;
     entry_id: number | bigint;
     row_count: number | bigint;
+    scroll_row: number | bigint;
     cursor_row: number | bigint;
     cursor_col: number | bigint;
 }): { surfaceId: number; state: EditorState } {
