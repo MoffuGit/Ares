@@ -114,6 +114,7 @@ export type GlobalAction =
     | "workspace:toggle_command_palette"
     | "workspace:tabs_panel"
     | "workspace:filetree_panel"
+    | "workspace:toggle_cmd"
     | "workspace:new_terminal_tab";
 
 export type EditorAction = string;

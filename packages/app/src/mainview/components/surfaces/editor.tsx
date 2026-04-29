@@ -44,6 +44,12 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
         target.scrollTop = editorState.scrollRow * cellHeight;
     }, [editorState, cellHeight]);
 
+    useEffect(() => {
+        if (!gpuRef.current) return;
+
+        gpuRef.current?.addMaskSelector("[data-slot=dialog-content]");
+    }, [gpuRef]);
+
     return (
         <div className="w-full flex flex-col grow data-[surface-active=true]:z-10 -z-10 data-[surface-active=true]:visible invisible" data-surface-active={active}>
             <div className="w-full grow relative flex p-2">

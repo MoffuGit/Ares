@@ -16,7 +16,8 @@
         "super+k": "workspace:toggle_command_palette",
         "super+p t": "workspace:tabs_panel",
         "super+p f": "workspace:filetree_panel",
-        "super+t": "workspace:new_terminal_tab"
+        "super+t": "workspace:new_terminal_tab",
+        "shift+;": "workspace:toggle_cmd"
       },
       "insert": {
         "escape": "workspace:enter_normal"

@@ -14,6 +14,8 @@ export type AppState = {
     sidebarOpen: boolean;
     sidebarKind: SidebarKind;
 
+    cmdOpen: boolean;
+
     tabs: Tab[];
     activeTabId: number | null;
 };
@@ -34,6 +36,8 @@ interface AppStore extends AppState {
     setSidebarOpen: (open: boolean) => void;
     toggleSidebarKind: (kind: SidebarKind) => void;
     toggleSidebar: () => void;
+    toggleCmd: () => void;
+    setCmdOpen: (open: boolean) => void;
 }
 
 
@@ -46,7 +50,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
     tabs: [],
     activeTabId: null,
     sidebarOpen: false,
+    cmdOpen: false,
     sidebarKind: "filetree",
+
+    toggleCmd: () => set((s) => ({ cmdOpen: !s.cmdOpen })),
+    setCmdOpen: (open) => set({ cmdOpen: open }),
+
     setSidebarOpen: (open) => set({ sidebarOpen: open }),
     toggleSidebarKind: (kind) => set((state) => {
         if (!state.settings) return {};
@@ -216,6 +225,9 @@ const rpc = Electroview.defineRPC<AppRPC>({
                         break;
                     case "workspace:close_active_tab":
                         if (store.activeTabId != null) store.closeTab(store.activeTabId);
+                        break;
+                    case "workspace:toggle_cmd":
+                        store.toggleCmd();
                         break;
                 }
             },

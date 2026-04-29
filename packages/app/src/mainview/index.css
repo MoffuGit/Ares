@@ -88,7 +88,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background antialiased select-none px-2 pt-0 pb-1.5 w-full h-screen content-stretch text-foreground  font-geist  flex flex-col gap-1.5;
+    @apply bg-background antialiased select-none px-2 pt-0 pb-2 w-full h-screen content-stretch text-foreground  font-geist  flex flex-col gap-1.5;
   }
 
   [data-slot="sidebar-content"]::-webkit-scrollbar {
