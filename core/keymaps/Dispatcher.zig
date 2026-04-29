@@ -163,6 +163,22 @@ fn codepointName(cp: u21) ?[]const u8 {
         else => null,
     };
 }
+/// Returns true when a partial match is buffered (a sequence that is a
+/// valid keymap, but the trie can still continue and we are waiting to
+/// see if the user types a longer match).
+pub fn hasPendingMatch(self: *const Dispatcher) bool {
+    return self.last_valid_len > 0;
+}
+
+/// Commit the buffered partial match, if any, and reset state.
+/// Returns the matched sequence as a freshly-allocated string (caller
+/// owns) or null if there is nothing to flush.
+pub fn flushPending(self: *Dispatcher) !?[]u8 {
+    if (self.last_valid_len == 0) return null;
+    const out = try self.formatPending(self.last_valid_len);
+    self.reset();
+    return out;
+}
 
 const testing = std.testing;
 

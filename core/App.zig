@@ -121,7 +121,6 @@ pub fn onKeyDown(self: *App, key_code: u32, modifiers: u32, _: bool) bool {
     };
 
     if (result.matched) |seq| {
-        std.log.debug("keymap match: {s}", .{seq});
         _ = global.emit(.{ .keymapMatch = .{ .sequence = seq } }, .instant);
     }
 
@@ -176,7 +175,6 @@ fn flushKeymap(self: *App) void {
     };
 
     if (seq) |s| {
-        std.log.debug("keymap match (flushed): {s}", .{s});
         _ = global.emit(.{ .keymapMatch = .{ .sequence = s } }, .instant);
     }
 }
