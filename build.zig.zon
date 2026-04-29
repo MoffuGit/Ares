@@ -33,7 +33,8 @@
     // internet connectivity.
     .dependencies = .{
         .libxev = .{
-            .path = "../libxev",
+            .url = "git+https://github.com/MoffuGit/libxev.git?ref#1aa32ecf02b904c8ca790318395cf46b8086f289",
+            .hash = "libxev-0.0.0-86vtc7LQFACLDCBvMKvWXAY-QRHyj6gFAxU31gtgIP0p",
         },
         .vaxis = .{
             .url = "git+https://github.com/MoffuGit/libvaxis.git#520bb32aa265fe86ee62e87d6695ef6756b5674e",
