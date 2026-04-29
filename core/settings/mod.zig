@@ -324,28 +324,21 @@ fn loadKeymaps(self: *Settings, km_json: std.json.Value) void {
     self.keymaps = Keymaps.init(self.alloc) catch return;
     self.keymaps_initialized = true;
 
-    const scope_names = [_]struct { key: []const u8, scope: keymapspkg.Scope }{
-        .{ .key = "global", .scope = .global },
-        .{ .key = "editor", .scope = .editor },
-        .{ .key = "command_palette", .scope = .command_palette },
-    };
-
     const mode_names = [_]struct { key: []const u8, mode: keymapspkg.Mode }{
         .{ .key = "normal", .mode = .normal },
         .{ .key = "insert", .mode = .insert },
         .{ .key = "visual", .mode = .visual },
     };
 
-    for (scope_names) |scope_entry| {
-        if (obj.get(scope_entry.key)) |scope_json| {
-            const scope_obj = switch (scope_json) {
-                .object => |o| o,
-                else => continue,
-            };
-            for (mode_names) |mode_entry| {
-                if (scope_obj.get(mode_entry.key)) |mode_json| {
-                    self.loadKeymapMode(scope_entry.scope, mode_entry.mode, mode_json);
-                }
+    var scope_it = obj.iterator();
+    while (scope_it.next()) |scope_entry| {
+        const scope_obj = switch (scope_entry.value_ptr.*) {
+            .object => |o| o,
+            else => continue,
+        };
+        for (mode_names) |mode_entry| {
+            if (scope_obj.get(mode_entry.key)) |mode_json| {
+                self.loadKeymapMode(mode_entry.mode, mode_json);
             }
         }
     }
@@ -353,7 +346,7 @@ fn loadKeymaps(self: *Settings, km_json: std.json.Value) void {
     self.keymap_generation +%= 1;
 }
 
-fn loadKeymapMode(self: *Settings, scope: keymapspkg.Scope, mode: keymapspkg.Mode, mode_json: std.json.Value) void {
+fn loadKeymapMode(self: *Settings, mode: keymapspkg.Mode, mode_json: std.json.Value) void {
     const bindings = switch (mode_json) {
         .object => |o| o,
         else => return,
@@ -362,12 +355,7 @@ fn loadKeymapMode(self: *Settings, scope: keymapspkg.Scope, mode: keymapspkg.Mod
     var it = bindings.iterator();
     while (it.next()) |entry| {
         const seq_str = entry.key_ptr.*;
-        const action_str = switch (entry.value_ptr.*) {
-            .string => |s| s,
-            else => continue,
-        };
-
-        self.keymaps.insert(scope, mode, seq_str, action_str) catch continue;
+        self.keymaps.insert(mode, seq_str) catch continue;
     }
 }
 
@@ -379,34 +367,32 @@ fn loadDefaultKeymaps(self: *Settings) void {
     self.keymaps_initialized = true;
 
     const DefaultEntry = struct {
-        scope: keymapspkg.Scope,
         mode: keymapspkg.Mode,
         sequence: []const u8,
-        action: []const u8,
     };
 
     const defaults = [_]DefaultEntry{
-        .{ .scope = .global, .mode = .normal, .sequence = "i", .action = "workspace:enter_insert" },
-        .{ .scope = .global, .mode = .normal, .sequence = "v", .action = "workspace:enter_visual" },
-        .{ .scope = .global, .mode = .insert, .sequence = "escape", .action = "workspace:enter_normal" },
-        .{ .scope = .global, .mode = .visual, .sequence = "escape", .action = "workspace:enter_normal" },
-        .{ .scope = .global, .mode = .normal, .sequence = "super+l", .action = "workspace:toggle_left_dock" },
-        .{ .scope = .global, .mode = .normal, .sequence = "ctrl+t", .action = "workspace:new_tab" },
-        .{ .scope = .global, .mode = .normal, .sequence = "tab", .action = "workspace:next_tab" },
-        .{ .scope = .global, .mode = .normal, .sequence = "shift+tab", .action = "workspace:prev_tab" },
-        .{ .scope = .global, .mode = .normal, .sequence = "ctrl+q", .action = "workspace:close_active_tab" },
-        .{ .scope = .global, .mode = .normal, .sequence = "super+k", .action = "workspace:toggle_command_palette" },
-        .{ .scope = .command_palette, .mode = .normal, .sequence = "k", .action = "command:up" },
-        .{ .scope = .command_palette, .mode = .normal, .sequence = "j", .action = "command:down" },
-        .{ .scope = .command_palette, .mode = .normal, .sequence = "enter", .action = "command:select" },
-        .{ .scope = .command_palette, .mode = .normal, .sequence = "ctrl+u", .action = "command:scroll_up" },
-        .{ .scope = .command_palette, .mode = .normal, .sequence = "ctrl+d", .action = "command:scroll_down" },
-        .{ .scope = .command_palette, .mode = .normal, .sequence = "g g", .action = "command:top" },
-        .{ .scope = .command_palette, .mode = .normal, .sequence = "shift+G", .action = "command:bottom" },
+        .{ .mode = .normal, .sequence = "i" },
+        .{ .mode = .normal, .sequence = "v" },
+        .{ .mode = .insert, .sequence = "escape" },
+        .{ .mode = .visual, .sequence = "escape" },
+        .{ .mode = .normal, .sequence = "super+l" },
+        .{ .mode = .normal, .sequence = "ctrl+t" },
+        .{ .mode = .normal, .sequence = "tab" },
+        .{ .mode = .normal, .sequence = "shift+tab" },
+        .{ .mode = .normal, .sequence = "ctrl+q" },
+        .{ .mode = .normal, .sequence = "super+k" },
+        .{ .mode = .normal, .sequence = "k" },
+        .{ .mode = .normal, .sequence = "j" },
+        .{ .mode = .normal, .sequence = "enter" },
+        .{ .mode = .normal, .sequence = "ctrl+u" },
+        .{ .mode = .normal, .sequence = "ctrl+d" },
+        .{ .mode = .normal, .sequence = "g g" },
+        .{ .mode = .normal, .sequence = "shift+G" },
     };
 
     for (defaults) |d| {
-        self.keymaps.insert(d.scope, d.mode, d.sequence, d.action) catch continue;
+        self.keymaps.insert(d.mode, d.sequence) catch continue;
     }
 
     self.keymap_generation +%= 1;

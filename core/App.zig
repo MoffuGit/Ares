@@ -6,9 +6,11 @@ const Appearance = @import("Appearance.zig");
 const Monitor = @import("monitor/mod.zig");
 const Io = @import("io/mod.zig");
 const Grid = @import("font/Grid.zig");
-const KeymapRuntime = @import("keymaps/runtime.zig").Runtime;
 const xev = globalpkg.xev;
 const objc = @import("objc");
+const keymapspkg = @import("keymaps/mod.zig");
+const macos_keycodes = keymapspkg.macos_keycodes;
+const KeyDispatcher = keymapspkg.Dispatcher;
 
 pub const App = @This();
 
@@ -18,8 +20,8 @@ monitor: *Monitor,
 io: *Io,
 thread_pool: *xev.ThreadPool,
 grid: Grid,
-keymaps: KeymapRuntime,
 window: objc.Object,
+key_dispatcher: KeyDispatcher,
 
 pub fn create(window: *anyopaque) !*App {
     const app = try global.alloc.create(App);
@@ -58,7 +60,7 @@ pub fn create(window: *anyopaque) !*App {
         .monitor = monitor,
         .io = io,
         .thread_pool = thread_pool,
-        .keymaps = KeymapRuntime.init(global.alloc),
+        .key_dispatcher = KeyDispatcher.init(global.alloc),
     };
 
     setKeyHandlerCallback(app.window, keyHandlerCallback, @ptrCast(app));
@@ -86,15 +88,30 @@ pub fn loadSettings(self: *App, path: []const u8) !void {
     try self.settings.load(path, self.monitor, self.appearance);
 }
 
-pub fn onKeyDown(self: *App, key_code: u32, modifiers: u32, is_repeat: bool) bool {
+pub fn onKeyDown(self: *App, key_code: u32, modifiers: u32, _: bool) bool {
+    const stroke = macos_keycodes.keystrokeFromEvent(key_code, modifiers) orelse return false;
+
     self.settings.rwlock.lockShared();
     defer self.settings.rwlock.unlockShared();
 
-    return self.keymaps.handleKeyDown(self.settings, key_code, modifiers, is_repeat);
+    if (!self.settings.keymaps_initialized) return false;
+
+    const result = self.key_dispatcher.dispatch(&self.settings.keymaps, stroke) catch |err| {
+        std.log.warn("key dispatch failed: {}", .{err});
+        self.key_dispatcher.reset();
+        return false;
+    };
+
+    if (result.matched) |seq| {
+        std.log.debug("keymap match: {s}", .{seq});
+        _ = global.emit(.{ .keymapMatch = .{ .sequence = seq } }, .instant);
+    }
+
+    return result.consumed;
 }
 
 pub fn destroy(self: *App) void {
-    self.keymaps.deinit();
+    self.key_dispatcher.deinit();
     self.grid.deinit(global.alloc);
     self.settings.destroy();
     self.appearance.destroy();

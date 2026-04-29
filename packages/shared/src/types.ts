@@ -141,7 +141,6 @@ export type KeymapBinding = {
 
 export type KeymapMatch = {
     sequence: string;
-    action: string;
 };
 
 export type ScopedKeymaps = Record<Scope, KeymapBinding[]>;

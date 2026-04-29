@@ -54,6 +54,4 @@ export const ModeUpdate = defineStruct([
 export const KeymapMatch = defineStruct([
     ["sequence", "char*"],
     ["sequence_len", "u64", { lengthOf: "sequence" }],
-    ["action", "char*"],
-    ["action_len", "u64", { lengthOf: "action" }],
 ] as const);

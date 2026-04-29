@@ -52,13 +52,10 @@ export fn drainMailbox() void {
             },
             .keymapMatch => |match| {
                 defer global.state.alloc.free(match.sequence);
-                defer global.state.alloc.free(match.action);
 
                 const payload = global.ExternKeymapMatch{
                     .sequence_ptr = @intFromPtr(match.sequence.ptr),
                     .sequence_len = match.sequence.len,
-                    .action_ptr = @intFromPtr(match.action.ptr),
-                    .action_len = match.action.len,
                 };
                 cb(@intFromEnum(ev), @ptrCast(&payload), @sizeOf(global.ExternKeymapMatch));
             },

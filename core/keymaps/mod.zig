@@ -6,19 +6,14 @@ const KeyStroke = keystrokepkg.KeyStroke;
 const KeyStrokeContext = keystrokepkg.KeyStrokeContext;
 pub const parseSequence = keystrokepkg.parseSequence;
 
+pub const Dispatcher = @import("Dispatcher.zig");
+pub const macos_keycodes = @import("macos_keycodes.zig");
+
 const Allocator = std.mem.Allocator;
 const KeySequenceTrie = triepkg.Trie(KeyStroke, u8, KeyStrokeContext);
 
 pub const Mode = enum { normal, insert, visual };
 pub const Scope = enum { global, editor, command_palette };
-
-pub const KeymapEntry = struct {
-    sequence: []const u8,
-    action: []const u8,
-    strokes: []const KeyStroke,
-};
-
-const EntryList = std.ArrayListUnmanaged(KeymapEntry);
 
 pub const Keymaps = struct {
     const scope_count = @typeInfo(Scope).@"enum".fields.len;
@@ -26,7 +21,6 @@ pub const Keymaps = struct {
 
     alloc: Allocator,
     tries: [mode_count]KeySequenceTrie,
-    bindings: [scope_count][mode_count]EntryList,
 
     pub fn init(alloc: Allocator) !Keymaps {
         var tries: [mode_count]KeySequenceTrie = undefined;
@@ -38,64 +32,53 @@ pub const Keymaps = struct {
             initialized += 1;
         }
 
-        var bindings: [scope_count][mode_count]EntryList = undefined;
-        for (&bindings) |*per_scope| {
-            for (per_scope) |*list| list.* = .{};
-        }
-
         return .{
             .alloc = alloc,
             .tries = tries,
-            .bindings = bindings,
         };
     }
 
     pub fn deinit(self: *Keymaps) void {
         for (&self.tries) |*t| t.deinit();
-
-        for (&self.bindings) |*per_scope| {
-            for (per_scope) |*list| {
-                for (list.items) |entry| {
-                    self.alloc.free(entry.sequence);
-                    self.alloc.free(entry.action);
-                    self.alloc.free(entry.strokes);
-                }
-                list.deinit(self.alloc);
-            }
-        }
     }
 
     pub fn trie(self: *Keymaps, mode: Mode) *KeySequenceTrie {
         return &self.tries[@intFromEnum(mode)];
     }
 
-    pub fn entries(self: *const Keymaps, scope: Scope, mode: Mode) []const KeymapEntry {
-        return self.bindings[@intFromEnum(scope)][@intFromEnum(mode)].items;
-    }
-
-    pub fn insert(self: *Keymaps, scope: Scope, mode: Mode, sequence_str: []const u8, action_str: []const u8) !void {
+    pub fn insert(self: *Keymaps, mode: Mode, sequence_str: []const u8) !void {
         const seq = try parseSequence(self.alloc, sequence_str);
-        errdefer self.alloc.free(seq);
+        defer self.alloc.free(seq);
 
         const t = self.trie(mode);
-        if (t.get(seq) == null) {
-            try t.insert(seq, 1);
-        }
+        try t.insert(seq, 1);
+    }
 
-        const owned_seq = try self.alloc.dupe(u8, sequence_str);
-        errdefer self.alloc.free(owned_seq);
+    /// Returns true if `sequence_str` is a complete, registered keymap
+    /// (the trie node at this sequence is marked as terminal). Note that
+    /// the trie may still have descendants past this point.
+    pub fn isKeymap(self: *Keymaps, mode: Mode, sequence_str: []const u8) bool {
+        const seq = parseSequence(self.alloc, sequence_str) catch return false;
+        defer self.alloc.free(seq);
 
-        const owned_action = try self.alloc.dupe(u8, action_str);
-        errdefer self.alloc.free(owned_action);
+        const t = self.trie(mode);
+        const node = t.get(seq) orelse return false;
+        return node.values.items.len > 0;
+    }
 
-        try self.bindings[@intFromEnum(scope)][@intFromEnum(mode)].append(self.alloc, .{
-            .sequence = owned_seq,
-            .action = owned_action,
-            .strokes = seq,
-        });
+    /// Returns true if `sequence_str` is a strict prefix of any registered
+    /// keymap (i.e. the trie can continue from here).
+    pub fn hasContinuation(self: *Keymaps, mode: Mode, sequence_str: []const u8) bool {
+        const seq = parseSequence(self.alloc, sequence_str) catch return false;
+        defer self.alloc.free(seq);
+
+        const t = self.trie(mode);
+        const node = t.get(seq) orelse return false;
+        return node.childrens.count() > 0;
     }
 };
 
 test {
     _ = keystrokepkg;
+    _ = Dispatcher;
 }

@@ -111,7 +111,6 @@ function mapMode(value: number | bigint): Mode {
 function mapKeymapMatch(raw: ReturnType<typeof RawKeymapMatch.unpack>): KeymapMatch {
     return {
         sequence: raw.sequence ?? "",
-        action: raw.action ?? "",
     };
 }
 

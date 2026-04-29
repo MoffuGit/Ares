@@ -43,14 +43,11 @@ pub const ExternModeUpdate = extern struct {
 
 pub const KeymapMatch = struct {
     sequence: []u8,
-    action: []u8,
 };
 
 pub const ExternKeymapMatch = extern struct {
     sequence_ptr: usize,
     sequence_len: usize,
-    action_ptr: usize,
-    action_len: usize,
 };
 
 pub const Events = union(enum) {

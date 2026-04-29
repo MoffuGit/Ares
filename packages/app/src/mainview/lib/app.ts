@@ -197,39 +197,8 @@ const rpc = Electroview.defineRPC<AppRPC>({
             modeUpdate: (mode) => {
                 useAppStore.setState({ mode });
             },
-            keymapMatch: ({ action }) => {
-                const store = useAppStore.getState();
-
-                switch (action) {
-                    case "workspace:toggle_left_sidebar":
-                    case "workspace:toggle_left_dock":
-                        store.toggleSidebar();
-                        break;
-                    case "workspace:tabs_panel":
-                        store.toggleSidebarKind("tabs");
-                        break;
-                    case "workspace:filetree_panel":
-                        store.toggleSidebarKind("filetree");
-                        break;
-                    case "workspace:new_tab":
-                        store.newTab({ kind: "editor" });
-                        break;
-                    case "workspace:new_terminal_tab":
-                        store.newTab({ kind: "terminal", cwd: "" });
-                        break;
-                    case "workspace:next_tab":
-                        store.nextTab();
-                        break;
-                    case "workspace:prev_tab":
-                        store.prevTab();
-                        break;
-                    case "workspace:close_active_tab":
-                        if (store.activeTabId != null) store.closeTab(store.activeTabId);
-                        break;
-                    case "workspace:toggle_cmd":
-                        store.toggleCmd();
-                        break;
-                }
+            keymapMatch: ({ sequence }) => {
+                console.log(sequence);
             },
         },
     },
