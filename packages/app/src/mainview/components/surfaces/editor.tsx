@@ -87,7 +87,8 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
                     </div>
                     <div style={{
                         height: surface.editorState && surface.surfaceState
-                            ? surface.editorState.rowCount * surface.surfaceState.cellHeight
+                            //HACK:
+                            ? (surface.editorState.rowCount + 1) * surface.surfaceState.cellHeight
                             : 0,
                     }} />
                 </div>
