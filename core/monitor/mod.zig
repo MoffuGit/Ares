@@ -1,36 +1,3 @@
-//for this to work i need to remember:
-//inotify has a shared data between all watchers:
-//that is the fd created by inotify
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
 // const std = @import("std");
 // const xev = @import("../global.zig").xev;
 // const Allocator = std.mem.Allocator;

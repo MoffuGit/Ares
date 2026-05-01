@@ -3,6 +3,7 @@ const posix = std.posix;
 const linux = std.os.linux;
 const Fnv1a_32 = std.hash.Fnv1a_32;
 const datastruct = @import("datastruct");
+const Allocator = std.mem.Allocator;
 
 const Tree = datastruct.RBTree;
 
@@ -24,18 +25,18 @@ const FLAGS =
     std.c.NOTE.LINK |
     std.c.NOTE.RENAME;
 
-pub const Backend = @This();
-const log = std.log.scoped(.fs);
+pub const Watchers = @This();
+const log = std.log.scoped(.watchers);
 
 tree: Tree(Watcher, Watcher.compare) = .{},
-loop: *xev.Loop = undefined,
+loop: *xev.Loop,
 active: usize = 0,
 
 pub const Watcher = struct {
-    Completions: Completions = .{},
+    completions: Completions = .{},
 
     wd: u32 = 0,
-    path: []const u8 = undefined,
+    path: []u8 = .{},
 
     flags: packed struct {
         state: State = .dead,
@@ -43,6 +44,22 @@ pub const Watcher = struct {
 
     fd: i32 = -1,
     c: xev.Completion = .{},
+
+    pub fn init(alloc: Allocator, path: []const u8) !void {
+        const wd = Fnv1a_32.hash(path);
+        return .{
+            .wd = wd,
+            .path = try alloc.dupe(u8, path),
+        };
+    }
+
+    pub fn deinit(self: *Watcher, alloc: Allocator) void {
+        posix.close(self.fd);
+        alloc.free(self.path);
+        self.path = .{};
+        self.fd = -1;
+        self.flags.state = .dead;
+    }
 
     pub fn state(self: Watcher) State {
         return switch (self.flags.state) {
@@ -60,29 +77,25 @@ pub const Watcher = struct {
         if (a.wd < b.wd) return .lt;
         return .eq;
     }
-    //             pub fn state(self: Monitor) State {
-    //                 return if (self.fd == 1) .dead else .active;
-    //             }
-    //
-    //             pub fn init(path: []const u8) !Monitor {
-    //                 const fd = try posix.open(path, .{}, 0);
-    //
-    //                 return .{ .fd = fd };
-    //             }
-    //
-    //             pub fn start(self: *Monitor, loop: *xev.Loop, w: *Watcher) void {
-    //                 self.c = .{
-    //                     .op = .{
-    //                         .vnode = .{
-    //                             .fd = self.fd,
-    //                             .flags = FLAGS,
-    //                         },
-    //                     },
-    //                     .userdata = w,
-    //                     .callback = vnode_callback,
-    //                 };
-    //                 loop.add(&self.c);
-    //             }
+
+    pub fn start(self: *Watcher, loop: *xev.Loop) !void {
+        const fd = try posix.open(self.path, .{}, 0);
+        self.fd = fd;
+        self.flags.state = .active;
+
+        self.c = .{
+            .op = .{
+                .vnode = .{
+                    .fd = self.fd,
+                    .flags = FLAGS,
+                },
+            },
+            .userdata = self,
+            .callback = vnode_callback,
+        };
+
+        loop.add(&self.c);
+    }
     //
     //             pub fn cancel(self: *Monitor, loop: *xev.Loop, w: *Watcher) void {
     //                 self.cancelation.c =
@@ -90,29 +103,71 @@ pub const Watcher = struct {
     //                 loop.add(&self.cancelation.c);
     //             }
     //
-    //             pub fn deinit(self: *Monitor) void {
-    //                 _ = self;
-    //             }
+    fn vnode_callback(
+        _: ?*anyopaque,
+        _: *xev.Loop,
+        _: *xev.Completion,
+        _: xev.Result,
+    ) xev.CallbackAction {
+        // const watcher: *Watcher = @ptrCast(@alignCast(ud.?));
+        //
+        // const vnode_flags = result.vnode catch {
+        //     return .disarm;
+        // };
+        //
+        // var watchers = watcher.monitor.watchers;
+        // watcher.monitor.watchers = .{};
+        //
+        // const action = watcher.invoke(watcher.path, vnode_flags);
+        //
+        // var curr = watchers.pop();
+        // while (curr) |w| {
+        //     switch (w.invoke(watcher.path, vnode_flags)) {
+        //         .disarm => {
+        //             w.flags.state = .dead;
+        //             w.fs.?.active -= 1;
+        //         },
+        //         .rearm => {
+        //             watcher.monitor.watchers.push(w);
+        //         },
+        //     }
+        //     curr = watchers.pop();
+        // }
+        //
+        // if (action == .disarm) {
+        //     if (watcher.monitor.watchers.pop()) |replace| {
+        //         replace.monitor = Monitor.init(replace.path) catch {
+        //             return action;
+        //         };
+        //
+        //         replace.monitor.start(loop, replace);
+        //
+        //         watcher.fs.?.tree.replace(watcher, replace) catch {};
+        //     } else {
+        //         _ = watcher.fs.?.tree.remove(watcher);
+        //     }
+        //
+        //     watcher.monitor.cancel(loop, watcher);
+        // }
+        //
+        // return action;
+    }
 };
 
-//         pub fn init() Self {
-//             return .{};
-//         }
-//
-//         pub fn deinit(self: *Self) void {
-//             var it = self.tree.iter();
-//             while (it.next()) |w| {
-//                 if (w.monitor.fd != -1) {
-//                     posix.close(w.monitor.fd);
-//                     w.monitor.fd = -1;
-//                 }
-//             }
-//         }
-//
-//         pub fn start(self: *Self, loop: *xev.Loop) !void {
-//             self.loop = loop;
-//         }
-//
+pub fn init(loop: *xev.Loop) Watchers {
+    return .{
+        .loop = loop,
+    };
+}
+
+pub fn deinit(self: *Watchers, alloc: Allocator) void {
+    var it = self.tree.iter();
+    while (it.next()) |w| {
+        w.deinit(alloc);
+        alloc.destroy(w);
+    }
+}
+
 //         pub fn watch(self: *Self, path: []const u8, watcher: *Watcher, comptime Userdata: type, userdata: ?*Userdata, comptime cb: *const fn (
 //             ud: ?*Userdata,
 //             watcher: *Watcher,
@@ -123,7 +178,6 @@ pub const Watcher = struct {
 //                 return;
 //             }
 //
-//             const wd = Fnv1a_32.hash(path);
 //
 //             watcher.* = .{ .callback = (struct {
 //                 fn callback(
@@ -223,58 +277,3 @@ pub const Watcher = struct {
 //
 //             return .disarm;
 //         }
-//
-//         fn vnode_callback(
-//             ud: ?*anyopaque,
-//             loop: *xev.Loop,
-//             _: *xev.Completion,
-//             result: xev.Result,
-//         ) xev.CallbackAction {
-//             const watcher: *Watcher = @ptrCast(@alignCast(ud.?));
-//
-//             const vnode_flags = result.vnode catch {
-//                 return .disarm;
-//             };
-//
-//             var watchers = watcher.monitor.watchers;
-//             watcher.monitor.watchers = .{};
-//
-//             const action = watcher.invoke(watcher.path, vnode_flags);
-//
-//             var curr = watchers.pop();
-//             while (curr) |w| {
-//                 switch (w.invoke(watcher.path, vnode_flags)) {
-//                     .disarm => {
-//                         w.flags.state = .dead;
-//                         w.fs.?.active -= 1;
-//                     },
-//                     .rearm => {
-//                         watcher.monitor.watchers.push(w);
-//                     },
-//                 }
-//                 curr = watchers.pop();
-//             }
-//
-//             if (action == .disarm) {
-//                 if (watcher.monitor.watchers.pop()) |replace| {
-//                     replace.monitor = Monitor.init(replace.path) catch {
-//                         return action;
-//                     };
-//
-//                     replace.monitor.start(loop, replace);
-//
-//                     watcher.fs.?.tree.replace(watcher, replace) catch {};
-//                 } else {
-//                     _ = watcher.fs.?.tree.remove(watcher);
-//                 }
-//
-//                 watcher.monitor.cancel(loop, watcher);
-//             }
-//
-//             return action;
-//         }
-//         test {
-//             _ = FileSystemTest(xev);
-//         }
-//
-//
