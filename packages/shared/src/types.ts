@@ -28,6 +28,7 @@ export type Settings = {
     tabs_position: TabsPosition;
     light_theme: string;
     dark_theme: string;
+    keymaps: ParsedKeymaps;
 };
 
 export type ThemeHighlightRule = {
@@ -100,6 +101,16 @@ export type WorktreeEntry = {
 };
 
 export type Mode = "normal" | "insert" | "visual";
+
+export type ParsedKeymap = {
+    mode: Mode;
+    scope: string;
+    cmd: string;
+    sequence: string;
+};
+
+export type ParsedKeymaps = Record<string, Partial<Record<Mode, ParsedKeymap[]>>>;
+
 export type KeymapMatch = {
     sequence: string;
 };

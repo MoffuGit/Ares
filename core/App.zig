@@ -101,6 +101,13 @@ pub fn loadSettings(self: *App, path: []const u8) !void {
     try self.settings.load(path, self.monitor, self.appearance);
 }
 
+pub fn setMode(self: *App, mode: keymapspkg.Mode) void {
+    self.keymap_mutex.lock();
+    defer self.keymap_mutex.unlock();
+
+    if (self.key_dispatcher.mode == mode) return;
+}
+
 pub fn onKeyDown(self: *App, key_code: u32, modifiers: u32, _: bool) bool {
     const stroke = macos_keycodes.keystrokeFromEvent(key_code, modifiers) orelse return false;
 

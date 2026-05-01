@@ -56,7 +56,6 @@ pub const Events = union(enum) {
     filetreeUpdate: void,
     surfaceUpdate: ExternSurfaceState,
     editorUpdate: ExternEditorState,
-    modeUpdate: ExternModeUpdate,
     keymapMatch: KeymapMatch,
 };
 

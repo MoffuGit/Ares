@@ -20,6 +20,8 @@ import type {
     WorktreeEntry,
 } from "@ares/shared";
 
+type NativeSettings = Omit<Settings, "keymaps">;
+
 const DEFAULT_LIB_PATH = resolve(import.meta.dir, "../../../zig-out/lib/libcore.dylib");
 
 function toNumber(value: number | bigint): number {
@@ -182,6 +184,10 @@ function getCoreLib(libPath: string) {
                 args: [FFIType.pointer, FFIType.u8],
                 returns: FFIType.void,
             },
+            setMode: {
+                args: [FFIType.pointer, FFIType.u8],
+                returns: FFIType.void,
+            },
             drainMailbox: {
                 args: [],
                 return: FFIType.void,
@@ -333,7 +339,7 @@ export class CoreLib extends EventEmitter {
         this.lib.symbols.loadSettings(app, buf, buf.byteLength);
     }
 
-    readSettings(app: Pointer) {
+    readSettings(app: Pointer): NativeSettings {
         this.lib.symbols.lockSettings(app);
         try {
             const buf = new ArrayBuffer(RawSettings.size);
@@ -345,7 +351,7 @@ export class CoreLib extends EventEmitter {
                 tabs_position: raw.tabs_position,
                 light_theme: raw.light_theme ?? "",
                 dark_theme: raw.dark_theme ?? "",
-            } satisfies Settings;
+            } satisfies NativeSettings;
         } finally {
             this.lib.symbols.unlockSettings(app);
         }
@@ -395,6 +401,16 @@ export class CoreLib extends EventEmitter {
 
     setSystemScheme(app: Pointer, scheme: number): void {
         this.lib.symbols.setSystemScheme(app, scheme);
+    }
+
+    setMode(app: Pointer, mode: Mode): void {
+        const rawMode = mode === "insert"
+            ? 1
+            : mode === "visual"
+                ? 2
+                : 0;
+
+        this.lib.symbols.setMode(app, rawMode);
     }
 
     drainMailbox() {

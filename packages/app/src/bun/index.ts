@@ -19,10 +19,11 @@ const rpc = BrowserView.defineRPC<AppRPC>({
     maxRequestTime: 600000,
     handlers: {
         requests: {
-            initialLoad: (): { settings: Settings; theme: Theme } => {
+            initialLoad: (): { settings: Settings; theme: Theme; mode: Mode } => {
                 return {
                     settings: app.readSettings(),
                     theme: app.readTheme(),
+                    mode: app.readMode(),
                 }
             },
             openProjectDialog: async () => {
@@ -81,6 +82,9 @@ const rpc = BrowserView.defineRPC<AppRPC>({
             },
             surfaceKeyEvent: (data) => {
                 surfaceStore.keyEvent(data)
+            },
+            setMode: (mode) => {
+                app.setMode(mode);
             }
         },
     },

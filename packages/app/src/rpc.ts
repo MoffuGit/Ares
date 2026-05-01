@@ -6,7 +6,7 @@ export type GpuRect = { x: number; y: number; width: number; height: number };
 export type AppRPC = {
     bun: RPCSchema<{
         requests: {
-            initialLoad: { params: {}; response: { settings: Settings, theme: Theme } },
+            initialLoad: { params: {}; response: { settings: Settings, theme: Theme, mode: Mode } },
             getTheme: { params: {}; response: Theme },
             openProjectDialog: { params: {}; response: Project | null };
             gitFileTree: { params: {}; response: WorktreeEntry[] }
@@ -22,6 +22,7 @@ export type AppRPC = {
             gpuTagStop: { id: number };
             gpuTagVisibility: { id: number; visible: boolean };
             surfaceKeyEvent: { id: number, key: string, code: string, mods: number, repeat: boolean };
+            setMode: Mode;
         };
     }>;
     webview: RPCSchema<{

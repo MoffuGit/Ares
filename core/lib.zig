@@ -125,6 +125,11 @@ export fn setSystemScheme(app: *App, scheme: u8) void {
     settings.setSystemScheme(@enumFromInt(scheme));
 }
 
+export fn setMode(app: *App, mode: u8) void {
+    if (mode >= @typeInfo(@import("keymaps/mod.zig").Mode).@"enum".fields.len) return;
+    app.setMode(@enumFromInt(mode));
+}
+
 export fn getThemeJsonLen(app: *App) u64 {
     return app.settings.theme_json.len;
 }
