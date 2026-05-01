@@ -63,8 +63,8 @@ keymap_generation: u64 = 0,
 
 settings_path: []const u8 = "",
 
-settings_watcher: u64 = 0,
-theme_watcher: u64 = 0,
+settings_watcher: Monitor.Completion = .{},
+theme_watcher: Monitor.Completion = .{},
 
 appearance: ?*Appearance = null,
 
@@ -121,8 +121,8 @@ pub fn load(self: *Settings, path: []const u8, monitor: *Monitor, appe: ?*Appear
         });
     }
 
-    self.settings_watcher = try monitor.watchPath(path, Settings, self, settingsCallback);
-    self.theme_watcher = try monitor.watchPath(themes_dir, Settings, self, themeCallback);
+    try monitor.watchPath(path, &self.settings_watcher, Settings, self, settingsCallback);
+    try monitor.watchPath(themes_dir, &self.theme_watcher, Settings, self, themeCallback);
 }
 
 fn appearanceChanged(ctx: *anyopaque, _: @import("../appearance/mac.zig").ObserverEvents) void {
@@ -142,7 +142,7 @@ fn appearanceChanged(ctx: *anyopaque, _: @import("../appearance/mac.zig").Observ
     _ = global.state.emit(.settingsUpdate, .instant);
 }
 
-fn settingsCallback(self: ?*Settings, _: u64, _: u32) void {
+fn settingsCallback(self: ?*Settings, _: u32) void {
     const s = self orelse return;
 
     {
@@ -159,7 +159,7 @@ fn settingsCallback(self: ?*Settings, _: u64, _: u32) void {
     global.state.emitGlobal(.themeUpdate);
     _ = global.state.emit(.settingsUpdate, .instant);
 }
-fn themeCallback(self: ?*Settings, _: u64, _: u32) void {
+fn themeCallback(self: ?*Settings, _: u32) void {
     const s = self orelse return;
 
     {

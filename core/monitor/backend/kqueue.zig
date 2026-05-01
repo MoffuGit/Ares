@@ -5,7 +5,7 @@ const Fnv1a_32 = std.hash.Fnv1a_32;
 const datastruct = @import("datastruct");
 const Allocator = std.mem.Allocator;
 
-const Tree = datastruct.RBTree;
+const Tree = datastruct.RBTree(Watcher, Watcher.compare);
 
 const xev = @import("../../global.zig").xev;
 const shared = @import("shared.zig");
@@ -28,7 +28,8 @@ const FLAGS =
 pub const Watchers = @This();
 const log = std.log.scoped(.watchers);
 
-tree: Tree(Watcher, Watcher.compare) = .{},
+alloc: Allocator,
+tree: Tree,
 loop: *xev.Loop,
 active: usize = 0,
 
@@ -36,7 +37,7 @@ pub const Watcher = struct {
     completions: Completions = .{},
 
     wd: u32 = 0,
-    path: []u8 = .{},
+    path: []u8 = &.{},
 
     flags: packed struct {
         state: State = .dead,
@@ -45,7 +46,7 @@ pub const Watcher = struct {
     fd: i32 = -1,
     c: xev.Completion = .{},
 
-    pub fn init(alloc: Allocator, path: []const u8) !void {
+    pub fn init(alloc: Allocator, path: []const u8) !Watcher {
         const wd = Fnv1a_32.hash(path);
         return .{
             .wd = wd,
@@ -54,9 +55,9 @@ pub const Watcher = struct {
     }
 
     pub fn deinit(self: *Watcher, alloc: Allocator) void {
-        posix.close(self.fd);
+        if (self.fd != -1) posix.close(self.fd);
         alloc.free(self.path);
-        self.path = .{};
+        self.path = &.{};
         self.fd = -1;
         self.flags.state = .dead;
     }
@@ -68,11 +69,24 @@ pub const Watcher = struct {
         };
     }
 
-    // pub fn invoke(self: *Watcher, path: []const u8, res: u32) xev.CallbackAction {
-    //     return self.callback(self.userdata, self, path, res);
-    // }
+    pub fn invoke(self: *Watcher, res: u32) void {
+        var comps = self.completions;
 
-    pub fn compare(a: *Watcher, b: *Watcher) std.math.Order {
+        self.completions = .{};
+
+        while (comps.pop()) |comp| {
+            switch (comp.invoke(self.path, res)) {
+                .rearm => {
+                    self.completions.push(comp);
+                },
+                .disarm => {
+                    comp.flags.state = .dead;
+                },
+            }
+        }
+    }
+
+    pub fn compare(a: Watcher, b: Watcher) std.math.Order {
         if (a.wd > b.wd) return .gt;
         if (a.wd < b.wd) return .lt;
         return .eq;
@@ -91,7 +105,7 @@ pub const Watcher = struct {
                 },
             },
             .userdata = self,
-            .callback = vnode_callback,
+            .callback = callback,
         };
 
         loop.add(&self.c);
@@ -103,106 +117,90 @@ pub const Watcher = struct {
     //                 loop.add(&self.cancelation.c);
     //             }
     //
-    fn vnode_callback(
-        _: ?*anyopaque,
+    fn callback(
+        ud: ?*anyopaque,
         _: *xev.Loop,
         _: *xev.Completion,
-        _: xev.Result,
+        res: xev.Result,
     ) xev.CallbackAction {
-        // const watcher: *Watcher = @ptrCast(@alignCast(ud.?));
-        //
-        // const vnode_flags = result.vnode catch {
-        //     return .disarm;
-        // };
-        //
-        // var watchers = watcher.monitor.watchers;
-        // watcher.monitor.watchers = .{};
-        //
-        // const action = watcher.invoke(watcher.path, vnode_flags);
-        //
-        // var curr = watchers.pop();
-        // while (curr) |w| {
-        //     switch (w.invoke(watcher.path, vnode_flags)) {
-        //         .disarm => {
-        //             w.flags.state = .dead;
-        //             w.fs.?.active -= 1;
-        //         },
-        //         .rearm => {
-        //             watcher.monitor.watchers.push(w);
-        //         },
-        //     }
-        //     curr = watchers.pop();
-        // }
-        //
-        // if (action == .disarm) {
-        //     if (watcher.monitor.watchers.pop()) |replace| {
-        //         replace.monitor = Monitor.init(replace.path) catch {
-        //             return action;
-        //         };
-        //
-        //         replace.monitor.start(loop, replace);
-        //
-        //         watcher.fs.?.tree.replace(watcher, replace) catch {};
-        //     } else {
-        //         _ = watcher.fs.?.tree.remove(watcher);
-        //     }
-        //
-        //     watcher.monitor.cancel(loop, watcher);
-        // }
-        //
-        // return action;
+        const watcher: *Watcher = @ptrCast(@alignCast(ud.?));
+
+        const flags = res.vnode catch {
+            return .disarm;
+        };
+
+        watcher.invoke(flags);
+
+        if (watcher.completions.empty()) {
+            watcher.flags.state = .dead;
+            return .disarm;
+        }
+
+        return .rearm;
     }
 };
 
-pub fn init(loop: *xev.Loop) Watchers {
+pub fn init(loop: *xev.Loop, alloc: Allocator) !Watchers {
+    const tree = Tree.init(alloc);
     return .{
         .loop = loop,
+        .tree = tree,
+        .alloc = alloc,
     };
 }
 
-pub fn deinit(self: *Watchers, alloc: Allocator) void {
+pub fn deinit(self: *Watchers) void {
     var it = self.tree.iter();
     while (it.next()) |w| {
-        w.deinit(alloc);
-        alloc.destroy(w);
+        w.deinit(self.alloc);
     }
+    self.tree.deinit();
 }
 
-//         pub fn watch(self: *Self, path: []const u8, watcher: *Watcher, comptime Userdata: type, userdata: ?*Userdata, comptime cb: *const fn (
-//             ud: ?*Userdata,
-//             watcher: *Watcher,
-//             path: []const u8,
-//             result: u32,
-//         ) xev.CallbackAction) !void {
-//             if (watcher.state() != .dead) {
-//                 return;
-//             }
-//
-//
-//             watcher.* = .{ .callback = (struct {
-//                 fn callback(
-//                     ud: ?*anyopaque,
-//                     _watcher: *Watcher,
-//                     _path: []const u8,
-//                     result: u32,
-//                 ) xev.CallbackAction {
-//                     return @call(.always_inline, cb, .{ common.userdataValue(Userdata, ud), _watcher, _path, result });
-//                 }
-//             }).callback, .userdata = userdata, .wd = wd, .path = path, .fs = self };
-//
-//             if (self.tree.find(watcher)) |w| {
-//                 w.monitor.watchers.push(watcher);
-//             } else {
-//                 watcher.monitor = try Monitor.init(path);
-//
-//                 watcher.monitor.start(self.loop, watcher);
-//
-//                 self.tree.insert(watcher);
-//             }
-//
-//             watcher.flags.state = .active;
-//             self.active += 1;
-//         }
+pub fn watch(self: *Watchers, path: []const u8, comp: *Completion, comptime Userdata: type, userdata: ?*Userdata, comptime cb: *const fn (
+    ud: ?*Userdata,
+    comp: *Completion,
+    path: []const u8,
+    result: u32,
+) xev.CallbackAction) !void {
+    if (comp.flags.state != .dead) {
+        return;
+    }
+
+    comp.* = .{
+        .callback = (struct {
+            fn callback(
+                ud: ?*anyopaque,
+                _comp: *Completion,
+                _path: []const u8,
+                result: u32,
+            ) xev.CallbackAction {
+                return @call(.always_inline, cb, .{ shared.userdataValue(Userdata, ud), _comp, _path, result });
+            }
+        }).callback,
+        .userdata = userdata,
+        .flags = .{ .state = .active },
+    };
+
+    // Probe by hash without allocating a path.
+    const probe: Watcher = .{ .wd = Fnv1a_32.hash(path) };
+
+    if (self.tree.find(probe)) |w| {
+        w.completions.push(comp);
+        self.active += 1;
+        return;
+    }
+
+    const watcher = try Watcher.init(self.alloc, path);
+    errdefer self.alloc.free(watcher.path);
+
+    _ = try self.tree.insert(watcher);
+
+    const w = self.tree.find(watcher).?;
+    w.completions.push(comp);
+    try w.start(self.loop);
+    self.active += 1;
+}
 //
 //         pub fn cancel(self: *Self, watcher: *Watcher) void {
 //             if (self.tree.find(watcher)) |w| {

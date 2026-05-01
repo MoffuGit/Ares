@@ -22,7 +22,7 @@ pub const State = enum(u1) {
 };
 
 pub const Completion = struct {
-    next: ?Completion = null,
+    next: ?*Completion = null,
     userdata: ?*anyopaque = null,
     callback: Callback = NoopCallback,
     flags: packed struct {
@@ -30,6 +30,14 @@ pub const Completion = struct {
     } = .{},
 
     pub fn invoke(self: *Completion, path: []const u8, res: u32) xev.CallbackAction {
-        self.callback(self.userdata, self, path, res);
+        return self.callback(self.userdata, self, path, res);
     }
 };
+
+/// Convert the callback value with an opaque pointer into the userdata type
+/// that we can pass to our higher level callback types.
+pub fn userdataValue(comptime Userdata: type, v: ?*anyopaque) ?*Userdata {
+    // Void userdata is always a null pointer.
+    if (Userdata == void) return null;
+    return @ptrCast(@alignCast(v));
+}
