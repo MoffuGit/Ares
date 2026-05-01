@@ -47,9 +47,6 @@ export fn drainMailbox() void {
             .editorUpdate => |bs| {
                 cb(@intFromEnum(ev), @ptrCast(&bs), @sizeOf(global.ExternEditorState));
             },
-            .modeUpdate => |mode| {
-                cb(@intFromEnum(ev), @ptrCast(&mode), @sizeOf(global.ExternModeUpdate));
-            },
             .keymapMatch => |match| {
                 defer global.state.alloc.free(match.sequence);
 

@@ -1,25 +1,19 @@
 const xev = @import("../../global.zig").xev;
 
-pub fn Callback(comptime T: type) type {
-    return *const fn (
-        userdata: ?*anyopaque,
-        watcher: *T.Watcher,
-        path: []const u8,
-        result: u32,
-    ) xev.CallbackAction;
-}
+pub const Callback = *const fn (
+    userdata: ?*anyopaque,
+    comp: *Completion,
+    path: []const u8,
+    result: u32,
+) xev.CallbackAction;
 
-pub fn NoopCallback(comptime T: type) Callback(xev, T) {
-    return (struct {
-        pub fn noopCallback(
-            _: ?*anyopaque,
-            _: *T.Watcher,
-            _: []const u8,
-            _: u32,
-        ) xev.CallbackAction {
-            return .disarm;
-        }
-    }).noopCallback;
+pub fn NoopCallback(
+    _: ?*anyopaque,
+    _: *Completion,
+    _: []const u8,
+    _: u32,
+) xev.CallbackAction {
+    return .disarm;
 }
 
 pub const State = enum(u1) {
@@ -34,4 +28,8 @@ pub const Completion = struct {
     flags: packed struct {
         state: State = .dead,
     } = .{},
+
+    pub fn invoke(self: *Completion, path: []const u8, res: u32) xev.CallbackAction {
+        self.callback(self.userdata, self, path, res);
+    }
 };

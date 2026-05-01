@@ -1,5 +1,5 @@
 import { type StructDef } from "bun-ffi-structs";
-import { EditorState, KeymapMatch, ModeUpdate, SurfaceState } from "./structs";
+import { EditorState, KeymapMatch,  SurfaceState } from "./structs";
 
 export enum EventType {
     SettingsUpdate,
@@ -7,7 +7,6 @@ export enum EventType {
     FiletreeUpdate,
     SurfaceUpdate,
     EditorUpdate,
-    ModeUpdate,
     KeymapMatch,
 }
 
@@ -17,7 +16,6 @@ export const EventsName: Record<EventType, string> = {
     [EventType.ThemeUpdate]: "ThemeUpdate",
     [EventType.EditorUpdate]: "EditorUpdate",
     [EventType.SurfaceUpdate]: "SurfaceUpdate",
-    [EventType.ModeUpdate]: "ModeUpdate",
     [EventType.KeymapMatch]: "KeymapMatch",
 };
 
@@ -27,6 +25,5 @@ export const Events: Record<EventType, StructDef<any> | null> = {
     [EventType.FiletreeUpdate]: null,
     [EventType.SurfaceUpdate]: SurfaceState,
     [EventType.EditorUpdate]: EditorState,
-    [EventType.ModeUpdate]: ModeUpdate,
     [EventType.KeymapMatch]: KeymapMatch,
 };

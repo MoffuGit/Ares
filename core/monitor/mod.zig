@@ -1,12 +1,12 @@
-// const std = @import("std");
-// const xev = @import("../global.zig").xev;
-// const Allocator = std.mem.Allocator;
-// const Thread = @import("Thread.zig");
-//
-// const log = std.log.scoped(.monitor);
-//
-// pub const Monitor = @This();
-//
+const std = @import("std");
+const xev = @import("../global.zig").xev;
+const Allocator = std.mem.Allocator;
+const Thread = @import("Thread.zig");
+
+const log = std.log.scoped(.monitor);
+
+pub const Monitor = @This();
+
 // pub const WatchRequest = struct {
 //     id: u64,
 //     path: []u8,
@@ -26,60 +26,45 @@
 //     callback: *const fn (userdata: ?*anyopaque, id: u64, events: u32) void,
 // };
 //
-// alloc: Allocator,
+alloc: Allocator,
 // watchers: std.AutoHashMap(u64, *WatcherEntry),
 // pending_cancel: std.ArrayListUnmanaged(*WatcherEntry),
 // dirty_queue: std.ArrayListUnmanaged(*WatcherEntry),
-// next_id: u64 = 0,
-// thread: Thread,
-// thr: std.Thread,
-//
-// pub fn create(alloc: Allocator) !*Monitor {
-//     const monitor = try alloc.create(Monitor);
-//
-//     monitor.* = .{
-//         .alloc = alloc,
-//         .watchers = std.AutoHashMap(u64, *WatcherEntry).init(alloc),
-//         .pending_cancel = .{},
-//         .dirty_queue = .{},
-//         .thread = try Thread.init(alloc, monitor),
-//         .thr = undefined,
-//     };
-//
-//     monitor.thr = try std.Thread.spawn(.{}, Thread.threadMain, .{&monitor.thread});
-//
-//     return monitor;
-// }
-//
-// pub fn destroy(self: *Monitor) void {
-//     {
-//         self.thread.stop.notify() catch |err| {
-//             log.err("error notifying monitor thread to stop, may stall err={}", .{err});
-//         };
-//         self.thr.join();
-//     }
-//
-//     self.thread.deinit();
-//
-//     var it = self.watchers.valueIterator();
-//     while (it.next()) |entry_ptr| {
-//         const entry = entry_ptr.*;
-//         self.alloc.free(entry.path);
-//         self.alloc.destroy(entry);
-//     }
-//     self.watchers.deinit();
-//
-//     for (self.pending_cancel.items) |entry| {
-//         self.alloc.free(entry.path);
-//         self.alloc.destroy(entry);
-//     }
-//     self.pending_cancel.deinit(self.alloc);
-//     self.dirty_queue.deinit(self.alloc);
-//
-//     self.alloc.destroy(self);
-//
-//     log.info("Monitor closed", .{});
-// }
+next_id: u64 = 0,
+thread: Thread,
+thr: std.Thread,
+
+pub fn create(alloc: Allocator) !*Monitor {
+    const monitor = try alloc.create(Monitor);
+
+    monitor.* = .{
+        .alloc = alloc,
+        // .watchers = std.AutoHashMap(u64, *WatcherEntry).init(alloc),
+        // .pending_cancel = .{},
+        // .dirty_queue = .{},
+        .thread = try Thread.init(alloc, monitor),
+        .thr = undefined,
+    };
+
+    monitor.thr = try std.Thread.spawn(.{}, Thread.threadMain, .{&monitor.thread});
+
+    return monitor;
+}
+
+pub fn destroy(self: *Monitor) void {
+    {
+        self.thread.stop.notify() catch |err| {
+            log.err("error notifying monitor thread to stop, may stall err={}", .{err});
+        };
+        self.thr.join();
+    }
+
+    self.thread.deinit();
+
+    self.alloc.destroy(self);
+
+    log.info("Monitor closed", .{});
+}
 //
 // pub fn userdataValue(comptime Userdata: type, v: ?*anyopaque) ?*Userdata {
 //     // Void userdata is always a null pointer.
@@ -87,54 +72,54 @@
 //     return @ptrCast(@alignCast(v));
 // }
 //
-// pub fn watchPath(
-//     self: *Monitor,
-//     abs_path: []const u8,
-//     comptime Userdata: type,
-//     userdata: ?*Userdata,
-//     comptime callback: *const fn (userdata: ?*Userdata, id: u64, events: u32) void,
-// ) !u64 {
-//     const id = self.next_id;
-//     self.next_id += 1;
-//
-//     const path = try self.alloc.dupe(u8, abs_path);
-//
-//     const entry = self.alloc.create(WatcherEntry) catch {
-//         log.err("failed to allocate watcher entry", .{});
-//         self.alloc.free(path);
-//         return error.OutOfMemory;
-//     };
-//
-//     entry.* = .{
-//         .watcher = .{},
-//         .path = path,
-//         .id = id,
-//         .monitor = self,
-//         .userdata = userdata,
-//         .callback = (struct {
-//             fn cb(inner_userdata: ?*anyopaque, inner_id: u64, inner_events: u32) void {
-//                 return @call(.always_inline, callback, .{ userdataValue(Userdata, inner_userdata), inner_id, inner_events });
-//             }
-//         }.cb),
-//     };
-//
-//     self.thread.fs.watch(path, &entry.watcher, WatcherEntry, entry, fsEventsCallback) catch {
-//         // log.err("failed to start watcher for '{s}': {}", .{ path, err });
-//         self.alloc.free(path);
-//         self.alloc.destroy(entry);
-//         return error.OutOfMemory;
-//     };
-//
-//     self.watchers.put(id, entry) catch {
-//         log.err("failed to track watcher id={}", .{id});
-//         self.thread.fs.cancel(&entry.watcher);
-//         self.alloc.free(entry.path);
-//         self.alloc.destroy(entry);
-//         return error.OutOfMemory;
-//     };
-//
-//     return id;
-// }
+pub fn watchPath(
+    self: *Monitor,
+    _: []const u8,
+    comptime Userdata: type,
+    _: ?*Userdata,
+    comptime _: *const fn (userdata: ?*Userdata, id: u64, events: u32) void,
+) !u64 {
+    const id = self.next_id;
+    self.next_id += 1;
+
+    // const path = try self.alloc.dupe(u8, abs_path);
+    //
+    // const entry = self.alloc.create(WatcherEntry) catch {
+    //     log.err("failed to allocate watcher entry", .{});
+    //     self.alloc.free(path);
+    //     return error.OutOfMemory;
+    // };
+    //
+    // entry.* = .{
+    //     .watcher = .{},
+    //     .path = path,
+    //     .id = id,
+    //     .monitor = self,
+    //     .userdata = userdata,
+    //     .callback = (struct {
+    //         fn cb(inner_userdata: ?*anyopaque, inner_id: u64, inner_events: u32) void {
+    //             return @call(.always_inline, callback, .{ userdataValue(Userdata, inner_userdata), inner_id, inner_events });
+    //         }
+    //     }.cb),
+    // };
+    //
+    // self.thread.fs.watch(path, &entry.watcher, WatcherEntry, entry, fsEventsCallback) catch {
+    //     // log.err("failed to start watcher for '{s}': {}", .{ path, err });
+    //     self.alloc.free(path);
+    //     self.alloc.destroy(entry);
+    //     return error.OutOfMemory;
+    // };
+    //
+    // self.watchers.put(id, entry) catch {
+    //     log.err("failed to track watcher id={}", .{id});
+    //     self.thread.fs.cancel(&entry.watcher);
+    //     self.alloc.free(entry.path);
+    //     self.alloc.destroy(entry);
+    //     return error.OutOfMemory;
+    // };
+
+    return id;
+}
 //
 // fn fsEventsCallback(
 //     entry: ?*Monitor.WatcherEntry,
