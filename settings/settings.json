@@ -6,24 +6,24 @@
   "keymaps": {
     "global": {
       "normal": {
-        "i": "workspace:enter_insert",
-        "v": "workspace:enter_visual",
-        "super+b": "workspace:toggle_left_sidebar",
-        "ctrl+t": "workspace:new_tab",
-        "tab": "workspace:next_tab",
-        "shift+tab": "workspace:prev_tab",
-        "ctrl+q": "workspace:close_active_tab",
-        "super+k": "workspace:toggle_command_palette",
-        "super+p t": "workspace:tabs_panel",
-        "super+p f": "workspace:filetree_panel",
-        "super+t": "workspace:new_terminal_tab",
-        "shift+;": "workspace:toggle_cmd"
+        "i": "global:enterInsert",
+        "v": "global:enterVisual",
+        "super+b": "global:toggleLeftSidebar",
+        "ctrl+t": "global:newTab",
+        "tab": "global:nextTab",
+        "shift+tab": "global:prevTab",
+        "ctrl+q": "global:closeActiveTab",
+        "super+k": "global:toggleCommandPalette",
+        "super+p t": "global:tabsPanel",
+        "super+p f": "global:filetreePanel",
+        "super+t": "global:newTerminalTab",
+        "shift+;": "global:toggleCmd"
       },
       "insert": {
-        "escape": "workspace:enter_normal"
+        "escape": "global:enterNormal"
       },
       "visual": {
-        "escape": "workspace:enter_normal"
+        "escape": "global:enterNormal"
       }
     },
     "command_palette": {

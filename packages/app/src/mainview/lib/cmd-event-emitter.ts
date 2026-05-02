@@ -86,7 +86,7 @@ export class CmdEventEmitter {
             const cmdId = findScopeCommand(keymaps, listener.scope, mode, sequence);
             if (!cmdId) continue;
 
-            const cmd = resolveScopeCmdDefinition(listener.scope, cmdId);
+            const cmd = resolveScopeCmdDefinition(listener.scope, mode, cmdId);
             if (!cmd) continue;
 
             matched = true;

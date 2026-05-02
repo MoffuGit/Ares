@@ -4,7 +4,7 @@ import { canUseSidebarKind, surfaceName } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import { create } from "zustand";
 import { cmdEventEmitter } from "./cmd-event-emitter.ts";
-import { globalScopeCmdDefinitions, type GlobalScopeCmdDefinition } from "./cmd-definitions.ts";
+import { globalCmds, type GlobalCmdDefinition } from "./cmd-definitions.ts";
 
 export type AppState = {
     settings: Settings | null;
@@ -24,7 +24,7 @@ export type AppState = {
 
 interface AppStore extends AppState {
     setMode: (mode: Mode) => void;
-    handleGlobalCmd: (cmd: GlobalScopeCmdDefinition) => void;
+    handleGlobalCmd: (cmd: GlobalCmdDefinition) => void;
     initialLoad: () => Promise<void>;
     openProjectDialog: () => Promise<void>;
     expandEntry: (entry: WorktreeEntry) => void;
@@ -84,54 +84,51 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     handleGlobalCmd: (cmd) => {
         switch (cmd.id) {
-            case globalScopeCmdDefinitions.enterInsert.id:
+            case globalCmds.enterInsert.id:
                 get().setMode("insert");
                 return;
-            case globalScopeCmdDefinitions.enterVisual.id:
+            case globalCmds.enterVisual.id:
                 get().setMode("visual");
                 return;
-            case globalScopeCmdDefinitions.enterNormal.id:
+            case globalCmds.enterNormal.id:
                 get().setMode("normal");
                 return;
-            case globalScopeCmdDefinitions.toggleLeftSidebar.id:
+            case globalCmds.toggleLeftSidebar.id:
                 get().toggleSidebar();
                 return;
-            case globalScopeCmdDefinitions.newTab.id:
+            case globalCmds.newTab.id:
                 get().newTab({ kind: "editor" });
                 return;
-            case globalScopeCmdDefinitions.nextTab.id:
+            case globalCmds.nextTab.id:
                 get().nextTab();
                 return;
-            case globalScopeCmdDefinitions.prevTab.id:
+            case globalCmds.prevTab.id:
                 get().prevTab();
                 return;
-            case globalScopeCmdDefinitions.closeActiveTab.id: {
+            case globalCmds.closeActiveTab.id: {
                 const activeTabId = get().activeTabId;
                 if (activeTabId != null) {
                     get().closeTab(activeTabId);
                 }
                 return;
             }
-            case globalScopeCmdDefinitions.toggleCommandPalette.id:
-            case globalScopeCmdDefinitions.toggleCmd.id:
+            case globalCmds.toggleCommandPalette.id:
+            case globalCmds.toggleCmd.id:
                 get().toggleCmd();
                 return;
-            case globalScopeCmdDefinitions.tabsPanel.id:
+            case globalCmds.tabsPanel.id:
                 set((state) => {
                     if (!state.settings || !canUseSidebarKind(state.settings, "tabs")) return {};
                     return { sidebarOpen: true, sidebarKind: "tabs" };
                 });
                 return;
-            case globalScopeCmdDefinitions.filetreePanel.id:
+            case globalCmds.filetreePanel.id:
                 set({ sidebarOpen: true, sidebarKind: "filetree" });
                 return;
-            case globalScopeCmdDefinitions.newTerminalTab.id:
+            case globalCmds.newTerminalTab.id:
                 get().newTab({ kind: "terminal", cwd: get().project?.path ?? "" });
                 return;
         }
-
-        const exhaustiveCheck: never = cmd.id;
-        return exhaustiveCheck;
     },
 
     expandEntry: (entry) => {
@@ -270,8 +267,23 @@ const rpc = Electroview.defineRPC<AppRPC>({
 export { rpc };
 export { CmdEvent, CmdEventEmitter, cmdEventEmitter } from "./cmd-event-emitter.ts";
 export type { CmdEventInit, CmdEventListener, CmdScope } from "./cmd-event-emitter.ts";
-export { globalScopeCmdDefinitions, resolveScopeCmdDefinition } from "./cmd-definitions.ts";
-export type { BaseScopeCmdDefinition, GlobalScopeCmdDefinition, ScopeCmdDefinition } from "./cmd-definitions.ts";
+export {
+    cmdDefinitions,
+    globalCmds,
+    scopeCmdsByKey,
+    scopeCmdsById,
+    resolveScopeCmdDefinition,
+    isCmdAllowedInMode,
+} from "./cmd-definitions.ts";
+export type {
+    FlatCmdEntry,
+    CmdKey,
+    CmdId,
+    GlobalCmdKey,
+    GlobalCmdId,
+    GlobalCmdDefinition,
+    ScopeCmdDefinition,
+} from "./cmd-definitions.ts";
 
 function syncSurfaceState(surfaceId: number, surfaceState: SurfaceState) {
     const tabs = useAppStore.getState().tabs.map((tab) => {
