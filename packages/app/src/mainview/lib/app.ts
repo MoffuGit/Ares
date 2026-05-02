@@ -4,7 +4,7 @@ import { canUseSidebarKind, surfaceName } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import { create } from "zustand";
 import { cmdEventEmitter } from "./cmd-event-emitter.ts";
-import { globalCmds, type GlobalCmdDefinition } from "./cmd-definitions.ts";
+import { type GlobalCmdDefinition } from "./cmd-definitions.ts";
 
 export type AppState = {
     settings: Settings | null;
@@ -83,49 +83,48 @@ export const useAppStore = create<AppStore>((set, get) => ({
     },
 
     handleGlobalCmd: (cmd) => {
-        switch (cmd.id) {
-            case globalCmds.enterInsert.id:
+        switch (cmd.key) {
+            case "enterInsert":
                 get().setMode("insert");
                 return;
-            case globalCmds.enterVisual.id:
+            case "enterVisual":
                 get().setMode("visual");
                 return;
-            case globalCmds.enterNormal.id:
+            case "enterNormal":
                 get().setMode("normal");
                 return;
-            case globalCmds.toggleLeftSidebar.id:
+            case "toggleLeftSidebar":
                 get().toggleSidebar();
                 return;
-            case globalCmds.newTab.id:
+            case "newTab":
                 get().newTab({ kind: "editor" });
                 return;
-            case globalCmds.nextTab.id:
+            case "nextTab":
                 get().nextTab();
                 return;
-            case globalCmds.prevTab.id:
+            case "prevTab":
                 get().prevTab();
                 return;
-            case globalCmds.closeActiveTab.id: {
+            case "closeActiveTab": {
                 const activeTabId = get().activeTabId;
                 if (activeTabId != null) {
                     get().closeTab(activeTabId);
                 }
                 return;
             }
-            case globalCmds.toggleCommandPalette.id:
-            case globalCmds.toggleCmd.id:
+            case "toggleCommandPalette":
                 get().toggleCmd();
                 return;
-            case globalCmds.tabsPanel.id:
+            case "tabsPanel":
                 set((state) => {
                     if (!state.settings || !canUseSidebarKind(state.settings, "tabs")) return {};
                     return { sidebarOpen: true, sidebarKind: "tabs" };
                 });
                 return;
-            case globalCmds.filetreePanel.id:
+            case "filetreePanel":
                 set({ sidebarOpen: true, sidebarKind: "filetree" });
                 return;
-            case globalCmds.newTerminalTab.id:
+            case "newTerminalTab":
                 get().newTab({ kind: "terminal", cwd: get().project?.path ?? "" });
                 return;
         }
@@ -271,16 +270,13 @@ export {
     cmdDefinitions,
     globalCmds,
     scopeCmdsByKey,
-    scopeCmdsById,
-    resolveScopeCmdDefinition,
+    resolveScopeCmd,
     isCmdAllowedInMode,
 } from "./cmd-definitions.ts";
 export type {
     FlatCmdEntry,
     CmdKey,
-    CmdId,
     GlobalCmdKey,
-    GlobalCmdId,
     GlobalCmdDefinition,
     ScopeCmdDefinition,
 } from "./cmd-definitions.ts";

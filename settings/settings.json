@@ -6,35 +6,34 @@
   "keymaps": {
     "global": {
       "normal": {
-        "i": "global:enterInsert",
-        "v": "global:enterVisual",
-        "super+b": "global:toggleLeftSidebar",
-        "ctrl+t": "global:newTab",
-        "tab": "global:nextTab",
-        "shift+tab": "global:prevTab",
-        "ctrl+q": "global:closeActiveTab",
-        "super+k": "global:toggleCommandPalette",
-        "super+p t": "global:tabsPanel",
-        "super+p f": "global:filetreePanel",
-        "super+t": "global:newTerminalTab",
-        "shift+;": "global:toggleCmd"
+        "i": "enterInsert",
+        "v": "enterVisual",
+        "super+b": "toggleLeftSidebar",
+        "ctrl+t": "newTab",
+        "tab": "nextTab",
+        "shift+tab": "prevTab",
+        "ctrl+q": "closeActiveTab",
+        "super+k": "toggleCommandPalette",
+        "super+p t": "tabsPanel",
+        "super+p f": "filetreePanel",
+        "super+t": "newTerminalTab"
       },
       "insert": {
-        "escape": "global:enterNormal"
+        "escape": "enterNormal"
       },
       "visual": {
-        "escape": "global:enterNormal"
+        "escape": "enterNormal"
       }
     },
     "command_palette": {
       "normal": {
-        "k": "command:up",
-        "j": "command:down",
-        "enter": "command:select",
-        "ctrl+u": "command:scroll_up",
-        "ctrl+d": "command:scroll_down",
-        "g g": "command:top",
-        "shift+g": "command:bottom"
+        "k": "up",
+        "j": "down",
+        "enter": "select",
+        "ctrl+u": "scroll_up",
+        "ctrl+d": "scroll_down",
+        "g g": "top",
+        "shift+g": "bottom"
       }
     }
   }

@@ -2,7 +2,7 @@ import type { Mode, ParsedKeymaps } from "@ares/shared";
 import {
     type CmdScope,
     type ScopeCmdDefinition,
-    resolveScopeCmdDefinition,
+    resolveScopeCmd,
 } from "./cmd-definitions.ts";
 
 export type { CmdScope } from "./cmd-definitions.ts";
@@ -83,10 +83,10 @@ export class CmdEventEmitter {
         // Newer listeners get the first chance to handle a sequence and stop it.
         for (let i = listeners.length - 1; i >= 0; i -= 1) {
             const listener = listeners[i];
-            const cmdId = findScopeCommand(keymaps, listener.scope, mode, sequence);
-            if (!cmdId) continue;
+            const cmdKey = findScopeCommand(keymaps, listener.scope, mode, sequence);
+            if (!cmdKey) continue;
 
-            const cmd = resolveScopeCmdDefinition(listener.scope, mode, cmdId);
+            const cmd = resolveScopeCmd(listener.scope, mode, cmdKey);
             if (!cmd) continue;
 
             matched = true;
