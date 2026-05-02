@@ -106,6 +106,7 @@ pub fn setMode(self: *App, mode: keymapspkg.Mode) void {
     defer self.keymap_mutex.unlock();
 
     if (self.key_dispatcher.mode == mode) return;
+    self.key_dispatcher.setMode(mode);
 }
 
 pub fn onKeyDown(self: *App, key_code: u32, modifiers: u32, _: bool) bool {
