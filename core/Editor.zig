@@ -42,6 +42,7 @@ saved_positions: std.AutoHashMapUnmanaged(u64, SavedPosition) = .{},
 rebuild_cells: bool = false,
 color: [4]u8,
 gutter_color: [4]u8,
+bg_color: [4]u8,
 
 size: sizepkg.Size,
 
@@ -60,6 +61,7 @@ pub fn init(
         .settings = settings,
         .color = settings.getColor(.fg),
         .gutter_color = settings.getColor(.gutter),
+        .bg_color = settings.getColor(.mutedBg),
     };
 }
 
@@ -321,6 +323,7 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
         self.cursor,
         self.color,
         self.gutter_color,
+        self.bg_color,
     );
 
     self.rebuild_cells = false;
@@ -336,12 +339,15 @@ fn rebuildCells(
     cursor: CursorPosition,
     default_color: [4]u8,
     gutter_color: [4]u8,
+    bg_color: [4]u8,
 ) !void {
     renderer.mutex.lock();
     defer renderer.mutex.unlock();
 
     const grid_size = renderer.size.grid();
     try renderer.ensureCellStoreSize(grid_size);
+
+    renderer.uniforms.bg_color = bg_color;
 
     renderer.cells.reset();
 
@@ -506,6 +512,7 @@ pub fn themeUpdate(self: *Editor) void {
 
     self.color = self.settings.getColor(.fg);
     self.gutter_color = self.settings.getColor(.gutter);
+    self.bg_color = self.settings.getColor(.mutedBg);
 
     self.rebuild_cells = true;
 }

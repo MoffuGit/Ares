@@ -9,7 +9,49 @@ struct Uniforms {
   ushort2 grid_size;
   ushort2 cursor_pos;
   uchar4 cursor_color;
+  uchar4 bg_color;
 };
+
+struct FullScreenVertexOut {
+  float4 position [[position]];
+};
+
+vertex FullScreenVertexOut full_screen_vertex(
+  uint vid [[vertex_id]]
+) {
+  FullScreenVertexOut out;
+
+  float4 position;
+  position.x = (vid == 2) ? 3.0 : -1.0;
+  position.y = (vid == 0) ? -3.0 : 1.0;
+  position.zw = 1.0;
+
+  // Single triangle is clipped to viewport.
+  //
+  // X <- vid == 0: (-1, -3)
+  // |\
+  // | \
+  // |  \
+  // |###\
+  // |#+# \ `+` is (0, 0). `#`s are viewport area.
+  // |###  \
+  // X------X <- vid == 2: (3, 1)
+  // ^
+  // vid == 1: (-1, 1)
+
+  out.position = position;
+
+  return out;
+}
+
+fragment float4 bg_color_fragment(
+  FullScreenVertexOut in [[stage_in]],
+  constant Uniforms& uniforms [[buffer(1)]]
+) {
+  float4 color = float4(uniforms.bg_color) / 255.0f;
+
+  return color;
+}
 
 struct VertexInput {
     float4 position [[attribute(0)]];

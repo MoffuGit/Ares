@@ -32,6 +32,7 @@ pub inline fn bufferOptions(self: Metal) bufferpkg.Options {
 }
 
 pub const uniformBufferOptions = bufferOptions;
+pub const bgBufferOptions = bufferOptions;
 
 layer: IOSurfaceLayer,
 /// MTLDevice

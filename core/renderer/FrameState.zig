@@ -10,11 +10,13 @@ const Texture = GraphicsAPI.Texture;
 const UniformBuffer = Buffer(shaderpkg.Uniforms);
 const VertexBuffer = Buffer(shaderpkg.VertexInput);
 const CellBuffer = Buffer(shaderpkg.CellText);
+const CellBgBuffer = Buffer(shaderpkg.CellBg);
 
 target: Target,
 uniforms: UniformBuffer,
 vertex: VertexBuffer,
 cells: CellBuffer,
+cells_bg: CellBgBuffer,
 grayscale: Texture,
 
 pub fn init(api: *GraphicsAPI) !FrameState {
@@ -32,6 +34,9 @@ pub fn init(api: *GraphicsAPI) !FrameState {
     var cells = try CellBuffer.init(api.uniformBufferOptions(), 1);
     errdefer cells.deinit();
 
+    var cells_bg = try CellBgBuffer.init(api.bgBufferOptions(), 1);
+    errdefer cells_bg.deinit();
+
     const grayscale = try api.initAtlasTexture(&.{
         .data = undefined,
         .size = 1,
@@ -48,13 +53,21 @@ pub fn init(api: *GraphicsAPI) !FrameState {
 
     try vertex.sync(&quad_vertices);
 
-    return .{ .target = target, .uniforms = uniforms, .vertex = vertex, .cells = cells, .grayscale = grayscale };
+    return .{
+        .target = target,
+        .uniforms = uniforms,
+        .vertex = vertex,
+        .cells = cells,
+        .cells_bg = cells_bg,
+        .grayscale = grayscale,
+    };
 }
 
 pub fn deinit(self: *FrameState) void {
     self.target.deinit();
     self.vertex.deinit();
     self.cells.deinit();
+    self.cells_bg.deinit();
     self.uniforms.deinit();
 }
 

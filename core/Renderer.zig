@@ -118,6 +118,7 @@ pub fn init(alloc: Allocator, settings: *Settings, opts: Options) !Renderer {
             .projection_matrix = undefined,
             .cursor_pos = .{ 0, 0 },
             .cursor_color = .{ 0, 0, 0, 0 },
+            .bg_color = settings.getColor(.mutedBg),
         },
     };
 
@@ -238,7 +239,7 @@ pub fn drawFrame(
     defer frame_ctx.complete(sync);
 
     {
-        var render_pass = frame_ctx.renderPass(&.{
+        var pass = frame_ctx.renderPass(&.{
             .{
                 .target = .{
                     .target = frame.target,
@@ -246,7 +247,14 @@ pub fn drawFrame(
                 .clear_color = .{ 0.0, 0.0, 0.0, 0.0 },
             },
         });
-        render_pass.step(.{
+        pass.step(.{
+            .pipeline = self.shaders.pipelines.bg_color,
+            .uniforms = frame.uniforms.buffer,
+            .buffers = &.{ null, frame.cells_bg.buffer },
+            .draw = .{ .type = .triangle, .vertex_count = 3 },
+        });
+
+        pass.step(.{
             .pipeline = self.shaders.pipelines.cell,
             .uniforms = frame.uniforms.buffer,
             .buffers = &.{
@@ -263,7 +271,7 @@ pub fn drawFrame(
         });
         //
 
-        defer render_pass.complete();
+        defer pass.complete();
     }
 }
 

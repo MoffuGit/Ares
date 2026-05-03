@@ -17,8 +17,18 @@ pub const VertexInput = extern struct {
 
 const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
     &.{
-        .{ "grid", .{ .vertex_fn = "vertexShader", .fragment_fn = "fragmentShader", .blending_enabled = false, .vertex_attributes = VertexInput } },
-        .{ "cell", .{ .vertex_fn = "cell_text_vertex", .fragment_fn = "cell_text_fragment", .step_fn = .per_instance, .blending_enabled = true, .vertex_attributes = CellText } },
+        .{ "bg_color", .{
+            .vertex_fn = "full_screen_vertex",
+            .fragment_fn = "bg_color_fragment",
+            .blending_enabled = false,
+        } },
+        .{ "cell", .{
+            .vertex_fn = "cell_text_vertex",
+            .fragment_fn = "cell_text_fragment",
+            .step_fn = .per_instance,
+            .blending_enabled = true,
+            .vertex_attributes = CellText,
+        } },
     };
 
 /// All the comptime-known info about a pipeline, so that
@@ -168,7 +178,7 @@ pub const Uniforms = extern struct {
     cursor_color: [4]u8 align(4),
 
     //  /// The background color for the whole surface.
-    // bg_color: [4]u8 align(4),
+    bg_color: [4]u8 align(4),
 
     //  /// Various booleans.
     //  ///
