@@ -46,7 +46,7 @@ function CommandDialog({
     children: React.ReactNode
 }) {
     return (
-        <Dialog  {...props}>
+        <Dialog {...props}>
             <DialogHeader className="sr-only">
                 <DialogTitle>{title}</DialogTitle>
                 <DialogDescription>{description}</DialogDescription>
