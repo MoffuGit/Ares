@@ -82,7 +82,7 @@ cells: Contents = .{},
 
 grid: *fontpkg.Grid,
 
-cells_rebuilt: bool = false,
+cells_rebuilt: bool = true,
 
 settings: *Settings,
 
