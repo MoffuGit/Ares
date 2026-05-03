@@ -4,7 +4,12 @@ import { canUseSidebarKind, surfaceName } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import { create } from "zustand";
 import { cmdEventEmitter } from "./cmd-event-emitter.ts";
-import { type GlobalCmdDefinition } from "./cmd-definitions.ts";
+import {
+    type GlobalCmdDefinition,
+    type ScopeCmdDefinition,
+    globalCmds,
+    isCmdAllowedInMode,
+} from "./cmd-definitions.ts";
 
 export type AppState = {
     settings: Settings | null;
@@ -17,14 +22,21 @@ export type AppState = {
     sidebarKind: SidebarKind;
 
     cmdOpen: boolean;
+    cmdRegistrations: CmdRegistration[];
 
     tabs: Tab[];
     activeTabId: number | null;
 };
 
+export type CmdRegistration = {
+    cmd: ScopeCmdDefinition;
+    handler: () => void;
+};
+
 interface AppStore extends AppState {
     setMode: (mode: Mode) => void;
     handleGlobalCmd: (cmd: GlobalCmdDefinition) => void;
+    registerCmd: (cmd: ScopeCmdDefinition, handler: () => void) => () => void;
     initialLoad: () => Promise<void>;
     openProjectDialog: () => Promise<void>;
     expandEntry: (entry: WorktreeEntry) => void;
@@ -54,10 +66,25 @@ export const useAppStore = create<AppStore>((set, get) => ({
     activeTabId: null,
     sidebarOpen: false,
     cmdOpen: false,
+    cmdRegistrations: [],
     sidebarKind: "filetree",
 
     toggleCmd: () => set((s) => ({ cmdOpen: !s.cmdOpen })),
     setCmdOpen: (open) => set({ cmdOpen: open }),
+
+    registerCmd: (cmd, handler) => {
+        const registration: CmdRegistration = { cmd, handler };
+        set((s) => ({ cmdRegistrations: [...s.cmdRegistrations, registration] }));
+        return () => {
+            set((s) => {
+                const idx = s.cmdRegistrations.indexOf(registration);
+                if (idx === -1) return {};
+                const next = s.cmdRegistrations.slice();
+                next.splice(idx, 1);
+                return { cmdRegistrations: next };
+            });
+        };
+    },
 
     setSidebarOpen: (open) => set({ sidebarOpen: open }),
     toggleSidebarKind: (kind) => set((state) => {
@@ -225,6 +252,36 @@ cmdEventEmitter.on("global", (event) => {
     useAppStore.getState().handleGlobalCmd(event.cmd);
     event.stopPropagation();
 });
+
+// Globals are always available: register each one so it appears in the palette.
+for (const cmd of Object.values(globalCmds) as GlobalCmdDefinition[]) {
+    useAppStore.getState().registerCmd(cmd, () => {
+        useAppStore.getState().handleGlobalCmd(cmd);
+    });
+}
+
+export function selectAvailableCmds(state: AppState): CmdRegistration[] {
+    // Newest registration for a given cmd reference wins.
+    const byCmd = new Map<ScopeCmdDefinition, CmdRegistration>();
+    for (const reg of state.cmdRegistrations) {
+        byCmd.set(reg.cmd, reg);
+    }
+    const result: CmdRegistration[] = [];
+    for (const reg of byCmd.values()) {
+        if (!reg.cmd.search) continue;
+        if (!isCmdAllowedInMode(reg.cmd, state.mode)) continue;
+        result.push(reg);
+    }
+    return result;
+}
+
+export function findCmdSequence(
+    keymaps: Settings["keymaps"] | undefined,
+    cmd: ScopeCmdDefinition,
+    mode: Mode,
+): string | undefined {
+    return keymaps?.[cmd.scope]?.[mode]?.find((k) => k.cmd === cmd.key)?.sequence;
+}
 
 const rpc = Electroview.defineRPC<AppRPC>({
     maxRequestTime: 600000,
