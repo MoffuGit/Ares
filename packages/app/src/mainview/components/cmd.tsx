@@ -12,7 +12,7 @@ export function Cmd() {
     return (
         <CommandDialog open={cmdOpen} onOpenChange={setCmdOpen}>
             <Command>
-                <CommandInput placeholder="Type a command or search..." />
+                <CommandInput placeholder="Type a command" />
                 <CommandList>
                     <CommandGroup>
                         {cmds.map(({ cmd, handler }) => {

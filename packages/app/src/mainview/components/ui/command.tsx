@@ -68,7 +68,7 @@ function CommandInput({
     ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
     return (
-        <div data-slot="command-input-wrapper" className="px-4 pt-2.5 pb-1.5  bg-transparent h-auto leading-0">
+        <div data-slot="command-input-wrapper" className="px-4 pt-2.5 pb-1  bg-transparent h-auto leading-0">
             <InputGroup className="h-8! *:data-[slot=input-group-addon]:pl-2! bg-transparent border-none">
                 <CommandPrimitive.Input
                     data-slot="command-input"
@@ -150,7 +150,7 @@ function CommandItem({
         <CommandPrimitive.Item
             data-slot="command-item"
             className={cn(
-                "group/command-item relative flex cursor-default items-center gap-2 rounded-sm p-3 text-[13px] font-normal outline-hidden select-none in-data-[slot=dialog-content]:rounded-lg! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-background data-selected:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-selected:*:[svg]:text-foreground",
+                "group/command-item relative flex cursor-default items-center gap-2 rounded-sm p-3 text-[13px] font-normal outline-hidden select-none in-data-[slot=dialog-content]:rounded-lg! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 dark:data-selected:bg-accent/60 data-selected:bg-accent/20 data-selected:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-selected:*:[svg]:text-foreground",
                 className
             )}
             {...props}
