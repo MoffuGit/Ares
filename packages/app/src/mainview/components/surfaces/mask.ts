@@ -20,8 +20,6 @@ const MASK_PROPS = [
     "-webkit-mask-composite",
 ] as const;
 
-let rafId = 0;
-
 function snap(v: number): number {
     const dpr = window.devicePixelRatio || 1;
     return Math.round(v * dpr) / dpr;
@@ -38,14 +36,6 @@ function snapRect(rect: RootMaskHoleRect): RootMaskHoleRect {
 
 function rectsEqual(a: RootMaskHoleRect, b: RootMaskHoleRect): boolean {
     return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
-}
-
-function scheduleApply(): void {
-    if (rafId) return;
-    rafId = window.requestAnimationFrame(() => {
-        rafId = 0;
-        applyMask();
-    });
 }
 
 function applyMask(): void {
@@ -88,11 +78,11 @@ export function upsertRootMaskHole(key: string | number, rect: RootMaskHoleRect)
     const prev = holes.get(key);
     if (prev && rectsEqual(prev, snapped)) return;
     holes.set(key, snapped);
-    scheduleApply();
+    applyMask();
 }
 
 export function removeRootMaskHole(key: string | number): void {
     if (!holes.has(key)) return;
     holes.delete(key);
-    scheduleApply();
+    applyMask();
 }
