@@ -141,7 +141,7 @@
     will-change: transform, opacity;
     transition-property: transform, opacity;
     transition-duration: var(--sidebar-switch-duration, 200ms);
-    transition-timing-function: var(--ease-out-quad);
+    transition-timing-function: var(--ease-out-quint);
   }
 
   .sidebar-switch-pane[data-phase="exit"] {
