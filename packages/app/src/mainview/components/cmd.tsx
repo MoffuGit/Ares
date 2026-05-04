@@ -1,6 +1,7 @@
 import { useShallow } from "zustand/react/shallow";
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from "./ui/command";
 import { findCmdSequence, selectAvailableCmds, useAppStore } from "@/lib/app";
+import { Separator } from "./ui/separator";
 
 export function Cmd() {
     const cmdOpen = useAppStore((s) => s.cmdOpen);
@@ -13,9 +14,10 @@ export function Cmd() {
         <CommandDialog open={cmdOpen} onOpenChange={setCmdOpen}>
             <Command>
                 <CommandInput placeholder="Type a command or search..." />
+                <Separator orientation="horizontal" className="mb-1" />
                 <CommandList>
                     <CommandEmpty>No results found.</CommandEmpty>
-                    <CommandGroup>
+                    <CommandGroup heading="Commands">
                         {cmds.map(({ cmd, handler }) => {
                             const sequence = findCmdSequence(keymaps, cmd, mode);
                             return (
