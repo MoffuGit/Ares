@@ -54,16 +54,24 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
             return;
         }
 
-        const el = containerRef.current;
-        if (!el) return;
+        const gpu = gpuRef.current;
+        if (!gpu) return;
+
+        const el = gpu.element;
+        if (!el) return
 
 
         const sync = new OverlaySyncController(el,
             {
                 onSync: (rect) => {
+                    const root = document.getElementById("root");
+                    if (!root) return;
+
+                    const rootRect = root.getBoundingClientRect();
+
                     upsertRootMaskHole(id, {
-                        x: rect.x,
-                        y: rect.y,
+                        x: rect.x - rootRect.left,
+                        y: rect.y - rootRect.top,
                         width: rect.width,
                         height: rect.height,
                     });
@@ -73,6 +81,8 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
                 burstDurationMs: 50,
             }
         )
+
+        sync.start();
 
         return () => {
             sync.stop();
