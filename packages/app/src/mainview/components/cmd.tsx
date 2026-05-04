@@ -14,7 +14,7 @@ export function Cmd() {
             <Command>
                 <CommandInput placeholder="Type a command or search..." />
                 <CommandList>
-                    <CommandGroup heading="Commands">
+                    <CommandGroup>
                         {cmds.map(({ cmd, handler }) => {
                             const sequence = findCmdSequence(keymaps, cmd, mode);
                             return (
