@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { rpc } from "@/lib/app";
 import type { EditorSurface as EditorSurfaceData } from "@ares/shared";
 import { GpuTag } from "../gpu-tag";
 import { useGpuSurface } from "./use-gpu-surface";
+import { removeRootMaskHole, upsertRootMaskHole } from "./mask";
 
 interface EditorSurfaceProps {
     id: number;
@@ -44,11 +45,55 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
         target.scrollTop = editorState.scrollRow * cellHeight;
     }, [editorState, cellHeight]);
 
-    useEffect(() => {
-        if (!gpuRef.current) return;
+    useLayoutEffect(() => {
+        if (!active) {
+            removeRootMaskHole(id);
+            return;
+        }
 
-        gpuRef.current?.addMaskSelector("[data-slot=dialog-content]");
-    }, [gpuRef]);
+        const el = containerRef.current;
+        if (!el) return;
+
+        let rafId = 0;
+
+        const measure = () => {
+            const root = document.getElementById("root");
+            if (!root) return;
+
+            const rect = el.getBoundingClientRect();
+            const rootRect = root.getBoundingClientRect();
+
+            upsertRootMaskHole(id, {
+                x: rect.left - rootRect.left,
+                y: rect.top - rootRect.top,
+                width: rect.width,
+                height: rect.height,
+            });
+        };
+
+        const scheduleMeasure = () => {
+            if (rafId) return;
+            rafId = window.requestAnimationFrame(() => {
+                rafId = 0;
+                measure();
+            });
+        };
+
+        measure();
+
+        const ro = new ResizeObserver(scheduleMeasure);
+        ro.observe(el);
+        window.addEventListener("resize", scheduleMeasure);
+        window.addEventListener("scroll", scheduleMeasure, true);
+
+        return () => {
+            ro.disconnect();
+            window.removeEventListener("resize", scheduleMeasure);
+            window.removeEventListener("scroll", scheduleMeasure, true);
+            if (rafId) window.cancelAnimationFrame(rafId);
+            removeRootMaskHole(id);
+        };
+    }, [id, active]);
 
     return (
         <div className="w-full flex flex-col grow data-[surface-active=true]:z-10 -z-10 data-[surface-active=true]:visible invisible" data-surface-active={active}>

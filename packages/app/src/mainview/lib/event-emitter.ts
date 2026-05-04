@@ -3,9 +3,9 @@ import {
     type CmdScope,
     type ScopeCmdDefinition,
     resolveScopeCmd,
-} from "./cmd-definitions.ts";
+} from "./cmds.ts";
 
-export type { CmdScope } from "./cmd-definitions.ts";
+export type { CmdScope } from "./cmds.ts";
 
 export type CmdEventInit<Scope extends CmdScope = CmdScope> = {
     cmd: ScopeCmdDefinition<Scope>;

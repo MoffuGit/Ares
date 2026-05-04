@@ -3,13 +3,13 @@ import type { EditorState, Mode, SurfaceState, WorktreeEntry, Tab, Surface, Side
 import { canUseSidebarKind, surfaceName } from "@ares/shared";
 import type { AppRPC } from "../../rpc.ts";
 import { create } from "zustand";
-import { cmdEventEmitter } from "./cmd-event-emitter.ts";
+import { cmdEventEmitter } from "./event-emitter.ts"
 import {
     type GlobalCmdDefinition,
     type ScopeCmdDefinition,
     globalCmds,
     isCmdAllowedInMode,
-} from "./cmd-definitions.ts";
+} from "./cmds.ts"
 
 export type AppState = {
     settings: Settings | null;
@@ -283,7 +283,7 @@ export function findCmdSequence(
     return keymaps?.[cmd.scope]?.[mode]?.find((k) => k.cmd === cmd.key)?.sequence;
 }
 
-const rpc = Electroview.defineRPC<AppRPC>({
+export const rpc = Electroview.defineRPC<AppRPC>({
     maxRequestTime: 600000,
     handlers: {
         requests: {},
@@ -319,24 +319,6 @@ const rpc = Electroview.defineRPC<AppRPC>({
         },
     },
 });
-
-export { rpc };
-export { CmdEvent, CmdEventEmitter, cmdEventEmitter } from "./cmd-event-emitter.ts";
-export type { CmdEventInit, CmdEventListener, CmdScope } from "./cmd-event-emitter.ts";
-export {
-    cmdDefinitions,
-    globalCmds,
-    scopeCmdsByKey,
-    resolveScopeCmd,
-    isCmdAllowedInMode,
-} from "./cmd-definitions.ts";
-export type {
-    FlatCmdEntry,
-    CmdKey,
-    GlobalCmdKey,
-    GlobalCmdDefinition,
-    ScopeCmdDefinition,
-} from "./cmd-definitions.ts";
 
 function syncSurfaceState(surfaceId: number, surfaceState: SurfaceState) {
     const tabs = useAppStore.getState().tabs.map((tab) => {
