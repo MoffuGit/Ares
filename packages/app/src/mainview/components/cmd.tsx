@@ -27,6 +27,9 @@ export function Cmd() {
                                     }}
                                 >
                                     {cmd.title}
+                                    <span className="text-xs leading-0 text-muted-foreground">
+                                        {cmd.scope}
+                                    </span>
                                     {sequence && <CommandShortcut>{sequence}</CommandShortcut>}
                                 </CommandItem>
                             );

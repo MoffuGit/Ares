@@ -99,17 +99,6 @@ function mapWorktreeEntry(raw: ReturnType<typeof RawWorktreeEntry.unpack>): Work
     };
 }
 
-function mapMode(value: number | bigint): Mode {
-    switch (toNumber(value)) {
-        case 1:
-            return "insert";
-        case 2:
-            return "visual";
-        default:
-            return "normal";
-    }
-}
-
 function mapKeymapMatch(raw: ReturnType<typeof RawKeymapMatch.unpack>): KeymapMatch {
     return {
         sequence: raw.sequence ?? "",

@@ -13,13 +13,13 @@ export const cmdDefinitions = {
         enterNormal: { search: false, title: "Enter normal mode", mode: ["insert", "visual"] },
         toggleLeftSidebar: { search: true, title: "Toggle left sidebar", mode: ["normal", "insert", "visual"] },
         newTab: { search: true, title: "New tab", mode: ["normal", "insert", "visual"] },
-        nextTab: { search: false, title: "Next tab", mode: ["normal", "insert", "visual"] },
-        prevTab: { search: false, title: "Previous tab", mode: ["normal", "insert", "visual"] },
-        closeActiveTab: { search: true, title: "Close active tab", mode: ["normal", "insert", "visual"] },
+        nextTab: { search: false, title: "Next tab", mode: ["normal", "insert", "visual"], },
+        prevTab: { search: false, title: "Previous tab", mode: ["normal", "insert", "visual"], },
+        closeActiveTab: { search: true, title: "Close active tab", mode: ["normal", "insert", "visual"], },
         toggleCommandPalette: { search: false, title: "Toggle command palette", mode: ["normal", "insert", "visual"] },
-        tabsPanel: { search: true, title: "Show tabs panel", mode: ["normal", "insert", "visual"] },
-        filetreePanel: { search: true, title: "Show filetree panel", mode: ["normal", "insert", "visual"] },
-        newTerminalTab: { search: true, title: "New terminal tab", mode: ["normal", "insert", "visual"] },
+        tabsPanel: { search: true, title: "Show tabs panel", mode: ["normal", "insert", "visual"], },
+        filetreePanel: { search: true, title: "Show filetree panel", mode: ["normal", "insert", "visual"], },
+        newTerminalTab: { search: true, title: "New terminal tab", mode: ["normal", "insert", "visual"], },
     },
 } as const satisfies Record<string, Record<string, FlatCmdEntry>>;
 
@@ -40,6 +40,7 @@ type ResolvedCmd<S extends CmdScope, K extends CmdKey<S>> = {
     readonly search: Entries<S>[K] extends { search: infer X } ? X : never;
     readonly title: Entries<S>[K] extends { title: infer X } ? X : never;
     readonly mode: Entries<S>[K] extends { mode: infer M } ? NormalizeMode<M> : never;
+    readonly icon: Entries<S>[K] extends { icon: infer I } ? I : undefined;
 };
 
 export type ScopeCmdDefinition<S extends CmdScope = CmdScope> = {
