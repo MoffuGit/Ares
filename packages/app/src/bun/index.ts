@@ -162,7 +162,7 @@ app.core.on("KeymapMatch", (match: KeymapMatch) => {
 mainWindow.webview.on("dom-ready", () => {
     setInterval(() => {
         app.core.drainMailbox()
-    }, 100);
+    }, 50);
 });
 
 mainWindow.on("close", () => {

@@ -292,11 +292,9 @@ export class CoreLib extends EventEmitter {
                         ? mapSurfaceUpdate(rawData)
                         : _type === EventType.EditorUpdate
                             ? mapEditorUpdate(rawData)
-                            : _type === EventType.ModeUpdate
-                                ? { mode: mapMode(rawData.mode) }
-                                : _type === EventType.KeymapMatch
-                                    ? mapKeymapMatch(rawData)
-                                    : rawData;
+                            : _type === EventType.KeymapMatch
+                                ? mapKeymapMatch(rawData)
+                                : rawData;
                     const event = EventsName[_type];
                     queueMicrotask(() => {
                         this.emit(event, data);
