@@ -4,6 +4,7 @@ import type { EditorSurface as EditorSurfaceData } from "@ares/shared";
 import { GpuTag } from "../gpu-tag";
 import { useGpuSurface } from "./use-gpu-surface";
 import { removeRootMaskHole, upsertRootMaskHole } from "./mask";
+import { OverlaySyncController } from "./overlaySync";
 
 interface EditorSurfaceProps {
     id: number;
@@ -30,6 +31,7 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
         },
     });
 
+
     const editorState = surface.editorState;
     const cellHeight = surface.surfaceState?.cellHeight;
 
@@ -45,6 +47,7 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
         target.scrollTop = editorState.scrollRow * cellHeight;
     }, [editorState, cellHeight]);
 
+
     useLayoutEffect(() => {
         if (!active) {
             removeRootMaskHole(id);
@@ -54,43 +57,25 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
         const el = containerRef.current;
         if (!el) return;
 
-        let rafId = 0;
 
-        const measure = () => {
-            const root = document.getElementById("root");
-            if (!root) return;
-
-            const rect = el.getBoundingClientRect();
-            const rootRect = root.getBoundingClientRect();
-
-            upsertRootMaskHole(id, {
-                x: rect.left - rootRect.left,
-                y: rect.top - rootRect.top,
-                width: rect.width,
-                height: rect.height,
-            });
-        };
-
-        const scheduleMeasure = () => {
-            if (rafId) return;
-            rafId = window.requestAnimationFrame(() => {
-                rafId = 0;
-                measure();
-            });
-        };
-
-        measure();
-
-        const ro = new ResizeObserver(scheduleMeasure);
-        ro.observe(el);
-        window.addEventListener("resize", scheduleMeasure);
-        window.addEventListener("scroll", scheduleMeasure, true);
+        const sync = new OverlaySyncController(el,
+            {
+                onSync: (rect) => {
+                    upsertRootMaskHole(id, {
+                        x: rect.x,
+                        y: rect.y,
+                        width: rect.width,
+                        height: rect.height,
+                    });
+                },
+                burstIntervalMs: 10,
+                baseIntervalMs: 10,
+                burstDurationMs: 50,
+            }
+        )
 
         return () => {
-            ro.disconnect();
-            window.removeEventListener("resize", scheduleMeasure);
-            window.removeEventListener("scroll", scheduleMeasure, true);
-            if (rafId) window.cancelAnimationFrame(rafId);
+            sync.stop();
             removeRootMaskHole(id);
         };
     }, [id, active]);
