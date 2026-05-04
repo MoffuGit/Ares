@@ -92,7 +92,7 @@
   }
 
   #root {
-    @apply bg-background px-2 pt-0 pb-2 w-full h-screen content-stretch flex flex-col gap-1.5;
+    @apply bg-background px-1.5 pt-0 pb-1.5 w-full h-screen content-stretch flex flex-col gap-1.5;
   }
 
   [data-slot="sidebar-content"]::-webkit-scrollbar {
