@@ -36,6 +36,7 @@
 		"@vitejs/plugin-react": "^6.0.1",
 		"concurrently": "^9.2.1",
 		"tailwindcss": "^4.2.2",
+        "lightningcss": "^1.32.0",
 		"typescript": "^5.9.3",
 		"vite": "^8.0.1"
 	}

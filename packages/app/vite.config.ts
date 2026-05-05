@@ -11,6 +11,15 @@ export default defineConfig({
     build: {
         outDir: "../../dist",
         emptyOutDir: true,
+        cssMinify: "lightningcss",
+    },
+    css: {
+        transformer: "lightningcss",
+        lightningcss: {
+            targets: {
+                safari: (16 << 16) | (4 << 8),
+            },
+        },
     },
     resolve: {
         alias: {
