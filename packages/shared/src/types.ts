@@ -102,6 +102,8 @@ export type WorktreeEntry = {
 
 export type Mode = "normal" | "insert" | "visual";
 
+export const MODES = ["normal", "insert", "visual"] as const satisfies readonly Mode[];
+
 export type ParsedKeymap = {
     mode: Mode;
     scope: string;

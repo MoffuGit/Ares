@@ -1,10 +1,9 @@
 import type { Pointer } from "bun:ffi";
 import { readFileSync } from "fs";
 import { join } from "path";
-import type { Mode, ParsedKeymap, ParsedKeymaps, Settings } from "@ares/shared";
+import { MODES, type Mode, type ParsedKeymap, type ParsedKeymaps, type Settings } from "@ares/shared";
 import { CoreLib, resolveCoreLib } from "@ares/core";
 
-const MODES = ["normal", "insert", "visual"] as const satisfies readonly Mode[];
 
 export class App {
     core: CoreLib;

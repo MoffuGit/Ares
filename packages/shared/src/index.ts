@@ -1,6 +1,8 @@
-import type { Settings, SidebarKind, Surface } from "./types.ts";
+import type { Mode, Settings, SidebarKind, Surface } from "./types.ts";
 
 export type * from "./types.ts";
+
+export const MODES = ["normal", "insert", "visual"] as const satisfies readonly Mode[];
 
 export function surfaceName(surface: Surface): string {
     switch (surface.kind) {
