@@ -9,7 +9,8 @@ export function resolveTheme(json: string): Theme {
     const resolved: Record<string, string> = {};
     for (const key of THEME_KEYS) {
         const ref = theme[key];
-        resolved[key] = ref ? resolveColor(ref, colors) : "#000000ff";
+        const color = ref ? resolveColor(ref, colors) : "#000000ff";
+        resolved[key] = color;
     }
 
     const fileType: Record<string, string> = {};

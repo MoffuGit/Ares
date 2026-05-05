@@ -24,6 +24,15 @@ export type CmdEventEmitResult = {
 type ListenerEntry = {
     scope: CmdScope;
     listener: CmdEventListener<any>;
+    exclusive: boolean;
+};
+
+export type CmdEventListenerOptions = {
+    /**
+     * When true, this listener consumes the sequence: no further (older)
+     * listeners are notified, even when this scope has no matching cmd.
+     */
+    exclusive?: boolean;
 };
 
 type PropagationState = {
@@ -57,10 +66,21 @@ export class CmdEvent<Scope extends CmdScope = CmdScope> {
 export class CmdEventEmitter {
     private readonly listeners: ListenerEntry[] = [];
 
-    on(scope: "global", listener: CmdEventListener<"global">): () => void;
-    on<Scope extends CmdScope>(scope: Scope, listener: CmdEventListener<Scope>): () => void;
-    on<Scope extends CmdScope>(scope: Scope, listener: CmdEventListener<Scope>) {
-        const entry: ListenerEntry = { scope, listener };
+    on<Scope extends CmdScope>(
+        scope: Scope,
+        listener: CmdEventListener<Scope>,
+        options?: CmdEventListenerOptions,
+    ): () => void;
+    on<Scope extends CmdScope>(
+        scope: Scope,
+        listener: CmdEventListener<Scope>,
+        options: CmdEventListenerOptions = {},
+    ) {
+        const entry: ListenerEntry = {
+            scope,
+            listener,
+            exclusive: options.exclusive ?? false,
+        };
         this.listeners.push(entry);
 
         return () => {
@@ -82,17 +102,23 @@ export class CmdEventEmitter {
 
         // Newer listeners get the first chance to handle a sequence and stop it.
         for (let i = listeners.length - 1; i >= 0; i -= 1) {
-            const listener = listeners[i];
-            const cmdKey = findScopeCommand(keymaps, listener.scope, mode, sequence);
-            if (!cmdKey) continue;
+            const entry = listeners[i];
+            const cmdKey = findScopeCommand(keymaps, entry.scope, mode, sequence);
 
-            const cmd = resolveScopeCmd(listener.scope, mode, cmdKey);
-            if (!cmd) continue;
-
-            matched = true;
-            listener.listener(new CmdEvent({ cmd, mode, scope: listener.scope, sequence }, propagationState));
+            if (cmdKey) {
+                const cmd = resolveScopeCmd(entry.scope, mode, cmdKey);
+                if (cmd) {
+                    matched = true;
+                    entry.listener(new CmdEvent({ cmd, mode, scope: entry.scope, sequence }, propagationState));
+                }
+            }
 
             if (propagationState.stopped) {
+                break;
+            }
+
+            if (entry.exclusive) {
+                propagationState.stopped = true;
                 break;
             }
         }

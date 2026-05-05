@@ -1,7 +1,15 @@
+import { useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Command, CommandDialog, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from "./ui/command";
 import { findCmdSequence, selectAvailableCmds, useAppStore } from "@/lib/app";
+import { cmdEventEmitter } from "@/lib";
 import { MOD_ICONS } from "./mods-icons";
+
+const COMMAND_PALETTE_KEYS: Record<string, string> = {
+    up: "ArrowUp",
+    down: "ArrowDown",
+    select: "Enter",
+};
 
 
 function KeySequence({ sequence }: { sequence: string }) {
@@ -23,7 +31,7 @@ function KeySequence({ sequence }: { sequence: string }) {
                                     <span key={mod}>{mod}</span>
                                 );
                             })}
-                            <span>{key}</span>
+                            <span className="uppercase">{key}</span>
                         </span>
                     );
                 })}
@@ -38,11 +46,33 @@ export function Cmd() {
     const mode = useAppStore((s) => s.mode);
     const keymaps = useAppStore((s) => s.settings?.keymaps);
     const cmds = useAppStore(useShallow(selectAvailableCmds));
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (!cmdOpen) return;
+        const off = cmdEventEmitter.on(
+            "command_palette",
+            (event) => {
+                if (event.cmd.key == "close") {
+                    setCmdOpen(false);
+                    return;
+                }
+                const input = inputRef.current;
+                if (!input) return;
+                const key = COMMAND_PALETTE_KEYS[event.cmd.key];
+                if (!key) return;
+                input.dispatchEvent(
+                    new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+                );
+            },
+        );
+        return off;
+    }, [cmdOpen]);
 
     return (
         <CommandDialog open={cmdOpen} onOpenChange={setCmdOpen}>
-            <Command>
-                <CommandInput placeholder="Type a command" />
+            <Command loop>
+                <CommandInput ref={inputRef} placeholder="Type a command" />
                 <CommandList>
                     <CommandGroup>
                         {cmds.map(({ cmd, handler }) => {

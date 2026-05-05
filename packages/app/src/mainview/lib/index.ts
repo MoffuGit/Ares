@@ -10,8 +10,6 @@ export {
 export type {
     FlatCmdEntry,
     CmdKey,
-    GlobalCmdKey,
-    GlobalCmdDefinition,
     ScopeCmdDefinition,
 } from "./cmds.ts"
 

@@ -27,13 +27,10 @@
     },
     "command_palette": {
       "normal": {
-        "k": "up",
-        "j": "down",
-        "enter": "select",
-        "ctrl+u": "scroll_up",
-        "ctrl+d": "scroll_down",
-        "g g": "top",
-        "shift+g": "bottom"
+        "escape": "close",
+        "shift+tab": "up",
+        "tab": "down",
+        "enter": "select"
       }
     }
   }

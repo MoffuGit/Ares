@@ -110,6 +110,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
     },
 
     handleGlobalCmd: (cmd) => {
+        if (get().cmdOpen) {
+            if (cmd.key == "toggleCommandPalette") {
+                get().toggleCmd();
+            }
+            return;
+        };
+
         switch (cmd.key) {
             case "enterInsert":
                 get().setMode("insert");

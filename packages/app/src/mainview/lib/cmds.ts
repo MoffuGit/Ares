@@ -15,12 +15,18 @@ export const cmdDefinitions = {
         newTab: { search: true, title: "New tab", mode: ["normal", "insert", "visual"] },
         nextTab: { search: false, title: "Next tab", mode: ["normal", "insert", "visual"], },
         prevTab: { search: false, title: "Previous tab", mode: ["normal", "insert", "visual"], },
-        closeActiveTab: { search: true, title: "Close active tab", mode: ["normal", "insert", "visual"], },
+        closeActiveTab: { search: true, title: "Close tab", mode: ["normal", "insert", "visual"], },
         toggleCommandPalette: { search: false, title: "Toggle command palette", mode: ["normal", "insert", "visual"] },
         tabsPanel: { search: true, title: "Show tabs", mode: ["normal", "insert", "visual"], },
         filetreePanel: { search: true, title: "Show filetree", mode: ["normal", "insert", "visual"], },
         newTerminalTab: { search: true, title: "New terminal", mode: ["normal", "insert", "visual"], },
     },
+    command_palette: {
+        close: { search: false, title: "", mode: ["normal"] },
+        up: { search: false, title: "", mode: ["normal"] },
+        down: { search: false, title: "", mode: ["normal"] },
+        select: { search: false, title: "", mode: ["normal"] },
+    }
 } as const satisfies Record<string, Record<string, FlatCmdEntry>>;
 
 type CmdDefinitions = typeof cmdDefinitions;
@@ -43,13 +49,13 @@ type ResolvedCmd<S extends CmdScope, K extends CmdKey<S>> = {
     readonly icon: Entries<S>[K] extends { icon: infer I } ? I : undefined;
 };
 
-export type ScopeCmdDefinition<S extends CmdScope = CmdScope> = {
-    [K in CmdKey<S>]: ResolvedCmd<S, K>;
-}[CmdKey<S>];
+export type ScopeCmdDefinition<S extends CmdScope = CmdScope> = S extends CmdScope
+    ? { [K in CmdKey<S>]: ResolvedCmd<S, K> }[CmdKey<S>]
+    : never;
 
-export type ScopeCmdsByKey<S extends CmdScope = CmdScope> = {
-    readonly [K in CmdKey<S>]: ResolvedCmd<S, K>;
-};
+export type ScopeCmdsByKey<S extends CmdScope = CmdScope> = S extends CmdScope
+    ? { readonly [K in CmdKey<S>]: ResolvedCmd<S, K> }
+    : never;
 
 export type GlobalCmdKey = CmdKey<"global">;
 export type GlobalCmdDefinition = ScopeCmdDefinition<"global">;
@@ -100,7 +106,7 @@ export function resolveScopeCmd<S extends CmdScope>(
     mode: Mode,
     key: string,
 ): ScopeCmdDefinition<S> | null {
-    const byKey = scopeCmdsByKey[scope] as Record<string, ScopeCmdDefinition<S> | undefined>;
+    const byKey = scopeCmdsByKey[scope] as unknown as Record<string, ScopeCmdDefinition<S> | undefined>;
     const cmd = byKey[key];
     if (!cmd) return null;
     if (!isCmdAllowedInMode(cmd, mode)) return null;
