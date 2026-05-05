@@ -120,7 +120,7 @@ function CommandGroup({
         <CommandPrimitive.Group
             data-slot="command-group"
             className={cn(
-                "overflow-hidden p-1 text-foreground **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pb-2 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:text-muted-foreground",
+                "overflow-hidden p-2 text-foreground **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pb-2 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:text-muted-foreground",
                 className
             )}
             {...props}
@@ -150,13 +150,13 @@ function CommandItem({
         <CommandPrimitive.Item
             data-slot="command-item"
             className={cn(
-                "group/command-item leading-0 relative flex cursor-default items-center gap-2.5 rounded-sm p-3 text-[13px] font-normal outline-hidden select-none in-data-[slot=dialog-content]:rounded-lg! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 dark:data-selected:bg-accent/60 data-selected:bg-accent/20 data-selected:text-foreground",
+                "group/command-item leading-0 relative flex cursor-default items-center gap-2.5 rounded-sm p-2 text-[13px] font-normal outline-hidden select-none in-data-[slot=dialog-content]:rounded-lg! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 dark:data-selected:bg-accent/60 data-selected:bg-accent/20 data-selected:text-foreground",
                 className
             )}
             {...props}
         >
             {children}
-            <CheckIcon className="ml-auto opacity-0 group-has-data-[slot=command-shortcut]/command-item:hidden group-data-[checked=true]/command-item:opacity-100" />
+            <CheckIcon className="size-5 ml-auto opacity-0 group-has-data-[slot=command-shortcut]/command-item:hidden group-data-[checked=true]/command-item:opacity-100" />
         </CommandPrimitive.Item>
     )
 }
