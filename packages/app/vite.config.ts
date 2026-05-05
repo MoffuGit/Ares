@@ -5,21 +5,12 @@ import path from "path";
 
 export default defineConfig({
     plugins: [
-        tailwindcss(), react()
+     react(), tailwindcss()
     ],
     root: "src/mainview",
     build: {
         outDir: "../../dist",
         emptyOutDir: true,
-        cssMinify: "lightningcss",
-    },
-    css: {
-        transformer: "lightningcss",
-        lightningcss: {
-            targets: {
-                safari: (16 << 16) | (4 << 8),
-            },
-        },
     },
     resolve: {
         alias: {
