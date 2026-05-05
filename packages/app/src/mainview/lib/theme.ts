@@ -45,9 +45,6 @@ export function applyTheme(theme: Theme, scheme: "light" | "dark") {
     root.classList.add(scheme);
     for (const [cssVar, themeKey] of Object.entries(themeVarMap)) {
         const color = theme[themeKey];
-        if (themeKey == "mutedBg") {
-            console.log(color);
-        }
         if (typeof color === "string") {
             root.style.setProperty(cssVar, color);
         }

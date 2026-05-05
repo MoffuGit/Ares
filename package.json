@@ -7,9 +7,5 @@
     "app:dev": "cd packages/app && bun run dev:hmr",
     "start": "bun run core && bun run app:dev"
   },
-  "workspaces": ["packages/*", "packages/app/*", "electrobun/package"],
-  "overrides": {
-    "@types/react": "^19",
-    "@types/react-dom": "^19"
-  }
+  "workspaces": ["packages/*", "packages/app/*", "electrobun/package"]
 }

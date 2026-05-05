@@ -16,7 +16,7 @@ export default {
             "../../settings": "settings",
         },
         mac: {
-            bundleCEF: true,
+            bundleCEF: false,
         },
         linux: {
             bundleCEF: true,
