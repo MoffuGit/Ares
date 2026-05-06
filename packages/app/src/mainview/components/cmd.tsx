@@ -14,15 +14,16 @@ const COMMAND_PALETTE_KEYS: Record<string, string> = {
 
 function KeySequence({ sequence }: { sequence: string }) {
     const presses = sequence.trim().split(/\s+/).filter(Boolean);
+    const last = presses.length - 1;
     return (
         <CommandShortcut>
-            <span className="ml-auto inline-flex items-center gap-1 text-xs tracking-widest text-popover-foreground/60 leading-0">
+            <span className="ml-auto inline-flex items-center text-xs text-popover-foreground/60 leading-0">
                 {presses.map((press, i) => {
                     const parts = press.split("+");
                     const key = parts.pop() ?? "";
                     const mods = parts;
                     return (
-                        <span key={i} className="inline-flex items-center gap-1 [&_svg:not([class*='size-'])]:size-3 [&_svg]:shrink-0  group-data-selected/command-item:opacity-100  opacity-50 h-5 px-1">
+                        <span key={i} className="inline-flex items-center gap-1 [&_svg:not([class*='size-'])]:size-3 [&_svg]:shrink-0  group-data-selected/command-item:opacity-100  opacity-50 h-5 pl-1">
                             {mods.map((mod) => {
                                 const Icon = MOD_ICONS[mod.toLowerCase()];
                                 return Icon ? (
@@ -32,6 +33,7 @@ function KeySequence({ sequence }: { sequence: string }) {
                                 );
                             })}
                             <span className="uppercase">{key}</span>
+                            {i !== last && (<span>+</span>)}
                         </span>
                     );
                 })}
