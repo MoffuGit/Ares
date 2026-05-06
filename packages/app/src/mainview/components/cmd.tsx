@@ -16,7 +16,7 @@ function KeySequence({ sequence }: { sequence: string }) {
     const presses = sequence.trim().split(/\s+/).filter(Boolean);
     return (
         <CommandShortcut>
-            <span className="ml-auto inline-flex items-center gap-1 text-xs tracking-widest text-muted-foreground leading-0">
+            <span className="ml-auto inline-flex items-center gap-1 text-xs tracking-widest text-popover-foreground/60 leading-0">
                 {presses.map((press, i) => {
                     const parts = press.split("+");
                     const key = parts.pop() ?? "";
@@ -88,7 +88,7 @@ export function Cmd() {
                                     }}
                                 >
                                     {cmd.title}
-                                    <span className="text-xs leading-0 text-muted-foreground">
+                                    <span className="text-xs font-medium leading-0 text-popover-foreground/30">
                                         {cmd.scope}
                                     </span>
                                     {sequence && <KeySequence sequence={sequence} />}
