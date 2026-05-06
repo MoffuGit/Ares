@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { Command, CommandDialog, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from "./ui/command";
+import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from "./ui/command";
 import { findCmdSequence, selectAvailableCmds, useAppStore } from "@/lib/app";
 import { cmdEventEmitter } from "@/lib";
 import { MOD_ICONS } from "./mods-icons";
@@ -22,7 +22,7 @@ function KeySequence({ sequence }: { sequence: string }) {
                     const key = parts.pop() ?? "";
                     const mods = parts;
                     return (
-                        <span key={i} className="inline-flex items-center gap-1 [&_svg:not([class*='size-'])]:size-3 [&_svg]:shrink-0  group-data-selected/command-item:bg-accent/0 dark:group-data-selected/command-item:bg-accent/0  bg-accent/10 dark:bg-accent/40 rounded-md h-5 px-1">
+                        <span key={i} className="inline-flex items-center gap-1 [&_svg:not([class*='size-'])]:size-3 [&_svg]:shrink-0  group-data-selected/command-item:opacity-100  opacity-50 h-5 px-1">
                             {mods.map((mod) => {
                                 const Icon = MOD_ICONS[mod.toLowerCase()];
                                 return Icon ? (
@@ -74,6 +74,7 @@ export function Cmd() {
             <Command loop>
                 <CommandInput ref={inputRef} placeholder="Type a command" />
                 <CommandList>
+                    <CommandEmpty />
                     <CommandGroup>
                         {cmds.map(({ cmd, handler }) => {
                             const sequence = findCmdSequence(keymaps, cmd, mode);

@@ -11,8 +11,9 @@ import {
 } from "@/components/ui/dialog"
 import {
     InputGroup,
+    InputGroupAddon,
 } from "@/components/ui/input-group"
-import { CheckIcon } from "lucide-react"
+import { CheckIcon, CornerDownLeft } from "lucide-react"
 
 function Command({
     className,
@@ -78,6 +79,13 @@ function CommandInput({
                     )}
                     {...props}
                 />
+                <InputGroupAddon align="inline-end" className="py-1 pr-1 gap-1 rounded-md bg-accent/60">
+                    <span className="text-xs leading-0 text-popover-foreground/30">
+                        Select
+                    </span>
+
+                    <CornerDownLeft className="size-3 shrink-0 opacity-50 pb-0.5" />
+                </InputGroupAddon>
             </InputGroup>
         </div>
     )
@@ -106,7 +114,7 @@ function CommandEmpty({
     return (
         <CommandPrimitive.Empty
             data-slot="command-empty"
-            className={cn("py-6 text-center text-sm", className)}
+            className={cn("p-1 text-center text-sm", className)}
             {...props}
         />
     )
@@ -150,7 +158,7 @@ function CommandItem({
         <CommandPrimitive.Item
             data-slot="command-item"
             className={cn(
-                "group/command-item leading-0 relative flex cursor-default items-center gap-2.5 rounded-sm p-2 text-[13px] font-normal outline-hidden select-none in-data-[slot=dialog-content]:rounded-lg! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 dark:data-selected:bg-accent/60 data-selected:bg-accent/20 data-selected:text-foreground",
+                "group/command-item leading-0 relative flex cursor-default items-center gap-2.5 rounded-sm p-2 text-[13px] font-normal outline-hidden select-none in-data-[slot=dialog-content]:rounded-lg! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 dark:data-selected:bg-accent/60 data-selected:bg-accent/20 data-selected:text-popover-foreground/80 text-foreground/60",
                 className
             )}
             {...props}
