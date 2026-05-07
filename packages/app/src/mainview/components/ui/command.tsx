@@ -79,7 +79,7 @@ function CommandInput({
                     )}
                     {...props}
                 />
-                <InputGroupAddon align="inline-end" className="py-1 pr-1 gap-1 rounded-md bg-accent/60">
+                <InputGroupAddon align="inline-end" className="py-1 pr-1 gap-1 rounded-md dark:bg-accent/60 bg-accent/20">
                     <span className="text-xs leading-0 text-popover-foreground/30">
                         Select
                     </span>
