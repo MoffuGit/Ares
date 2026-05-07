@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "./ui/button";
 import { FileIcon } from "./file-icons";
-import { X } from "lucide-react";
+import { Plus, Terminal, X } from "lucide-react";
 
 export function SidebarTabs() {
     const tabs = useAppStore((state) => state.tabs);
@@ -32,6 +32,25 @@ export function SidebarTabs() {
     );
 }
 
+function SidebarTabsIcon({ tab }: { tab: Tab }) {
+    switch (tab.surface.kind) {
+        case "editor":
+            return tab.surface.entry ? (
+                <FileIcon entry={tab.surface.entry} />
+            ) : (
+                <div className="size-3.5 flex items-center align-middle [&_svg:not([class*='size-'])]:size-3.5 dark:opacity-50">
+                    <Plus />
+                </div>
+            )
+        case "terminal":
+            return (
+                <div className="size-3.5 flex items-center align-middle [&_svg:not([class*='size-'])]:size-3.5 dark:opacity-50" >
+                    <Terminal />
+                </div>
+            )
+    }
+}
+
 function SidebarTabsItem({ tab }: { tab: Tab }) {
     const activeTabId = useAppStore((state) => state.activeTabId);
     const setActiveTab = useAppStore((state) => state.setActiveTab);
@@ -45,9 +64,7 @@ function SidebarTabsItem({ tab }: { tab: Tab }) {
                 size="xs"
                 onClick={() => setActiveTab(tab.id)}
             >
-                {tab.surface.kind === "editor" && tab.surface.entry ? (
-                    <FileIcon entry={tab.surface.entry} />
-                ) : null}
+                <SidebarTabsIcon tab={tab} />
                 <span className="truncate leading-none">{tab.name}</span>
             </SidebarMenuButton>
             <Button

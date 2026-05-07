@@ -6,7 +6,7 @@ export const MODES = ["normal", "insert", "visual"] as const satisfies readonly 
 
 export function surfaceName(surface: Surface): string {
     switch (surface.kind) {
-        case "editor": return surface.entry?.path.split("/").pop() ?? "No file selected";
+        case "editor": return surface.entry?.path.split("/").pop() ?? "New Tab";
         case "terminal": return "terminal";
     }
 }
