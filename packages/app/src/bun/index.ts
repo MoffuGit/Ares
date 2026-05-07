@@ -71,9 +71,6 @@ const rpc = BrowserView.defineRPC<AppRPC>({
             surfaceMouseEvent: (event) => {
                 surfaceStore.surfaceMouseEvent(event.surfaceId, event.type, event.x, event.y, event.button, event.mods);
             },
-            gpuTagRect: ({ id, rect }) => {
-                surfaceStore.updateRect(id, rect);
-            },
             gpuTagStop: ({ id }) => {
                 surfaceStore.stop(id);
             },

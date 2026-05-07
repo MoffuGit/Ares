@@ -26,6 +26,14 @@ export const cmdDefinitions = {
         up: { search: false, title: "", mode: ["normal"] },
         down: { search: false, title: "", mode: ["normal"] },
         select: { search: false, title: "", mode: ["normal"] },
+    },
+    editor: {
+        cursor_down: { search: false, title: "", mode: ["normal"] },
+        cursor_up: { search: false, title: "", mode: ["normal"] },
+        cursor_left: { search: false, title: "", mode: ["normal"] },
+        cursor_right: { search: false, title: "", mode: ["normal"] },
+        scroll_down: { search: false, title: "", mode: ["normal"] },
+        scroll_up: { search: false, title: "", mode: ["normal"] },
     }
 } as const satisfies Record<string, Record<string, FlatCmdEntry>>;
 
@@ -75,6 +83,9 @@ function buildIndex(): AllScopeCmdsByKey {
 
         for (const key of Object.keys(entries)) {
             const entry = entries[key];
+
+            if (!entry) continue;
+
             scopeByKey[key] = {
                 scope,
                 key,

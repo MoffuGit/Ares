@@ -18,7 +18,6 @@ export type AppRPC = {
             surfaceScrollTo: { surfaceId: number, row: number };
             setEditorCursorPosition: { surfaceId: number, row: number, col: number };
             surfaceMouseEvent: { surfaceId: number; type: "mousedown" | "mousemove" | "mouseup"; x: number; y: number; button: number; mods: number };
-            gpuTagRect: { id: number; rect: GpuRect };
             gpuTagStop: { id: number };
             gpuTagVisibility: { id: number; visible: boolean };
             surfaceKeyEvent: { id: number, key: string, code: string, mods: number, repeat: boolean };

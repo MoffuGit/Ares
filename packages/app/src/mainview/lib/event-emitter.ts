@@ -103,6 +103,7 @@ export class CmdEventEmitter {
         // Newer listeners get the first chance to handle a sequence and stop it.
         for (let i = listeners.length - 1; i >= 0; i -= 1) {
             const entry = listeners[i];
+            if (!entry) continue;
             const cmdKey = findScopeCommand(keymaps, entry.scope, mode, sequence);
 
             if (cmdKey) {

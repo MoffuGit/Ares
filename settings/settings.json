@@ -32,6 +32,16 @@
         "tab": "down",
         "enter": "select"
       }
+    },
+    "editor": {
+        "normal": {
+            "k": "cursor_up",
+            "j": "cursor_down",
+            "l": "cursor_right",
+            "h": "cursor_left",
+            "ctrl+d": "scroll_down",
+            "ctrl+u": "scroll_up"
+        }
     }
   }
 }

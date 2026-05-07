@@ -5,6 +5,7 @@ import { GpuTag } from "../gpu-tag";
 import { useGpuSurface } from "./use-gpu-surface";
 import { removeRootMaskHole, upsertRootMaskHole } from "./mask";
 import { OverlaySyncController } from "./overlaySync";
+import { cmdEventEmitter } from "@/lib";
 
 interface EditorSurfaceProps {
     id: number;
@@ -46,6 +47,41 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
 
         target.scrollTop = editorState.scrollRow * cellHeight;
     }, [editorState, cellHeight]);
+
+    useEffect(() => {
+        if (!active) return;
+        const off = cmdEventEmitter.on(
+            "editor",
+            (event) => {
+                const surfaceId = surface.gpuSurfaceId;
+                if (!surfaceId || !editorState) return;
+
+                switch (event.cmd.key) {
+                    case "cursor_down":
+                        rpc.send("setEditorCursorPosition", { surfaceId: surfaceId, row: editorState.cursorRow + 1, col: editorState.cursorCol });
+                        break;
+                    case "cursor_up":
+                        rpc.send("setEditorCursorPosition", { surfaceId: surfaceId, row: editorState.cursorRow - 1, col: editorState.cursorCol });
+                        break;
+                    case "cursor_left":
+                        rpc.send("setEditorCursorPosition", { surfaceId: surfaceId, row: editorState.cursorRow, col: editorState.cursorCol - 1 });
+                        break;
+                    case "cursor_right":
+                        rpc.send("setEditorCursorPosition", { surfaceId: surfaceId, row: editorState.cursorRow, col: editorState.cursorCol + 1 });
+                        break;
+                    //NOTE:
+                    //this should not only move the cursor row but the scroll ammount,
+                    case "scroll_down":
+                        rpc.send("setEditorCursorPosition", { surfaceId: surfaceId, row: editorState.cursorRow + 30, col: editorState.cursorCol });
+                        break;
+                    case "scroll_up":
+                        rpc.send("setEditorCursorPosition", { surfaceId: surfaceId, row: editorState.cursorRow - 30, col: editorState.cursorCol });
+                        break;
+                }
+            },
+        );
+        return off;
+    }, [active, surface, editorState]);
 
 
     useLayoutEffect(() => {
