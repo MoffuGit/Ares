@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { rpc } from "@/lib/app";
+import { rpc, useAppStore } from "@/lib/app";
 import type { EditorSurface as EditorSurfaceData } from "@ares/shared";
 import { GpuTag } from "../gpu-tag";
 import { useGpuSurface } from "./use-gpu-surface";
@@ -18,6 +18,7 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const mouseRef = useRef<HTMLDivElement | null>(null);
     const lastSyncedEntryRef = useRef<number | null>(null);
+    const mode = useAppStore((state) => state.mode);
     const { gpuRef, handleReady } = useGpuSurface({
         id,
         surface,
@@ -148,6 +149,7 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
                             onKeyDown={(event) => {
                                 if (surface.gpuSurfaceId == null) return;
                                 if (event.altKey || event.ctrlKey || event.metaKey) return;
+                                if (mode !== "insert") return;
 
                                 event.preventDefault();
 
