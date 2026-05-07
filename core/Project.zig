@@ -26,7 +26,7 @@ pub fn create(alloc: std.mem.Allocator, app: *App, abs_path: []const u8) !*Proje
     const filetree = try FileTree.create(alloc, worktree);
     errdefer filetree.destroy();
 
-    var store = try BufferStore.init(alloc, worktree, app.thread_pool);
+    var store = try BufferStore.init(alloc, worktree, &global.state.thread_pool);
     errdefer store.deinit();
 
     project.* = .{

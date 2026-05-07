@@ -23,7 +23,6 @@ settings: *Settings,
 appearance: *Appearance,
 monitor: *Monitor,
 io: *Io,
-thread_pool: *xev.ThreadPool,
 grid: Grid,
 window: objc.Object,
 
@@ -47,15 +46,7 @@ pub fn create(window: *anyopaque) !*App {
     const monitor = try Monitor.create(global.alloc);
     errdefer global.alloc.destroy(monitor);
 
-    const thread_pool = try global.alloc.create(xev.ThreadPool);
-    errdefer global.alloc.destroy(thread_pool);
-    thread_pool.* = xev.ThreadPool.init(.{});
-    errdefer {
-        thread_pool.shutdown();
-        thread_pool.deinit();
-    }
-
-    const io = try Io.create(global.alloc, thread_pool);
+    const io = try Io.create(global.alloc, &global.thread_pool);
     errdefer global.alloc.destroy(io);
 
     var grid = try Grid.init(global.alloc, .{ .size = .{
@@ -70,7 +61,6 @@ pub fn create(window: *anyopaque) !*App {
         .appearance = appearance,
         .monitor = monitor,
         .io = io,
-        .thread_pool = thread_pool,
         .key_dispatcher = KeyDispatcher.init(global.alloc),
     };
 
@@ -203,8 +193,5 @@ pub fn destroy(self: *App) void {
     self.appearance.destroy();
     self.monitor.destroy();
     self.io.destroy();
-    self.thread_pool.shutdown();
-    self.thread_pool.deinit();
-    global.alloc.destroy(self.thread_pool);
     global.alloc.destroy(self);
 }

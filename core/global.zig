@@ -65,8 +65,9 @@ pub const GlobalState = struct {
     gpa: GPA = .{},
     alloc: std.mem.Allocator,
     events: EventEmitter,
-    mailbox: *MailBox,
+    mailbox: MailBox,
     callback: ?Callback = null,
+    thread_pool: xev.ThreadPool,
 
     pub fn init(self: *Self, callback: ?Callback) !void {
         const gpa: GPA = .{};
@@ -76,7 +77,8 @@ pub const GlobalState = struct {
             .alloc = alloc,
             .events = EventEmitter.init(alloc),
             .callback = callback,
-            .mailbox = try MailBox.create(alloc),
+            .mailbox = .{},
+            .thread_pool = xev.ThreadPool.init(.{}),
         };
     }
 
@@ -90,7 +92,9 @@ pub const GlobalState = struct {
 
     pub fn deinit(self: *Self) void {
         self.events.deinit();
-        self.mailbox.destroy(self.alloc);
+
+        self.thread_pool.shutdown();
+        self.thread_pool.deinit();
         if (self.gpa.deinit() == .leak) {
             std.log.debug("WE HAVE LEAKS", .{});
         }
