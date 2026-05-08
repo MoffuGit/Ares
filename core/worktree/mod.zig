@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const global = @import("../global.zig");
 const Monitor = @import("../monitor/mod.zig");
 const Scanner = @import("scanner/mod.zig");
 const ScannerThread = @import("scanner/Thread.zig");
@@ -46,7 +47,7 @@ pub const Worktree = struct {
         var scanner_thread = try ScannerThread.init(alloc, &self.scanner);
         errdefer scanner_thread.deinit();
 
-        var scanner = try Scanner.init(alloc, monitor, &self.snapshot, _abs_path);
+        var scanner = try Scanner.init(alloc, &global.state.thread_pool, monitor, &self.snapshot, _abs_path);
         errdefer scanner.deinit();
 
         self.* = .{

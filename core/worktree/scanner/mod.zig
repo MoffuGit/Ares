@@ -13,6 +13,11 @@ const Entry = Snapshot.Entry;
 const Kind = Snapshot.Kind;
 const fileTypeFromName = Snapshot.fileTypeFromName;
 const Stat = Snapshot.Stat;
+const ThreadPool = global.xev.ThreadPool;
+
+const log = std.log.scoped(.worktree_scanner);
+
+const EMIT_THRESHOLD: u64 = 1000;
 
 pub const Scanner = @This();
 
@@ -22,24 +27,41 @@ abs_root: []const u8,
 root_name: []const u8,
 snapshot: *Snapshot,
 monitor: *Monitor,
+pool: *ThreadPool,
 stop_requested: std.atomic.Value(bool) = .{ .raw = false },
 
 mutex: std.Thread.Mutex = .{},
 watcher_to_entry: std.AutoHashMap(u64, u64),
 dirty_entries: std.ArrayList(u64) = .{},
 
-pub fn init(alloc: Allocator, monitor: *Monitor, snapshot: *Snapshot, abs_root: []const u8) !Scanner {
+// Parallel scan coordination.
+// `pending_jobs` counts the number of in-flight ScanJob instances (queued
+// or executing). `scan_event` is signalled when the counter transitions
+// back to zero so the driver can return.
+pending_jobs: std.atomic.Value(u32) = .{ .raw = 0 },
+scan_event: std.Thread.ResetEvent = .{},
+scan_progress: std.atomic.Value(u64) = .{ .raw = 0 },
+
+pub fn init(alloc: Allocator, pool: *ThreadPool, monitor: *Monitor, snapshot: *Snapshot, abs_root: []const u8) !Scanner {
     return .{
         .alloc = alloc,
         .monitor = monitor,
         .abs_root = abs_root,
         .root_name = std.fs.path.basename(abs_root),
         .snapshot = snapshot,
+        .pool = pool,
         .watcher_to_entry = std.AutoHashMap(u64, u64).init(alloc),
     };
 }
 
 pub fn deinit(self: *Scanner) void {
+    // Make sure no pool tasks remain in flight before tearing down state
+    // they reference (snapshot, allocator, etc.). requestStop must have
+    // been called by the owner already; we just drain.
+    self.stop_requested.store(true, .release);
+    while (self.pending_jobs.load(.acquire) != 0) {
+        std.atomic.spinLoopHint();
+    }
     self.watcher_to_entry.deinit();
     self.dirty_entries.deinit(self.alloc);
 }
@@ -107,9 +129,7 @@ pub fn initial_scan(self: *Scanner) !void {
         try self.snapshot.insertInterned(id, root_path, root_abs, .dir, "unknown", root_stat);
     }
 
-    var count: usize = 0;
-
-    try self.scanRecursive(id, &count);
+    try self.scanTreeParallel(id);
 
     // if (!builtin.is_test) {
     //     const watcher_id = self.monitor.watchPath(self.abs_root, Scanner, self, monitorCallback) catch null;
@@ -126,11 +146,78 @@ pub fn initial_scan(self: *Scanner) !void {
 
 pub fn process_scan_by_id(self: *Scanner, id: u64) !void {
     try self.ensureRunning();
-    var count: usize = 0;
-    try self.scanRecursive(id, &count);
+    try self.scanTreeParallel(id);
 }
 
-fn scanRecursive(self: *Scanner, dir_id: u64, count: *usize) !void {
+const ScanJob = struct {
+    scanner: *Scanner,
+    dir_id: u64,
+    task: ThreadPool.Task,
+};
+
+/// Parallel scan driver.
+/// Submits `root_id` as a single ScanJob and blocks until all jobs spawned
+/// transitively (one per discovered directory) have completed. Each job
+/// inserts its directory entries into the snapshot and schedules a new
+/// ScanJob on the global thread pool for every child directory it finds.
+///
+/// Returns `error.StopRequested` if a stop was signalled at any point.
+/// In-flight tasks always run to completion (they bail early after the
+/// stop check), so by the time we return the pending counter is zero and
+/// no task references this Scanner anymore.
+pub fn scanTreeParallel(self: *Scanner, root_id: u64) !void {
+    try self.ensureRunning();
+
+    self.scan_event.reset();
+    self.scan_progress.store(0, .release);
+
+    try self.spawnScanJob(root_id);
+
+    self.scan_event.wait();
+
+    if (self.isStopRequested()) return error.StopRequested;
+}
+
+fn spawnScanJob(self: *Scanner, dir_id: u64) !void {
+    const job = try self.alloc.create(ScanJob);
+    job.* = .{
+        .scanner = self,
+        .dir_id = dir_id,
+        .task = .{ .callback = scanJobCallback },
+    };
+
+    // Increment BEFORE scheduling so the task can never observe the
+    // counter transition to zero before this caller has accounted for
+    // the new job.
+    _ = self.pending_jobs.fetchAdd(1, .acq_rel);
+    self.pool.schedule(.from(&job.task));
+}
+
+fn scanJobCallback(task: *ThreadPool.Task) void {
+    const job: *ScanJob = @alignCast(@fieldParentPtr("task", task));
+    const scanner = job.scanner;
+    const dir_id = job.dir_id;
+    scanner.alloc.destroy(job);
+
+    if (!scanner.isStopRequested()) {
+        scanner.scanOneDir(dir_id) catch |err| {
+            if (err != error.StopRequested) {
+                log.err("scan dir id={d} err={}", .{ dir_id, err });
+            }
+        };
+    }
+
+    const remaining = scanner.pending_jobs.fetchSub(1, .acq_rel);
+    if (remaining == 1) {
+        scanner.scan_event.set();
+    }
+}
+
+/// Scan a single directory: insert all its immediate entries into the
+/// snapshot and spawn a new ScanJob per child directory. Does NOT recurse
+/// in this thread — recursion is achieved by jobs scheduling further jobs
+/// on the pool.
+fn scanOneDir(self: *Scanner, dir_id: u64) !void {
     try self.ensureRunning();
 
     const rel_path = blk: {
@@ -142,68 +229,67 @@ fn scanRecursive(self: *Scanner, dir_id: u64, count: *usize) !void {
     var abs_buf: [std.fs.max_path_bytes]u8 = undefined;
     const abs_path = try self.buildAbsPath(rel_path, &abs_buf);
 
-    var child_dirs: std.ArrayList(u64) = .{};
-    defer child_dirs.deinit(self.alloc);
+    var d = std.fs.openDirAbsolute(abs_path, .{ .iterate = true }) catch |err| {
+        // Directory may have been removed between discovery and scan.
+        if (err == error.FileNotFound or err == error.AccessDenied) return;
+        return err;
+    };
+    defer d.close();
 
-    {
-        var d = try std.fs.openDirAbsolute(abs_path, .{ .iterate = true });
-        defer d.close();
+    var iter = d.iterate();
+    while (try iter.next()) |entry| {
+        try self.ensureRunning();
 
-        var iter = d.iterate();
-        while (try iter.next()) |entry| {
-            try self.ensureRunning();
+        const kind: Kind = switch (entry.kind) {
+            .directory => .dir,
+            .file => .file,
+            else => continue,
+        };
 
-            const kind: Kind = switch (entry.kind) {
-                .directory => .dir,
-                .file => .file,
-                else => continue,
+        const stat = self.getEntryStat(d, entry.name) catch Stat{};
+        const file_type = if (kind == .file) fileTypeFromName(entry.name) else "unknown";
+        const child_id = self.snapshot.newId();
+
+        {
+            self.snapshot.rwlock.lock();
+            defer self.snapshot.rwlock.unlock();
+
+            const interned = try self.snapshot.internPath(rel_path, entry.name);
+            const interned_abs = try self.snapshot.internPath(abs_path, entry.name);
+            try self.snapshot.insertInterned(child_id, interned, interned_abs, kind, file_type, stat);
+        }
+
+        if (kind == .dir) {
+            // Fan out: each subdirectory becomes its own pool task. If we
+            // can't allocate a new job we just skip it — the entry is
+            // already recorded as a directory, future monitor events will
+            // cause it to be re-scanned.
+            self.spawnScanJob(child_id) catch |err| {
+                log.err("failed to spawn scan job for child id={d} err={}", .{ child_id, err });
             };
 
-            const stat = self.getEntryStat(d, entry.name) catch Stat{};
-            const file_type = if (kind == .file) fileTypeFromName(entry.name) else "unknown";
-            const child_id = self.snapshot.newId();
-
-            {
-                self.snapshot.rwlock.lock();
-                defer self.snapshot.rwlock.unlock();
-
-                const interned = try self.snapshot.internPath(rel_path, entry.name);
-                const interned_abs = try self.snapshot.internPath(abs_path, entry.name);
-                try self.snapshot.insertInterned(child_id, interned, interned_abs, kind, file_type, stat);
-            }
-
-            if (kind == .dir) {
-                try child_dirs.append(self.alloc, child_id);
-
-                const child_abs = blk: {
-                    self.snapshot.rwlock.lockShared();
-                    defer self.snapshot.rwlock.unlockShared();
-                    break :blk self.snapshot.getAbsPathById(child_id) orelse continue;
-                };
-                _ = child_abs;
-                // if (!builtin.is_test) {
-                //     const watcher_id = self.monitor.watchPath(child_abs, Scanner, self, monitorCallback) catch null;
-                //     if (watcher_id) |id| {
-                //         try self.watcher_to_entry.put(id, child_id);
-                //     }
-                // }
-            }
+            // if (!builtin.is_test) {
+            //     const child_abs = blk: {
+            //         self.snapshot.rwlock.lockShared();
+            //         defer self.snapshot.rwlock.unlockShared();
+            //         break :blk self.snapshot.getAbsPathById(child_id) orelse continue;
+            //     };
+            //     const watcher_id = self.monitor.watchPath(child_abs, Scanner, self, monitorCallback) catch null;
+            //     if (watcher_id) |id| {
+            //         try self.watcher_to_entry.put(id, child_id);
+            //     }
+            // }
         }
     }
 
-    if (count.* > 1000) {
-        count.* = 0;
+    // Periodically nudge listeners so the UI can render partial results
+    // while the rest of the tree is still being walked.
+    const prev = self.scan_progress.fetchAdd(1, .monotonic);
+    if (prev != 0 and prev % EMIT_THRESHOLD == 0) {
         var update = UpdatedEntriesSet.init(self.alloc);
         defer update.deinit();
 
         global.state.emitGlobal(.{ .worktreeUpdate = update });
-    } else {
-        count.* += 1;
-    }
-
-    for (child_dirs.items) |child_id| {
-        try self.ensureRunning();
-        try self.scanRecursive(child_id, count);
     }
 }
 
@@ -368,9 +454,7 @@ fn update_entries(self: *Scanner, dir_path: []const u8, abs_dir_path: []const u8
                 //     try self.watcher_to_entry.put(watcher_id, id);
                 // }
 
-                var count: usize = 0;
-
-                try self.scanRecursive(id, &count);
+                try self.scanTreeParallel(id);
             }
         }
     }
@@ -447,8 +531,19 @@ pub const UpdatedEntriesSet = struct {
 
 const testing = std.testing;
 
+// Tests don't go through the normal `core/test.zig` global-state init path
+// for every test, so we keep a process-local pool that all scanner tests
+// share. It's intentionally leaked at process exit.
+var test_pool_storage: ?ThreadPool = null;
+fn getTestPool() *ThreadPool {
+    if (test_pool_storage == null) {
+        test_pool_storage = ThreadPool.init(.{});
+    }
+    return &test_pool_storage.?;
+}
+
 fn testInit(alloc: Allocator, snapshot: *Snapshot, abs_path: []const u8) !Scanner {
-    return Scanner.init(alloc, undefined, snapshot, abs_path);
+    return Scanner.init(alloc, getTestPool(), undefined, snapshot, abs_path);
 }
 
 test "initial_scan single file" {
@@ -769,7 +864,7 @@ test "process_events detects modified files" {
     try testing.expect(found_update);
 }
 
-test "scanRecursive stops when stop requested" {
+test "scanTreeParallel stops when stop requested" {
     const alloc = testing.allocator;
 
     var tmp = testing.tmpDir(.{});
@@ -800,7 +895,6 @@ test "scanRecursive stops when stop requested" {
 
     scanner.requestStop();
 
-    var count: usize = 0;
-    try testing.expectError(error.StopRequested, scanner.scanRecursive(root_id, &count));
+    try testing.expectError(error.StopRequested, scanner.scanTreeParallel(root_id));
     try testing.expectEqual(@as(usize, 1), snapshot.id_to_path.count());
 }
