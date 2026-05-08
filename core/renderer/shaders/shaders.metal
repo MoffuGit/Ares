@@ -204,7 +204,7 @@ vertex CellTextVertexOut cell_text_vertex(
   // If this cell is the cursor cell, but we're not processing
   // the cursor glyph itself, then we need to change the color.
   if ((in.bools & IS_CURSOR_GLYPH) == 0 && is_cursor_pos) {
-    out.color = float4(1.0f, 0.0f, 0.0f, 1.0f);
+    out.color = float4(uniforms.bg_color) / 255.0f;
   }
 
 
