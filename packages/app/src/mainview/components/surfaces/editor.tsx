@@ -43,10 +43,16 @@ export function EditorSurface({ id, surface, active }: EditorSurfaceProps) {
         const target = scrollRef.current;
         if (!target) return;
 
-        if (lastSyncedEntryRef.current === editorState.entryId) return;
+        // On a fresh entry, force the initial sync regardless of the
+        // currently displayed scrollTop.
+        const isNewEntry = lastSyncedEntryRef.current !== editorState.entryId;
         lastSyncedEntryRef.current = editorState.entryId;
 
-        target.scrollTop = editorState.scrollRow * cellHeight;
+        const desired = editorState.scrollRow * cellHeight;
+        const currentRow = Math.floor(target.scrollTop / cellHeight);
+        if (isNewEntry || currentRow !== editorState.scrollRow) {
+            target.scrollTop = desired;
+        }
     }, [editorState, cellHeight]);
 
     useEffect(() => {

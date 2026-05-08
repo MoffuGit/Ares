@@ -98,6 +98,7 @@ pub fn selectEntry(self: *Editor, id: u64) void {
             self.cursor = .{};
         }
         self.clampCursor();
+        self.ensureCursorVisible();
 
         self.rebuild_cells = true;
 
@@ -119,6 +120,7 @@ pub fn setCursorPosition(self: *Editor, row: u64, col: u64) void {
 
     self.cursor = .{ .row = row, .col = col };
     self.clampCursor();
+    self.ensureCursorVisible();
 
     self.emitUpdate();
 
@@ -144,6 +146,23 @@ fn clampCursor(self: *Editor) void {
     if (self.cursor.col > col_count) self.cursor.col = col_count;
 }
 
+/// Adjust scroll_row so the cursor stays inside the visible area.
+fn ensureCursorVisible(self: *Editor) void {
+    if (self.size.cell.height == 0) return;
+
+    // Fully visible rows (floor); bottom row may be partially visible due to
+    // @ceil in GridSize, so we use floor to keep the cursor entirely on screen.
+    const visible_rows: u64 = @max(1, self.size.screen.height / self.size.cell.height);
+
+    if (self.cursor.row < self.scroll_row) {
+        self.scroll_row = self.cursor.row;
+        self.rebuild_cells = true;
+    } else if (self.cursor.row >= self.scroll_row + visible_rows) {
+        self.scroll_row = self.cursor.row - visible_rows + 1;
+        self.rebuild_cells = true;
+    }
+}
+
 pub fn keyEvent(self: *Editor, event: inputpkg.KeyEvent) void {
     self.mutex.lock();
     defer self.mutex.unlock();
@@ -161,6 +180,9 @@ pub fn keyEvent(self: *Editor, event: inputpkg.KeyEvent) void {
 
     if (!changed) return;
 
+    self.clampCursor();
+    self.ensureCursorVisible();
+
     self.emitUpdate();
 }
 
@@ -169,6 +191,7 @@ pub fn resize(self: *Editor, size: sizepkg.Size) void {
     defer self.mutex.unlock();
 
     self.size = size;
+    self.ensureCursorVisible();
     self.rebuild_cells = true;
 }
 
@@ -191,6 +214,7 @@ pub fn mouseButton(self: *Editor, evt: inputpkg.MouseButtonEvent) void {
 
     self.cursor = .{ .row = self.scroll_row + row, .col = col };
     self.clampCursor();
+    self.ensureCursorVisible();
 
     self.emitUpdate();
 
@@ -206,6 +230,7 @@ pub fn onBufferUpdate(self: *Editor, entry_id: u64) void {
     if (self.buffer != null and self.buffer.?.id != entry_id) return;
 
     self.clampCursor();
+    self.ensureCursorVisible();
 
     self.emitUpdate();
 
