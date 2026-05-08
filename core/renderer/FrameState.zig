@@ -8,13 +8,11 @@ const Buffer = GraphicsAPI.Buffer;
 const Texture = GraphicsAPI.Texture;
 
 const UniformBuffer = Buffer(shaderpkg.Uniforms);
-const VertexBuffer = Buffer(shaderpkg.VertexInput);
 const CellBuffer = Buffer(shaderpkg.CellText);
 const CellBgBuffer = Buffer(shaderpkg.CellBg);
 
 target: Target,
 uniforms: UniformBuffer,
-vertex: VertexBuffer,
 cells: CellBuffer,
 cells_bg: CellBgBuffer,
 grayscale: Texture,
@@ -27,9 +25,6 @@ pub fn init(api: *GraphicsAPI) !FrameState {
 
     var uniforms = try UniformBuffer.init(api.uniformBufferOptions(), 1);
     errdefer uniforms.deinit();
-
-    var vertex = try VertexBuffer.init(api.uniformBufferOptions(), 1);
-    errdefer vertex.deinit();
 
     var cells = try CellBuffer.init(api.uniformBufferOptions(), 1);
     errdefer cells.deinit();
@@ -44,19 +39,9 @@ pub fn init(api: *GraphicsAPI) !FrameState {
     });
     errdefer grayscale.deinit();
 
-    const quad_vertices: [4]shaderpkg.VertexInput = .{
-        .{ .position = .{ -1.0, -1.0, 0.0, 1.0 }, .color = .{ 1.0, 0.0, 0.0, 0.0 } }, // Bottom-left
-        .{ .position = .{ 1.0, -1.0, 0.0, 1.0 }, .color = .{ 1.0, 0.0, 0.0, 0.0 } }, // Bottom-right
-        .{ .position = .{ -1.0, 1.0, 0.0, 1.0 }, .color = .{ 1.0, 0.0, 0.0, 0.0 } }, // Top-left
-        .{ .position = .{ 1.0, 1.0, 0.0, 1.0 }, .color = .{ 1.0, 0.0, 0.0, 0.0 } }, // Top-right
-    };
-
-    try vertex.sync(&quad_vertices);
-
     return .{
         .target = target,
         .uniforms = uniforms,
-        .vertex = vertex,
         .cells = cells,
         .cells_bg = cells_bg,
         .grayscale = grayscale,
@@ -65,7 +50,6 @@ pub fn init(api: *GraphicsAPI) !FrameState {
 
 pub fn deinit(self: *FrameState) void {
     self.target.deinit();
-    self.vertex.deinit();
     self.cells.deinit();
     self.cells_bg.deinit();
     self.uniforms.deinit();

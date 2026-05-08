@@ -43,6 +43,7 @@ rebuild_cells: bool = false,
 color: [4]u8,
 gutter_color: [4]u8,
 bg_color: [4]u8,
+accent_color: [4]u8,
 
 size: sizepkg.Size,
 
@@ -62,6 +63,7 @@ pub fn init(
         .color = settings.getColor(.fg),
         .gutter_color = settings.getColor(.gutter),
         .bg_color = settings.getColor(.mutedBg),
+        .accent_color = settings.getColor(.accent),
     };
 }
 
@@ -324,6 +326,7 @@ pub fn frameCallback(self: *Editor, renderer: *Renderer) !void {
         self.color,
         self.gutter_color,
         self.bg_color,
+        self.accent_color,
     );
 
     self.rebuild_cells = false;
@@ -340,6 +343,7 @@ fn rebuildCells(
     default_color: [4]u8,
     gutter_color: [4]u8,
     bg_color: [4]u8,
+    accent_color: [4]u8,
 ) !void {
     renderer.mutex.lock();
     defer renderer.mutex.unlock();
@@ -381,6 +385,16 @@ fn rebuildCells(
 
         const hl = if (row_idx < hl_rows.len) hl_rows[row_idx] else &[_]Buffer.Span{};
         const line_number = scroll_row + row_idx;
+
+        renderer.cells.bgCell(row_idx, cursor.col + visible_gutter_width).* = accent_color;
+
+        if (line_number == cursor.row) {
+            if (cursor.row > scroll_row) {
+                for (visible_gutter_width..grid_size.columns) |col| {
+                    renderer.cells.bgCell(cursor.row - scroll_row, col).* = accent_color;
+                }
+            }
+        }
 
         try renderRelativeLineNumber(
             renderer,
@@ -513,6 +527,7 @@ pub fn themeUpdate(self: *Editor) void {
     self.color = self.settings.getColor(.fg);
     self.gutter_color = self.settings.getColor(.gutter);
     self.bg_color = self.settings.getColor(.mutedBg);
+    self.accent_color = self.settings.getColor(.accent);
 
     self.rebuild_cells = true;
 }

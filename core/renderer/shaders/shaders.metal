@@ -235,3 +235,34 @@ fragment float4 cell_text_fragment(
 
       return color;
 }
+
+fragment float4 cell_bg_fragment(
+  FullScreenVertexOut in [[stage_in]],
+  constant Uniforms& uniforms [[buffer(1)]],
+  constant uchar4 *cells [[buffer(2)]]
+) {
+  int2 grid_pos = int2(floor((in.position.xy) / uniforms.cell_size));
+
+  float4 bg = float4(0.0);
+
+  // Clamp x position, extends edge bg colors in to padding on sides.
+ if (grid_pos.x < 0) {
+     return bg;
+ } else if (grid_pos.x > uniforms.grid_size.x - 1) {
+     return bg;
+ }
+
+ // Clamp y position if we should extend, otherwise discard if out of bounds.
+ if (grid_pos.y < 0) {
+     return bg;
+ } else if (grid_pos.y > uniforms.grid_size.y - 1) {
+     return bg;
+ }
+
+  // Load the color for the cell.
+  uchar4 cell_color = cells[grid_pos.y * uniforms.grid_size.x + grid_pos.x];
+
+  float4 color = float4(cell_color) / 255.0f;
+
+  return color;
+}

@@ -226,6 +226,7 @@ pub fn drawFrame(
     try frame.uniforms.sync(&.{self.uniforms});
 
     const fg_count = try frame.cells.syncFromArrayLists(self.cells.fg_rows.lists);
+    try frame.cells_bg.sync(self.cells.bg_cells);
 
     self.cells_rebuilt = false;
 
@@ -255,7 +256,14 @@ pub fn drawFrame(
         });
 
         pass.step(.{
-            .pipeline = self.shaders.pipelines.cell,
+            .pipeline = self.shaders.pipelines.cell_bg,
+            .uniforms = frame.uniforms.buffer,
+            .buffers = &.{ null, frame.cells_bg.buffer },
+            .draw = .{ .type = .triangle, .vertex_count = 3 },
+        });
+
+        pass.step(.{
+            .pipeline = self.shaders.pipelines.cell_text,
             .uniforms = frame.uniforms.buffer,
             .buffers = &.{
                 frame.cells.buffer,
