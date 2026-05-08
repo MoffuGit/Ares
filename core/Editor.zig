@@ -110,8 +110,27 @@ pub fn scroll(self: *Editor, row: u64) void {
     self.mutex.lock();
     defer self.mutex.unlock();
 
+    if (self.scroll_row == row) return;
+
     self.scroll_row = row;
     self.rebuild_cells = true;
+
+    // Keep the cursor inside the now-visible window. If it has scrolled
+    // off the top or bottom, snap it to the nearest visible edge.
+    if (self.size.cell.height != 0) {
+        const visible_rows: u64 = @max(1, self.size.screen.height / self.size.cell.height);
+        const cursor_changed = if (self.cursor.row < self.scroll_row) blk: {
+            self.cursor.row = self.scroll_row;
+            break :blk true;
+        } else if (self.cursor.row >= self.scroll_row + visible_rows) blk: {
+            self.cursor.row = self.scroll_row + visible_rows - 1;
+            break :blk true;
+        } else false;
+
+        if (cursor_changed) self.clampCursor();
+    }
+
+    self.emitUpdate();
 }
 
 pub fn setCursorPosition(self: *Editor, row: u64, col: u64) void {
