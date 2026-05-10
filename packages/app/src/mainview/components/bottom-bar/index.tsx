@@ -17,7 +17,7 @@ export function BottomBar() {
     const tabsInSidebar = settings?.tabs_position === "vertical";
 
     return (
-        <div className="h-auto w-full flex flex-wrap items-center align-middle gap-1 text-xs wrap-break-word text-muted-foreground px-1">
+        <div className="h-auto w-full flex flex-wrap items-center align-middle gap-1 text-xs wrap-break-word text-muted-foreground">
             <Button
                 size="icon-xs"
                 variant="ghost"
