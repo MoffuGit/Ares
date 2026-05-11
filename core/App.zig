@@ -11,6 +11,8 @@ const objc = @import("objc");
 const keymapspkg = @import("keymaps/mod.zig");
 const macos_keycodes = keymapspkg.macos_keycodes;
 const KeyDispatcher = keymapspkg.Dispatcher;
+const FocusLayer = keymapspkg.FocusLayer;
+const Mode = keymapspkg.Mode;
 
 pub const App = @This();
 
@@ -18,6 +20,13 @@ pub const App = @This();
 /// that is itself a valid keymap, but the trie can still continue).
 /// After this idle interval the dispatcher fires the buffered match.
 const KEYMAP_TIMEOUT_NS: u64 = 500 * std.time.ns_per_ms;
+
+/// Default focus stack used until JS sets one. Mirrors the historical
+/// behaviour of "editor is the active surface, palette is closed".
+const DEFAULT_LAYERS = [_]FocusLayer{
+    .{ .scope = .global },
+    .{ .scope = .editor },
+};
 
 settings: *Settings,
 appearance: *Appearance,
@@ -32,6 +41,9 @@ keymap_cond: std.Thread.Condition = .{},
 keymap_deadline_ns: ?i128 = null,
 keymap_stop: bool = false,
 keymap_thread: ?std.Thread = null,
+
+editor_mode: Mode = .normal,
+focus_stack: std.ArrayListUnmanaged(FocusLayer) = .{},
 
 pub fn create(window: *anyopaque) !*App {
     const app = try global.alloc.create(App);
@@ -64,6 +76,8 @@ pub fn create(window: *anyopaque) !*App {
         .key_dispatcher = KeyDispatcher.init(global.alloc),
     };
 
+    try app.focus_stack.appendSlice(global.alloc, &DEFAULT_LAYERS);
+
     app.keymap_thread = try std.Thread.spawn(.{}, keymapFlusherMain, .{app});
 
     setKeyHandlerCallback(app.window, keyHandlerCallback, @ptrCast(app));
@@ -91,12 +105,30 @@ pub fn loadSettings(self: *App, path: []const u8) !void {
     try self.settings.load(path, self.monitor, self.appearance);
 }
 
-pub fn setMode(self: *App, mode: keymapspkg.Mode) void {
+pub fn setMode(self: *App, mode: Mode) void {
     self.keymap_mutex.lock();
     defer self.keymap_mutex.unlock();
 
-    if (self.key_dispatcher.mode == mode) return;
-    self.key_dispatcher.setMode(mode);
+    if (self.editor_mode == mode) return;
+    self.editor_mode = mode;
+    self.resetKeyDispatchLocked();
+}
+
+/// Replace the focus stack atomically. `layers` is bottom-first; the
+/// topmost (most recently pushed) layer is the last element.
+pub fn setFocusStack(self: *App, layers: []const FocusLayer) !void {
+    self.keymap_mutex.lock();
+    defer self.keymap_mutex.unlock();
+
+    self.focus_stack.clearRetainingCapacity();
+    try self.focus_stack.appendSlice(global.alloc, layers);
+    self.resetKeyDispatchLocked();
+}
+
+fn resetKeyDispatchLocked(self: *App) void {
+    self.key_dispatcher.reset();
+    self.keymap_deadline_ns = null;
+    self.keymap_cond.signal();
 }
 
 pub fn onKeyDown(self: *App, key_code: u32, modifiers: u32, _: bool) bool {
@@ -110,7 +142,12 @@ pub fn onKeyDown(self: *App, key_code: u32, modifiers: u32, _: bool) bool {
     self.keymap_mutex.lock();
     defer self.keymap_mutex.unlock();
 
-    const result = self.key_dispatcher.dispatch(&self.settings.keymaps, stroke) catch |err| {
+    const result = self.key_dispatcher.dispatch(
+        &self.settings.keymaps,
+        self.focus_stack.items,
+        self.editor_mode,
+        stroke,
+    ) catch |err| {
         std.log.warn("key dispatch failed: {}", .{err});
         self.key_dispatcher.reset();
         self.keymap_deadline_ns = null;
@@ -167,13 +204,13 @@ fn flushKeymap(self: *App) void {
     self.keymap_mutex.lock();
     defer self.keymap_mutex.unlock();
 
-    const seq = self.key_dispatcher.flushPending() catch |err| {
+    const flushed = self.key_dispatcher.flushPending() catch |err| {
         std.log.warn("keymap flush failed: {}", .{err});
         return;
     };
 
-    if (seq) |s| {
-        _ = global.emit(.{ .keymapMatch = .{ .sequence = s } }, .instant);
+    if (flushed) |f| {
+        _ = global.emit(.{ .keymapMatch = .{ .sequence = f.sequence } }, .instant);
     }
 }
 
@@ -188,6 +225,7 @@ pub fn destroy(self: *App) void {
     if (self.keymap_thread) |t| t.join();
 
     self.key_dispatcher.deinit();
+    self.focus_stack.deinit(global.alloc);
     self.grid.deinit(global.alloc);
     self.settings.destroy();
     self.appearance.destroy();

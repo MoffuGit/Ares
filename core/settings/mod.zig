@@ -332,13 +332,17 @@ fn loadKeymaps(self: *Settings, km_json: std.json.Value) void {
 
     var scope_it = obj.iterator();
     while (scope_it.next()) |scope_entry| {
+        const scope = keymapspkg.parseScope(scope_entry.key_ptr.*) orelse {
+            std.log.warn("unknown keymap scope: {s}", .{scope_entry.key_ptr.*});
+            continue;
+        };
         const scope_obj = switch (scope_entry.value_ptr.*) {
             .object => |o| o,
             else => continue,
         };
         for (mode_names) |mode_entry| {
             if (scope_obj.get(mode_entry.key)) |mode_json| {
-                self.loadKeymapMode(mode_entry.mode, mode_json);
+                self.loadKeymapMode(scope, mode_entry.mode, mode_json);
             }
         }
     }
@@ -346,7 +350,7 @@ fn loadKeymaps(self: *Settings, km_json: std.json.Value) void {
     self.keymap_generation +%= 1;
 }
 
-fn loadKeymapMode(self: *Settings, mode: keymapspkg.Mode, mode_json: std.json.Value) void {
+fn loadKeymapMode(self: *Settings, scope: keymapspkg.Scope, mode: keymapspkg.Mode, mode_json: std.json.Value) void {
     const bindings = switch (mode_json) {
         .object => |o| o,
         else => return,
@@ -355,7 +359,7 @@ fn loadKeymapMode(self: *Settings, mode: keymapspkg.Mode, mode_json: std.json.Va
     var it = bindings.iterator();
     while (it.next()) |entry| {
         const seq_str = entry.key_ptr.*;
-        self.keymaps.insert(mode, seq_str) catch continue;
+        self.keymaps.insert(scope, mode, seq_str) catch continue;
     }
 }
 
@@ -367,32 +371,46 @@ fn loadDefaultKeymaps(self: *Settings) void {
     self.keymaps_initialized = true;
 
     const DefaultEntry = struct {
+        scope: keymapspkg.Scope,
         mode: keymapspkg.Mode,
         sequence: []const u8,
     };
 
     const defaults = [_]DefaultEntry{
-        .{ .mode = .normal, .sequence = "i" },
-        .{ .mode = .normal, .sequence = "v" },
-        .{ .mode = .insert, .sequence = "escape" },
-        .{ .mode = .visual, .sequence = "escape" },
-        .{ .mode = .normal, .sequence = "super+l" },
-        .{ .mode = .normal, .sequence = "ctrl+t" },
-        .{ .mode = .normal, .sequence = "tab" },
-        .{ .mode = .normal, .sequence = "shift+tab" },
-        .{ .mode = .normal, .sequence = "ctrl+q" },
-        .{ .mode = .normal, .sequence = "super+k" },
-        .{ .mode = .normal, .sequence = "k" },
-        .{ .mode = .normal, .sequence = "j" },
-        .{ .mode = .normal, .sequence = "enter" },
-        .{ .mode = .normal, .sequence = "ctrl+u" },
-        .{ .mode = .normal, .sequence = "ctrl+d" },
-        .{ .mode = .normal, .sequence = "g g" },
-        .{ .mode = .normal, .sequence = "shift+G" },
+        // global
+        .{ .scope = .global, .mode = .normal, .sequence = "i" },
+        .{ .scope = .global, .mode = .normal, .sequence = "v" },
+        .{ .scope = .global, .mode = .insert, .sequence = "escape" },
+        .{ .scope = .global, .mode = .visual, .sequence = "escape" },
+        .{ .scope = .global, .mode = .normal, .sequence = "super+b" },
+        .{ .scope = .global, .mode = .normal, .sequence = "ctrl+t" },
+        .{ .scope = .global, .mode = .normal, .sequence = "tab" },
+        .{ .scope = .global, .mode = .normal, .sequence = "shift+tab" },
+        .{ .scope = .global, .mode = .normal, .sequence = "ctrl+q" },
+        .{ .scope = .global, .mode = .normal, .sequence = "super+k" },
+        .{ .scope = .global, .mode = .normal, .sequence = "super+p t" },
+        .{ .scope = .global, .mode = .normal, .sequence = "super+p f" },
+        .{ .scope = .global, .mode = .normal, .sequence = "super+t" },
+
+        // command_palette
+        .{ .scope = .command_palette, .mode = .normal, .sequence = "escape" },
+        .{ .scope = .command_palette, .mode = .normal, .sequence = "shift+tab" },
+        .{ .scope = .command_palette, .mode = .normal, .sequence = "tab" },
+        .{ .scope = .command_palette, .mode = .normal, .sequence = "enter" },
+
+        // editor
+        .{ .scope = .editor, .mode = .normal, .sequence = "k" },
+        .{ .scope = .editor, .mode = .normal, .sequence = "j" },
+        .{ .scope = .editor, .mode = .normal, .sequence = "h" },
+        .{ .scope = .editor, .mode = .normal, .sequence = "l" },
+        .{ .scope = .editor, .mode = .normal, .sequence = "ctrl+u" },
+        .{ .scope = .editor, .mode = .normal, .sequence = "ctrl+d" },
+        .{ .scope = .editor, .mode = .normal, .sequence = "g g" },
+        .{ .scope = .editor, .mode = .normal, .sequence = "shift+g" },
     };
 
     for (defaults) |d| {
-        self.keymaps.insert(d.mode, d.sequence) catch continue;
+        self.keymaps.insert(d.scope, d.mode, d.sequence) catch continue;
     }
 
     self.keymap_generation +%= 1;

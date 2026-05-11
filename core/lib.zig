@@ -127,6 +127,54 @@ export fn setMode(app: *App, mode: u8) void {
     app.setMode(@enumFromInt(mode));
 }
 
+/// Sentinel value for `ExternFocusLayer.mode_override` meaning "inherit
+/// the editor's current mode".
+pub const FOCUS_LAYER_INHERIT_MODE: u8 = 0xff;
+
+pub const ExternFocusLayer = extern struct {
+    scope: u8,
+    /// `Mode` enum value, or `FOCUS_LAYER_INHERIT_MODE` for null.
+    mode_override: u8,
+    /// 0 = false, anything else = true.
+    passthrough_printable: u8,
+};
+
+/// Replace the focus stack atomically. `layers` is bottom-first; the
+/// topmost (most recently pushed) layer is the last element. Invalid
+/// `scope` or `mode_override` values are dropped silently.
+export fn setFocusStack(app: *App, layers_ptr: [*]const ExternFocusLayer, len: u32) void {
+    const km = @import("keymaps/mod.zig");
+    const scope_count = @typeInfo(km.Scope).@"enum".fields.len;
+    const mode_count = @typeInfo(km.Mode).@"enum".fields.len;
+
+    var buf: [16]km.FocusLayer = undefined;
+    const raw = layers_ptr[0..len];
+    var n: usize = 0;
+
+    for (raw) |entry| {
+        if (n >= buf.len) break;
+        if (entry.scope >= scope_count) continue;
+
+        const mode_override: ?km.Mode = if (entry.mode_override == FOCUS_LAYER_INHERIT_MODE)
+            null
+        else if (entry.mode_override < mode_count)
+            @enumFromInt(entry.mode_override)
+        else
+            null;
+
+        buf[n] = .{
+            .scope = @enumFromInt(entry.scope),
+            .mode_override = mode_override,
+            .passthrough_printable = entry.passthrough_printable != 0,
+        };
+        n += 1;
+    }
+
+    app.setFocusStack(buf[0..n]) catch |err| {
+        std.log.warn("setFocusStack failed: {}", .{err});
+    };
+}
+
 export fn getThemeJsonLen(app: *App) u64 {
     return app.settings.theme_json.len;
 }
