@@ -1,7 +1,0 @@
-.{
-    .name = .zintect,
-    .version = "0.0.0",
-    .paths = .{""},
-    .fingerprint = 0x6f7474e4dac6ce1e,
-    .dependencies = .{},
-}
