@@ -19,8 +19,8 @@ pub const RunFlags = struct {
     failed: bool = false,
 };
 
-pub const Hook = *const fn (b: *Benchmark, ctx: ?*anyopaque) anyerror!void;
-pub const AfterEachHook = *const fn (b: *Benchmark, ctx: ?*anyopaque, flags: RunFlags) anyerror!void;
+pub const Hook = *const fn (b: *Benchmark, ctx: ?*anyopaque) void;
+pub const AfterEachHook = *const fn (b: *Benchmark, ctx: ?*anyopaque, flags: RunFlags) void;
 
 pub const Hooks = struct {
     before_all: ?Hook = null,
@@ -107,7 +107,7 @@ pub fn run(
     self.ctx = if (ctx) |c| @as(*anyopaque, @ptrCast(c)) else null;
     self.data = .{};
 
-    if (self.config.hooks.before_all) |hook| try hook(self, self.ctx);
+    if (self.config.hooks.before_all) |hook| hook(self, self.ctx);
 
     const max_ticks = if (self.config.stop_ms) |ms| time.msToTicks(ms) else std.math.maxInt(u64);
     const max_iter = self.config.max_iter orelse std.math.maxInt(usize);
@@ -117,7 +117,7 @@ pub fn run(
     var worst_time: u64 = 0;
 
     while (self.data.iterations + self.data.failures < max_iter) {
-        if (self.config.hooks.before_each) |hook| try hook(self, self.ctx);
+        if (self.config.hooks.before_each) |hook| hook(self, self.ctx);
 
         self.profiler.init(self.allocator);
         defer self.profiler.deinit();
@@ -142,7 +142,7 @@ pub fn run(
             }
         }
 
-        if (self.config.hooks.after_each) |hook| try hook(self, self.ctx, flags);
+        if (self.config.hooks.after_each) |hook| hook(self, self.ctx, flags);
 
         if (failed) {
             acc_ticks += sample.time;
@@ -158,7 +158,7 @@ pub fn run(
         }
     }
 
-    if (self.config.hooks.after_all) |hook| try hook(self, self.ctx);
+    if (self.config.hooks.after_all) |hook| hook(self, self.ctx);
 
     if (self.data.iterations == 0) {
         return .{
