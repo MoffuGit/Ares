@@ -13,3 +13,4 @@ pub const ProfileLevel = prof.ProfileLevel;
 pub const Profiler = prof.Profiler(.{ .level = configured_level });
 pub const Zone = prof.Zone(Profiler);
 pub const Benchmark = @import("bench.zig");
+pub const Sample = prof.Sample(Profiler);

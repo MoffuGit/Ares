@@ -3,38 +3,27 @@ const Io = std.Io;
 const mod = @import("mod.zig");
 const time = @import("time.zig");
 const Profiler = mod.Profiler;
+const Sample = mod.Sample;
 const bench_enabled = mod.bench_enabled;
 
 const Benchmark = @This();
 
 allocator: std.mem.Allocator,
 config: Config,
-ctx: ?*anyopaque = null,
-data: Data = .{},
+samples: std.ArrayList(Sample) = .empty,
+failures: u64 = 0,
 profiler: Profiler = undefined,
 
 pub const RunFlags = struct {
-    is_best: bool = false,
-    is_worst: bool = false,
+    best: bool = false,
+    worst: bool = false,
     failed: bool = false,
 };
 
-pub const Hook = *const fn (b: *Benchmark, ctx: ?*anyopaque) void;
-pub const AfterEachHook = *const fn (b: *Benchmark, ctx: ?*anyopaque, flags: RunFlags) void;
-
-pub const Hooks = struct {
-    before_all: ?Hook = null,
-    after_all: ?Hook = null,
-    before_each: ?Hook = null,
-    after_each: ?AfterEachHook = null,
-};
-
 pub const Config = struct {
-    name: []const u8 = "benchmark",
     min_iter: usize = 1,
     max_iter: ?usize = 1,
     stop_ms: ?u64 = null,
-    hooks: Hooks = .{},
 };
 
 pub const Status = enum {
@@ -42,41 +31,146 @@ pub const Status = enum {
     completed,
 };
 
+pub const Stats = struct {
+    total_ms: f64,
+    mean_ms: f64,
+    min_ms: f64,
+    max_ms: f64,
+
+    pub fn computeTime(samples: *std.ArrayList(Sample)) !Stats {
+        std.debug.assert(samples.items.len > 0);
+
+        std.mem.sort(Sample, samples.items, {}, Sample.sort);
+
+        const len = samples.items.len;
+
+        var sum: u128 = 0;
+        for (samples.items) |v| sum += v.time;
+        const mean_ticks: u64 = @intCast(sum / len);
+
+        var var_acc: u128 = 0;
+        for (samples.items) |v| {
+            const d: i128 = @as(i128, @intCast(v.time)) - @as(i128, @intCast(mean_ticks));
+            var_acc += @intCast(d * d);
+        }
+
+        return .{
+            .total_ms = time.ticksToMs(sum),
+            .mean_ms = time.ticksToMs(mean_ticks),
+            .min_ms = time.ticksToMs(samples.items[0].time),
+            .max_ms = time.ticksToMs(samples.items[len - 1].time),
+        };
+    }
+};
+
 pub const Result = struct {
     const Self = @This();
 
     status: Status,
     iterations: usize = 0,
-    failures: usize = 0,
-    timings: Timing = .{},
-
-    pub fn fromData(data: Data) Self {
-        const max = time.ticksToMs(data.max_ticks);
-        const min = time.ticksToMs(data.min_ticks);
-        const mean = time.ticksToMs(data.acc / data.iterations);
-
-        return .{
-            .status = .completed,
-            .iterations = data.iterations,
-            .failures = data.failures,
-            .timings = .{
-                .max = max,
-                .min = min,
-                .mean = mean,
-            },
-        };
-    }
+    failures: u64 = 0,
+    time: ?Stats = null,
 
     pub fn log(self: *const Self, io: Io, file: Io.File) !void {
         var buffer: [4096]u8 = undefined;
         var w: Io.File.Writer = .init(file, io, &buffer);
-        const writer = &w.interface;
+        const writer: *Io.Writer = &w.interface;
+        defer writer.flush() catch {};
 
-        try writer.print("BENCHMARK RUNS\n", .{});
-        try writer.print("best: {}", .{self.timings.min});
-        try writer.flush();
+        var terminal: Io.Terminal = .{
+            .writer = writer,
+            .mode = .escape_codes,
+        };
+
+        if (self.status == .skipped or self.iterations == 0) return;
+
+        const time_stats = self.time orelse return;
+
+        try writer.print("\n\n", .{});
+        try terminal.setColor(.bold);
+        try writer.print("BENCHMARK", .{});
+        try terminal.setColor(.dim);
+        if (self.iterations > 1) {
+            try writer.print(" ({d} runs)", .{self.iterations});
+        } else {
+            try writer.print(" ({d} run)", .{self.iterations});
+        }
+        try terminal.setColor(.reset);
+        try writer.writeAll("\n");
+
+        try terminal.setColor(.bold);
+        const measurement_label = "  measurement";
+        try writer.writeAll(measurement_label);
+        try writer.splatByteAll(' ', NAME_COL_WIDTH - measurement_label.len);
+        try terminal.setColor(.bright_green);
+        try writer.writeAll("mean");
+        try terminal.setColor(.reset);
+
+        try terminal.setColor(.bold);
+        try writer.splatByteAll(' ', 12);
+        try terminal.setColor(.cyan);
+        try writer.writeAll("min");
+        try terminal.setColor(.reset);
+        try terminal.setColor(.bold);
+        try writer.writeAll(" … ");
+        try terminal.setColor(.magenta);
+        try writer.writeAll("max\n");
+        try terminal.setColor(.reset);
+
+        try printMeasurement(writer, &terminal, "time", time_stats);
+
+        try writer.print("\n\n", .{});
     }
 };
+
+const NAME_COL_WIDTH: usize = 23;
+const MEAN_COL_WIDTH: usize = 16;
+const RANGE_COL_WIDTH: usize = 20;
+
+fn printMeasurement(writer: *Io.Writer, terminal: *Io.Terminal, label: []const u8, stats: Stats) !void {
+    var buf_mean: [32]u8 = undefined;
+    var buf_min: [32]u8 = undefined;
+    var buf_max: [32]u8 = undefined;
+
+    var name_buf: [NAME_COL_WIDTH + 8]u8 = undefined;
+    const name_str = try std.fmt.bufPrint(&name_buf, "  {s}", .{label});
+    try writer.writeAll(name_str);
+    if (name_str.len < NAME_COL_WIDTH) {
+        try writer.splatByteAll(' ', NAME_COL_WIDTH - name_str.len);
+    } else {
+        try writer.writeByte(' ');
+    }
+
+    const mean_str = try std.fmt.bufPrint(&buf_mean, "{f}", .{Duration{ .ms = stats.mean_ms }});
+    try terminal.setColor(.bright_green);
+    try writer.writeAll(mean_str);
+    try terminal.setColor(.reset);
+    const mean_written = mean_str.len + 3;
+    if (mean_written < MEAN_COL_WIDTH) {
+        try writer.splatByteAll(' ', MEAN_COL_WIDTH - mean_written);
+    } else {
+        try writer.writeByte(' ');
+    }
+
+    // min … max
+    const min_str = try std.fmt.bufPrint(&buf_min, "{f}", .{Duration{ .ms = stats.min_ms }});
+    const max_str = try std.fmt.bufPrint(&buf_max, "{f}", .{Duration{ .ms = stats.max_ms }});
+    try terminal.setColor(.cyan);
+    try writer.writeAll(min_str);
+    try terminal.setColor(.reset);
+    try writer.writeAll(" … ");
+    try terminal.setColor(.magenta);
+    try writer.writeAll(max_str);
+    try terminal.setColor(.reset);
+    const range_written = min_str.len + 3 + max_str.len;
+    if (range_written < RANGE_COL_WIDTH) {
+        try writer.splatByteAll(' ', RANGE_COL_WIDTH - range_written);
+    } else {
+        try writer.writeByte(' ');
+    }
+
+    try writer.writeAll("\n");
+}
 
 pub fn init(self: *Benchmark, allocator: std.mem.Allocator, config: Config) void {
     self.* = .{
@@ -86,16 +180,16 @@ pub fn init(self: *Benchmark, allocator: std.mem.Allocator, config: Config) void
 }
 
 pub fn deinit(self: *Benchmark) void {
-    _ = self;
+    self.samples.deinit(self.allocator);
 }
 
 pub fn run(
     self: *Benchmark,
     comptime Context: type,
-    ctx: ?*Context,
+    context: ?*Context,
     callback: *const fn (ctx: ?*Context, profiler: *Profiler) anyerror!void,
 ) !Result {
-    if (!bench_enabled) return .{ .status = .skipped, .timings = .{} };
+    if (!bench_enabled) return .{ .status = .skipped, .name = self.config.name };
 
     if (self.config.max_iter == null and self.config.stop_ms == null) {
         return error.UnboundedBenchmark;
@@ -109,10 +203,8 @@ pub fn run(
         if (mx < self.config.min_iter) return error.MinIterExceedsMaxIter;
     }
 
-    self.ctx = if (ctx) |c| @as(*anyopaque, @ptrCast(c)) else null;
-    self.data = .{};
-
-    if (self.config.hooks.before_all) |hook| hook(self, self.ctx);
+    self.samples.clearRetainingCapacity();
+    self.failures = 0;
 
     const max_ticks = if (self.config.stop_ms) |ms| time.msToTicks(ms) else std.math.maxInt(u64);
     const max_iter = self.config.max_iter orelse std.math.maxInt(usize);
@@ -121,86 +213,77 @@ pub fn run(
     var best_time: u64 = std.math.maxInt(u64);
     var worst_time: u64 = 0;
 
-    while (self.data.iterations + self.data.failures < max_iter) {
-        if (self.config.hooks.before_each) |hook| hook(self, self.ctx);
-
+    while (self.samples.items.len + self.failures < max_iter) {
         self.profiler.init(self.allocator);
         defer self.profiler.deinit();
 
-        const cb_result = callback(ctx, &self.profiler);
+        const cb_result = callback(context, &self.profiler);
         const failed = if (cb_result) |_| false else |_| true;
+
         const sample = self.profiler.sample();
 
         var flags: RunFlags = .{ .failed = failed };
 
         if (failed) {
-            self.data.failures += 1;
+            self.failures += 1;
         } else {
-            _ = self.data.add(sample.time);
+            try self.samples.append(self.allocator, sample);
             if (sample.time < best_time) {
-                flags.is_best = true;
+                flags.best = true;
                 best_time = sample.time;
             }
             if (sample.time > worst_time) {
-                flags.is_worst = true;
+                flags.worst = true;
                 worst_time = sample.time;
             }
         }
 
-        if (self.config.hooks.after_each) |hook| hook(self, self.ctx, flags);
-
         if (failed) {
             acc_ticks += sample.time;
-            if (acc_ticks >= max_ticks and self.data.iterations + self.data.failures >= min_iter) break;
+            if (acc_ticks >= max_ticks and self.samples.items.len + self.failures >= min_iter) break;
             continue;
         }
 
-        if (flags.is_best) {
+        if (flags.best) {
             acc_ticks = 0;
         } else {
             acc_ticks += sample.time;
-            if (acc_ticks >= max_ticks and self.data.iterations + self.data.failures >= min_iter) break;
+            if (acc_ticks >= max_ticks and self.samples.items.len + self.failures >= min_iter) break;
         }
     }
 
-    if (self.config.hooks.after_all) |hook| hook(self, self.ctx);
-
-    if (self.data.iterations == 0) {
+    if (self.samples.items.len == 0) {
         return .{
             .status = .completed,
             .iterations = 0,
-            .failures = self.data.failures,
-            .timings = .{},
+            .failures = self.failures,
+            .time = null,
         };
     }
 
-    return Result.fromData(self.data);
+    const time_stats = try Stats.computeTime(&self.samples);
+
+    return .{
+        .status = .completed,
+        .iterations = self.samples.items.len,
+        .failures = self.failures,
+        .time = time_stats,
+    };
 }
 
-pub const Data = struct {
-    min_ticks: u64 = std.math.maxInt(u64),
-    max_ticks: u64 = 0,
-    acc: u64 = 0,
-    iterations: u64 = 0,
-    failures: u64 = 0,
+pub const Duration = struct {
+    ms: f64,
 
-    pub fn add(self: *Data, ticks: u64) bool {
-        self.iterations += 1;
-        self.acc += ticks;
-
-        if (ticks > self.max_ticks) self.max_ticks = ticks;
-
-        if (self.min_ticks > ticks) {
-            self.min_ticks = ticks;
-            return true;
+    pub fn format(self: Duration, writer: *Io.Writer) Io.Writer.Error!void {
+        const ms = self.ms;
+        if (ms >= 1_000.0) {
+            try writer.print("{d:.3}s", .{ms / 1_000.0});
+        } else if (ms >= 1.0) {
+            try writer.print("{d:.3}ms", .{ms});
+        } else if (ms >= 0.001) {
+            try writer.print("{d:.3}us", .{ms * 1_000.0});
+        } else {
+            try writer.print("{d:.3}ns", .{ms * 1_000_000.0});
         }
-
-        return false;
     }
-};
-
-const Timing = struct {
-    max: f64 = 0,
-    min: f64 = 0,
-    mean: f64 = 0,
 };

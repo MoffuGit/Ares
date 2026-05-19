@@ -11,6 +11,7 @@ test "Bench Reads" {
 
     var bench: prof.Benchmark = undefined;
     bench.init(gpa, .{});
+    defer bench.deinit();
 
     var ctx = Context{
         .io = io,

@@ -25,7 +25,7 @@ pub fn msToTicks(ms: u64) u64 {
     return ms * timerFreq() / 1000;
 }
 
-pub fn ticksToMs(ticks: u64) f64 {
+pub fn ticksToMs(ticks: anytype) f64 {
     if (ticks == 0) return 0.0;
 
     return @as(f64, @floatFromInt(ticks)) * 1000.0 / @as(f64, @floatFromInt(timerFreq()));

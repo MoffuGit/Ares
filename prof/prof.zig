@@ -241,11 +241,20 @@ pub fn Profiler(comptime config: ProfilerConfig) type {
 
 pub fn Sample(comptime ProfilerType: type) type {
     if (!ProfilerType.is_enabled) {
-        return struct {};
+        return struct {
+            const Self = @This();
+            pub fn sort(_: void, _: Self, _: Self) bool {
+                return false;
+            }
+        };
     }
 
     return struct {
+        const Self = @This();
         time: u64,
+        pub fn sort(_: void, a: Self, b: Self) bool {
+            return a.time < b.time;
+        }
     };
 }
 
