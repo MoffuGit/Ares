@@ -22,8 +22,8 @@ pub const RunFlags = struct {
 
 pub const Config = struct {
     min_iter: usize = 1,
-    max_iter: ?usize = 1,
-    stop_ms: ?u64 = null,
+    max_iter: ?usize = null,
+    stop_ms: ?u64 = 1000,
 };
 
 pub const Status = enum {
@@ -173,8 +173,10 @@ pub fn deinit(self: *Benchmark) void {
 pub fn run(
     self: *Benchmark,
     comptime Context: type,
-    context: ?*Context,
-    callback: *const fn (ctx: ?*Context, profiler: *Profiler) anyerror!void,
+    context: *Context,
+    alloc: std.mem.Allocator,
+    io: std.Io,
+    callback: *const fn (ctx: *Context, alloc: std.mem.Allocator, io: std.Io, profiler: *Profiler) anyerror!void,
 ) !Result {
     if (!bench_enabled) return .{ .status = .skipped, .name = self.config.name };
 
@@ -204,7 +206,7 @@ pub fn run(
         self.profiler.init(self.allocator);
         defer self.profiler.deinit();
 
-        const cb_result = callback(context, &self.profiler);
+        const cb_result = callback(context, alloc, io, &self.profiler);
         const failed = if (cb_result) |_| false else |_| true;
 
         const sample = self.profiler.sample();

@@ -3,6 +3,10 @@ const prof = @import("prof/mod.zig");
 
 const ProfileLevel = prof.ProfileLevel;
 
+const TestDataPath = "testdata";
+const ChromiumPath = TestDataPath ++ "/chromium";
+const ChromiumUrl = "https://github.com/chromium/chromium.git";
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -40,6 +44,13 @@ pub fn build(b: *std.Build) void {
         .root_module = rootModule(b, target, optimize, "src/bench.zig", bench_level, true),
     });
 
+    const bench_artifact = b.addInstallArtifact(
+        bench_tests,
+        .{ .dest_dir = .{ .override = .{ .custom = "benchs" } } },
+    );
+    const install_bench_step = b.step("bench_install", "Create bench binaries for debugging");
+    install_bench_step.dependOn(&bench_artifact.step);
+
     bench_tests.step.dependOn(clone_chromium);
     const run_bench = b.addRunArtifact(bench_tests);
     run_bench.argv.shrinkRetainingCapacity(1);
@@ -74,9 +85,6 @@ fn rootModule(
     });
 }
 
-const chromium_dir = "testdata/chromium";
-const chromium_url = "https://github.com/chromium/chromium.git";
-
 fn cloneChromiumStep(b: *std.Build) *std.Build.Step {
     const step = b.allocator.create(std.Build.Step) catch @panic("OOM");
     step.* = std.Build.Step.init(.{
@@ -91,12 +99,12 @@ fn cloneChromiumStep(b: *std.Build) *std.Build.Step {
 fn cloneChromiumMake(step: *std.Build.Step, opts: std.Build.Step.MakeOptions) anyerror!void {
     const b = step.owner;
     const io = b.graph.io;
-    const dest = b.pathFromRoot(chromium_dir);
+    const dest = b.pathFromRoot(ChromiumPath);
     const git_dir = b.pathJoin(&.{ dest, ".git" });
 
     if (std.Io.Dir.accessAbsolute(io, git_dir, .{})) |_| return else |_| {}
 
-    std.Io.Dir.cwd().createDirPath(io, b.pathFromRoot("testdata")) catch |e|
+    std.Io.Dir.cwd().createDirPath(io, b.pathFromRoot(TestDataPath)) catch |e|
         return step.fail("unable to create testdata dir: {s}", .{@errorName(e)});
 
     var node = opts.progress_node.start("git clone chromium", 0);
@@ -106,7 +114,7 @@ fn cloneChromiumMake(step: *std.Build.Step, opts: std.Build.Step.MakeOptions) an
         .argv = &.{
             "git",                "clone",
             "--depth",            "1",
-            "--filter=blob:none", chromium_url,
+            "--filter=blob:none", ChromiumUrl,
             dest,
         },
         .stdin = .pipe,
