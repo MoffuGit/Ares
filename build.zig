@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
         "Profiling level: none, general, or deep. Bench defaults to general when unset.",
     );
     const normal_profile_level = requested_profile_level orelse .none;
-    const bench_profile_level = .general;
+    const bench_profile_level = requested_profile_level orelse .general;
 
     const normal_options = profOptions(b, normal_profile_level, false);
     const prof_mod = b.createModule(.{
