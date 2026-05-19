@@ -102,22 +102,15 @@ pub const Result = struct {
         const measurement_label = "  measurement";
         try writer.writeAll(measurement_label);
         try writer.splatByteAll(' ', NAME_COL_WIDTH - measurement_label.len);
-        try terminal.setColor(.bright_green);
         try writer.writeAll("mean");
-        try terminal.setColor(.reset);
 
-        try terminal.setColor(.bold);
         try writer.splatByteAll(' ', 12);
-        try terminal.setColor(.cyan);
         try writer.writeAll("min");
-        try terminal.setColor(.reset);
-        try terminal.setColor(.bold);
         try writer.writeAll(" … ");
-        try terminal.setColor(.magenta);
         try writer.writeAll("max\n");
         try terminal.setColor(.reset);
 
-        try printMeasurement(writer, &terminal, "time", time_stats);
+        try printMeasurement(writer, "time", time_stats);
 
         try writer.print("\n\n", .{});
     }
@@ -127,7 +120,7 @@ const NAME_COL_WIDTH: usize = 23;
 const MEAN_COL_WIDTH: usize = 16;
 const RANGE_COL_WIDTH: usize = 20;
 
-fn printMeasurement(writer: *Io.Writer, terminal: *Io.Terminal, label: []const u8, stats: Stats) !void {
+fn printMeasurement(writer: *Io.Writer, label: []const u8, stats: Stats) !void {
     var buf_mean: [32]u8 = undefined;
     var buf_min: [32]u8 = undefined;
     var buf_max: [32]u8 = undefined;
@@ -142,9 +135,7 @@ fn printMeasurement(writer: *Io.Writer, terminal: *Io.Terminal, label: []const u
     }
 
     const mean_str = try std.fmt.bufPrint(&buf_mean, "{f}", .{Duration{ .ms = stats.mean_ms }});
-    try terminal.setColor(.bright_green);
     try writer.writeAll(mean_str);
-    try terminal.setColor(.reset);
     const mean_written = mean_str.len + 3;
     if (mean_written < MEAN_COL_WIDTH) {
         try writer.splatByteAll(' ', MEAN_COL_WIDTH - mean_written);
@@ -155,13 +146,9 @@ fn printMeasurement(writer: *Io.Writer, terminal: *Io.Terminal, label: []const u
     // min … max
     const min_str = try std.fmt.bufPrint(&buf_min, "{f}", .{Duration{ .ms = stats.min_ms }});
     const max_str = try std.fmt.bufPrint(&buf_max, "{f}", .{Duration{ .ms = stats.max_ms }});
-    try terminal.setColor(.cyan);
     try writer.writeAll(min_str);
-    try terminal.setColor(.reset);
     try writer.writeAll(" … ");
-    try terminal.setColor(.magenta);
     try writer.writeAll(max_str);
-    try terminal.setColor(.reset);
     const range_written = min_str.len + 3 + max_str.len;
     if (range_written < RANGE_COL_WIDTH) {
         try writer.splatByteAll(' ', RANGE_COL_WIDTH - range_written);
