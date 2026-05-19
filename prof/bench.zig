@@ -1,6 +1,6 @@
 const std = @import("std");
+const Io = std.Io;
 const mod = @import("mod.zig");
-const print = @import("print.zig");
 const time = @import("time.zig");
 const Profiler = mod.Profiler;
 const bench_enabled = mod.bench_enabled;
@@ -67,9 +67,14 @@ pub const Result = struct {
         };
     }
 
-    pub fn log(self: *const Self) void {
-        print.print("BENCHMARK RUNS\n", .{});
-        print.print("best: {}", .{self.timings.min});
+    pub fn log(self: *const Self, io: Io, file: Io.File) !void {
+        var buffer: [4096]u8 = undefined;
+        var w: Io.File.Writer = .init(file, io, &buffer);
+        const writer = &w.interface;
+
+        try writer.print("BENCHMARK RUNS\n", .{});
+        try writer.print("best: {}", .{self.timings.min});
+        try writer.flush();
     }
 };
 

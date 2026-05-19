@@ -2,7 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const time = @import("time.zig");
 const mod = @import("mod.zig");
-const print = @import("print.zig");
 
 pub const ProfileLevel = enum {
     none,
@@ -188,7 +187,7 @@ pub fn Profiler(comptime config: ProfilerConfig) type {
                 return Zone(Self).begin(self, name, bytes, source);
             }
 
-            pub fn log(_: *const Self) void {}
+            pub fn log(_: *const Self, _: std.Io, _: std.Io.File) void {}
         };
     }
 
@@ -233,12 +232,7 @@ pub fn Profiler(comptime config: ProfilerConfig) type {
             };
         }
 
-        pub fn log(_: *const Self) void {
-            // return .{
-            //     .level = level,
-            //     .ticks = time.timer() - self.state.start,
-            //     .anchors = self.state.stack.anchors.items,
-            // };
+        pub fn log(_: *const Self, _: std.Io, _: std.Io.File) void {
             // const freq_f = @as(f64, @floatFromInt(time.timerFreq()));
             // const min_ms: f64 = 1000.0 * @as(f64, @floatFromInt(self.ticks)) / freq_f;
         }

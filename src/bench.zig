@@ -17,7 +17,7 @@ test "Bench Reads" {
     };
 
     const res = try bench.run(Context, &ctx, sleepTest);
-    res.log();
+    try res.log(io, .stdout());
 }
 
 pub fn sleepTest(_ctx: ?*Context, _: *prof.Profiler) !void {
