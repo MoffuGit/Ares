@@ -3,7 +3,6 @@ const mod = @import("mod.zig");
 const print = @import("print.zig");
 const time = @import("time.zig");
 const Profiler = mod.Profiler;
-const Snapshot = mod.Snapshot;
 const bench_enabled = mod.bench_enabled;
 
 const Benchmark = @This();
@@ -65,13 +64,6 @@ pub const Result = struct {
         //         self.profiler.ticksToMs(result.timings.avgTicks()),
         //     },
         // );
-        //
-        // if (Profiler.collects_zones) {
-        //     if (self.best_profile) |snapshot_value| {
-        //         stdoutPrint("\nBEST PROFILE\n", .{});
-        //         snapshot_value.log();
-        //     }
-        // }
     }
 };
 
