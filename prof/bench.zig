@@ -9,13 +9,32 @@ const Benchmark = @This();
 
 allocator: std.mem.Allocator,
 config: Config,
-profiler: Profiler,
+ctx: ?*anyopaque = null,
+data: Data = .{},
+profiler: Profiler = undefined,
+
+pub const RunFlags = struct {
+    is_best: bool = false,
+    is_worst: bool = false,
+    failed: bool = false,
+};
+
+pub const Hook = *const fn (b: *Benchmark, ctx: ?*anyopaque) anyerror!void;
+pub const AfterEachHook = *const fn (b: *Benchmark, ctx: ?*anyopaque, flags: RunFlags) anyerror!void;
+
+pub const Hooks = struct {
+    before_all: ?Hook = null,
+    after_all: ?Hook = null,
+    before_each: ?Hook = null,
+    after_each: ?AfterEachHook = null,
+};
 
 pub const Config = struct {
     name: []const u8 = "benchmark",
     min_iter: usize = 1,
     max_iter: ?usize = 1,
     stop_ms: ?u64 = null,
+    hooks: Hooks = .{},
 };
 
 pub const Status = enum {
@@ -29,7 +48,7 @@ pub const Result = struct {
     status: Status,
     iterations: usize = 0,
     failures: usize = 0,
-    timings: Timing,
+    timings: Timing = .{},
 
     pub fn fromData(data: Data) Self {
         const max = time.ticksToMs(data.max_ticks);
@@ -51,19 +70,6 @@ pub const Result = struct {
     pub fn log(self: *const Self) void {
         print.print("BENCHMARK RUNS\n", .{});
         print.print("best: {}", .{self.timings.min});
-        // stdoutPrint("| NAME | RUNS | FAILS |\n", .{});
-        // stdoutPrint("| {s} | {d} | {d} |\n", .{ self.config.name, result.iterations, result.failures });
-        //
-        // stdoutPrint("\nMEASUREMENTS\n", .{});
-        // stdoutPrint("| KIND | MIN MS | MAX MS | AVG MS |\n", .{});
-        // stdoutPrint(
-        //     "| TIME | {d:.3} | {d:.3} | {d:.3} |\n",
-        //     .{
-        //         if (result.timings.min_ticks) |ticks| self.profiler.ticksToMs(ticks) else 0,
-        //         self.profiler.ticksToMs(result.timings.max_ticks),
-        //         self.profiler.ticksToMs(result.timings.avgTicks()),
-        //     },
-        // );
     }
 };
 
@@ -71,7 +77,6 @@ pub fn init(self: *Benchmark, allocator: std.mem.Allocator, config: Config) void
     self.* = .{
         .allocator = allocator,
         .config = config,
-        .profiler = undefined,
     };
 }
 
@@ -85,7 +90,7 @@ pub fn run(
     ctx: ?*Context,
     callback: *const fn (ctx: ?*Context, profiler: *Profiler) anyerror!void,
 ) !Result {
-    if (!bench_enabled) return .{ .status = .skipped };
+    if (!bench_enabled) return .{ .status = .skipped, .timings = .{} };
 
     if (self.config.max_iter == null and self.config.stop_ms == null) {
         return error.UnboundedBenchmark;
@@ -99,47 +104,72 @@ pub fn run(
         if (mx < self.config.min_iter) return error.MinIterExceedsMaxIter;
     }
 
+    self.ctx = if (ctx) |c| @as(*anyopaque, @ptrCast(c)) else null;
+    self.data = .{};
+
+    if (self.config.hooks.before_all) |hook| try hook(self, self.ctx);
+
     const max_ticks = if (self.config.stop_ms) |ms| time.msToTicks(ms) else std.math.maxInt(u64);
     const max_iter = self.config.max_iter orelse std.math.maxInt(usize);
     const min_iter = self.config.min_iter;
     var acc_ticks: u64 = 0;
+    var best_time: u64 = std.math.maxInt(u64);
+    var worst_time: u64 = 0;
 
-    var data: Data = .{};
-    while (data.iterations + data.failures < max_iter) {
+    while (self.data.iterations + self.data.failures < max_iter) {
+        if (self.config.hooks.before_each) |hook| try hook(self, self.ctx);
+
         self.profiler.init(self.allocator);
         defer self.profiler.deinit();
 
-        const failed = if (callback(ctx, &self.profiler)) |_| false else |_| failed: {
-            data.failures += 1;
-            break :failed true;
-        };
-
+        const cb_result = callback(ctx, &self.profiler);
+        const failed = if (cb_result) |_| false else |_| true;
         const sample = self.profiler.sample();
+
+        var flags: RunFlags = .{ .failed = failed };
+
+        if (failed) {
+            self.data.failures += 1;
+        } else {
+            _ = self.data.add(sample.time);
+            if (sample.time < best_time) {
+                flags.is_best = true;
+                best_time = sample.time;
+            }
+            if (sample.time > worst_time) {
+                flags.is_worst = true;
+                worst_time = sample.time;
+            }
+        }
+
+        if (self.config.hooks.after_each) |hook| try hook(self, self.ctx, flags);
 
         if (failed) {
             acc_ticks += sample.time;
-            if (acc_ticks >= max_ticks and data.iterations + data.failures >= min_iter) break;
+            if (acc_ticks >= max_ticks and self.data.iterations + self.data.failures >= min_iter) break;
             continue;
         }
 
-        if (data.add(sample.time)) {
+        if (flags.is_best) {
             acc_ticks = 0;
         } else {
             acc_ticks += sample.time;
-            if (acc_ticks >= max_ticks and data.iterations + data.failures >= min_iter) break;
+            if (acc_ticks >= max_ticks and self.data.iterations + self.data.failures >= min_iter) break;
         }
     }
 
-    if (data.iterations == 0) {
+    if (self.config.hooks.after_all) |hook| try hook(self, self.ctx);
+
+    if (self.data.iterations == 0) {
         return .{
             .status = .completed,
             .iterations = 0,
-            .failures = data.failures,
-            .timings = .{ .max = 0, .min = 0, .mean = 0 },
+            .failures = self.data.failures,
+            .timings = .{},
         };
     }
 
-    return Result.fromData(data);
+    return Result.fromData(self.data);
 }
 
 pub const Data = struct {
@@ -165,7 +195,7 @@ pub const Data = struct {
 };
 
 const Timing = struct {
-    max: f64,
-    min: f64,
-    mean: f64,
+    max: f64 = 0,
+    min: f64 = 0,
+    mean: f64 = 0,
 };
