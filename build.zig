@@ -6,94 +6,64 @@ const ProfileLevel = prof.ProfileLevel;
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const requested_profile_level = b.option(
+    const requested = b.option(
         ProfileLevel,
         "profile",
-        "Profiling level: none, general, or deep. Bench defaults to general when unset.",
+        "Profiling level: none, general, or deep. Tests always use none; bench defaults to general.",
     );
-    const normal_profile_level = requested_profile_level orelse .none;
-    const bench_profile_level: ProfileLevel = switch (requested_profile_level orelse .general) {
-        .none => .general,
-        .general => .general,
+
+    const exe = b.addExecutable(.{
+        .name = "Odyssey",
+        .root_module = rootModule(b, target, optimize, "src/main.zig", requested orelse .none, false),
+    });
+    b.installArtifact(exe);
+
+    const run_cmd = b.addRunArtifact(exe);
+    run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| run_cmd.addArgs(args);
+    b.step("run", "Run the app").dependOn(&run_cmd.step);
+
+    const exe_tests = b.addTest(.{
+        .root_module = rootModule(b, target, optimize, "src/test.zig", .none, false),
+    });
+    b.step("test", "Run tests").dependOn(&b.addRunArtifact(exe_tests).step);
+
+    const bench_level: ProfileLevel = switch (requested orelse .general) {
+        .none, .general => .general,
         .deep => .deep,
     };
+    const bench_tests = b.addTest(.{
+        .root_module = rootModule(b, target, optimize, "src/bench.zig", bench_level, true),
+    });
+    const run_bench = b.addRunArtifact(bench_tests);
+    run_bench.argv.shrinkRetainingCapacity(1);
+    run_bench.stdio = .inherit;
+    b.step("bench", "Run benchmarks").dependOn(&run_bench.step);
+}
 
-    const normal_options = profOptions(b, normal_profile_level, false);
+fn rootModule(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    root_source: []const u8,
+    level: ProfileLevel,
+    bench_enabled: bool,
+) *std.Build.Module {
+    const options = b.addOptions();
+    options.addOption([]const u8, "profile_level", @tagName(level));
+    options.addOption(bool, "bench_enabled", bench_enabled);
+
     const prof_mod = b.createModule(.{
         .root_source_file = b.path("prof/mod.zig"),
         .target = target,
         .optimize = optimize,
     });
-    prof_mod.addOptions("prof_build", normal_options);
+    prof_mod.addOptions("prof_build", options);
 
-    const exe = b.addExecutable(.{
-        .name = "Odyssey",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    exe.root_module.addOptions("prof_build", normal_options);
-
-    b.installArtifact(exe);
-    const run_step = b.step("run", "Run the app");
-
-    const run_cmd = b.addRunArtifact(exe);
-    run_step.dependOn(&run_cmd.step);
-
-    run_cmd.step.dependOn(b.getInstallStep());
-
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-
-    const exe_tests = b.addTest(.{
-        .root_module = exe.root_module,
-    });
-
-    const run_exe_tests = b.addRunArtifact(exe_tests);
-
-    const test_step = b.step("test", "Run tests");
-    test_step.dependOn(&run_exe_tests.step);
-
-    const bench_options = profOptions(b, bench_profile_level, true);
-    const bench_prof_mod = b.createModule(.{
-        .root_source_file = b.path("prof/mod.zig"),
+    return b.createModule(.{
+        .root_source_file = b.path(root_source),
         .target = target,
         .optimize = optimize,
+        .imports = &.{.{ .name = "prof", .module = prof_mod }},
     });
-    bench_prof_mod.addOptions("prof_build", bench_options);
-
-    const bench_mod = b.createModule(.{
-        .root_source_file = b.path("src/bench.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "prof", .module = bench_prof_mod },
-        },
-    });
-    bench_mod.addOptions("prof_build", bench_options);
-
-    const bench_tests = b.addTest(.{
-        .root_module = bench_mod,
-    });
-
-    const run_bench_tests = b.addRunArtifact(bench_tests);
-    run_bench_tests.argv.shrinkRetainingCapacity(1);
-    run_bench_tests.stdio = .inherit;
-
-    const bench_step = b.step("bench", "Run benchmarks");
-    bench_step.dependOn(&run_bench_tests.step);
-}
-
-fn profOptions(
-    b: *std.Build,
-    profile_level: ProfileLevel,
-    bench_enabled: bool,
-) *std.Build.Step.Options {
-    const options = b.addOptions();
-    options.addOption([]const u8, "profile_level", @tagName(profile_level));
-    options.addOption(bool, "bench_enabled", bench_enabled);
-    return options;
 }
