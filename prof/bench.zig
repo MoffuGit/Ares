@@ -14,6 +14,7 @@ profiler: Profiler,
 
 pub const Config = struct {
     name: []const u8 = "benchmark",
+    min_iter: usize = 1,
     max_iter: ?usize = 1,
     stop_ms: ?u64 = null,
 };
@@ -102,8 +103,13 @@ pub fn run(
         return error.BenchmarkTimerDisabled;
     }
 
+    if (self.config.max_iter) |mx| {
+        if (mx < self.config.min_iter) return error.MinIterExceedsMaxIter;
+    }
+
     const max_ticks = if (self.config.stop_ms) |ms| time.msToTicks(ms) else std.math.maxInt(u64);
     const max_iter = self.config.max_iter orelse std.math.maxInt(usize);
+    const min_iter = self.config.min_iter;
     var acc_ticks: u64 = 0;
 
     var data: Data = .{};
@@ -120,7 +126,7 @@ pub fn run(
 
         if (failed) {
             acc_ticks += sample.time;
-            if (acc_ticks >= max_ticks) break;
+            if (acc_ticks >= max_ticks and data.iterations + data.failures >= min_iter) break;
             continue;
         }
 
@@ -128,7 +134,7 @@ pub fn run(
             acc_ticks = 0;
         } else {
             acc_ticks += sample.time;
-            if (acc_ticks >= max_ticks) break;
+            if (acc_ticks >= max_ticks and data.iterations + data.failures >= min_iter) break;
         }
     }
 
