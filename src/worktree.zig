@@ -29,7 +29,6 @@ pub fn init(self: *Worktree, gpa: Allocator, io: Io, opts: Options) !void {
     const abs_root = try arena.dupe(u8, opts.abs_path);
 
     try self.scanner.init(arena, gpa, abs_root);
-    try self.scanner.run(io);
 }
 
 pub fn deinit(self: *Worktree) void {

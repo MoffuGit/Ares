@@ -8,8 +8,7 @@ const Scanner = @This();
 
 const State = struct {
     phase: Phase,
-    list: std.ArrayList([]const u8),
-    // snapshot: Snapshot,
+    snapshot: Snapshot,
 };
 
 const Phase = enum {
@@ -34,16 +33,36 @@ pub fn init(self: *Scanner, arena: Allocator, gpa: Allocator, abs_root: []u8) !v
         .gpa = gpa,
         .state = .{
             .phase = .Initial,
-            .list = .empty,
-            // .snapshot = undefined,
+            .snapshot = undefined,
         },
         .abs_root = abs_root,
     };
 
-    // try self.state.snapshot.init(gpa);
+    try self.state.snapshot.init(gpa);
 }
 
 pub fn run(self: *Scanner, io: Io) !void {
+    var dir = try Io.Dir.openDirAbsolute(io, self.abs_root, .{ .iterate = true });
+    defer dir.close(io);
+
+    var walker = try dir.walk(self.gpa);
+    defer walker.deinit();
+
+    while (try walker.next(io)) |entry| {
+        const child =
+            self.arena.dupe(u8, entry.path) catch |err| {
+                std.log.err("ah: {}", .{err});
+                continue;
+            };
+
+        self.state.snapshot.insert(self.gpa, child) catch |err| {
+            std.log.err("eh: {} path: {s}", .{ err, child });
+            continue;
+        };
+    }
+}
+
+pub fn runAsync(self: *Scanner, io: Io) !void {
     assert(self.state.phase == .Initial);
     try self.group.concurrent(io, scanPath, .{ self, io, self.abs_root });
     try self.group.await(io);
@@ -51,8 +70,7 @@ pub fn run(self: *Scanner, io: Io) !void {
 
 pub fn deinit(self: *Scanner, io: Io) void {
     self.group.cancel(io);
-    self.state.list.deinit(self.gpa);
-    // self.state.snapshot.deinit();
+    self.state.snapshot.deinit(self.gpa);
 }
 
 fn scanPath(
@@ -108,10 +126,10 @@ fn scanDir(self: *Scanner, io: Io, abs_path: []const u8) !void {
 
     try self.mutex.lock(io);
     defer self.mutex.unlock(io);
+
     for (childrens.items) |children| {
-        self.state.list.append(self.gpa, children) catch |err| {
+        self.state.snapshot.insert(self.gpa, children) catch |err| {
             std.log.err("path: {s}, err: {}", .{ children, err });
         };
-        // self.state.snapshot.insert(children)
     }
 }

@@ -33,13 +33,13 @@ pub fn init(self: *Snapshot, gpa: Allocator) !void {
     try self.entries.init(gpa);
 }
 
-pub fn insert(self: *Snapshot, path: []const u8) !void {
-    try self.entries.insert(path, .{ .id = self.next_id });
+pub fn insert(self: *Snapshot, gpa: Allocator, path: []const u8) !void {
+    try self.entries.insert(gpa, path, .{ .id = self.next_id });
     self.next_id += 1;
 }
 
-pub fn deinit(self: *Snapshot) void {
-    self.entries.deinit();
+pub fn deinit(self: *Snapshot, gpa: Allocator) void {
+    self.entries.deinit(gpa);
     // self.id_to_abs_path.deinit();
     // self.id_to_path.deinit();
 }
