@@ -8,7 +8,9 @@ test "Bench Worktree" {
     const io = testing.io;
 
     var bench: prof.Benchmark = undefined;
-    bench.init(gpa, .{});
+    bench.init(gpa, .{
+        .max_iter = 1,
+    });
     defer bench.deinit();
 
     const res = try bench.run(void, undefined, gpa, io, initialWorktreeScan);
@@ -21,4 +23,6 @@ pub fn initialWorktreeScan(_: *void, alloc: std.mem.Allocator, io: std.Io, _: *p
         .abs_path = "/Volumes/Home_SSD/Users/home/Documents/projects/Odyssey/testdata/chromium",
     });
     defer worktree.deinit();
+
+    std.log.err("cnt: {}", .{worktree.scanner.state.list.items.len});
 }

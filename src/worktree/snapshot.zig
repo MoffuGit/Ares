@@ -1,11 +1,45 @@
+const std = @import("std");
+const datastruct = @import("../datastruct.zig");
+const btree = datastruct.btree;
+const Allocator = std.mem.Allocator;
+
+pub const Entry = struct {
+    id: u64,
+    // file_type: []const u8,
+    // stat: std.Io.File.Stat,
+
+};
+
+const Entries = btree.BPlusTree([]const u8, Entry, entryOrder);
+
+fn entryOrder(a: []const u8, b: []const u8) std.math.Order {
+    return std.mem.order(u8, a, b);
+}
+
 const Snapshot = @This();
 
-//snapshot dont store any allocator,
-//every operation should pass the allocator
-//that want to use,
-//
-//for example, when adding entries the ideal is to use an
-//arena allocator, when creating the Maps or b trees we should use
-//an gpa, why, because Snapshot can be cloned,
-//entries can stay alive all the time they want,
-//but the maps and trees are going to be changing in base of the events
+entries: Entries,
+// id_to_path: std.HashMap(u64, []const u8),
+// id_to_abs_path: std.HashMap(u64, []const u8),
+
+next_id: u64,
+
+pub fn init(self: *Snapshot, gpa: Allocator) !void {
+    self.* = .{
+        .entries = undefined,
+        .next_id = 0,
+    };
+
+    try self.entries.init(gpa);
+}
+
+pub fn insert(self: *Snapshot, path: []const u8) !void {
+    try self.entries.insert(path, .{ .id = self.next_id });
+    self.next_id += 1;
+}
+
+pub fn deinit(self: *Snapshot) void {
+    self.entries.deinit();
+    // self.id_to_abs_path.deinit();
+    // self.id_to_path.deinit();
+}

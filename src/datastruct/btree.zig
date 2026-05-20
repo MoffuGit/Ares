@@ -295,14 +295,18 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         var temp: usize = 0;
 
                         while (idx < internal.len and other_idx < len_to_append) {
-                            if (comp(internal.keys[idx], keys_to_append[other_idx]) != .gt) {
-                                temp_keys[temp] = internal.keys[idx];
-                                temp_items[temp] = internal.childs[idx];
-                                idx += 1;
-                            } else {
-                                temp_keys[temp] = keys_to_append[other_idx];
-                                temp_items[temp] = childs_to_append[other_idx];
-                                other_idx += 1;
+                            switch (comp(internal.keys[idx], keys_to_append[other_idx])) {
+                                .eq => return error.DuplicatedKey,
+                                .lt => {
+                                    temp_keys[temp] = internal.keys[idx];
+                                    temp_items[temp] = internal.childs[idx];
+                                    idx += 1;
+                                },
+                                .gt => {
+                                    temp_keys[temp] = keys_to_append[other_idx];
+                                    temp_items[temp] = childs_to_append[other_idx];
+                                    other_idx += 1;
+                                },
                             }
                             temp += 1;
                         }
@@ -882,11 +886,11 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             }
         };
 
-        pub fn init(alloc: Allocator) !Self {
+        pub fn init(self: *Self, alloc: Allocator) !void {
             const root = try alloc.create(Node);
             root.* = .{ .Leaf = .{} };
 
-            return .{ .root = root, .alloc = alloc };
+            self.* = .{ .root = root, .alloc = alloc };
         }
 
         pub fn deinit(self: Self) void {
@@ -1006,611 +1010,611 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
         }
     };
 }
-
-fn test_comp(a: usize, b: usize) std.math.Order {
-    return std.math.order(a, b);
-}
-
-test "B+ Tree push operation and splitting" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    try tree.insert(0, 1);
-
-    try testing.expect(!tree.root.is_empty());
-    try testing.expect(tree.root.is_leaf());
-
-    for (1..13) |key| {
-        try tree.insert(key, key + 1);
-    }
-
-    try testing.expect(!tree.root.is_leaf());
-
-    try testing.expectEqual(12, tree.get(11));
-
-    for (13..20) |key| {
-        try tree.insert(key, key + 1);
-    }
-
-    try testing.expectEqual(tree.root.len(), 3);
-    try testing.expectEqual(12, tree.get(11));
-}
-
-test "B+ Tree push operation until height is 2" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..89) |key| {
-        try tree.insert(key, key + 1);
-    }
-
-    try testing.expectEqual(tree.root.height(), 1);
-
-    try tree.insert(89, 90);
-
-    try testing.expectEqual(tree.root.height(), 2);
-}
-
-test "B+ Tree get operation" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..90) |key| {
-        try tree.insert(key, key + 1);
-    }
-
-    for (0..90) |key| {
-        try testing.expectEqual(key + 1, tree.get(key));
-    }
-}
-
-test "B+ Tree get ref operation" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..90) |key| {
-        try tree.insert(key, key + 1);
-    }
-
-    for (0..90) |key| {
-        const value = try tree.get_ref(key);
-        value.* = key * 4;
-        try testing.expectEqual(key * 4, tree.get(key));
-    }
-}
-
-test "B+ Tree leaf traversal" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..20) |key| {
-        try tree.insert(key, key + 100);
-    }
-
-    var iter = tree.iter();
-    var expected_key: usize = 0;
-    while (iter.next()) |n| {
-        try testing.expectEqual(expected_key, n.key);
-        try testing.expectEqual(expected_key + 100, n.value);
-        expected_key += 1;
-    }
-    try testing.expectEqual(20, expected_key);
-}
-
-test "B+ Tree insert a duplicate key" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    try tree.insert(0, 1);
-    try testing.expectEqual(tree.insert(0, 2), error.DuplicatedKey);
-
-    try testing.expectEqual(1, tree.get(0));
-
-    for (1..90) |key| {
-        try tree.insert(key, key + 1);
-    }
-
-    for (20..30) |key| {
-        try testing.expectEqual(tree.insert(key, 2), error.DuplicatedKey);
-        try testing.expectEqual(tree.get(key), key + 1);
-    }
-}
-
-test "B+ Tree basic deletion" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..BASE) |key| {
-        try tree.insert(key, key + 100);
-    }
-    try testing.expect(tree.root.is_leaf());
-    try testing.expectEqual(BASE, tree.root.len());
-
-    const removed_val = try tree.remove(3);
-    try testing.expectEqual(3 + 100, removed_val);
-    try testing.expectEqual(error.NotFound, tree.get(3));
-    try testing.expectEqual(BASE - 1, tree.root.len());
-    try testing.expectEqual(0 + 100, tree.get(0));
-    try testing.expectEqual(5 + 100, tree.get(5));
-
-    _ = try tree.remove(0);
-    try testing.expectEqual(error.NotFound, tree.get(0));
-    try testing.expectEqual(BASE - 2, tree.root.len());
-    try testing.expectEqual(1 + 100, tree.get(1));
-
-    _ = try tree.remove(5);
-    try testing.expectEqual(error.NotFound, tree.get(5));
-    try testing.expectEqual(BASE - 3, tree.root.len());
-    try testing.expectEqual(4 + 100, tree.get(4));
-}
-
-test "B+ Tree delete - non-existent key" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..10) |key| {
-        try tree.insert(key, key + 100);
-    }
-
-    try testing.expectEqual(error.NotFound, tree.remove(99));
-    try testing.expectEqual(error.NotFound, tree.remove(10));
-
-    try testing.expectEqual(10, tree.root.len());
-    try testing.expectEqual(5 + 100, tree.get(5));
-}
-
-test "B+ Tree delete - underflow and borrow from left sibling (leaf)" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..CAPACITY + 1) |key| {
-        try tree.insert(key, key + 100);
-    }
-
-    try testing.expect(!tree.root.is_leaf());
-    try testing.expectEqual(2, tree.root.len());
-    try testing.expectEqual(7, tree.root.Internal.childs[0].len());
-    try testing.expectEqual(6, tree.root.Internal.childs[1].len());
-    try testing.expectEqual(7, tree.root.Internal.keys[1]);
-
-    const removed_val = try tree.remove(12);
-    try testing.expectEqual(12 + 100, removed_val);
-    try testing.expectEqual(error.NotFound, tree.get(12));
-
-    try testing.expectEqual(6, tree.root.Internal.childs[0].len());
-    try testing.expectEqual(6, tree.root.Internal.childs[1].len());
-    try testing.expectEqual(6, tree.root.Internal.keys[1]);
-    try testing.expectEqual(11 + 100, tree.get(11));
-    try testing.expectEqual(10 + 100, tree.get(10));
-}
-
-test "B+ Tree delete - underflow and borrow from right sibling (leaf)" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..(BASE + CAPACITY)) |key| {
-        try tree.insert(key, key + 100);
-    }
-
-    try testing.expect(!tree.root.is_leaf());
-    try testing.expectEqual(2, tree.root.len());
-    try testing.expectEqual(7, tree.root.Internal.childs[0].len());
-    try testing.expectEqual(11, tree.root.Internal.childs[1].len());
-    try testing.expectEqual(7, tree.root.Internal.keys[1]);
-
-    const removed_val = try tree.remove(0);
-    const removed_val_1 = try tree.remove(1);
-    try testing.expectEqual(0 + 100, removed_val);
-    try testing.expectEqual(1 + 100, removed_val_1);
-    try testing.expectEqual(error.NotFound, tree.get(0));
-
-    try testing.expectEqual(6, tree.root.Internal.childs[0].len());
-    try testing.expectEqual(10, tree.root.Internal.childs[1].len());
-    try testing.expectEqual(8, tree.root.Internal.keys[1]);
-    try testing.expectEqual(error.NotFound, tree.get(0));
-    try testing.expectEqual(error.NotFound, tree.get(1));
-    try testing.expectEqual(6 + 100, tree.get(6));
-    try testing.expectEqual(7 + 100, tree.get(7));
-}
-
-test "B+ Tree delete - underflow and merge with left sibling (leaf)" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..CAPACITY) |key| {
-        try tree.insert(key, key + 100);
-    }
-    try testing.expect(tree.root.is_leaf());
-    try testing.expectEqual(CAPACITY, tree.root.len());
-
-    try tree.insert(CAPACITY, CAPACITY + 100);
-
-    try testing.expect(!tree.root.is_leaf());
-    try testing.expectEqual(2, tree.root.len());
-    try testing.expectEqual(7, tree.root.Internal.childs[0].len());
-    try testing.expectEqual(6, tree.root.Internal.childs[1].len());
-    try testing.expectEqual(0, tree.root.Internal.keys[0]);
-    try testing.expectEqual(7, tree.root.Internal.keys[1]);
-
-    const removed_val_12 = try tree.remove(12);
-    try testing.expectEqual(12 + 100, removed_val_12);
-    try testing.expectEqual(error.NotFound, tree.get(12));
-
-    try testing.expectEqual(6, tree.root.Internal.childs[0].len());
-    try testing.expectEqual(6, tree.root.Internal.childs[1].len());
-    try testing.expectEqual(0, tree.root.Internal.keys[0]);
-    try testing.expectEqual(6, tree.root.Internal.keys[1]);
-
-    const removed_val_11 = try tree.remove(11);
-    try testing.expectEqual(11 + 100, removed_val_11);
-    try testing.expectEqual(error.NotFound, tree.get(11));
-
-    try testing.expect(tree.root.is_leaf());
-    try testing.expectEqual(11, tree.root.len());
-    try testing.expectEqual(0 + 100, try tree.get(0));
-    try testing.expectEqual(10 + 100, try tree.get(10));
-    try testing.expectEqual(error.NotFound, tree.get(11));
-    try testing.expectEqual(error.NotFound, tree.get(12));
-
-    for (0..11) |key| {
-        if (key != 11) {
-            try testing.expectEqual(key + 100, try tree.get(key));
-        }
-    }
-    try testing.expectEqual(error.NotFound, tree.get(99));
-}
-
-test "B+ Tree delete - underflow and merge with right sibling (leaf)" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..CAPACITY) |key| {
-        try tree.insert(key, key + 100);
-    }
-    try tree.insert(CAPACITY, CAPACITY + 100);
-    _ = try tree.remove(12);
-
-    try testing.expect(!tree.root.is_leaf());
-    try testing.expectEqual(2, tree.root.len());
-    try testing.expectEqual(6, tree.root.Internal.childs[0].len());
-    try testing.expectEqual(6, tree.root.Internal.childs[1].len());
-    try testing.expectEqual(0, tree.root.Internal.keys[0]);
-    try testing.expectEqual(6, tree.root.Internal.keys[1]);
-
-    const removed_val_0 = try tree.remove(0);
-    try testing.expectEqual(0 + 100, removed_val_0);
-    try testing.expectEqual(error.NotFound, tree.get(0));
-
-    try testing.expectEqual(11, tree.root.len());
-    try testing.expect(tree.root.is_leaf());
-
-    try testing.expectEqual(1 + 100, try tree.get(1));
-    try testing.expectEqual(11 + 100, try tree.get(11));
-    try testing.expectEqual(error.NotFound, tree.get(0));
-    try testing.expectEqual(error.NotFound, tree.get(12));
-
-    for (1..12) |key| {
-        if (key != 12) {
-            try testing.expectEqual(key + 100, try tree.get(key));
-        }
-    }
-    try testing.expectEqual(error.NotFound, tree.get(99));
-}
-
-test "B+ Tree delete - underflow and borrow from right sibling (internal)" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..90) |key| {
-        try tree.insert(key, key + 100);
-    }
-
-    try testing.expectEqual(tree.root.height(), 2);
-    try testing.expect(!tree.root.is_leaf());
-    try testing.expectEqual(tree.root.len(), 2);
-
-    const I0 = tree.root.Internal.childs[0];
-    const I1 = tree.root.Internal.childs[1];
-
-    try testing.expect(!I0.is_leaf());
-    try testing.expect(!I1.is_leaf());
-
-    try testing.expectEqual(BASE + 1, I0.len());
-    try testing.expectEqual(BASE, I1.len());
-
-    for (0..9) |_| {
-        const key_to_remove_from_I0 = I0.keys()[0];
-        const removed_val = try tree.remove(key_to_remove_from_I0);
-        try testing.expectEqual(key_to_remove_from_I0 + 100, removed_val);
-        try testing.expectEqual(error.NotFound, tree.get(key_to_remove_from_I0));
-    }
-
-    try testing.expectEqual(tree.root.height(), 2);
-    try testing.expect(!tree.root.is_leaf());
-    try testing.expectEqual(tree.root.len(), 2);
-
-    try testing.expectEqual(tree.root.childs()[0].keys()[0], 9);
-    try testing.expectEqual(tree.root.keys()[0], 9);
-
-    _ = try tree.remove(9);
-
-    try testing.expectEqual(tree.root.height(), 1);
-    try testing.expect(!tree.root.is_leaf());
-    try testing.expectEqual(tree.root.len(), 11);
-
-    try tree.insert(9, 109);
-    try tree.insert(8, 108);
-
-    try testing.expectEqual(tree.root.height(), 1);
-    try testing.expect(!tree.root.is_leaf());
-    try testing.expectEqual(tree.root.len(), 12);
-}
-
-fn string_comp(a: []const u8, b: []const u8) std.math.Order {
-    return std.mem.order(u8, a, b);
-}
-
-test "B+ Tree with string keys" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree([]const u8, usize, string_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    // Insert some key-value pairs
-    try tree.insert("apple", 10);
-    try tree.insert("banana", 20);
-    try tree.insert("cherry", 30);
-    try tree.insert("date", 40);
-    try tree.insert("grape", 50);
-    try tree.insert("fig", 45);
-    try tree.insert("elderberry", 35);
-
-    // Verify retrieval
-    try testing.expectEqual(10, try tree.get("apple"));
-    try testing.expectEqual(20, try tree.get("banana"));
-    try testing.expectEqual(30, try tree.get("cherry"));
-    try testing.expectEqual(40, try tree.get("date"));
-    try testing.expectEqual(50, try tree.get("grape"));
-    try testing.expectEqual(45, try tree.get("fig"));
-    try testing.expectEqual(35, try tree.get("elderberry"));
-
-    // Test a non-existent key
-    try testing.expectEqual(error.NotFound, tree.get("kiwi"));
-
-    // Test duplicate key insertion
-    try testing.expectEqual(error.DuplicatedKey, tree.insert("apple", 100));
-    try testing.expectEqual(10, try tree.get("apple")); // Value should not change
-
-    // Test deletion
-    const removed_val = try tree.remove("banana");
-    try testing.expectEqual(20, removed_val);
-    try testing.expectEqual(error.NotFound, tree.get("banana"));
-
-    // Verify other keys are still present
-    try testing.expectEqual(10, try tree.get("apple"));
-    try testing.expectEqual(30, try tree.get("cherry"));
-
-    // Test deletion of a non-existent key
-    try testing.expectEqual(error.NotFound, tree.remove("mango"));
-}
-
-test "B+ Tree range iterator - inclusive range" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    // Insert values 0-19
-    for (0..20) |key| {
-        try tree.insert(key, key + 100);
-    }
-
-    // Test range [5, 10] inclusive
-    var range_iter = tree.range(5, 10);
-    var count: usize = 0;
-    var expected_key: usize = 5;
-
-    while (range_iter.next()) |entry| {
-        try testing.expectEqual(expected_key, entry.key);
-        try testing.expectEqual(expected_key + 100, entry.value);
-        expected_key += 1;
-        count += 1;
-    }
-
-    try testing.expectEqual(6, count); // 5, 6, 7, 8, 9, 10
-}
-
-test "B+ Tree range iterator - rangeFrom" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..20) |key| {
-        try tree.insert(key, key + 100);
-    }
-
-    // Test from 15 to end
-    var range_iter = tree.rangeFrom(15);
-    var count: usize = 0;
-    var expected_key: usize = 15;
-
-    while (range_iter.next()) |entry| {
-        try testing.expectEqual(expected_key, entry.key);
-        expected_key += 1;
-        count += 1;
-    }
-
-    try testing.expectEqual(5, count); // 15, 16, 17, 18, 19
-}
-
-test "B+ Tree range iterator - rangeTo" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..20) |key| {
-        try tree.insert(key, key + 100);
-    }
-
-    // Test from start to 4
-    var range_iter = tree.rangeTo(4);
-    var count: usize = 0;
-    var expected_key: usize = 0;
-
-    while (range_iter.next()) |entry| {
-        try testing.expectEqual(expected_key, entry.key);
-        expected_key += 1;
-        count += 1;
-    }
-
-    try testing.expectEqual(5, count); // 0, 1, 2, 3, 4
-}
-
-test "B+ Tree range iterator - exclusive bounds" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    for (0..20) |key| {
-        try tree.insert(key, key + 100);
-    }
-
-    // Test (5, 10) exclusive on both ends
-    var range_iter = tree.rangeWithBounds(.{ .exclusive = 5 }, .{ .exclusive = 10 });
-    var count: usize = 0;
-    var expected_key: usize = 6;
-
-    while (range_iter.next()) |entry| {
-        try testing.expectEqual(expected_key, entry.key);
-        expected_key += 1;
-        count += 1;
-    }
-
-    try testing.expectEqual(4, count); // 6, 7, 8, 9
-}
-
-test "B+ Tree range iterator with string keys" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree([]const u8, usize, string_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    try tree.insert("apple", 10);
-    try tree.insert("banana", 20);
-    try tree.insert("cherry", 30);
-    try tree.insert("date", 40);
-    try tree.insert("elderberry", 35);
-    try tree.insert("fig", 45);
-    try tree.insert("grape", 50);
-
-    // Range from "banana" to "elderberry" inclusive
-    var range_iter = tree.range("banana", "elderberry");
-    var results: std.ArrayListUnmanaged([]const u8) = .{};
-    defer results.deinit(alloc);
-
-    while (range_iter.next()) |entry| {
-        try results.append(alloc, entry.key);
-    }
-
-    try testing.expectEqual(4, results.items.len);
-    try testing.expectEqualStrings("banana", results.items[0]);
-    try testing.expectEqualStrings("cherry", results.items[1]);
-    try testing.expectEqualStrings("date", results.items[2]);
-    try testing.expectEqualStrings("elderberry", results.items[3]);
-}
-
-test "B+ Tree count tracks inserts and removes" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const T = BPlusTree(usize, usize, test_comp);
-    var tree = try T.init(alloc);
-    defer tree.deinit();
-
-    try testing.expectEqual(@as(usize, 0), tree.count);
-
-    for (0..50) |key| {
-        try tree.insert(key, key + 1);
-    }
-
-    try testing.expectEqual(@as(usize, 50), tree.count);
-
-    _ = try tree.remove(10);
-    _ = try tree.remove(20);
-    _ = try tree.remove(30);
-
-    try testing.expectEqual(@as(usize, 47), tree.count);
-
-    for (50..100) |key| {
-        try tree.insert(key, key + 1);
-    }
-
-    try testing.expectEqual(@as(usize, 97), tree.count);
-}
+//
+// fn test_comp(a: usize, b: usize) std.math.Order {
+//     return std.math.order(a, b);
+// }
+//
+// test "B+ Tree push operation and splitting" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     try tree.insert(0, 1);
+//
+//     try testing.expect(!tree.root.is_empty());
+//     try testing.expect(tree.root.is_leaf());
+//
+//     for (1..13) |key| {
+//         try tree.insert(key, key + 1);
+//     }
+//
+//     try testing.expect(!tree.root.is_leaf());
+//
+//     try testing.expectEqual(12, tree.get(11));
+//
+//     for (13..20) |key| {
+//         try tree.insert(key, key + 1);
+//     }
+//
+//     try testing.expectEqual(tree.root.len(), 3);
+//     try testing.expectEqual(12, tree.get(11));
+// }
+//
+// test "B+ Tree push operation until height is 2" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..89) |key| {
+//         try tree.insert(key, key + 1);
+//     }
+//
+//     try testing.expectEqual(tree.root.height(), 1);
+//
+//     try tree.insert(89, 90);
+//
+//     try testing.expectEqual(tree.root.height(), 2);
+// }
+//
+// test "B+ Tree get operation" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..90) |key| {
+//         try tree.insert(key, key + 1);
+//     }
+//
+//     for (0..90) |key| {
+//         try testing.expectEqual(key + 1, tree.get(key));
+//     }
+// }
+//
+// test "B+ Tree get ref operation" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..90) |key| {
+//         try tree.insert(key, key + 1);
+//     }
+//
+//     for (0..90) |key| {
+//         const value = try tree.get_ref(key);
+//         value.* = key * 4;
+//         try testing.expectEqual(key * 4, tree.get(key));
+//     }
+// }
+//
+// test "B+ Tree leaf traversal" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..20) |key| {
+//         try tree.insert(key, key + 100);
+//     }
+//
+//     var iter = tree.iter();
+//     var expected_key: usize = 0;
+//     while (iter.next()) |n| {
+//         try testing.expectEqual(expected_key, n.key);
+//         try testing.expectEqual(expected_key + 100, n.value);
+//         expected_key += 1;
+//     }
+//     try testing.expectEqual(20, expected_key);
+// }
+//
+// test "B+ Tree insert a duplicate key" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     try tree.insert(0, 1);
+//     try testing.expectEqual(tree.insert(0, 2), error.DuplicatedKey);
+//
+//     try testing.expectEqual(1, tree.get(0));
+//
+//     for (1..90) |key| {
+//         try tree.insert(key, key + 1);
+//     }
+//
+//     for (20..30) |key| {
+//         try testing.expectEqual(tree.insert(key, 2), error.DuplicatedKey);
+//         try testing.expectEqual(tree.get(key), key + 1);
+//     }
+// }
+//
+// test "B+ Tree basic deletion" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..BASE) |key| {
+//         try tree.insert(key, key + 100);
+//     }
+//     try testing.expect(tree.root.is_leaf());
+//     try testing.expectEqual(BASE, tree.root.len());
+//
+//     const removed_val = try tree.remove(3);
+//     try testing.expectEqual(3 + 100, removed_val);
+//     try testing.expectEqual(error.NotFound, tree.get(3));
+//     try testing.expectEqual(BASE - 1, tree.root.len());
+//     try testing.expectEqual(0 + 100, tree.get(0));
+//     try testing.expectEqual(5 + 100, tree.get(5));
+//
+//     _ = try tree.remove(0);
+//     try testing.expectEqual(error.NotFound, tree.get(0));
+//     try testing.expectEqual(BASE - 2, tree.root.len());
+//     try testing.expectEqual(1 + 100, tree.get(1));
+//
+//     _ = try tree.remove(5);
+//     try testing.expectEqual(error.NotFound, tree.get(5));
+//     try testing.expectEqual(BASE - 3, tree.root.len());
+//     try testing.expectEqual(4 + 100, tree.get(4));
+// }
+//
+// test "B+ Tree delete - non-existent key" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..10) |key| {
+//         try tree.insert(key, key + 100);
+//     }
+//
+//     try testing.expectEqual(error.NotFound, tree.remove(99));
+//     try testing.expectEqual(error.NotFound, tree.remove(10));
+//
+//     try testing.expectEqual(10, tree.root.len());
+//     try testing.expectEqual(5 + 100, tree.get(5));
+// }
+//
+// test "B+ Tree delete - underflow and borrow from left sibling (leaf)" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..CAPACITY + 1) |key| {
+//         try tree.insert(key, key + 100);
+//     }
+//
+//     try testing.expect(!tree.root.is_leaf());
+//     try testing.expectEqual(2, tree.root.len());
+//     try testing.expectEqual(7, tree.root.Internal.childs[0].len());
+//     try testing.expectEqual(6, tree.root.Internal.childs[1].len());
+//     try testing.expectEqual(7, tree.root.Internal.keys[1]);
+//
+//     const removed_val = try tree.remove(12);
+//     try testing.expectEqual(12 + 100, removed_val);
+//     try testing.expectEqual(error.NotFound, tree.get(12));
+//
+//     try testing.expectEqual(6, tree.root.Internal.childs[0].len());
+//     try testing.expectEqual(6, tree.root.Internal.childs[1].len());
+//     try testing.expectEqual(6, tree.root.Internal.keys[1]);
+//     try testing.expectEqual(11 + 100, tree.get(11));
+//     try testing.expectEqual(10 + 100, tree.get(10));
+// }
+//
+// test "B+ Tree delete - underflow and borrow from right sibling (leaf)" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..(BASE + CAPACITY)) |key| {
+//         try tree.insert(key, key + 100);
+//     }
+//
+//     try testing.expect(!tree.root.is_leaf());
+//     try testing.expectEqual(2, tree.root.len());
+//     try testing.expectEqual(7, tree.root.Internal.childs[0].len());
+//     try testing.expectEqual(11, tree.root.Internal.childs[1].len());
+//     try testing.expectEqual(7, tree.root.Internal.keys[1]);
+//
+//     const removed_val = try tree.remove(0);
+//     const removed_val_1 = try tree.remove(1);
+//     try testing.expectEqual(0 + 100, removed_val);
+//     try testing.expectEqual(1 + 100, removed_val_1);
+//     try testing.expectEqual(error.NotFound, tree.get(0));
+//
+//     try testing.expectEqual(6, tree.root.Internal.childs[0].len());
+//     try testing.expectEqual(10, tree.root.Internal.childs[1].len());
+//     try testing.expectEqual(8, tree.root.Internal.keys[1]);
+//     try testing.expectEqual(error.NotFound, tree.get(0));
+//     try testing.expectEqual(error.NotFound, tree.get(1));
+//     try testing.expectEqual(6 + 100, tree.get(6));
+//     try testing.expectEqual(7 + 100, tree.get(7));
+// }
+//
+// test "B+ Tree delete - underflow and merge with left sibling (leaf)" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..CAPACITY) |key| {
+//         try tree.insert(key, key + 100);
+//     }
+//     try testing.expect(tree.root.is_leaf());
+//     try testing.expectEqual(CAPACITY, tree.root.len());
+//
+//     try tree.insert(CAPACITY, CAPACITY + 100);
+//
+//     try testing.expect(!tree.root.is_leaf());
+//     try testing.expectEqual(2, tree.root.len());
+//     try testing.expectEqual(7, tree.root.Internal.childs[0].len());
+//     try testing.expectEqual(6, tree.root.Internal.childs[1].len());
+//     try testing.expectEqual(0, tree.root.Internal.keys[0]);
+//     try testing.expectEqual(7, tree.root.Internal.keys[1]);
+//
+//     const removed_val_12 = try tree.remove(12);
+//     try testing.expectEqual(12 + 100, removed_val_12);
+//     try testing.expectEqual(error.NotFound, tree.get(12));
+//
+//     try testing.expectEqual(6, tree.root.Internal.childs[0].len());
+//     try testing.expectEqual(6, tree.root.Internal.childs[1].len());
+//     try testing.expectEqual(0, tree.root.Internal.keys[0]);
+//     try testing.expectEqual(6, tree.root.Internal.keys[1]);
+//
+//     const removed_val_11 = try tree.remove(11);
+//     try testing.expectEqual(11 + 100, removed_val_11);
+//     try testing.expectEqual(error.NotFound, tree.get(11));
+//
+//     try testing.expect(tree.root.is_leaf());
+//     try testing.expectEqual(11, tree.root.len());
+//     try testing.expectEqual(0 + 100, try tree.get(0));
+//     try testing.expectEqual(10 + 100, try tree.get(10));
+//     try testing.expectEqual(error.NotFound, tree.get(11));
+//     try testing.expectEqual(error.NotFound, tree.get(12));
+//
+//     for (0..11) |key| {
+//         if (key != 11) {
+//             try testing.expectEqual(key + 100, try tree.get(key));
+//         }
+//     }
+//     try testing.expectEqual(error.NotFound, tree.get(99));
+// }
+//
+// test "B+ Tree delete - underflow and merge with right sibling (leaf)" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..CAPACITY) |key| {
+//         try tree.insert(key, key + 100);
+//     }
+//     try tree.insert(CAPACITY, CAPACITY + 100);
+//     _ = try tree.remove(12);
+//
+//     try testing.expect(!tree.root.is_leaf());
+//     try testing.expectEqual(2, tree.root.len());
+//     try testing.expectEqual(6, tree.root.Internal.childs[0].len());
+//     try testing.expectEqual(6, tree.root.Internal.childs[1].len());
+//     try testing.expectEqual(0, tree.root.Internal.keys[0]);
+//     try testing.expectEqual(6, tree.root.Internal.keys[1]);
+//
+//     const removed_val_0 = try tree.remove(0);
+//     try testing.expectEqual(0 + 100, removed_val_0);
+//     try testing.expectEqual(error.NotFound, tree.get(0));
+//
+//     try testing.expectEqual(11, tree.root.len());
+//     try testing.expect(tree.root.is_leaf());
+//
+//     try testing.expectEqual(1 + 100, try tree.get(1));
+//     try testing.expectEqual(11 + 100, try tree.get(11));
+//     try testing.expectEqual(error.NotFound, tree.get(0));
+//     try testing.expectEqual(error.NotFound, tree.get(12));
+//
+//     for (1..12) |key| {
+//         if (key != 12) {
+//             try testing.expectEqual(key + 100, try tree.get(key));
+//         }
+//     }
+//     try testing.expectEqual(error.NotFound, tree.get(99));
+// }
+//
+// test "B+ Tree delete - underflow and borrow from right sibling (internal)" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..90) |key| {
+//         try tree.insert(key, key + 100);
+//     }
+//
+//     try testing.expectEqual(tree.root.height(), 2);
+//     try testing.expect(!tree.root.is_leaf());
+//     try testing.expectEqual(tree.root.len(), 2);
+//
+//     const I0 = tree.root.Internal.childs[0];
+//     const I1 = tree.root.Internal.childs[1];
+//
+//     try testing.expect(!I0.is_leaf());
+//     try testing.expect(!I1.is_leaf());
+//
+//     try testing.expectEqual(BASE + 1, I0.len());
+//     try testing.expectEqual(BASE, I1.len());
+//
+//     for (0..9) |_| {
+//         const key_to_remove_from_I0 = I0.keys()[0];
+//         const removed_val = try tree.remove(key_to_remove_from_I0);
+//         try testing.expectEqual(key_to_remove_from_I0 + 100, removed_val);
+//         try testing.expectEqual(error.NotFound, tree.get(key_to_remove_from_I0));
+//     }
+//
+//     try testing.expectEqual(tree.root.height(), 2);
+//     try testing.expect(!tree.root.is_leaf());
+//     try testing.expectEqual(tree.root.len(), 2);
+//
+//     try testing.expectEqual(tree.root.childs()[0].keys()[0], 9);
+//     try testing.expectEqual(tree.root.keys()[0], 9);
+//
+//     _ = try tree.remove(9);
+//
+//     try testing.expectEqual(tree.root.height(), 1);
+//     try testing.expect(!tree.root.is_leaf());
+//     try testing.expectEqual(tree.root.len(), 11);
+//
+//     try tree.insert(9, 109);
+//     try tree.insert(8, 108);
+//
+//     try testing.expectEqual(tree.root.height(), 1);
+//     try testing.expect(!tree.root.is_leaf());
+//     try testing.expectEqual(tree.root.len(), 12);
+// }
+//
+// fn string_comp(a: []const u8, b: []const u8) std.math.Order {
+//     return std.mem.order(u8, a, b);
+// }
+//
+// test "B+ Tree with string keys" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree([]const u8, usize, string_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     // Insert some key-value pairs
+//     try tree.insert("apple", 10);
+//     try tree.insert("banana", 20);
+//     try tree.insert("cherry", 30);
+//     try tree.insert("date", 40);
+//     try tree.insert("grape", 50);
+//     try tree.insert("fig", 45);
+//     try tree.insert("elderberry", 35);
+//
+//     // Verify retrieval
+//     try testing.expectEqual(10, try tree.get("apple"));
+//     try testing.expectEqual(20, try tree.get("banana"));
+//     try testing.expectEqual(30, try tree.get("cherry"));
+//     try testing.expectEqual(40, try tree.get("date"));
+//     try testing.expectEqual(50, try tree.get("grape"));
+//     try testing.expectEqual(45, try tree.get("fig"));
+//     try testing.expectEqual(35, try tree.get("elderberry"));
+//
+//     // Test a non-existent key
+//     try testing.expectEqual(error.NotFound, tree.get("kiwi"));
+//
+//     // Test duplicate key insertion
+//     try testing.expectEqual(error.DuplicatedKey, tree.insert("apple", 100));
+//     try testing.expectEqual(10, try tree.get("apple")); // Value should not change
+//
+//     // Test deletion
+//     const removed_val = try tree.remove("banana");
+//     try testing.expectEqual(20, removed_val);
+//     try testing.expectEqual(error.NotFound, tree.get("banana"));
+//
+//     // Verify other keys are still present
+//     try testing.expectEqual(10, try tree.get("apple"));
+//     try testing.expectEqual(30, try tree.get("cherry"));
+//
+//     // Test deletion of a non-existent key
+//     try testing.expectEqual(error.NotFound, tree.remove("mango"));
+// }
+//
+// test "B+ Tree range iterator - inclusive range" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     // Insert values 0-19
+//     for (0..20) |key| {
+//         try tree.insert(key, key + 100);
+//     }
+//
+//     // Test range [5, 10] inclusive
+//     var range_iter = tree.range(5, 10);
+//     var count: usize = 0;
+//     var expected_key: usize = 5;
+//
+//     while (range_iter.next()) |entry| {
+//         try testing.expectEqual(expected_key, entry.key);
+//         try testing.expectEqual(expected_key + 100, entry.value);
+//         expected_key += 1;
+//         count += 1;
+//     }
+//
+//     try testing.expectEqual(6, count); // 5, 6, 7, 8, 9, 10
+// }
+//
+// test "B+ Tree range iterator - rangeFrom" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..20) |key| {
+//         try tree.insert(key, key + 100);
+//     }
+//
+//     // Test from 15 to end
+//     var range_iter = tree.rangeFrom(15);
+//     var count: usize = 0;
+//     var expected_key: usize = 15;
+//
+//     while (range_iter.next()) |entry| {
+//         try testing.expectEqual(expected_key, entry.key);
+//         expected_key += 1;
+//         count += 1;
+//     }
+//
+//     try testing.expectEqual(5, count); // 15, 16, 17, 18, 19
+// }
+//
+// test "B+ Tree range iterator - rangeTo" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..20) |key| {
+//         try tree.insert(key, key + 100);
+//     }
+//
+//     // Test from start to 4
+//     var range_iter = tree.rangeTo(4);
+//     var count: usize = 0;
+//     var expected_key: usize = 0;
+//
+//     while (range_iter.next()) |entry| {
+//         try testing.expectEqual(expected_key, entry.key);
+//         expected_key += 1;
+//         count += 1;
+//     }
+//
+//     try testing.expectEqual(5, count); // 0, 1, 2, 3, 4
+// }
+//
+// test "B+ Tree range iterator - exclusive bounds" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     for (0..20) |key| {
+//         try tree.insert(key, key + 100);
+//     }
+//
+//     // Test (5, 10) exclusive on both ends
+//     var range_iter = tree.rangeWithBounds(.{ .exclusive = 5 }, .{ .exclusive = 10 });
+//     var count: usize = 0;
+//     var expected_key: usize = 6;
+//
+//     while (range_iter.next()) |entry| {
+//         try testing.expectEqual(expected_key, entry.key);
+//         expected_key += 1;
+//         count += 1;
+//     }
+//
+//     try testing.expectEqual(4, count); // 6, 7, 8, 9
+// }
+//
+// test "B+ Tree range iterator with string keys" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree([]const u8, usize, string_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     try tree.insert("apple", 10);
+//     try tree.insert("banana", 20);
+//     try tree.insert("cherry", 30);
+//     try tree.insert("date", 40);
+//     try tree.insert("elderberry", 35);
+//     try tree.insert("fig", 45);
+//     try tree.insert("grape", 50);
+//
+//     // Range from "banana" to "elderberry" inclusive
+//     var range_iter = tree.range("banana", "elderberry");
+//     var results: std.ArrayListUnmanaged([]const u8) = .{};
+//     defer results.deinit(alloc);
+//
+//     while (range_iter.next()) |entry| {
+//         try results.append(alloc, entry.key);
+//     }
+//
+//     try testing.expectEqual(4, results.items.len);
+//     try testing.expectEqualStrings("banana", results.items[0]);
+//     try testing.expectEqualStrings("cherry", results.items[1]);
+//     try testing.expectEqualStrings("date", results.items[2]);
+//     try testing.expectEqualStrings("elderberry", results.items[3]);
+// }
+//
+// test "B+ Tree count tracks inserts and removes" {
+//     const testing = std.testing;
+//     const alloc = testing.allocator;
+//
+//     const T = BPlusTree(usize, usize, test_comp);
+//     var tree = try T.init(alloc);
+//     defer tree.deinit();
+//
+//     try testing.expectEqual(@as(usize, 0), tree.count);
+//
+//     for (0..50) |key| {
+//         try tree.insert(key, key + 1);
+//     }
+//
+//     try testing.expectEqual(@as(usize, 50), tree.count);
+//
+//     _ = try tree.remove(10);
+//     _ = try tree.remove(20);
+//     _ = try tree.remove(30);
+//
+//     try testing.expectEqual(@as(usize, 47), tree.count);
+//
+//     for (50..100) |key| {
+//         try tree.insert(key, key + 1);
+//     }
+//
+//     try testing.expectEqual(@as(usize, 97), tree.count);
+// }
