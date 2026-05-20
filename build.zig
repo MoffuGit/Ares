@@ -31,7 +31,7 @@ pub fn build(b: *std.Build) void {
     const clone_chromium = cloneChromiumStep(b);
 
     const exe_tests = b.addTest(.{
-        .root_module = rootModule(b, target, optimize, "src/main.zig", .none, false),
+        .root_module = rootModule(b, target, optimize, "src/test.zig", .none, false),
     });
     exe_tests.step.dependOn(clone_chromium);
     b.step("test", "Run tests").dependOn(&b.addRunArtifact(exe_tests).step);
