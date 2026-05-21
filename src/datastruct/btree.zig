@@ -6,11 +6,6 @@ const panic = std.debug.panic;
 const BASE: usize = 6;
 const CAPACITY: usize = 2 * BASE;
 
-pub const Error = error{
-    OutOfMemory,
-    DuplicatedKey,
-} || Allocator.Error;
-
 pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K) std.math.Order) type {
     return union(enum) {
         const Self = @This();
@@ -116,22 +111,16 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             return .{ .key = key, .child = child };
         }
 
-        pub fn items(self: Self) *const [CAPACITY]V {
+        pub fn items(self: *const Self) *const [CAPACITY]V {
             assert(self.is_leaf());
-            const leaf = self.Leaf;
-
-            return &leaf.items;
+            return &self.Leaf.items;
         }
 
-        pub fn keys(self: Self) *const [CAPACITY]K {
-            switch (self) {
-                .Internal => |*internal| {
-                    return &internal.keys;
-                },
-                .Leaf => |*leaf| {
-                    return &leaf.keys;
-                },
-            }
+        pub fn keys(self: *const Self) *const [CAPACITY]K {
+            return switch (self.*) {
+                .Internal => &self.Internal.keys,
+                .Leaf => &self.Leaf.keys,
+            };
         }
 
         pub fn is_empty(self: Self) bool {
@@ -168,11 +157,9 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             return self.len() < BASE;
         }
 
-        pub fn childs(self: Self) *const [CAPACITY]*Self {
+        pub fn childs(self: *const Self) *const [CAPACITY]*Self {
             assert(!self.is_leaf());
-            const internal = self.Internal;
-
-            return &internal.childs;
+            return &self.Internal.childs;
         }
 
         pub fn destroy(self: *Self, alloc: Allocator) void {
@@ -189,20 +176,27 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             alloc.destroy(self);
         }
 
-        pub fn append(self: *Self, other: Self, alloc: Allocator) Error!void {
+        pub fn append(self: *Self, other: Self, alloc: Allocator) !?V {
             if (self.is_empty()) {
                 self.* = other;
             } else if (!other.is_leaf() or other.items().len != 0) {
                 if (self.height() < other.height()) {
                     for (other.childs()) |node| {
-                        try self.append(node.*, alloc);
+                        return try self.append(node.*, alloc);
                     }
-                } else if (try self.append_recursive(other, alloc)) |right| {
-                    const left = try alloc.create(Self);
-                    left.* = self.*;
-                    self.* = try Self.from_child_nodes(left, right);
+                } else if (try self.append_recursive(other, alloc)) |res| {
+                    switch (res) {
+                        .append => |right| {
+                            const left = try alloc.create(Self);
+                            left.* = self.*;
+                            self.* = try Self.from_child_nodes(left, right);
+                        },
+                        .duplicated => |old| return old,
+                    }
                 }
             }
+
+            return null;
         }
 
         pub fn from_child_nodes(left: *Self, right: *Self) !Self {
@@ -217,7 +211,12 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             return .{ .Internal = .{ .height = left.height() + 1, .len = 2, .childs = childrens, .keys = _keys } };
         }
 
-        pub fn append_recursive(self: *Self, other: Self, alloc: Allocator) Error!?*Self {
+        const Result = union(enum) {
+            duplicated: V,
+            append: *Self,
+        };
+
+        pub fn append_recursive(self: *Self, other: Self, alloc: Allocator) !?Result {
             switch (self.*) {
                 .Internal => |*internal| {
                     const height_delta = internal.height - other.height();
@@ -243,7 +242,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         while (idx < internal.len) {
                             switch (comp(other.keys()[0], internal.keys[idx])) {
                                 .eq => {
-                                    return error.DuplicatedKey;
+                                    idx += 1;
                                 },
                                 .gt => {
                                     idx += 1;
@@ -254,7 +253,14 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                             }
                         }
 
-                        const node_to_append = try internal.childs[idx - 1].append_recursive(other, alloc);
+                        const node_to_append = bkl: {
+                            const res = try internal.childs[idx - 1].append_recursive(other, alloc);
+                            if (res == null) break :bkl null;
+                            switch (res.?) {
+                                .duplicated => |v| return Result{ .duplicated = v },
+                                .append => |node| break :bkl node,
+                            }
+                        };
 
                         internal.keys[idx - 1] = internal.childs[idx - 1].keys()[0];
 
@@ -279,7 +285,9 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
 
                         while (idx < internal.len and other_idx < len_to_append) {
                             switch (comp(internal.keys[idx], keys_to_append[other_idx])) {
-                                .eq => return error.DuplicatedKey,
+                                .eq => {
+                                    @panic("There should not be any internal duplicated keys");
+                                },
                                 .lt => {
                                     temp_keys[temp] = internal.keys[idx];
                                     temp_items[temp] = internal.childs[idx];
@@ -328,7 +336,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
 
                         const right_node = try alloc.create(Self);
                         right_node.* = .{ .Internal = .{ .childs = right_items, .keys = right_keys, .len = childs_len - mid, .height = internal.height } };
-                        return right_node;
+                        return Result{ .append = right_node };
                     } else {
                         var target: usize = childs_len;
                         var idx: usize = internal.len;
@@ -354,7 +362,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                 .Leaf => |*leaf| {
                     const other_leaf = other.Leaf;
 
-                    const new_len = leaf.len + other_leaf.len;
+                    var new_len = leaf.len + other_leaf.len;
 
                     if (new_len > CAPACITY) {
                         const temp_keys = try alloc.alloc(K, new_len);
@@ -366,6 +374,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         var idx: usize = 0;
                         var other_idx: usize = 0;
                         var temp: usize = 0;
+                        var duplicated: ?V = null;
 
                         while (idx < leaf.len and other_idx < other_leaf.len) {
                             switch (comp(leaf.keys[idx], other_leaf.keys[other_idx])) {
@@ -380,7 +389,13 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                                     other_idx += 1;
                                 },
                                 .eq => {
-                                    return error.DuplicatedKey;
+                                    temp_keys[temp] = other_leaf.keys[other_idx];
+                                    temp_items[temp] = other_leaf.items[other_idx];
+
+                                    duplicated = leaf.items[idx];
+                                    idx += 1;
+                                    other_idx += 1;
+                                    new_len -= 1;
                                 },
                             }
                             temp += 1;
@@ -425,7 +440,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
 
                         leaf.next = right_node;
 
-                        return right_node;
+                        return Result{ .append = right_node };
                     } else {
                         const temp_keys = try alloc.alloc(K, new_len);
                         defer alloc.free(temp_keys);
@@ -436,6 +451,8 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         var idx: usize = 0;
                         var other_idx: usize = 0;
                         var temp_ptr: usize = 0;
+
+                        var duplicated: ?V = null;
 
                         while (idx < leaf.len and other_idx < other_leaf.len) {
                             switch (comp(leaf.keys[idx], other_leaf.keys[other_idx])) {
@@ -450,7 +467,13 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                                     other_idx += 1;
                                 },
                                 .eq => {
-                                    return error.DuplicatedKey;
+                                    temp_keys[temp_ptr] = other_leaf.keys[other_idx];
+                                    temp_items[temp_ptr] = other_leaf.items[other_idx];
+
+                                    duplicated = leaf.items[idx];
+                                    idx += 1;
+                                    other_idx += 1;
+                                    new_len -= 1;
                                 },
                             }
                             temp_ptr += 1;
@@ -470,15 +493,13 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                             temp_ptr += 1;
                         }
 
-                        for (0..new_len - 1) |i| {
-                            if (comp(temp_keys[i], temp_keys[i + 1]) == .eq) {
-                                return error.DuplicatedKey;
-                            }
-                        }
-
                         @memcpy(leaf.keys[0..new_len], temp_keys[0..new_len]);
                         @memcpy(leaf.items[0..new_len], temp_items[0..new_len]);
                         leaf.len = new_len;
+
+                        if (duplicated) |dup| {
+                            return Result{ .duplicated = dup };
+                        }
                     }
                 },
             }
@@ -879,13 +900,13 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             self.root.destroy(alloc);
         }
 
-        pub fn insert(self: *Self, alloc: Allocator, key: K, value: V) Error!void {
+        pub fn insert(self: *Self, alloc: Allocator, key: K, value: V) !?V {
+            defer self.count += 1;
             var node: Node = Node{ .Leaf = .{} };
 
             node.add_item(key, value);
 
-            try self.root.append(node, alloc);
-            self.count += 1;
+            return try self.root.append(node, alloc);
         }
 
         pub fn get(self: *Self, key: K) ?V {
@@ -962,7 +983,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
                         const internal = node.Internal;
                         std.debug.print("{s}", .{"{ "});
                         for (0..internal.len) |i| {
-                            std.debug.print("{s}", .{internal.keys[i]});
+                            std.debug.print("{}", .{internal.keys[i]});
                             if (i < internal.len - 1) {
                                 std.debug.print(", ", .{});
                             }
@@ -973,7 +994,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
                         const leaf = node.Leaf;
                         std.debug.print("{s}", .{"{ "});
                         for (0..leaf.len) |i| {
-                            std.debug.print("{{ {s}, {any} }}", .{ leaf.keys[i], leaf.items[i] });
+                            std.debug.print("{{ {any}, {any} }}", .{ leaf.keys[i], leaf.items[i] });
                             if (i < leaf.len - 1) {
                                 std.debug.print(", ", .{});
                             }
@@ -1006,13 +1027,13 @@ test "B+ Tree push operation and splitting" {
     try tree.init(alloc);
     defer tree.deinit(alloc);
 
-    try tree.insert(alloc, 0, 1);
+    try testing.expectEqual(null, try tree.insert(alloc, 0, 1));
 
     try testing.expect(!tree.root.is_empty());
     try testing.expect(tree.root.is_leaf());
 
     for (1..13) |key| {
-        try tree.insert(alloc, key, key + 1);
+        try testing.expectEqual(null, try tree.insert(alloc, key, key + 1));
     }
 
     try testing.expect(!tree.root.is_leaf());
@@ -1020,14 +1041,14 @@ test "B+ Tree push operation and splitting" {
     try testing.expectEqual(12, tree.get(11));
 
     for (13..20) |key| {
-        try tree.insert(alloc, key, key + 1);
+        _ = try tree.insert(alloc, key, key + 1);
     }
 
     try testing.expectEqual(tree.root.len(), 3);
     try testing.expectEqual(12, tree.get(11));
 
     for (20..90) |key| {
-        try tree.insert(alloc, key, key + 1);
+        _ = try tree.insert(alloc, key, key + 1);
     }
 
     try testing.expectEqual(tree.root.height(), 2);
@@ -1043,7 +1064,7 @@ test "B+ Tree get operation" {
     defer tree.deinit(alloc);
 
     for (0..90) |key| {
-        try tree.insert(alloc, key, key + 1);
+        _ = try tree.insert(alloc, key, key + 1);
     }
 
     for (0..90) |key| {
@@ -1061,7 +1082,7 @@ test "B+ Tree get ref operation" {
     defer tree.deinit(alloc);
 
     for (0..90) |key| {
-        try tree.insert(alloc, key, key + 1);
+        _ = try tree.insert(alloc, key, key + 1);
     }
 
     for (0..90) |key| {
@@ -1081,7 +1102,7 @@ test "B+ Tree leaf traversal" {
     defer tree.deinit(alloc);
 
     for (0..20) |key| {
-        try tree.insert(alloc, key, key + 100);
+        _ = try tree.insert(alloc, key, key + 100);
     }
 
     var iter = tree.iter();
@@ -1103,18 +1124,44 @@ test "B+ Tree insert a duplicate key" {
     try tree.init(alloc);
     defer tree.deinit(alloc);
 
-    try tree.insert(alloc, 0, 1);
-    try testing.expectEqual(tree.insert(alloc, 0, 2), error.DuplicatedKey);
+    _ = try tree.insert(alloc, 0, 1);
+    try testing.expectEqual(tree.insert(alloc, 0, 2), 1);
 
-    try testing.expectEqual(1, tree.get(0));
+    try testing.expectEqual(2, tree.get(0));
 
     for (1..90) |key| {
-        try tree.insert(alloc, key, key + 1);
+        _ = try tree.insert(alloc, key, key + 1);
     }
 
     for (20..30) |key| {
-        try testing.expectEqual(tree.insert(alloc, key, 2), error.DuplicatedKey);
-        try testing.expectEqual(tree.get(key), key + 1);
+        const expected = tree.get(key);
+        try testing.expectEqual(tree.insert(alloc, key, 2), expected);
+        try testing.expectEqual(tree.get(key), 2);
+    }
+}
+
+test "B+ Tree insert a duplicate key 2" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusTree(usize, usize, test_comp);
+    var tree: T = undefined;
+    try tree.init(alloc);
+    defer tree.deinit(alloc);
+
+    _ = try tree.insert(alloc, 0, 1);
+    try testing.expectEqual(tree.insert(alloc, 0, 2), 1);
+
+    try testing.expectEqual(2, tree.get(0));
+
+    for (1..200) |key| {
+        _ = try tree.insert(alloc, key, key + 1);
+    }
+
+    for (20..180) |key| {
+        const expected = tree.get(key);
+        try testing.expectEqual(tree.insert(alloc, key, 2), expected);
+        try testing.expectEqual(tree.get(key), 2);
     }
 }
 
@@ -1128,7 +1175,7 @@ test "B+ Tree basic deletion" {
     defer tree.deinit(alloc);
 
     for (0..BASE) |key| {
-        try tree.insert(alloc, key, key + 100);
+        _ = try tree.insert(alloc, key, key + 100);
     }
     try testing.expect(tree.root.is_leaf());
     try testing.expectEqual(BASE, tree.root.len());
@@ -1161,7 +1208,7 @@ test "B+ Tree delete - non-existent key" {
     defer tree.deinit(alloc);
 
     for (0..10) |key| {
-        try tree.insert(alloc, key, key + 100);
+        _ = try tree.insert(alloc, key, key + 100);
     }
 
     try testing.expectEqual(null, tree.remove(alloc, 99));
@@ -1181,7 +1228,7 @@ test "B+ Tree delete - underflow and borrow from left sibling (leaf)" {
     defer tree.deinit(alloc);
 
     for (0..CAPACITY + 1) |key| {
-        try tree.insert(alloc, key, key + 100);
+        _ = try tree.insert(alloc, key, key + 100);
     }
 
     try testing.expect(!tree.root.is_leaf());
@@ -1211,7 +1258,7 @@ test "B+ Tree delete - underflow and borrow from right sibling (leaf)" {
     defer tree.deinit(alloc);
 
     for (0..(BASE + CAPACITY)) |key| {
-        try tree.insert(alloc, key, key + 100);
+        _ = try tree.insert(alloc, key, key + 100);
     }
 
     try testing.expect(!tree.root.is_leaf());
@@ -1245,12 +1292,12 @@ test "B+ Tree delete - underflow and merge with left sibling (leaf)" {
     defer tree.deinit(alloc);
 
     for (0..CAPACITY) |key| {
-        try tree.insert(alloc, key, key + 100);
+        _ = try tree.insert(alloc, key, key + 100);
     }
     try testing.expect(tree.root.is_leaf());
     try testing.expectEqual(CAPACITY, tree.root.len());
 
-    try tree.insert(alloc, CAPACITY, CAPACITY + 100);
+    _ = try tree.insert(alloc, CAPACITY, CAPACITY + 100);
 
     try testing.expect(!tree.root.is_leaf());
     try testing.expectEqual(2, tree.root.len());
@@ -1297,9 +1344,9 @@ test "B+ Tree delete - underflow and merge with right sibling (leaf)" {
     defer tree.deinit(alloc);
 
     for (0..CAPACITY) |key| {
-        try tree.insert(alloc, key, key + 100);
+        _ = try tree.insert(alloc, key, key + 100);
     }
-    try tree.insert(alloc, CAPACITY, CAPACITY + 100);
+    _ = try tree.insert(alloc, CAPACITY, CAPACITY + 100);
     _ = tree.remove(alloc, 12);
 
     try testing.expect(!tree.root.is_leaf());
@@ -1339,7 +1386,7 @@ test "B+ Tree delete - underflow and borrow from right sibling (internal)" {
     defer tree.deinit(alloc);
 
     for (0..90) |key| {
-        try tree.insert(alloc, key, key + 100);
+        _ = try tree.insert(alloc, key, key + 100);
     }
 
     try testing.expectEqual(tree.root.height(), 2);
@@ -1375,8 +1422,8 @@ test "B+ Tree delete - underflow and borrow from right sibling (internal)" {
     try testing.expect(!tree.root.is_leaf());
     try testing.expectEqual(tree.root.len(), 11);
 
-    try tree.insert(alloc, 9, 109);
-    try tree.insert(alloc, 8, 108);
+    _ = try tree.insert(alloc, 9, 109);
+    _ = try tree.insert(alloc, 8, 108);
 
     try testing.expectEqual(tree.root.height(), 1);
     try testing.expect(!tree.root.is_leaf());

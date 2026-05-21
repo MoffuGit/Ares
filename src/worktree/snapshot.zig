@@ -34,7 +34,7 @@ pub fn init(self: *Snapshot, gpa: Allocator) !void {
 }
 
 pub fn insert(self: *Snapshot, gpa: Allocator, path: []const u8) !void {
-    try self.entries.insert(gpa, path, .{ .id = self.next_id });
+    _ = try self.entries.insert(gpa, path, .{ .id = self.next_id });
     self.next_id += 1;
 }
 
