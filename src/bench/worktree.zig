@@ -9,7 +9,7 @@ test "Bench Worktree" {
 
     var bench: prof.Benchmark = undefined;
     bench.init(gpa, .{
-        .max_iter = 1,
+        .stop_ms = 20000,
     });
     defer bench.deinit();
 
