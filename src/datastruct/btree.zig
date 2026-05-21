@@ -223,7 +223,6 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
 
                     var keys_to_append: [CAPACITY]K = undefined;
                     var childs_to_append: [CAPACITY]*Self = undefined;
-
                     var len_to_append: u16 = 0;
 
                     if (height_delta == 0) {
@@ -273,11 +272,8 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
 
                     const childs_len = internal.len + len_to_append;
                     if (childs_len > CAPACITY) {
-                        const temp_keys = try alloc.alloc(K, childs_len);
-                        defer alloc.free(temp_keys);
-
-                        const temp_items = try alloc.alloc(*Self, childs_len);
-                        defer alloc.free(temp_items);
+                        var temp_keys: [CAPACITY * 2]K = undefined;
+                        var temp_items: [CAPACITY * 2]*Self = undefined;
 
                         var idx: usize = 0;
                         var other_idx: usize = 0;
@@ -365,11 +361,8 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                     var new_len = leaf.len + other_leaf.len;
 
                     if (new_len > CAPACITY) {
-                        const temp_keys = try alloc.alloc(K, new_len);
-                        defer alloc.free(temp_keys);
-
-                        const temp_items = try alloc.alloc(V, new_len);
-                        defer alloc.free(temp_items);
+                        var temp_keys: [CAPACITY * 2]K = undefined;
+                        var temp_items: [CAPACITY * 2]V = undefined;
 
                         var idx: usize = 0;
                         var other_idx: usize = 0;
@@ -442,11 +435,8 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
 
                         return Result{ .append = right_node };
                     } else {
-                        const temp_keys = try alloc.alloc(K, new_len);
-                        defer alloc.free(temp_keys);
-
-                        const temp_items = try alloc.alloc(V, new_len);
-                        defer alloc.free(temp_items);
+                        var temp_keys: [CAPACITY * 2]K = undefined;
+                        var temp_items: [CAPACITY * 2]V = undefined;
 
                         var idx: usize = 0;
                         var other_idx: usize = 0;
