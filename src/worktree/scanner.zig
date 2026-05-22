@@ -24,7 +24,7 @@ pub const ScanJob = struct {
     sender: Channel.Sender,
 };
 
-buffer: [4 * 128 * 1024]ScanJob,
+buffer: [256 * 256]ScanJob,
 
 mutex: Io.Mutex,
 state: State,

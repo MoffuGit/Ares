@@ -28,13 +28,14 @@ const Snapshot = @This();
 
 entries: Entries,
 // id_to_path: std.HashMap(u64, []const u8),
-// id_to_abs_path: std.HashMap(u64, []const u8),
+id_to_abs_path: std.AutoHashMapUnmanaged(u64, []const u8),
 
 next_id: u64,
 
 pub fn init(self: *Snapshot, gpa: Allocator) !void {
     self.* = .{
         .entries = undefined,
+        .id_to_abs_path = .empty,
         .next_id = 0,
     };
 
@@ -43,11 +44,12 @@ pub fn init(self: *Snapshot, gpa: Allocator) !void {
 
 pub fn insert(self: *Snapshot, gpa: Allocator, path: []const u8) !void {
     _ = try self.entries.insert(gpa, path, .{ .id = self.next_id });
+    _ = try self.id_to_abs_path.put(gpa, self.next_id, path);
     self.next_id += 1;
 }
 
 pub fn deinit(self: *Snapshot, gpa: Allocator) void {
     self.entries.deinit(gpa);
-    // self.id_to_abs_path.deinit();
+    self.id_to_abs_path.deinit(gpa);
     // self.id_to_path.deinit();
 }
