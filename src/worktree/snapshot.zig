@@ -18,11 +18,11 @@ const Snapshot = @This();
 
 entries: Entries,
 
-abs_root: []u8,
-root_name: []u8,
+abs_root: []const u8,
+root_name: []const u8,
 next_id: u64,
 
-pub fn init(self: *Snapshot, abs_root: []u8, root_name: []u8, gpa: Allocator) !void {
+pub fn init(self: *Snapshot, abs_root: []const u8, root_name: []const u8, gpa: Allocator) !void {
     self.* = .{
         .abs_root = abs_root,
         .root_name = root_name,

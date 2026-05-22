@@ -20,8 +20,8 @@ const Phase = enum {
 };
 
 pub const ScanJob = struct {
-    abs_path: []u8,
-    path_name: []u8,
+    abs_path: []const u8,
+    path_name: []const u8,
     sender: Channel.Sender,
 };
 
