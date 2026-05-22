@@ -53,7 +53,11 @@ pub fn run(self: *Scanner, io: Io) !void {
     assert(self.state.phase == .Initial);
 
     const root_stat = try Io.Dir.statFile(.cwd(), io, self.abs_root, .{});
-    try self.insertEntry(io, self.abs_root);
+
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
+    try self.state.snapshot.insert(self.gpa, self.abs_root);
+
     if (root_stat.kind != .directory) return;
 
     var channel: Channel = .init(&self.buffer);
@@ -90,54 +94,51 @@ fn scanTask(self: *Scanner, io: Io, channel: *Channel, receiver_in: Channel.Rece
     var receiver = receiver_in;
     defer receiver.close(io);
 
+    var entries: std.ArrayList([]const u8) = .empty;
+    defer entries.deinit(self.gpa);
+
+    var jobs: std.ArrayList(ScanJob) = .empty;
+    defer jobs.deinit(self.gpa);
+
     while (true) {
         var job = receiver.getOne(io) catch return;
         defer job.sender.close(io);
 
-        self.scanDir(io, channel, job.abs_path) catch |err| {
+        self.scanDir(io, channel, job.abs_path, &entries, &jobs) catch |err| {
             std.log.err("scan failed for {s}: {s}", .{ job.abs_path, @errorName(err) });
         };
     }
 }
 
-fn scanDir(self: *Scanner, io: Io, channel: *Channel, abs_path: []const u8) !void {
+fn scanDir(self: *Scanner, io: Io, channel: *Channel, abs_path: []const u8, entries: *std.ArrayList([]const u8), jobs: *std.ArrayList(ScanJob)) !void {
     var dir = try Io.Dir.openDirAbsolute(io, abs_path, .{ .iterate = true });
     defer dir.close(io);
-
-    var collected: std.ArrayList([]const u8) = .empty;
-    defer collected.deinit(self.gpa);
 
     var it = dir.iterate();
     while (try it.next(io)) |entry| {
         const child_path = try std.fs.path.join(self.arena, &.{ abs_path, entry.name });
-
-        try collected.append(self.gpa, child_path);
+        try entries.append(self.gpa, child_path);
 
         if (entry.kind != .directory) continue;
 
-        var child_sender = channel.sender();
-        channel.queue.putOneUncancelable(io, .{
+        try jobs.append(self.gpa, .{
             .abs_path = child_path,
-            .sender = child_sender,
-        }) catch |err| switch (err) {
-            error.Closed => {
-                child_sender.close(io);
-                return;
-            },
-        };
+            .sender = channel.sender(),
+        });
     }
 
-    try self.insertEntries(io, collected.items);
-}
+    if (jobs.items.len > 0) {
+        channel.queue.putAll(io, jobs.items) catch {
+            for (jobs.items) |*job| job.sender.close(io);
+        };
+        jobs.clearRetainingCapacity();
+    }
 
-fn insertEntries(self: *Scanner, io: Io, paths: []const []const u8) !void {
-    try self.mutex.lock(io);
-    defer self.mutex.unlock(io);
-    for (paths) |path| try self.state.snapshot.insert(self.gpa, path);
-}
+    {
+        try self.mutex.lock(io);
+        defer self.mutex.unlock(io);
+        for (entries.items) |path| try self.state.snapshot.insert(self.gpa, path);
+    }
 
-fn insertEntry(self: *Scanner, io: Io, path: []const u8) !void {
-    self.mutex.lockUncancelable(io);
-    defer self.mutex.unlock(io);
-    try self.state.snapshot.insert(self.gpa, path);
+    entries.clearRetainingCapacity();
 }

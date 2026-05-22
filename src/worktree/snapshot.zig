@@ -13,7 +13,15 @@ pub const Entry = struct {
 const Entries = btree.BPlusTree([]const u8, Entry, entryOrder);
 
 fn entryOrder(a: []const u8, b: []const u8) std.math.Order {
-    return std.mem.order(u8, a, b);
+    const n = @min(a.len, b.len);
+    for (a[0..n], b[0..n]) |a_elem, b_elem| {
+        switch (std.math.order(a_elem, b_elem)) {
+            .eq => continue,
+            .lt => return .lt,
+            .gt => return .gt,
+        }
+    }
+    return std.math.order(a.len, b.len);
 }
 
 const Snapshot = @This();
