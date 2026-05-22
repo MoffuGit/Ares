@@ -435,8 +435,8 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
 
                         return Result{ .append = right_node };
                     } else {
-                        var temp_keys: [CAPACITY * 2]K = undefined;
-                        var temp_items: [CAPACITY * 2]V = undefined;
+                        var temp_keys: [CAPACITY]K = undefined;
+                        var temp_items: [CAPACITY]V = undefined;
 
                         var idx: usize = 0;
                         var other_idx: usize = 0;

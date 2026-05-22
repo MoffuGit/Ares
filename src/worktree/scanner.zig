@@ -52,11 +52,9 @@ pub fn init(self: *Scanner, arena: Allocator, gpa: Allocator, abs_root: []u8) !v
 pub fn run(self: *Scanner, io: Io) !void {
     assert(self.state.phase == .Initial);
 
-    const root_stat = try Io.Dir.statFile(.cwd(), io, self.abs_root, .{});
-
-    try self.mutex.lock(io);
-    defer self.mutex.unlock(io);
     try self.state.snapshot.insert(self.gpa, self.abs_root);
+
+    const root_stat = try Io.Dir.statFile(.cwd(), io, self.abs_root, .{});
 
     if (root_stat.kind != .directory) return;
 
@@ -127,13 +125,6 @@ fn scanDir(self: *Scanner, io: Io, channel: *Channel, abs_path: []const u8, entr
         });
     }
 
-    if (jobs.items.len > 0) {
-        channel.queue.putAll(io, jobs.items) catch {
-            for (jobs.items) |*job| job.sender.close(io);
-        };
-        jobs.clearRetainingCapacity();
-    }
-
     {
         try self.mutex.lock(io);
         defer self.mutex.unlock(io);
@@ -141,4 +132,11 @@ fn scanDir(self: *Scanner, io: Io, channel: *Channel, abs_path: []const u8, entr
     }
 
     entries.clearRetainingCapacity();
+
+    if (jobs.items.len > 0) {
+        channel.queue.putAll(io, jobs.items) catch {
+            for (jobs.items) |*job| job.sender.close(io);
+        };
+        jobs.clearRetainingCapacity();
+    }
 }
