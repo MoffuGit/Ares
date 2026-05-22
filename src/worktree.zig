@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Io = std.Io;
 const Scanner = @import("worktree/scanner.zig");
+const Snapshot = @import("worktree/snapshot.zig");
 
 pub const Worktree = @This();
 pub const Options = struct {
@@ -13,6 +14,7 @@ arena: ArenaAllocator,
 gpa: Allocator,
 io: Io,
 
+snapshot: Snapshot,
 scanner: Scanner,
 
 pub fn init(self: *Worktree, gpa: Allocator, io: Io, opts: Options) !void {
@@ -20,18 +22,19 @@ pub fn init(self: *Worktree, gpa: Allocator, io: Io, opts: Options) !void {
         .arena = ArenaAllocator.init(gpa),
         .gpa = gpa,
         .io = io,
+        .snapshot = undefined,
         .scanner = undefined,
     };
-
+    const arena = self.arena.allocator();
     errdefer _ = self.arena.reset(.free_all);
 
-    const arena = self.arena.allocator();
     const abs_root = try arena.dupe(u8, opts.abs_path);
-
     const basename = std.fs.path.basename(abs_root);
     const root_name = try arena.dupe(u8, basename);
 
-    try self.scanner.init(arena, gpa, abs_root, root_name);
+    try self.snapshot.init(abs_root, root_name, gpa);
+
+    try self.scanner.init(arena, gpa, &self.snapshot);
     try self.scanner.run(io);
 }
 

@@ -111,6 +111,47 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             return .{ .key = key, .child = child };
         }
 
+        fn clone(self: *const Self, alloc: Allocator) Allocator.Error!*Self {
+            var last_leaf: ?*Self = null;
+            return try self.clone_recursive(alloc, &last_leaf);
+        }
+
+        fn clone_recursive(self: *const Self, alloc: Allocator, last_leaf: *?*Self) Allocator.Error!*Self {
+            const new_node = try alloc.create(Self);
+
+            switch (self.*) {
+                .Leaf => |leaf| {
+                    new_node.* = .{ .Leaf = .{
+                        .keys = leaf.keys,
+                        .items = leaf.items,
+                        .len = leaf.len,
+                        .next = null,
+                    } };
+                    if (last_leaf.*) |prev| {
+                        prev.Leaf.next = new_node;
+                    }
+                    last_leaf.* = new_node;
+                },
+                .Internal => |internal| {
+                    new_node.* = .{ .Internal = .{
+                        .keys = internal.keys,
+                        .len = 0,
+                        .height = internal.height,
+                        .childs = undefined,
+                    } };
+                    for (0..internal.len) |i| {
+                        const child = internal.childs[i].clone_recursive(alloc, last_leaf) catch |err| {
+                            new_node.destroy(alloc);
+                            return err;
+                        };
+                        new_node.Internal.childs[i] = child;
+                        new_node.Internal.len += 1;
+                    }
+                },
+            }
+            return new_node;
+        }
+
         pub fn items(self: *const Self) *const [CAPACITY]V {
             assert(self.is_leaf());
             return &self.Leaf.items;
@@ -888,6 +929,11 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
 
         pub fn deinit(self: Self, alloc: Allocator) void {
             self.root.destroy(alloc);
+        }
+
+        pub fn clone(self: *const Self, alloc: Allocator) !Self {
+            const root = try self.root.clone(alloc);
+            return .{ .root = root, .count = self.count };
         }
 
         pub fn insert(self: *Self, alloc: Allocator, key: K, value: V) !?V {

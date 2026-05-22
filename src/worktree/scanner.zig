@@ -32,7 +32,7 @@ state: State,
 gpa: Allocator,
 arena: Allocator,
 
-pub fn init(self: *Scanner, arena: Allocator, gpa: Allocator, abs_root: []u8, root_name: []u8) !void {
+pub fn init(self: *Scanner, arena: Allocator, gpa: Allocator, snapshot: *Snapshot) !void {
     self.* = .{
         .arena = arena,
         .mutex = .init,
@@ -44,16 +44,13 @@ pub fn init(self: *Scanner, arena: Allocator, gpa: Allocator, abs_root: []u8, ro
         },
     };
 
-    try self.state.snapshot.init(abs_root, root_name, gpa);
+    try self.state.snapshot.clone(snapshot, gpa);
 }
 
 pub fn run(self: *Scanner, io: Io) !void {
     assert(self.state.phase == .Initial);
 
-    try self.state.snapshot.insert(self.gpa, self.state.snapshot.root_name);
-
     const root_stat = try Io.Dir.statFile(.cwd(), io, self.state.snapshot.abs_root, .{});
-
     if (root_stat.kind != .directory) return;
 
     var channel: Channel = .init(&self.buffer);

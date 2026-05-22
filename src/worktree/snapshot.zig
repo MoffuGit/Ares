@@ -31,6 +31,13 @@ pub fn init(self: *Snapshot, abs_root: []u8, root_name: []u8, gpa: Allocator) !v
     };
 
     try self.entries.init(gpa);
+    _ = try self.entries.insert(gpa, root_name, .{ .id = self.next_id, .path = root_name });
+    self.next_id += 1;
+}
+
+pub fn clone(self: *Snapshot, from: *Snapshot, gpa: Allocator) !void {
+    self.* = from.*;
+    self.entries = try from.entries.clone(gpa);
 }
 
 pub fn insert(self: *Snapshot, gpa: Allocator, path_name: []const u8) !void {
