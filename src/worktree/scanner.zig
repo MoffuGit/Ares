@@ -21,6 +21,7 @@ const Phase = enum {
 
 pub const ScanJob = struct {
     abs_path: []u8,
+    path_name: []u8,
     sender: Channel.Sender,
 };
 
@@ -31,9 +32,7 @@ state: State,
 gpa: Allocator,
 arena: Allocator,
 
-abs_root: []u8,
-
-pub fn init(self: *Scanner, arena: Allocator, gpa: Allocator, abs_root: []u8) !void {
+pub fn init(self: *Scanner, arena: Allocator, gpa: Allocator, abs_root: []u8, root_name: []u8) !void {
     self.* = .{
         .arena = arena,
         .mutex = .init,
@@ -43,18 +42,17 @@ pub fn init(self: *Scanner, arena: Allocator, gpa: Allocator, abs_root: []u8) !v
             .phase = .Initial,
             .snapshot = undefined,
         },
-        .abs_root = abs_root,
     };
 
-    try self.state.snapshot.init(gpa);
+    try self.state.snapshot.init(abs_root, root_name, gpa);
 }
 
 pub fn run(self: *Scanner, io: Io) !void {
     assert(self.state.phase == .Initial);
 
-    try self.state.snapshot.insert(self.gpa, self.abs_root);
+    try self.state.snapshot.insert(self.gpa, self.state.snapshot.root_name);
 
-    const root_stat = try Io.Dir.statFile(.cwd(), io, self.abs_root, .{});
+    const root_stat = try Io.Dir.statFile(.cwd(), io, self.state.snapshot.abs_root, .{});
 
     if (root_stat.kind != .directory) return;
 
@@ -63,8 +61,9 @@ pub fn run(self: *Scanner, io: Io) !void {
     {
         var seed_sender = channel.sender();
         channel.queue.putOneUncancelable(io, .{
-            .abs_path = self.abs_root,
+            .abs_path = self.state.snapshot.abs_root,
             .sender = seed_sender,
+            .path_name = self.state.snapshot.root_name,
         }) catch |err| switch (err) {
             error.Closed => {
                 seed_sender.close(io);
@@ -102,25 +101,27 @@ fn scanTask(self: *Scanner, io: Io, channel: *Channel, receiver_in: Channel.Rece
         var job = receiver.getOne(io) catch return;
         defer job.sender.close(io);
 
-        self.scanDir(io, channel, job.abs_path, &entries, &jobs) catch |err| {
+        self.scanDir(io, channel, &job, &entries, &jobs) catch |err| {
             std.log.err("scan failed for {s}: {s}", .{ job.abs_path, @errorName(err) });
         };
     }
 }
 
-fn scanDir(self: *Scanner, io: Io, channel: *Channel, abs_path: []const u8, entries: *std.ArrayList([]const u8), jobs: *std.ArrayList(ScanJob)) !void {
-    var dir = try Io.Dir.openDirAbsolute(io, abs_path, .{ .iterate = true });
+fn scanDir(self: *Scanner, io: Io, channel: *Channel, job: *ScanJob, entries: *std.ArrayList([]const u8), jobs: *std.ArrayList(ScanJob)) !void {
+    var dir = try Io.Dir.openDirAbsolute(io, job.abs_path, .{ .iterate = true });
     defer dir.close(io);
 
     var it = dir.iterate();
     while (try it.next(io)) |entry| {
-        const child_path = try std.fs.path.join(self.arena, &.{ abs_path, entry.name });
+        const child_path = try std.fs.path.join(self.arena, &.{ job.path_name, entry.name });
+        const child_abs_path = try std.fs.path.join(self.arena, &.{ job.abs_path, entry.name });
         try entries.append(self.gpa, child_path);
 
         if (entry.kind != .directory) continue;
 
         try jobs.append(self.gpa, .{
-            .abs_path = child_path,
+            .abs_path = child_abs_path,
+            .path_name = child_path,
             .sender = channel.sender(),
         });
     }
@@ -135,7 +136,7 @@ fn scanDir(self: *Scanner, io: Io, channel: *Channel, abs_path: []const u8, entr
 
     if (jobs.items.len > 0) {
         channel.queue.putAll(io, jobs.items) catch {
-            for (jobs.items) |*job| job.sender.close(io);
+            for (jobs.items) |*new_job| new_job.sender.close(io);
         };
         jobs.clearRetainingCapacity();
     }

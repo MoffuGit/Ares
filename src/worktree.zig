@@ -28,7 +28,10 @@ pub fn init(self: *Worktree, gpa: Allocator, io: Io, opts: Options) !void {
     const arena = self.arena.allocator();
     const abs_root = try arena.dupe(u8, opts.abs_path);
 
-    try self.scanner.init(arena, gpa, abs_root);
+    const basename = std.fs.path.basename(abs_root);
+    const root_name = try arena.dupe(u8, basename);
+
+    try self.scanner.init(arena, gpa, abs_root, root_name);
     try self.scanner.run(io);
 }
 
