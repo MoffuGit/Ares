@@ -12,7 +12,7 @@ allocator: std.mem.Allocator,
 config: Config,
 samples: std.ArrayList(Sample) = .empty,
 failures: u64 = 0,
-profiler: Profiler = undefined,
+profiler: *Profiler,
 
 pub const RunFlags = struct {
     best: bool = false,
@@ -24,6 +24,7 @@ pub const Config = struct {
     min_iter: usize = 1,
     max_iter: ?usize = null,
     stop_ms: ?u64 = 1000,
+    profiler: ?*Profiler = null,
 };
 
 pub const Status = enum {
@@ -159,9 +160,14 @@ fn printMeasurement(writer: *Io.Writer, label: []const u8, stats: Stats) !void {
     try writer.writeAll("\n");
 }
 
-pub fn init(self: *Benchmark, allocator: std.mem.Allocator, config: Config) void {
+pub fn init(
+    self: *Benchmark,
+    allocator: std.mem.Allocator,
+    config: Config,
+) void {
     self.* = .{
         .allocator = allocator,
+        .profiler = config.profiler orelse &mod.profiler,
         .config = config,
     };
 }
@@ -184,10 +190,6 @@ pub fn run(
         return error.UnboundedBenchmark;
     }
 
-    if (!Profiler.is_enabled and self.config.stop_ms != null) {
-        return error.BenchmarkTimerDisabled;
-    }
-
     if (self.config.max_iter) |mx| {
         if (mx < self.config.min_iter) return error.MinIterExceedsMaxIter;
     }
@@ -203,10 +205,10 @@ pub fn run(
     var worst_time: u64 = 0;
 
     while (self.samples.items.len + self.failures < max_iter) {
-        self.profiler.init(self.allocator);
+        self.profiler.init(io, self.allocator);
         defer self.profiler.deinit();
 
-        const cb_result = callback(context, alloc, io, &self.profiler);
+        const cb_result = callback(context, alloc, io, self.profiler);
         const failed = if (cb_result) |_| false else |_| true;
 
         const sample = self.profiler.sample();

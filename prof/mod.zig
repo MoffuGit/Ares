@@ -10,7 +10,9 @@ pub const bench_enabled: bool = build_options.bench_enabled;
 
 pub const ProfileLevel = prof.ProfileLevel;
 
-pub const Profiler = prof.Profiler(.{ .level = configured_level });
-pub const Zone = prof.Zone(Profiler);
+pub const Profiler = prof.Profiler(configured_level);
+pub const Zone = prof.Zone(configured_level);
 pub const Benchmark = @import("bench.zig");
-pub const Sample = prof.Sample(Profiler);
+pub const Sample = prof.Sample(configured_level);
+
+pub var profiler: Profiler = .{};
