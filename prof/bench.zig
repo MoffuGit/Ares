@@ -135,7 +135,7 @@ fn printMeasurement(writer: *Io.Writer, label: []const u8, stats: Stats) !void {
         try writer.writeByte(' ');
     }
 
-    const mean_str = try std.fmt.bufPrint(&buf_mean, "{f}", .{Duration{ .ms = stats.mean_ms }});
+    const mean_str = try std.fmt.bufPrint(&buf_mean, "{f}", .{time.Duration{ .ms = stats.mean_ms }});
     try writer.writeAll(mean_str);
     const mean_written = mean_str.len + 3;
     if (mean_written < MEAN_COL_WIDTH) {
@@ -145,8 +145,8 @@ fn printMeasurement(writer: *Io.Writer, label: []const u8, stats: Stats) !void {
     }
 
     // min … max
-    const min_str = try std.fmt.bufPrint(&buf_min, "{f}", .{Duration{ .ms = stats.min_ms }});
-    const max_str = try std.fmt.bufPrint(&buf_max, "{f}", .{Duration{ .ms = stats.max_ms }});
+    const min_str = try std.fmt.bufPrint(&buf_min, "{f}", .{time.Duration{ .ms = stats.min_ms }});
+    const max_str = try std.fmt.bufPrint(&buf_max, "{f}", .{time.Duration{ .ms = stats.max_ms }});
     try writer.writeAll(min_str);
     try writer.writeAll(" … ");
     try writer.writeAll(max_str);
@@ -261,20 +261,3 @@ pub fn run(
         .time = time_stats,
     };
 }
-
-pub const Duration = struct {
-    ms: f64,
-
-    pub fn format(self: Duration, writer: *Io.Writer) Io.Writer.Error!void {
-        const ms = self.ms;
-        if (ms >= 1_000.0) {
-            try writer.print("{d:.3}s", .{ms / 1_000.0});
-        } else if (ms >= 1.0) {
-            try writer.print("{d:.3}ms", .{ms});
-        } else if (ms >= 0.001) {
-            try writer.print("{d:.3}us", .{ms * 1_000.0});
-        } else {
-            try writer.print("{d:.3}ns", .{ms * 1_000_000.0});
-        }
-    }
-};

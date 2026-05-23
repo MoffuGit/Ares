@@ -122,9 +122,6 @@ pub fn Profiler(comptime profile_level: ProfileLevel) type {
 }
 
 pub fn Zone(comptime profile_level: ProfileLevel) type {
-    const Log = struct {
-        children: bool = false,
-    };
     if (profile_level != .deep) {
         return struct {
             const Self = @This();
@@ -139,7 +136,11 @@ pub fn Zone(comptime profile_level: ProfileLevel) type {
 
             pub fn end(_: *Self) void {}
 
-            pub fn log(_: *const Self, _: Io, _: Io.File, _: Log) !void {}
+            pub fn log(
+                _: *const Self,
+                _: Io,
+                _: Io.File,
+            ) !void {}
         };
     }
 
@@ -188,7 +189,7 @@ pub fn Zone(comptime profile_level: ProfileLevel) type {
             self.anchor_index = null;
         }
 
-        pub fn log(self: *const Self, io: Io, file: Io.File, opts: Log) !void {
+        pub fn log(self: *const Self, io: Io, file: Io.File) !void {
             const state = self.state orelse return;
             const anchor_idx = self.anchor_index orelse return;
 
@@ -200,9 +201,21 @@ pub fn Zone(comptime profile_level: ProfileLevel) type {
             const now = time.timer();
 
             try printAnchor(writer, state, anchor_idx, now, 0);
-            if (opts.children) {
-                try printChildren(writer, state, anchor_idx, now, 1);
-            }
+        }
+
+        pub fn logTree(self: *const Self, io: Io, file: Io.File) !void {
+            const state = self.state orelse return;
+            const anchor_idx = self.anchor_index orelse return;
+
+            var buffer: [4096]u8 = undefined;
+            var w: Io.File.Writer = .init(file, io, &buffer);
+            const writer: *Io.Writer = &w.interface;
+            defer writer.flush() catch {};
+
+            const now = time.timer();
+
+            try printAnchor(writer, state, anchor_idx, now, 0);
+            try printChildren(writer, state, anchor_idx, now, 1);
         }
     };
 }
@@ -231,11 +244,11 @@ fn printAnchor(writer: *Io.Writer, state: *Thread, idx: u32, now: u64, indent: u
     const anchor = state.anchors.items[idx];
     const totals = liveTotals(state, idx, now);
     try writer.splatByteAll(' ', @as(usize, indent) * 2);
-    try writer.print("{s}: calls={d} inclusive={d:.3}ms exclusive={d:.3}ms\n", .{
+    try writer.print("{s}: calls={d} inclusive={f} exclusive={f}\n", .{
         anchor.name,
         totals.calls,
-        time.ticksToMs(totals.inclusive_ticks),
-        time.ticksToMs(totals.exclusive_ticks),
+        time.Duration.fromTicks(totals.inclusive_ticks),
+        time.Duration.fromTicks(totals.exclusive_ticks),
     });
 }
 
