@@ -84,9 +84,9 @@ pub fn deinit(self: *Scanner, _: Io) void {
     self.state.snapshot.deinit(self.gpa);
 }
 
-fn scanTask(self: *Scanner, io: Io, channel: *Channel, receiver_in: Channel.Receiver) void {
-    var receiver = receiver_in;
-    defer receiver.close(io);
+fn scanTask(self: *Scanner, io: Io, channel: *Channel, receiver: Channel.Receiver) void {
+    var rec = receiver;
+    defer rec.close(io);
 
     var entries: std.ArrayList([]const u8) = .empty;
     defer entries.deinit(self.gpa);
@@ -95,11 +95,12 @@ fn scanTask(self: *Scanner, io: Io, channel: *Channel, receiver_in: Channel.Rece
     defer jobs.deinit(self.gpa);
 
     while (true) {
-        var job = receiver.getOne(io) catch return;
+        var job = rec.getOne(io) catch return;
         defer job.sender.close(io);
 
         self.scanDir(io, channel, &job, &entries, &jobs) catch |err| {
             std.log.err("scan failed for {s}: {s}", .{ job.abs_path, @errorName(err) });
+            break;
         };
     }
 }
@@ -110,8 +111,8 @@ fn scanDir(self: *Scanner, io: Io, channel: *Channel, job: *ScanJob, entries: *s
 
     var it = dir.iterate();
     while (try it.next(io)) |entry| {
-        const child_path = try std.fs.path.join(self.arena, &.{ job.path_name, entry.name });
-        const child_abs_path = try std.fs.path.join(self.arena, &.{ job.abs_path, entry.name });
+        const child_path = try std.mem.join(self.arena, "/", &.{ job.path_name, entry.name });
+        const child_abs_path = try std.mem.join(self.arena, "/", &.{ job.abs_path, entry.name });
         try entries.append(self.gpa, child_path);
 
         if (entry.kind != .directory) continue;
