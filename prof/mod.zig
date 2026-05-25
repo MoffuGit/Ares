@@ -6,7 +6,7 @@ const time = @import("time.zig");
 pub const configured_level: ProfileLevel = std.meta.stringToEnum(ProfileLevel, build_options.profile_level) orelse
     @compileError("invalid prof_build.profile_level");
 
-pub const bench_enabled: bool = build_options.bench_enabled;
+pub const bench: bool = build_options.bench;
 
 pub const ProfileLevel = prof.ProfileLevel;
 

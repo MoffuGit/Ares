@@ -1,6 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 const prof = @import("prof");
+const test_build = @import("test_build");
 const Worktree = @import("../worktree.zig");
 
 test "Bench Worktree" {
@@ -20,7 +21,7 @@ test "Bench Worktree" {
 pub fn initialWorktreeScan(_: *void, alloc: std.mem.Allocator, io: std.Io, _: *prof.Profiler) !void {
     var worktree: Worktree = undefined;
     try worktree.init(alloc, io, .{
-        .abs_path = "/Volumes/Home_SSD/Users/home/Documents/projects/Odyssey/testdata/chromium",
+        .abs_path = test_build.chromium_path,
     });
     defer worktree.deinit();
 }

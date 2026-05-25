@@ -1,4 +1,5 @@
 .zig-cache/
 .idea/
 zig-out/
-testdata/
+test/*
+!test/build.zig

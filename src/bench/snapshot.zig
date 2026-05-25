@@ -1,6 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 const prof = @import("prof");
+const test_build = @import("test_build");
 const Snapshot = @import("../worktree/snapshot.zig");
 
 const Context = struct {
@@ -16,7 +17,7 @@ test "Bench Worktree" {
     const arena = alloc.allocator();
     const io = testing.io;
 
-    const abs_root = "/Volumes/Home_SSD/Users/home/Documents/projects/Odyssey/testdata/chromium";
+    const abs_root = test_build.chromium_path;
     const basename = std.fs.path.basename(abs_root);
     const root_name = try arena.dupe(u8, basename);
 

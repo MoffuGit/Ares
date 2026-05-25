@@ -4,7 +4,7 @@ const mod = @import("mod.zig");
 const time = @import("time.zig");
 const Profiler = mod.Profiler;
 const Sample = mod.Sample;
-const bench_enabled = mod.bench_enabled;
+const bench = mod.bench;
 
 const Benchmark = @This();
 
@@ -184,7 +184,7 @@ pub fn run(
     io: std.Io,
     callback: *const fn (ctx: *Context, alloc: std.mem.Allocator, io: std.Io, profiler: *Profiler) anyerror!void,
 ) !Result {
-    if (!bench_enabled) return .{ .status = .skipped, .name = self.config.name };
+    if (!bench) return .{ .status = .skipped, .name = self.config.name };
 
     if (self.config.max_iter == null and self.config.stop_ms == null) {
         return error.UnboundedBenchmark;
