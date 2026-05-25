@@ -21,6 +21,7 @@ pub const RunFlags = struct {
 };
 
 pub const Config = struct {
+    name: ?[]const u8 = null,
     min_iter: usize = 1,
     max_iter: ?usize = null,
     stop_ms: ?u64 = 1000,
@@ -71,6 +72,7 @@ pub const Result = struct {
     iterations: usize = 0,
     failures: u64 = 0,
     time: ?Stats = null,
+    name: ?[]const u8 = null,
 
     pub fn log(self: *const Self, io: Io, file: Io.File) !void {
         var buffer: [4096]u8 = undefined;
@@ -89,7 +91,7 @@ pub const Result = struct {
 
         try writer.print("\n\n", .{});
         try terminal.setColor(.bold);
-        try writer.print("BENCHMARK", .{});
+        try writer.writeAll(self.name orelse "BENCHMARK");
         try terminal.setColor(.dim);
         if (self.iterations > 1) {
             try writer.print(" ({d} runs)", .{self.iterations});
@@ -249,6 +251,7 @@ pub fn run(
             .iterations = 0,
             .failures = self.failures,
             .time = null,
+            .name = self.config.name,
         };
     }
 
@@ -259,5 +262,6 @@ pub fn run(
         .iterations = self.samples.items.len,
         .failures = self.failures,
         .time = time_stats,
+        .name = self.config.name,
     };
 }

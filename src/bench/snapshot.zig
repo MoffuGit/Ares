@@ -9,7 +9,7 @@ const Context = struct {
     paths: *std.ArrayList([]const u8),
 };
 
-test "Bench Worktree" {
+test "Bench Snapshot inserts" {
     const gpa = testing.allocator;
     var alloc = std.heap.ArenaAllocator.init(gpa);
     defer _ = alloc.reset(.free_all);
@@ -40,9 +40,7 @@ test "Bench Worktree" {
     defer snapshot.deinit(gpa);
 
     var bench: prof.Benchmark = undefined;
-    bench.init(gpa, .{
-        .stop_ms = 20000,
-    });
+    bench.init(gpa, .{ .stop_ms = 20000, .name = "SNAPSHOT" });
     defer bench.deinit();
 
     var context: Context = .{ .snapshot = &snapshot, .paths = &paths };

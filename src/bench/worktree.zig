@@ -9,9 +9,7 @@ test "Bench Worktree" {
     const io = testing.io;
 
     var bench: prof.Benchmark = undefined;
-    bench.init(gpa, .{
-        .stop_ms = 20000,
-    });
+    bench.init(gpa, .{ .stop_ms = 20000, .name = "WORKTREE" });
     defer bench.deinit();
 
     const res = try bench.run(void, undefined, gpa, io, initialWorktreeScan);
