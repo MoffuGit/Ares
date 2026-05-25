@@ -220,9 +220,6 @@ pub fn Zone(comptime profile_level: ProfileLevel) type {
     };
 }
 
-/// `anchor.totals` only reflects completed invocations. Add the in-progress
-/// contribution of every currently-active frame bound to this anchor so the
-/// caller sees the live picture mid-zone.
 fn liveTotals(state: *Thread, idx: u32, now: u64) ScopeTotals {
     var totals = state.anchors.items[idx].totals;
     for (state.frames.items) |f| {
