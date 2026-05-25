@@ -27,6 +27,7 @@ pub fn build(b: *std.Build) void {
     b.step("run", "Run the app").dependOn(&run_cmd.step);
 
     const clone_chromium = @"test".cloneChromiumStep(b);
+    const bench_filter = b.option([]const u8, "bench-filter", "Only run benchmarks whose test name contains this text");
 
     const exe_tests = b.addTest(.{
         .root_module = rootModule(
@@ -46,6 +47,7 @@ pub fn build(b: *std.Build) void {
             .level = requested orelse .general,
             .bench = true,
         }, test_opts),
+        .filters = if (bench_filter) |filter| &.{filter} else &.{},
     });
 
     const bench_artifact = b.addInstallArtifact(
