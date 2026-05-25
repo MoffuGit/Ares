@@ -27,7 +27,7 @@ pub fn Profiler(comptime profile_level: ProfileLevel) type {
                 return .{};
             }
 
-            pub fn beginZone(
+            pub fn zone(
                 self: *Self,
                 name: []const u8,
                 source: std.builtin.SourceLocation,
@@ -42,11 +42,11 @@ pub fn Profiler(comptime profile_level: ProfileLevel) type {
     return struct {
         const Self = @This();
 
-        gpa: Allocator = undefined,
-        io: Io = undefined,
-        rwlock: Io.RwLock = .init,
-        threads: std.AutoHashMapUnmanaged(u64, *Thread) = .empty,
-        start: u64 = 0,
+        gpa: Allocator,
+        io: Io,
+        rwlock: Io.RwLock,
+        threads: std.AutoHashMapUnmanaged(u64, *Thread),
+        start: u64,
 
         pub fn init(self: *Self, io: Io, gpa: Allocator) void {
             self.* = .{
@@ -65,7 +65,6 @@ pub fn Profiler(comptime profile_level: ProfileLevel) type {
                 self.gpa.destroy(thread_ptr.*);
             }
             self.threads.deinit(self.gpa);
-            self.* = .{};
         }
 
         pub fn reset(self: *Self) void {
@@ -85,7 +84,7 @@ pub fn Profiler(comptime profile_level: ProfileLevel) type {
             };
         }
 
-        pub fn beginZone(
+        pub fn zone(
             self: *Self,
             name: []const u8,
             source: std.builtin.SourceLocation,
