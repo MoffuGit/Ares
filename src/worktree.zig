@@ -83,15 +83,14 @@ fn runUpdateReceiver(self: *Worktree, io: Io, receiver: channelpkg.ReceiverType(
                 defer self.rwlock.unlock(io);
 
                 self.scanning = true;
-                std.log.debug("started scanner", .{});
             },
-            .updated => |snapshot| {
+            .updated => |update| {
                 try self.rwlock.lock(io);
                 defer self.rwlock.unlock(io);
 
                 self.snapshot.deinit(self.gpa);
-                self.snapshot = snapshot;
-                std.log.debug("snapshot update", .{});
+                self.snapshot = update.snapshot;
+                self.scanning = update.scanning;
             },
         }
     }

@@ -24,7 +24,10 @@ const Phase = enum {
 
 pub const ScanUpdates = union(enum) {
     started: void,
-    updated: Snapshot,
+    updated: struct {
+        snapshot: Snapshot,
+        scanning: bool,
+    },
 };
 
 pub const ScanJob = struct {
@@ -108,19 +111,23 @@ pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(ScanUpd
                 break;
             },
             .timeout => {
-                var snapshot: Snapshot = undefined;
-                {
-                    try self.mutex.lock(io);
-                    defer self.mutex.unlock(io);
-
-                    try snapshot.clone(&self.state.snapshot, self.gpa);
-                }
-
-                try update_sender.putOne(io, .{ .updated = snapshot });
+                try self.send_update(io, true, update_sender);
                 try select.concurrent(.timeout, Io.sleep, .{ io, SNAPSHOT_UPDATE_INTERVAL, .real });
             },
         }
     }
+}
+
+pub fn send_update(self: *Scanner, io: Io, scanning: bool, update_sender: *channelpkg.SenderType(ScanUpdates)) !void {
+    var snapshot: Snapshot = undefined;
+    {
+        try self.mutex.lock(io);
+        defer self.mutex.unlock(io);
+
+        try snapshot.clone(&self.state.snapshot, self.gpa);
+    }
+
+    try update_sender.putOne(io, .{ .updated = .{ .snapshot = snapshot, .scanning = scanning } });
 }
 
 pub fn deinit(self: *Scanner, _: Io) void {

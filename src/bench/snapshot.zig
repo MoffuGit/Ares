@@ -40,7 +40,7 @@ test "Bench Snapshot inserts" {
     defer snapshot.deinit(gpa);
 
     var bench: prof.Benchmark = undefined;
-    bench.init(gpa, .{ .stop_ms = 20000, .name = "SNAPSHOT" });
+    bench.init(gpa, .{ .max_iter = 1, .name = "SNAPSHOT" });
     defer bench.deinit();
 
     var context: Context = .{ .snapshot = &snapshot, .paths = &paths };
