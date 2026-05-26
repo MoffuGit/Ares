@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 const panic = std.debug.panic;
 
-const BASE: usize = 6;
+const BASE: usize = 8;
 const CAPACITY: usize = 2 * BASE;
 
 pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K) std.math.Order) type {
