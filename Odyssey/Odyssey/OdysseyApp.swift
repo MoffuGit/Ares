@@ -13,5 +13,6 @@ struct OdysseyApp: App {
         WindowGroup {
             ContentView()
         }
+        .windowStyle(.hiddenTitleBar)
     }
 }
