@@ -113,19 +113,6 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             return .{ .key = key, .child = child };
         }
 
-        fn node_count(self: *const Self) usize {
-            return switch (self.*) {
-                .Leaf => 1,
-                .Internal => |internal| blk: {
-                    var count: usize = 1;
-                    for (0..internal.len) |i| {
-                        count += internal.childs[i].node_count();
-                    }
-                    break :blk count;
-                },
-            };
-        }
-
         fn clone(self: *const Self, pool: *Pool, alloc: Allocator) Allocator.Error!*Self {
             var last_leaf: ?*Self = null;
             return try self.clone_recursive(pool, alloc, &last_leaf);
@@ -951,7 +938,14 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
         }
 
         pub fn clone(self: *const Self, alloc: Allocator) !Self {
-            var pool = try Node.Pool.initCapacity(alloc, self.root.node_count());
+            var node = self.pool.arena_state.used_list;
+            var count: u64 = 0;
+            while (node) |n| {
+                count += 1;
+                node = n.next;
+            }
+
+            var pool = try Node.Pool.initCapacity(alloc, count);
             errdefer pool.deinit(alloc);
 
             const root = try self.root.clone(&pool, alloc);

@@ -36,20 +36,6 @@ pub fn module(
         .optimize = optimize,
     });
     prof_mod.addOptions("prof_build", build_options);
-    linkCounters(b, target, prof_mod);
 
     return prof_mod;
-}
-
-fn linkCounters(
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    mod: *std.Build.Module,
-) void {
-    if (!target.result.os.tag.isDarwin()) return;
-
-    const sdk_path = std.zig.system.darwin.getSdk(b.allocator, b.graph.io, &target.result) orelse return;
-    mod.addSystemFrameworkPath(.{ .cwd_relative = b.pathJoin(&.{ sdk_path, "System/Library/PrivateFrameworks" }) });
-    mod.linkFramework("kperf", .{});
-    mod.linkFramework("kperfdata", .{});
 }
