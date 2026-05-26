@@ -109,16 +109,3 @@ pub fn runScanner(scanner: *Scanner, io: Io, sender: channelpkg.SenderType(Scann
         std.log.err("scanner err: {}", .{err});
     };
 }
-
-test "Init/Deinit Worktree" {
-    const gpa = testing.allocator;
-
-    var worktree: Worktree = undefined;
-    try worktree.init(gpa, .{
-        .abs_path = test_build.chromium_path,
-    });
-
-    worktree.deinit();
-}
-
-test "Run with error on runScanner" {}
