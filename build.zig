@@ -62,6 +62,7 @@ fn rootModule(
         .root_source_file = b.path(root_source),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
         .imports = &.{.{ .name = "prof", .module = prof_mod }},
     });
     if (test_opts) |opts| @"test".addOptions(mod, b, opts);
