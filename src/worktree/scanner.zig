@@ -10,7 +10,7 @@ const Channel = channelpkg.Channel(ScanJob);
 
 const Scanner = @This();
 
-const update_interval: Io.Duration = .fromSeconds(1);
+const SNAPSHOT_UPDATE_INTERVAL: Io.Duration = .fromMilliseconds(500);
 
 const State = struct {
     phase: Phase,
@@ -23,7 +23,7 @@ const Phase = enum {
 };
 
 pub const Update = union(enum) {
-    update: bool,
+    update: Snapshot,
 };
 
 pub const ScanJob = struct {
@@ -96,7 +96,7 @@ pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(Update)
     var select: Select = .init(io, &select_buffer);
 
     try select.concurrent(.group, Io.Group.await, .{ &group, io });
-    try select.concurrent(.timeout, Io.sleep, .{ io, update_interval, .real });
+    try select.concurrent(.timeout, Io.sleep, .{ io, SNAPSHOT_UPDATE_INTERVAL, .real });
 
     while (true) {
         switch (try select.await()) {
@@ -105,8 +105,16 @@ pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(Update)
                 break;
             },
             .timeout => {
-                try update_sender.putOne(io, .{ .update = true });
-                try select.concurrent(.timeout, Io.sleep, .{ io, update_interval, .real });
+                var snapshot: Snapshot = undefined;
+                {
+                    try self.mutex.lock(io);
+                    defer self.mutex.unlock(io);
+
+                    try snapshot.clone(&self.state.snapshot, self.gpa);
+                }
+
+                try update_sender.putOne(io, .{ .update = snapshot });
+                try select.concurrent(.timeout, Io.sleep, .{ io, SNAPSHOT_UPDATE_INTERVAL, .real });
             },
         }
     }
