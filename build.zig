@@ -8,24 +8,6 @@ pub fn build(b: *std.Build) void {
     const requested = prof.option(b);
     const test_opts = @"test".options(b);
 
-    const exe = b.addExecutable(.{
-        .name = "Odyssey",
-        .root_module = rootModule(
-            b,
-            target,
-            optimize,
-            "src/main.zig",
-            .{ .level = requested orelse .none },
-            null,
-        ),
-    });
-    b.installArtifact(exe);
-
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run_cmd.addArgs(args);
-    b.step("run", "Run the app").dependOn(&run_cmd.step);
-
     const clone_chromium = @"test".cloneChromiumStep(b);
     const bench_filter = b.option([]const u8, "bench-filter", "Only run benchmarks whose test name contains this text");
 
