@@ -10,7 +10,7 @@ const Channel = channelpkg.Channel(ScanJob);
 
 const Scanner = @This();
 
-const SNAPSHOT_UPDATE_INTERVAL: Io.Duration = .fromMilliseconds(500);
+const SNAPSHOT_UPDATE_INTERVAL: Io.Duration = if (@import("builtin").mode == .Debug) .fromSeconds(5) else .fromMilliseconds(500);
 
 const State = struct {
     phase: Phase,
@@ -22,8 +22,9 @@ const Phase = enum {
     Events,
 };
 
-pub const Update = union(enum) {
-    update: Snapshot,
+pub const ScanUpdates = union(enum) {
+    started: void,
+    updated: Snapshot,
 };
 
 pub const ScanJob = struct {
@@ -54,7 +55,7 @@ pub fn init(self: *Scanner, arena: Allocator, gpa: Allocator, snapshot: *Snapsho
     try self.state.snapshot.clone(snapshot, gpa);
 }
 
-pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(Update)) !void {
+pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(ScanUpdates)) !void {
     assert(try update_sender.channel.closed(io) != true);
     assert(self.state.phase == .Initial);
 
@@ -62,6 +63,8 @@ pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(Update)
     if (stat.kind != .directory) return;
 
     var channel: Channel = .init(&self.buffer);
+
+    try update_sender.putOne(io, .started);
 
     {
         var sender = channel.sender();
@@ -113,7 +116,7 @@ pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(Update)
                     try snapshot.clone(&self.state.snapshot, self.gpa);
                 }
 
-                try update_sender.putOne(io, .{ .update = snapshot });
+                try update_sender.putOne(io, .{ .updated = snapshot });
                 try select.concurrent(.timeout, Io.sleep, .{ io, SNAPSHOT_UPDATE_INTERVAL, .real });
             },
         }

@@ -16,15 +16,19 @@ pub const Options = struct {
 arena: ArenaAllocator,
 gpa: Allocator,
 
+rwlock: Io.RwLock,
+scanning: bool,
 snapshot: Snapshot,
 scanner: Scanner,
 
-buffer: [8]Scanner.Update,
-updates_channel: Channel(Scanner.Update),
+buffer: [8]Scanner.ScanUpdates,
+updates_channel: Channel(Scanner.ScanUpdates),
 group: Io.Group,
 
 pub fn init(self: *Worktree, gpa: Allocator, io: Io, opts: Options) !void {
     self.* = .{
+        .scanning = false,
+        .rwlock = .init,
         .arena = ArenaAllocator.init(gpa),
         .gpa = gpa,
         .group = .init,
@@ -50,8 +54,8 @@ pub fn init(self: *Worktree, gpa: Allocator, io: Io, opts: Options) !void {
 
     self.updates_channel = .init(&self.buffer);
 
-    try self.group.concurrent(io, runScanner, .{ &self.scanner, io, self.updates_channel.sender() });
     try self.group.concurrent(io, runUpdateReceiver, .{ self, io, self.updates_channel.receiver() });
+    try self.group.concurrent(io, runScanner, .{ &self.scanner, io, self.updates_channel.sender() });
 }
 
 pub fn await(self: *Worktree, io: Io) !void {
@@ -68,18 +72,32 @@ pub fn deinit(self: *Worktree, io: Io) void {
     _ = self.arena.reset(.free_all);
 }
 
-fn runUpdateReceiver(_: *Worktree, io: Io, receiver: channelpkg.ReceiverType(Scanner.Update)) void {
+fn runUpdateReceiver(self: *Worktree, io: Io, receiver: channelpkg.ReceiverType(Scanner.ScanUpdates)) !void {
     var rec = receiver;
     defer rec.close(io);
 
     while (true) {
-        const update = rec.getOne(io) catch return;
-        std.log.debug("Snapshot Update", .{});
-        _ = update;
+        switch (rec.getOne(io) catch return) {
+            .started => {
+                try self.rwlock.lock(io);
+                defer self.rwlock.unlock(io);
+
+                self.scanning = true;
+                std.log.debug("started scanner", .{});
+            },
+            .updated => |snapshot| {
+                try self.rwlock.lock(io);
+                defer self.rwlock.unlock(io);
+
+                self.snapshot.deinit(self.gpa);
+                self.snapshot = snapshot;
+                std.log.debug("snapshot update", .{});
+            },
+        }
     }
 }
 
-pub fn runScanner(scanner: *Scanner, io: Io, sender: channelpkg.SenderType(Scanner.Update)) void {
+pub fn runScanner(scanner: *Scanner, io: Io, sender: channelpkg.SenderType(Scanner.ScanUpdates)) void {
     var send = sender;
     defer send.close(io);
 
