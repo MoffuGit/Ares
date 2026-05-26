@@ -47,6 +47,7 @@ pub fn build(b: *std.Build) void {
             .level = requested orelse .general,
             .bench = true,
         }, test_opts),
+        .test_runner = .{ .path = b.path("prof/bench_runner.zig"), .mode = .simple },
         .filters = if (bench_filter) |filter| &.{filter} else &.{},
     });
 

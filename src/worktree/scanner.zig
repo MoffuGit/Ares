@@ -5,9 +5,12 @@ const assert = std.debug.assert;
 
 const Snapshot = @import("snapshot.zig");
 
-const Channel = @import("../channel.zig").Channel(ScanJob);
+const channelpkg = @import("../channel.zig");
+const Channel = channelpkg.Channel(ScanJob);
 
 const Scanner = @This();
+
+const update_interval: Io.Duration = .fromSeconds(1);
 
 const State = struct {
     phase: Phase,
@@ -17,6 +20,10 @@ const State = struct {
 const Phase = enum {
     Initial,
     Events,
+};
+
+pub const Update = union(enum) {
+    update: bool,
 };
 
 pub const ScanJob = struct {
@@ -47,26 +54,27 @@ pub fn init(self: *Scanner, arena: Allocator, gpa: Allocator, snapshot: *Snapsho
     try self.state.snapshot.clone(snapshot, gpa);
 }
 
-pub fn run(self: *Scanner, io: Io) !void {
+pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(Update)) !void {
+    assert(try update_sender.channel.closed(io) != true);
     assert(self.state.phase == .Initial);
 
-    const root_stat = try Io.Dir.statFile(.cwd(), io, self.state.snapshot.abs_root, .{});
-    if (root_stat.kind != .directory) return;
+    const stat = try Io.Dir.statFile(.cwd(), io, self.state.snapshot.abs_root, .{});
+    if (stat.kind != .directory) return;
 
     var channel: Channel = .init(&self.buffer);
 
     {
-        var seed_sender = channel.sender();
-        channel.queue.putOneUncancelable(io, .{
-            .abs_path = self.state.snapshot.abs_root,
-            .sender = seed_sender,
-            .path_name = self.state.snapshot.root_name,
-        }) catch |err| switch (err) {
-            error.Closed => {
-                seed_sender.close(io);
-                return;
+        var sender = channel.sender();
+        errdefer sender.close(io);
+
+        try sender.putOneUncancelable(
+            io,
+            .{
+                .abs_path = self.state.snapshot.abs_root,
+                .sender = sender,
+                .path_name = self.state.snapshot.root_name,
             },
-        };
+        );
     }
 
     const cpu_count = try std.Thread.getCpuCount();
@@ -74,17 +82,41 @@ pub fn run(self: *Scanner, io: Io) !void {
     var group: Io.Group = .init;
     for (0..cpu_count) |_| {
         const receiver = channel.receiver();
-        try group.concurrent(io, scanTask, .{ self, io, &channel, receiver });
+        try group.concurrent(io, scanTask, .{ self, io, receiver });
     }
 
-    try group.await(io);
+    const SelectResult = union(enum) {
+        group: Io.Cancelable!void,
+        timeout: Io.Cancelable!void,
+    };
+    const Select = Io.Select(SelectResult);
+
+    var select_buffer: [2]SelectResult = undefined;
+
+    var select: Select = .init(io, &select_buffer);
+
+    try select.concurrent(.group, Io.Group.await, .{ &group, io });
+    try select.concurrent(.timeout, Io.sleep, .{ io, update_interval, .real });
+
+    while (true) {
+        switch (try select.await()) {
+            .group => {
+                select.cancelDiscard();
+                break;
+            },
+            .timeout => {
+                try update_sender.putOne(io, .{ .update = true });
+                try select.concurrent(.timeout, Io.sleep, .{ io, update_interval, .real });
+            },
+        }
+    }
 }
 
 pub fn deinit(self: *Scanner, _: Io) void {
     self.state.snapshot.deinit(self.gpa);
 }
 
-fn scanTask(self: *Scanner, io: Io, channel: *Channel, receiver: Channel.Receiver) void {
+fn scanTask(self: *Scanner, io: Io, receiver: Channel.Receiver) void {
     var rec = receiver;
     defer rec.close(io);
 
@@ -98,14 +130,14 @@ fn scanTask(self: *Scanner, io: Io, channel: *Channel, receiver: Channel.Receive
         var job = rec.getOne(io) catch return;
         defer job.sender.close(io);
 
-        self.scanDir(io, channel, &job, &entries, &jobs) catch |err| {
+        self.scanDir(io, &job, &entries, &jobs) catch |err| {
             std.log.err("scan failed for {s}: {s}", .{ job.abs_path, @errorName(err) });
             break;
         };
     }
 }
 
-fn scanDir(self: *Scanner, io: Io, channel: *Channel, job: *ScanJob, entries: *std.ArrayList([]const u8), jobs: *std.ArrayList(ScanJob)) !void {
+fn scanDir(self: *Scanner, io: Io, job: *ScanJob, entries: *std.ArrayList([]const u8), jobs: *std.ArrayList(ScanJob)) !void {
     var dir = try Io.Dir.openDirAbsolute(io, job.abs_path, .{ .iterate = true });
     defer dir.close(io);
 
@@ -120,7 +152,7 @@ fn scanDir(self: *Scanner, io: Io, channel: *Channel, job: *ScanJob, entries: *s
         try jobs.append(self.gpa, .{
             .abs_path = child_abs_path,
             .path_name = child_path,
-            .sender = channel.sender(),
+            .sender = job.sender.clone(),
         });
     }
 
@@ -133,7 +165,7 @@ fn scanDir(self: *Scanner, io: Io, channel: *Channel, job: *ScanJob, entries: *s
     entries.clearRetainingCapacity();
 
     if (jobs.items.len > 0) {
-        channel.queue.putAll(io, jobs.items) catch {
+        job.sender.putAll(io, jobs.items) catch {
             for (jobs.items) |*new_job| new_job.sender.close(io);
         };
         jobs.clearRetainingCapacity();

@@ -2,29 +2,40 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Io = std.Io;
+const channelpkg = @import("channel.zig");
+const Channel = channelpkg.Channel;
 const Scanner = @import("worktree/scanner.zig");
 const Snapshot = @import("worktree/snapshot.zig");
 
 pub const Worktree = @This();
+
 pub const Options = struct {
     abs_path: []const u8,
 };
 
 arena: ArenaAllocator,
 gpa: Allocator,
-io: Io,
 
 snapshot: Snapshot,
 scanner: Scanner,
+
+buffer: [8]Scanner.Update,
+updates_channel: Channel(Scanner.Update),
+group: Io.Group,
 
 pub fn init(self: *Worktree, gpa: Allocator, io: Io, opts: Options) !void {
     self.* = .{
         .arena = ArenaAllocator.init(gpa),
         .gpa = gpa,
-        .io = io,
+        .group = .init,
         .snapshot = undefined,
         .scanner = undefined,
+        .buffer = undefined,
+        .updates_channel = undefined,
     };
+
+    errdefer self.updates_channel.close(io);
+
     const arena = self.arena.allocator();
     errdefer _ = self.arena.reset(.free_all);
 
@@ -33,12 +44,46 @@ pub fn init(self: *Worktree, gpa: Allocator, io: Io, opts: Options) !void {
     const root_name = try arena.dupe(u8, basename);
 
     try self.snapshot.init(abs_root, root_name, gpa);
+    errdefer self.snapshot.deinit(gpa);
 
     try self.scanner.init(arena, gpa, &self.snapshot);
-    try self.scanner.run(io);
+
+    self.updates_channel = .init(&self.buffer);
+
+    try self.group.concurrent(io, runScanner, .{ &self.scanner, io, self.updates_channel.sender() });
+    try self.group.concurrent(io, runUpdateReceiver, .{ self, io, self.updates_channel.receiver() });
 }
 
-pub fn deinit(self: *Worktree) void {
-    self.scanner.deinit(self.io);
+pub fn await(self: *Worktree, io: Io) !void {
+    try self.group.await(io);
+}
+
+pub fn close(self: *Worktree, io: Io) !void {
+    self.updates_channel.close(io);
+}
+
+pub fn deinit(self: *Worktree, io: Io) void {
+    self.scanner.deinit(io);
+    self.snapshot.deinit(self.gpa);
     _ = self.arena.reset(.free_all);
+}
+
+fn runUpdateReceiver(_: *Worktree, io: Io, receiver: channelpkg.ReceiverType(Scanner.Update)) void {
+    var rec = receiver;
+    defer rec.close(io);
+
+    while (true) {
+        const update = rec.getOne(io) catch return;
+        std.log.debug("Snapshot Update", .{});
+        _ = update;
+    }
+}
+
+pub fn runScanner(scanner: *Scanner, io: Io, sender: channelpkg.SenderType(Scanner.Update)) void {
+    var send = sender;
+    defer send.close(io);
+
+    scanner.run(io, &send) catch |err| {
+        std.log.err("scanner err: {}", .{err});
+    };
 }

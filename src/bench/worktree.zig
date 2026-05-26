@@ -21,5 +21,7 @@ pub fn initialWorktreeScan(_: *void, alloc: std.mem.Allocator, io: std.Io, _: *p
     try worktree.init(alloc, io, .{
         .abs_path = test_build.chromium_path,
     });
-    defer worktree.deinit();
+    defer worktree.deinit(io);
+
+    try worktree.await(io);
 }
