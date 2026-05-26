@@ -13,6 +13,7 @@ const Scanner = @This();
 const SNAPSHOT_UPDATE_INTERVAL: Io.Duration = if (@import("builtin").mode == .Debug) .fromSeconds(5) else .fromMilliseconds(500);
 
 const State = struct {
+    mutex: Io.Mutex,
     phase: Phase,
     snapshot: Snapshot,
 };
@@ -38,18 +39,19 @@ pub const ScanJob = struct {
 
 buffer: [256 * 256]ScanJob,
 
-mutex: Io.Mutex,
 state: State,
 gpa: Allocator,
 arena: Allocator,
+next_entry_id: *std.atomic.Value(u64),
 
-pub fn init(self: *Scanner, arena: Allocator, gpa: Allocator, snapshot: *Snapshot) !void {
+pub fn init(self: *Scanner, arena: Allocator, gpa: Allocator, snapshot: *Snapshot, next_entry_id: *std.atomic.Value(u64)) !void {
     self.* = .{
         .arena = arena,
-        .mutex = .init,
         .gpa = gpa,
         .buffer = undefined,
+        .next_entry_id = next_entry_id,
         .state = .{
+            .mutex = .init,
             .phase = .Initial,
             .snapshot = undefined,
         },
@@ -121,8 +123,8 @@ pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(ScanUpd
 pub fn send_update(self: *Scanner, io: Io, scanning: bool, update_sender: *channelpkg.SenderType(ScanUpdates)) !void {
     var snapshot: Snapshot = undefined;
     {
-        try self.mutex.lock(io);
-        defer self.mutex.unlock(io);
+        try self.state.mutex.lock(io);
+        defer self.state.mutex.unlock(io);
 
         try snapshot.clone(&self.state.snapshot, self.gpa);
     }
@@ -130,7 +132,7 @@ pub fn send_update(self: *Scanner, io: Io, scanning: bool, update_sender: *chann
     try update_sender.putOne(io, .{ .updated = .{ .snapshot = snapshot, .scanning = scanning } });
 }
 
-pub fn deinit(self: *Scanner, _: Io) void {
+pub fn deinit(self: *Scanner) void {
     self.state.snapshot.deinit(self.gpa);
 }
 
@@ -138,7 +140,7 @@ fn scanTask(self: *Scanner, io: Io, receiver: Channel.Receiver) void {
     var rec = receiver;
     defer rec.close(io);
 
-    var entries: std.ArrayList([]const u8) = .empty;
+    var entries: std.ArrayList(Snapshot.Entry) = .empty;
     defer entries.deinit(self.gpa);
 
     var jobs: std.ArrayList(ScanJob) = .empty;
@@ -155,7 +157,7 @@ fn scanTask(self: *Scanner, io: Io, receiver: Channel.Receiver) void {
     }
 }
 
-fn scanDir(self: *Scanner, io: Io, job: *ScanJob, entries: *std.ArrayList([]const u8), jobs: *std.ArrayList(ScanJob)) !void {
+fn scanDir(self: *Scanner, io: Io, job: *ScanJob, entries: *std.ArrayList(Snapshot.Entry), jobs: *std.ArrayList(ScanJob)) !void {
     var dir = try Io.Dir.openDirAbsolute(io, job.abs_path, .{ .iterate = true });
     defer dir.close(io);
 
@@ -163,7 +165,7 @@ fn scanDir(self: *Scanner, io: Io, job: *ScanJob, entries: *std.ArrayList([]cons
     while (try it.next(io)) |entry| {
         const child_path = try std.mem.join(self.arena, "/", &.{ job.path_name, entry.name });
         const child_abs_path = try std.mem.join(self.arena, "/", &.{ job.abs_path, entry.name });
-        try entries.append(self.gpa, child_path);
+        try entries.append(self.gpa, .{ .path = child_path, .id = self.next_entry_id.fetchAdd(1, .monotonic) });
 
         if (entry.kind != .directory) continue;
 
@@ -175,17 +177,18 @@ fn scanDir(self: *Scanner, io: Io, job: *ScanJob, entries: *std.ArrayList([]cons
     }
 
     {
-        try self.mutex.lock(io);
-        defer self.mutex.unlock(io);
-        for (entries.items) |path| try self.state.snapshot.insert(self.gpa, path);
+        try self.state.mutex.lock(io);
+        defer self.state.mutex.unlock(io);
+        for (entries.items) |entry| try self.state.snapshot.insert(self.gpa, entry);
     }
 
     entries.clearRetainingCapacity();
 
-    if (jobs.items.len > 0) {
-        job.sender.putAll(io, jobs.items) catch {
-            for (jobs.items) |*new_job| new_job.sender.close(io);
+    for (jobs.items) |*new_job| {
+        job.sender.putOne(io, new_job.*) catch {
+            new_job.sender.close(io);
         };
-        jobs.clearRetainingCapacity();
     }
+
+    jobs.clearRetainingCapacity();
 }

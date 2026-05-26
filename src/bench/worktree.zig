@@ -18,10 +18,11 @@ test "Bench Worktree" {
 
 pub fn initialWorktreeScan(_: *void, alloc: std.mem.Allocator, io: std.Io, _: *prof.Profiler) !void {
     var worktree: Worktree = undefined;
-    try worktree.init(alloc, io, .{
+    try worktree.init(alloc, .{
         .abs_path = test_build.chromium_path,
     });
-    defer worktree.deinit(io);
+    defer worktree.deinit();
 
+    try worktree.run(io);
     try worktree.await(io);
 }

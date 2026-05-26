@@ -1,4 +1,5 @@
 const std = @import("std");
+const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Io = std.Io;
@@ -6,6 +7,9 @@ const channelpkg = @import("channel.zig");
 const Channel = channelpkg.Channel;
 const Scanner = @import("worktree/scanner.zig");
 const Snapshot = @import("worktree/snapshot.zig");
+const prof = @import("prof");
+const tripwire = prof.tripwire;
+const test_build = @import("test_build");
 
 pub const Worktree = @This();
 
@@ -24,8 +28,9 @@ scanner: Scanner,
 buffer: [8]Scanner.ScanUpdates,
 updates_channel: Channel(Scanner.ScanUpdates),
 group: Io.Group,
+next_entry_id: std.atomic.Value(u64),
 
-pub fn init(self: *Worktree, gpa: Allocator, io: Io, opts: Options) !void {
+pub fn init(self: *Worktree, gpa: Allocator, opts: Options) !void {
     self.* = .{
         .scanning = false,
         .rwlock = .init,
@@ -35,10 +40,9 @@ pub fn init(self: *Worktree, gpa: Allocator, io: Io, opts: Options) !void {
         .snapshot = undefined,
         .scanner = undefined,
         .buffer = undefined,
-        .updates_channel = undefined,
+        .next_entry_id = .init(0),
+        .updates_channel = .init(&self.buffer),
     };
-
-    errdefer self.updates_channel.close(io);
 
     const arena = self.arena.allocator();
     errdefer _ = self.arena.reset(.free_all);
@@ -49,25 +53,26 @@ pub fn init(self: *Worktree, gpa: Allocator, io: Io, opts: Options) !void {
 
     try self.snapshot.init(abs_root, root_name, gpa);
     errdefer self.snapshot.deinit(gpa);
+    try self.snapshot.insert(gpa, .{ .id = self.next_entry_id.fetchAdd(1, .monotonic), .path = root_name });
 
-    try self.scanner.init(arena, gpa, &self.snapshot);
-
-    self.updates_channel = .init(&self.buffer);
-
-    try self.group.concurrent(io, runUpdateReceiver, .{ self, io, self.updates_channel.receiver() });
-    try self.group.concurrent(io, runScanner, .{ &self.scanner, io, self.updates_channel.sender() });
+    try self.scanner.init(arena, gpa, &self.snapshot, &self.next_entry_id);
 }
 
 pub fn await(self: *Worktree, io: Io) !void {
     try self.group.await(io);
 }
 
+pub fn run(self: *Worktree, io: Io) !void {
+    try self.group.concurrent(io, runUpdateReceiver, .{ self, io, self.updates_channel.receiver() });
+    try self.group.concurrent(io, runScanner, .{ &self.scanner, io, self.updates_channel.sender() });
+}
+
 pub fn close(self: *Worktree, io: Io) !void {
     self.updates_channel.close(io);
 }
 
-pub fn deinit(self: *Worktree, io: Io) void {
-    self.scanner.deinit(io);
+pub fn deinit(self: *Worktree) void {
+    self.scanner.deinit();
     self.snapshot.deinit(self.gpa);
     _ = self.arena.reset(.free_all);
 }
@@ -104,3 +109,16 @@ pub fn runScanner(scanner: *Scanner, io: Io, sender: channelpkg.SenderType(Scann
         std.log.err("scanner err: {}", .{err});
     };
 }
+
+test "Init/Deinit Worktree" {
+    const gpa = testing.allocator;
+
+    var worktree: Worktree = undefined;
+    try worktree.init(gpa, .{
+        .abs_path = test_build.chromium_path,
+    });
+
+    worktree.deinit();
+}
+
+test "Run with error on runScanner" {}
