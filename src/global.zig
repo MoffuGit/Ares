@@ -1,0 +1,48 @@
+const std = @import("std");
+const builtin = @import("builtin");
+
+pub var state: GlobalState = undefined;
+
+const use_safe_allocator = switch (builtin.mode) {
+    .Debug, .ReleaseSafe => true,
+    .ReleaseFast, .ReleaseSmall => !builtin.link_libc and builtin.single_threaded, // Also not ideal.
+};
+
+var safe_allocator: std.heap.DebugAllocator(.{}) = .init;
+
+const GlobalState = struct {
+    const Self = @This();
+
+    gpa: std.mem.Allocator,
+    threaded: std.Io.Threaded,
+    io: std.Io,
+
+    pub fn init(self: *Self, args: std.process.Args.Vector, environ: std.process.Environ.Block) !void {
+        const gpa = if (use_safe_allocator)
+            safe_allocator.allocator()
+        else if (builtin.link_libc)
+            std.heap.c_allocator
+        else if (!builtin.single_threaded)
+            std.heap.smp_allocator
+        else
+            comptime unreachable;
+
+        var threaded: std.Io.Threaded = .init(gpa, .{
+            .argv0 = .init(.{ .vector = args }),
+            .environ = .{ .block = environ },
+        });
+
+        self.* = .{
+            .gpa = gpa,
+            .threaded = threaded,
+            .io = threaded.io(),
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        if (use_safe_allocator) {
+            _ = safe_allocator.deinit(); // Leaks do not affect return code.
+        }
+        self.threaded.deinit();
+    }
+};

@@ -1,5 +1,6 @@
 const std = @import("std");
 const prof = @import("prof/build.zig");
+const XCFrameworkStep = @import("build/XCFrameworkStep.zig");
 const @"test" = @import("test/build.zig");
 
 pub fn build(b: *std.Build) void {
@@ -46,6 +47,43 @@ pub fn build(b: *std.Build) void {
     run_bench.argv.shrinkRetainingCapacity(1);
     run_bench.stdio = .inherit;
     b.step("bench", "Run benchmarks").dependOn(&run_bench.step);
+
+    const lib = b.addLibrary(.{
+        .name = "odyssey",
+        .root_module = rootModule(
+            b,
+            target,
+            optimize,
+            "src/lib.zig",
+            .{ .level = requested orelse .none },
+            null,
+        ),
+    });
+
+    const lib_install = b.addInstallArtifact(lib, .{});
+    const lib_step = b.step("lib", "Compile and Install XCFramework Odyssey Kit");
+
+    if (lib_install.emitted_bin) |lazy_path| {
+        const xcframework = XCFrameworkStep.create(
+            b,
+            .{
+                .name = "OdysseyKit",
+                .libraries = &.{
+                    XCFrameworkStep.Library{
+                        .library = lazy_path,
+                        .headers = .{ .cwd_relative = "include" },
+                        .dsym = null,
+                    },
+                },
+                .out_path = "Odyssey/OdysseyKit.xcframework",
+            },
+        );
+
+        xcframework.step.dependOn(&lib_install.step);
+        lib_step.dependOn(xcframework.step);
+    }
+
+    lib_step.dependOn(&lib_install.step);
 }
 
 fn rootModule(
