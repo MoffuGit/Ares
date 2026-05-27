@@ -57,6 +57,19 @@ pub fn build(b: *std.Build) void {
         null,
     );
 
+    if (b.lazyDependency("macos", .{
+        .target = target,
+        .optimize = optimize,
+    })) |macos_dep| {
+        mod.addImport(
+            "macos",
+            macos_dep.module("macos"),
+        );
+        mod.linkLibrary(
+            macos_dep.artifact("macos"),
+        );
+    }
+
     const lib = b.addLibrary(.{
         .name = "odyssey",
         .root_module = mod,
