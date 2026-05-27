@@ -48,16 +48,18 @@ pub fn build(b: *std.Build) void {
     run_bench.stdio = .inherit;
     b.step("bench", "Run benchmarks").dependOn(&run_bench.step);
 
+    const mod = rootModule(
+        b,
+        target,
+        optimize,
+        "src/lib.zig",
+        .{ .level = requested orelse .none },
+        null,
+    );
+
     const lib = b.addLibrary(.{
         .name = "odyssey",
-        .root_module = rootModule(
-            b,
-            target,
-            optimize,
-            "src/lib.zig",
-            .{ .level = requested orelse .none },
-            null,
-        ),
+        .root_module = mod,
     });
 
     const lib_install = b.addInstallArtifact(lib, .{});

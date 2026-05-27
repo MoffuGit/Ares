@@ -32,6 +32,9 @@ const GlobalState = struct {
             .environ = .{ .block = environ },
         });
 
+        std.log.info("odyssey zig version={}", .{builtin.zig_version});
+        std.log.info("odyssey build optimize={}", .{builtin.mode});
+
         self.* = .{
             .gpa = gpa,
             .threaded = threaded,

@@ -6,13 +6,32 @@
 //
 
 import SwiftUI
+import OdysseyKit
 
 @main
 struct OdysseyApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
+    init() {
+        precondition(odyssey_init(CommandLine.argc, CommandLine.unsafeArgv) == 0)
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
         .windowStyle(.hiddenTitleBar)
+    }
+}
+
+extension OdysseyApp {
+    final class AppDelegate: NSObject, NSApplicationDelegate {
+        func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+            true
+        }
+
+        func applicationWillTerminate(_ notification: Notification) {
+            odyssey_deinit()
+        }
     }
 }
