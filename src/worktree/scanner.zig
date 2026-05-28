@@ -110,6 +110,7 @@ pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(ScanUpd
         switch (try select.await()) {
             .group => {
                 select.cancelDiscard();
+                try self.send_update(io, true, update_sender);
                 break;
             },
             .timeout => {
