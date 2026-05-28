@@ -15,7 +15,6 @@ const GlobalState = struct {
 
     gpa: std.mem.Allocator,
     threaded: std.Io.Threaded,
-    io: std.Io,
 
     pub fn init(self: *Self, args: std.process.Args.Vector, environ: std.process.Environ.Block) !void {
         const gpa = if (use_safe_allocator)
@@ -27,7 +26,7 @@ const GlobalState = struct {
         else
             comptime unreachable;
 
-        var threaded: std.Io.Threaded = .init(gpa, .{
+        const threaded: std.Io.Threaded = .init(gpa, .{
             .argv0 = .init(.{ .vector = args }),
             .environ = .{ .block = environ },
         });
@@ -38,7 +37,6 @@ const GlobalState = struct {
         self.* = .{
             .gpa = gpa,
             .threaded = threaded,
-            .io = threaded.io(),
         };
     }
 

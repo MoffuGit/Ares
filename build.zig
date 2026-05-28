@@ -1,6 +1,7 @@
 const std = @import("std");
 const prof = @import("prof/build.zig");
 const XCFrameworkStep = @import("build/XCFrameworkStep.zig");
+const LibtoolStep = @import("build/LibtoolStep.zig");
 const @"test" = @import("test/build.zig");
 
 pub fn build(b: *std.Build) void {
@@ -79,13 +80,30 @@ pub fn build(b: *std.Build) void {
     const lib_step = b.step("lib", "Compile and Install XCFramework Odyssey Kit");
 
     if (lib_install.emitted_bin) |lazy_path| {
+        var libs: std.ArrayList(std.Build.LazyPath) = .empty;
+        libs.append(b.allocator, lazy_path) catch {
+            @panic("We cannot append the lib");
+        };
+
+        const libtool = LibtoolStep.create(
+            b,
+            .{
+                .name = "odyssey",
+                .out_name = "libodyssey-aarch64-bundle.a",
+                .sources = libs.items,
+                .extract_objects = true,
+            },
+        );
+
+        libtool.step.dependOn(&lib_install.step);
+
         const xcframework = XCFrameworkStep.create(
             b,
             .{
                 .name = "OdysseyKit",
                 .libraries = &.{
                     XCFrameworkStep.Library{
-                        .library = lazy_path,
+                        .library = libtool.output,
                         .headers = .{ .cwd_relative = "include" },
                         .dsym = null,
                     },
@@ -94,7 +112,8 @@ pub fn build(b: *std.Build) void {
             },
         );
 
-        xcframework.step.dependOn(&lib_install.step);
+        xcframework.step.dependOn(libtool.step);
+
         lib_step.dependOn(xcframework.step);
     }
 

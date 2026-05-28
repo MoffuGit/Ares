@@ -11,6 +11,14 @@ import OdysseyKit
 @main
 struct OdysseyApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    
+     var app: odyssey_app_t? {
+        didSet {
+            guard let old = oldValue else { return }
+            odyssey_app_free(old)
+        }
+    }
+
 
     init() {
         precondition(odyssey_init(CommandLine.argc, CommandLine.unsafeArgv) == 0)
