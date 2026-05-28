@@ -8,7 +8,7 @@
 import AppKit
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    let odyssey = Odyssey.App()
+    let odyssey = Odyssey.App.shared
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true

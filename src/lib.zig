@@ -2,7 +2,8 @@ const std = @import("std");
 const assert = std.debug.assert;
 const builtin = @import("builtin");
 
-const CoreApp = @import("app.zig");
+const App = @import("app.zig");
+const Workspace = @import("workspace.zig");
 const global = @import("global.zig");
 
 const state = &@import("global.zig").state;
@@ -25,16 +26,6 @@ pub export fn odyssey_deinit() void {
     global.state.deinit();
 }
 
-pub const App = extern struct {
-    core_app: *CoreApp,
-
-    pub fn init(self: *App, core_app: *CoreApp) !void {
-        self.* = .{
-            .core_app = core_app,
-        };
-    }
-};
-
 pub export fn odyssey_app_new() ?*App {
     return app_new() catch |err| {
         std.log.err("error initializing app: {}", .{err});
@@ -46,19 +37,37 @@ fn app_new() !*App {
     var app = try state.gpa.create(App);
     errdefer state.gpa.destroy(app);
 
-    const core_app = try state.gpa.create(CoreApp);
-    errdefer state.gpa.destroy(core_app);
-
-    try core_app.init(state.gpa, state.threaded.io());
-    try app.init(core_app);
+    try app.init();
 
     return app;
 }
 
 pub export fn odyssey_app_free(app: *App) void {
-    const core_app = app.core_app;
-    core_app.deinit();
-
+    app.deinit(state.gpa);
     state.gpa.destroy(app);
-    state.gpa.destroy(core_app);
+}
+
+pub export fn odyssey_workspace_new(app: *App) ?*Workspace {
+    return workspace_new(app) catch |err| {
+        std.log.err("error initializing workspace: {}", .{err});
+        return null;
+    };
+}
+
+fn workspace_new(app: *App) !*Workspace {
+    const workspace = try state.gpa.create(Workspace);
+    errdefer state.gpa.destroy(workspace);
+
+    try workspace.init();
+    errdefer workspace.deinit(state.gpa);
+
+    try app.add_workspace(workspace, state.gpa);
+
+    return workspace;
+}
+
+pub export fn odyssey_workspace_free(app: *App, workspace: *Workspace) void {
+    app.remove_workspace(workspace);
+    workspace.deinit(state.gpa);
+    state.gpa.destroy(workspace);
 }

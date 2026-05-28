@@ -8,29 +8,14 @@
 import SwiftUI
 
 struct ContentView: View {
-    var body: some View {
-        ZStack {
-            Color(Color(hex: "#f8f8f8"))
-                .ignoresSafeArea()
-            
-            VStack {
-                HStack {
-                    Color(Color(hex: "#f8f8f8"))
-                        .frame(maxWidth: 250, maxHeight: .infinity)
-                    
-                    Color(.windowBackgroundColor)
-                        .ignoresSafeArea()
-                        .clipShape(
-                            RoundedRectangle(cornerRadius: 10.0, style: .continuous)
-                        )
-                        .padding( [.horizontal], 6)
-                }
-                
-                Color(Color(hex: "#f8f8f8"))
-                    .frame(maxWidth: .infinity, maxHeight: 24)
-            }
-        }
+    @EnvironmentObject private var app: Odyssey.App
+    @StateObject private var workspace: Odyssey.Workspace
+
+    init(app: Odyssey.App = .shared) {
+        _workspace = StateObject(wrappedValue: app.makeWorkspace())
     }
+
+    var body: some View {}
 }
 
 #Preview {
