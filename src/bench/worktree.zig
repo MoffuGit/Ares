@@ -5,7 +5,7 @@ const test_build = @import("test_build");
 const Worktree = @import("../worktree.zig");
 
 test "Bench Worktree" {
-    const gpa = testing.allocator;
+    const gpa = std.heap.c_allocator;
     const io = testing.io;
 
     var bench: prof.Benchmark = undefined;
