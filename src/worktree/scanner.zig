@@ -163,7 +163,7 @@ fn scanTask(self: *Scanner, io: Io, receiver: Channel.Receiver) void {
 
         switch (message) {
             .job => |*job| {
-                defer closeJob(io, job);
+                defer job.sender.close(io);
 
                 self.scanDir(io, &path_z, job, &entries, &jobs) catch |err| {
                     std.log.err("scan failed for {s}: {s}", .{ job.abs_path, @errorName(err) });
@@ -174,7 +174,7 @@ fn scanTask(self: *Scanner, io: Io, receiver: Channel.Receiver) void {
                 defer self.gpa.free(batch);
 
                 for (batch) |*job| {
-                    defer closeJob(io, job);
+                    defer job.sender.close(io);
 
                     self.scanDir(io, &path_z, job, &entries, &jobs) catch |err| {
                         std.log.err("scan failed for {s}: {s}", .{ job.abs_path, @errorName(err) });
@@ -184,10 +184,6 @@ fn scanTask(self: *Scanner, io: Io, receiver: Channel.Receiver) void {
             },
         }
     }
-}
-
-fn closeJob(io: Io, job: *ScanJob) void {
-    job.sender.close(io);
 }
 
 fn scanDir(self: *Scanner, io: Io, path_z: [:0]u8, job: *ScanJob, entries: *std.ArrayList(Snapshot.Entry), jobs: *std.ArrayList(ScanJob)) !void {
