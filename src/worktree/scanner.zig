@@ -2,6 +2,8 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
+const c = std.c;
+const posix = std.posix;
 
 const Snapshot = @import("snapshot.zig");
 
@@ -147,28 +149,41 @@ fn scanTask(self: *Scanner, io: Io, receiver: Channel.Receiver) void {
     var jobs: std.ArrayList(ScanJob) = .empty;
     defer jobs.deinit(self.gpa);
 
+    var path_z: [4096:0]u8 = undefined;
+
     while (true) {
         var job = rec.getOne(io) catch return;
         defer job.sender.close(io);
 
-        self.scanDir(io, &job, &entries, &jobs) catch |err| {
+        self.scanDir(io, &path_z, &job, &entries, &jobs) catch |err| {
             std.log.err("scan failed for {s}: {s}", .{ job.abs_path, @errorName(err) });
             break;
         };
     }
 }
 
-fn scanDir(self: *Scanner, io: Io, job: *ScanJob, entries: *std.ArrayList(Snapshot.Entry), jobs: *std.ArrayList(ScanJob)) !void {
-    var dir = try Io.Dir.openDirAbsolute(io, job.abs_path, .{ .iterate = true });
-    defer dir.close(io);
+fn scanDir(self: *Scanner, io: Io, path_z: [:0]u8, job: *ScanJob, entries: *std.ArrayList(Snapshot.Entry), jobs: *std.ArrayList(ScanJob)) !void {
+    const abs_path = job.abs_path;
+    @memcpy(path_z[0..abs_path.len], abs_path);
+    path_z[abs_path.len] = 0;
 
-    var it = dir.iterate();
-    while (try it.next(io)) |entry| {
-        const child_path = try std.mem.join(self.arena, "/", &.{ job.path_name, entry.name });
-        const child_abs_path = try std.mem.join(self.arena, "/", &.{ job.abs_path, entry.name });
+    const dir = c.opendir(path_z.ptr) orelse return posix.unexpectedErrno(posix.errno(-1));
+    defer _ = c.closedir(dir);
+
+    while (c.readdir(dir)) |entry_raw| {
+        const entry: *const c.dirent = @ptrCast(@alignCast(entry_raw));
+        const name = direntNameFromEntry(entry);
+        const is_dot = name.len == 1;
+        const is_dotdot = name.len == 2 and name[1] == '.';
+
+        if (is_dot or is_dotdot) continue;
+
+        const child_path = try std.mem.join(self.arena, "/", &.{ job.path_name, name });
+        const child_abs_path = try std.mem.join(self.arena, "/", &.{ job.abs_path, name });
+
         try entries.append(self.gpa, .{ .path = child_path, .id = self.next_entry_id.fetchAdd(1, .monotonic) });
 
-        if (entry.kind != .directory) continue;
+        if (entry.type != c.DT.DIR) continue;
 
         try jobs.append(self.gpa, .{
             .abs_path = child_abs_path,
@@ -192,4 +207,9 @@ fn scanDir(self: *Scanner, io: Io, job: *ScanJob, entries: *std.ArrayList(Snapsh
     }
 
     jobs.clearRetainingCapacity();
+}
+
+inline fn direntNameFromEntry(entry: *const c.dirent) []const u8 {
+    const namlen: usize = @intCast(entry.namlen);
+    return entry.name[0..namlen];
 }

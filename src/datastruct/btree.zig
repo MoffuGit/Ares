@@ -399,58 +399,56 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                     }
                 },
                 .Leaf => |*leaf| {
+                    assert(other.is_leaf());
+
                     const other_leaf = other.Leaf;
+                    const new_len = leaf.len + other_leaf.len;
 
-                    var new_len = leaf.len + other_leaf.len;
+                    const overflow = new_len > CAPACITY;
 
-                    if (new_len > CAPACITY) {
-                        var temp_keys: [CAPACITY * 2]K = undefined;
-                        var temp_items: [CAPACITY * 2]V = undefined;
+                    var temp_keys: [CAPACITY * 2]K = undefined;
+                    var temp_items: [CAPACITY * 2]V = undefined;
 
-                        var idx: usize = 0;
-                        var other_idx: usize = 0;
-                        var temp: usize = 0;
-                        var duplicated: ?V = null;
+                    var idx: usize = 0;
+                    var other_idx: usize = 0;
+                    var temp: usize = 0;
 
-                        while (idx < leaf.len and other_idx < other_leaf.len) {
-                            switch (comp(leaf.keys[idx], other_leaf.keys[other_idx])) {
-                                .lt => {
-                                    temp_keys[temp] = leaf.keys[idx];
-                                    temp_items[temp] = leaf.items[idx];
-                                    idx += 1;
-                                },
-                                .gt => {
-                                    temp_keys[temp] = other_leaf.keys[other_idx];
-                                    temp_items[temp] = other_leaf.items[other_idx];
-                                    other_idx += 1;
-                                },
-                                .eq => {
-                                    temp_keys[temp] = other_leaf.keys[other_idx];
-                                    temp_items[temp] = other_leaf.items[other_idx];
-
-                                    duplicated = leaf.items[idx];
-                                    idx += 1;
-                                    other_idx += 1;
-                                    new_len -= 1;
-                                },
-                            }
-                            temp += 1;
+                    while (idx < leaf.len and other_idx < other_leaf.len) {
+                        switch (comp(leaf.keys[idx], other_leaf.keys[other_idx])) {
+                            .lt => {
+                                temp_keys[temp] = leaf.keys[idx];
+                                temp_items[temp] = leaf.items[idx];
+                                idx += 1;
+                            },
+                            .gt => {
+                                temp_keys[temp] = other_leaf.keys[other_idx];
+                                temp_items[temp] = other_leaf.items[other_idx];
+                                other_idx += 1;
+                            },
+                            .eq => {
+                                const old = leaf.items[idx];
+                                leaf.items[idx] = other_leaf.items[other_idx];
+                                return Result{ .duplicated = old };
+                            },
                         }
+                        temp += 1;
+                    }
 
-                        while (idx < leaf.len) {
-                            temp_keys[temp] = leaf.keys[idx];
-                            temp_items[temp] = leaf.items[idx];
-                            idx += 1;
-                            temp += 1;
-                        }
+                    while (idx < leaf.len) {
+                        temp_keys[temp] = leaf.keys[idx];
+                        temp_items[temp] = leaf.items[idx];
+                        idx += 1;
+                        temp += 1;
+                    }
 
-                        while (other_idx < other_leaf.len) {
-                            temp_keys[temp] = other_leaf.keys[other_idx];
-                            temp_items[temp] = other_leaf.items[other_idx];
-                            other_idx += 1;
-                            temp += 1;
-                        }
+                    while (other_idx < other_leaf.len) {
+                        temp_keys[temp] = other_leaf.keys[other_idx];
+                        temp_items[temp] = other_leaf.items[other_idx];
+                        other_idx += 1;
+                        temp += 1;
+                    }
 
+                    if (overflow) {
                         var left_keys: [CAPACITY]K = undefined;
                         var left_items: [CAPACITY]V = undefined;
 
@@ -478,61 +476,9 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
 
                         return Result{ .append = right_node };
                     } else {
-                        var temp_keys: [CAPACITY]K = undefined;
-                        var temp_items: [CAPACITY]V = undefined;
-
-                        var idx: usize = 0;
-                        var other_idx: usize = 0;
-                        var temp_ptr: usize = 0;
-
-                        var duplicated: ?V = null;
-
-                        while (idx < leaf.len and other_idx < other_leaf.len) {
-                            switch (comp(leaf.keys[idx], other_leaf.keys[other_idx])) {
-                                .lt => {
-                                    temp_keys[temp_ptr] = leaf.keys[idx];
-                                    temp_items[temp_ptr] = leaf.items[idx];
-                                    idx += 1;
-                                },
-                                .gt => {
-                                    temp_keys[temp_ptr] = other_leaf.keys[other_idx];
-                                    temp_items[temp_ptr] = other_leaf.items[other_idx];
-                                    other_idx += 1;
-                                },
-                                .eq => {
-                                    temp_keys[temp_ptr] = other_leaf.keys[other_idx];
-                                    temp_items[temp_ptr] = other_leaf.items[other_idx];
-
-                                    duplicated = leaf.items[idx];
-                                    idx += 1;
-                                    other_idx += 1;
-                                    new_len -= 1;
-                                },
-                            }
-                            temp_ptr += 1;
-                        }
-
-                        while (idx < leaf.len) {
-                            temp_keys[temp_ptr] = leaf.keys[idx];
-                            temp_items[temp_ptr] = leaf.items[idx];
-                            idx += 1;
-                            temp_ptr += 1;
-                        }
-
-                        while (other_idx < other_leaf.len) {
-                            temp_keys[temp_ptr] = other_leaf.keys[other_idx];
-                            temp_items[temp_ptr] = other_leaf.items[other_idx];
-                            other_idx += 1;
-                            temp_ptr += 1;
-                        }
-
                         @memcpy(leaf.keys[0..new_len], temp_keys[0..new_len]);
                         @memcpy(leaf.items[0..new_len], temp_items[0..new_len]);
                         leaf.len = new_len;
-
-                        if (duplicated) |dup| {
-                            return Result{ .duplicated = dup };
-                        }
                     }
                 },
             }
