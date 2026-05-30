@@ -8,7 +8,7 @@ const posix = std.posix;
 const Snapshot = @import("snapshot.zig");
 
 const channelpkg = @import("../channel.zig");
-const Channel = channelpkg.Channel(ScanJob);
+const Channel = channelpkg.Channel(Message);
 
 const Scanner = @This();
 
@@ -39,7 +39,12 @@ pub const ScanJob = struct {
     sender: Channel.Sender,
 };
 
-buffer: [256 * 256]ScanJob,
+const Message = union(enum) {
+    batch: []ScanJob,
+    job: ScanJob,
+};
+
+buffer: [128 * 128]Message,
 
 state: State,
 gpa: Allocator,
@@ -80,9 +85,11 @@ pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(ScanUpd
         try sender.putOneUncancelable(
             io,
             .{
-                .abs_path = self.state.snapshot.abs_root,
-                .sender = sender,
-                .path_name = self.state.snapshot.root_name,
+                .job = .{
+                    .abs_path = self.state.snapshot.abs_root,
+                    .sender = sender,
+                    .path_name = self.state.snapshot.root_name,
+                },
             },
         );
     }
@@ -112,7 +119,7 @@ pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(ScanUpd
         switch (try select.await()) {
             .group => {
                 select.cancelDiscard();
-                try self.send_update(io, true, update_sender);
+                try self.send_update(io, false, update_sender);
                 break;
             },
             .timeout => {
@@ -152,17 +159,40 @@ fn scanTask(self: *Scanner, io: Io, receiver: Channel.Receiver) void {
     var path_z: [4096:0]u8 = undefined;
 
     while (true) {
-        var job = rec.getOne(io) catch return;
-        defer job.sender.close(io);
+        var message = rec.getOne(io) catch return;
 
-        self.scanDir(io, &path_z, &job, &entries, &jobs) catch |err| {
-            std.log.err("scan failed for {s}: {s}", .{ job.abs_path, @errorName(err) });
-            break;
-        };
+        switch (message) {
+            .job => |*job| {
+                defer closeJob(io, job);
+
+                self.scanDir(io, &path_z, job, &entries, &jobs) catch |err| {
+                    std.log.err("scan failed for {s}: {s}", .{ job.abs_path, @errorName(err) });
+                    break;
+                };
+            },
+            .batch => |batch| {
+                defer self.gpa.free(batch);
+
+                for (batch) |*job| {
+                    defer closeJob(io, job);
+
+                    self.scanDir(io, &path_z, job, &entries, &jobs) catch |err| {
+                        std.log.err("scan failed for {s}: {s}", .{ job.abs_path, @errorName(err) });
+                        break;
+                    };
+                }
+            },
+        }
     }
 }
 
+fn closeJob(io: Io, job: *ScanJob) void {
+    job.sender.close(io);
+}
+
 fn scanDir(self: *Scanner, io: Io, path_z: [:0]u8, job: *ScanJob, entries: *std.ArrayList(Snapshot.Entry), jobs: *std.ArrayList(ScanJob)) !void {
+    assert(jobs.items.len == 0);
+
     const abs_path = job.abs_path;
     @memcpy(path_z[0..abs_path.len], abs_path);
     path_z[abs_path.len] = 0;
@@ -200,13 +230,17 @@ fn scanDir(self: *Scanner, io: Io, path_z: [:0]u8, job: *ScanJob, entries: *std.
 
     entries.clearRetainingCapacity();
 
-    for (jobs.items) |*new_job| {
-        job.sender.putOne(io, new_job.*) catch {
+    if (jobs.items.len == 0) return;
+
+    const slice = try jobs.toOwnedSlice(self.gpa);
+    errdefer {
+        for (slice) |*new_job| {
             new_job.sender.close(io);
-        };
+        }
+        self.gpa.free(slice);
     }
 
-    jobs.clearRetainingCapacity();
+    try job.sender.putOne(io, .{ .batch = slice });
 }
 
 inline fn direntNameFromEntry(entry: *const c.dirent) []const u8 {
