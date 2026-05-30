@@ -880,7 +880,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
         }
 
         pub fn deinit(self: *Self, alloc: Allocator) void {
-            _ = self.pool.reset(alloc, .free_all);
+            self.pool.deinit(alloc);
         }
 
         pub fn clone(self: *const Self, alloc: Allocator) !Self {
