@@ -1,5 +1,6 @@
 const std = @import("std");
 const Io = std.Io;
+const c = std.c;
 const atomic = std.atomic;
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
@@ -143,23 +144,23 @@ const Worker = struct {
 
     fn scanDir(self: *Worker, state: *State, io: Io, path_z: *[4096:0]u8, job: *const Job, entries: *std.ArrayList(Snapshot.Entry), messages: *std.ArrayList(*Message)) !void {
         const abs_path = job.abs_path;
-        if (abs_path.len >= path_z.len) return error.NameTooLong;
         @memcpy(path_z[0..abs_path.len], abs_path);
         path_z[abs_path.len] = 0;
 
-        var dir = try Io.Dir.openDirAbsolute(io, path_z[0..abs_path.len], .{ .iterate = true });
-        defer dir.close(io);
+        const dir = c.opendir(path_z.ptr) orelse return error.OPENDIR;
+        defer _ = c.closedir(dir);
+        while (c.readdir(dir)) |entry_raw| {
+            const entry: *const c.dirent = @ptrCast(@alignCast(entry_raw));
+            const name = direntNameFromEntry(entry);
 
-        var iter = dir.iterate();
-        while (try iter.next(io)) |entry| {
-            if (std.mem.eql(u8, entry.name, ".") or std.mem.eql(u8, entry.name, "..")) continue;
+            if (std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) continue;
 
-            const child_path = try std.mem.join(self.arena, "/", &.{ job.path_name, entry.name });
-            const child_abs_path = try std.mem.join(self.arena, "/", &.{ job.abs_path, entry.name });
+            const child_path = try std.mem.join(self.arena, "/", &.{ job.path_name, name });
+            const child_abs_path = try std.mem.join(self.arena, "/", &.{ job.abs_path, name });
 
             try entries.append(self.gpa, .{ .path = child_path, .id = self.next_entry_id.fetchAdd(1, .monotonic) });
 
-            if (entry.kind != .directory) continue;
+            if (entry.type != c.DT.DIR) continue;
 
             if (messages.items.len == 0 or messages.items[messages.items.len - 1].len == messages.items[messages.items.len - 1].buffer.len) {
                 const message = try self.pool.create(self.gpa);
@@ -285,4 +286,9 @@ pub fn send_update(self: *Scanner, io: Io, scanning: bool, sender: *Updates.Send
     }
 
     try sender.putOne(io, .{ .updated = .{ .snapshot = snapshot, .scanning = scanning } });
+}
+
+inline fn direntNameFromEntry(entry: *const c.dirent) []const u8 {
+    const namlen: usize = @intCast(entry.namlen);
+    return entry.name[0..namlen];
 }
