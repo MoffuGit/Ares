@@ -44,8 +44,6 @@ const Message = union(enum) {
     job: ScanJob,
 };
 
-buffer: [4096]Message,
-
 state: State,
 gpa: Allocator,
 arena: Allocator,
@@ -55,7 +53,6 @@ pub fn init(self: *Scanner, arena: Allocator, gpa: Allocator, snapshot: *Snapsho
     self.* = .{
         .arena = arena,
         .gpa = gpa,
-        .buffer = undefined,
         .next_entry_id = next_entry_id,
         .state = .{
             .mutex = .init,
@@ -74,7 +71,9 @@ pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(ScanUpd
     const stat = try Io.Dir.statFile(.cwd(), io, self.state.snapshot.abs_root, .{});
     if (stat.kind != .directory) return;
 
-    var channel: Channel = .init(&self.buffer);
+    const buffer = try self.gpa.alloc(Message, 1024 * 128);
+    defer self.gpa.free(buffer);
+    var channel: Channel = .init(buffer);
 
     try update_sender.putOne(io, .started);
 
