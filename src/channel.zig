@@ -20,6 +20,27 @@ pub fn SenderType(Elem: type) type {
             return .{ .channel = s.channel };
         }
 
+        /// Appends elements to the end of the queue, potentially blocking if
+        /// there is insufficient capacity. Returns when any one of the
+        /// following conditions is satisfied:
+        ///
+        /// * At least `min` elements have been added to the queue
+        /// * The queue is closed
+        /// * The current task is canceled
+        ///
+        /// Returns how many of `elements` have been added to the queue, if any.
+        /// If an error is returned, no elements have been added.
+        ///
+        /// If the queue is closed or the task is canceled, but some items were
+        /// already added before the closure or cancelation, then `put` may
+        /// return a number lower than `min`, in which case future calls are
+        /// guaranteed to return `error.Canceled` or `error.Closed`.
+        ///
+        /// A return value of 0 is only possible if `min` is 0, in which case
+        /// the call is guaranteed to queue as many of `elements` as is possible
+        /// *without* blocking.
+        ///
+        /// Asserts that `elements.len >= min`.
         pub fn put(s: *Self, io: Io, elements: []const Elem, min: usize) (QueueClosedError || Cancelable)!usize {
             return s.channel.queue.put(io, elements, min);
         }
@@ -54,6 +75,27 @@ pub fn ReceiverType(Elem: type) type {
             r.* = undefined;
         }
 
+        /// Receives elements from the beginning of the queue, potentially blocking
+        /// if there are insufficient elements currently in the queue. Returns when
+        /// any one of the following conditions is satisfied:
+        ///
+        /// * At least `min` elements have been received from the queue
+        /// * The queue is closed and contains no buffered elements
+        /// * The current task is canceled
+        ///
+        /// Returns how many elements of `buffer` have been populated, if any.
+        /// If an error is returned, no elements have been populated.
+        ///
+        /// If the queue is closed or the task is canceled, but some items were
+        /// already received before the closure or cancelation, then `get` may
+        /// return a number lower than `min`, in which case future calls are
+        /// guaranteed to return `error.Canceled` or `error.Closed`.
+        ///
+        /// A return value of 0 is only possible if `min` is 0, in which case
+        /// the call is guaranteed to fill as much of `buffer` as is possible
+        /// *without* blocking.
+        ///
+        /// Asserts that `buffer.len >= min`.
         pub fn get(r: *Self, io: Io, buffer: []Elem, min: usize) (QueueClosedError || Cancelable)!usize {
             return r.channel.queue.get(io, buffer, min);
         }
