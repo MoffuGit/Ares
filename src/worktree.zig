@@ -25,8 +25,8 @@ scanning: bool,
 snapshot: Snapshot,
 scanner: Scanner,
 
-buffer: [8]Scanner.ScanUpdates,
-updates_channel: Channel(Scanner.ScanUpdates),
+buffer: [8]Scanner.Updates,
+updates_channel: Scanner.Updates.Channel,
 group: Io.Group,
 next_entry_id: std.atomic.Value(u64),
 
@@ -55,7 +55,7 @@ pub fn init(self: *Worktree, gpa: Allocator, opts: Options) !void {
     errdefer self.snapshot.deinit(gpa);
     try self.snapshot.insert(gpa, .{ .id = self.next_entry_id.fetchAdd(1, .monotonic), .path = root_name });
 
-    try self.scanner.init(arena, gpa, &self.snapshot, &self.next_entry_id);
+    try self.scanner.init(gpa, arena, &self.snapshot, &self.next_entry_id);
 }
 
 pub fn await(self: *Worktree, io: Io) !void {
@@ -77,7 +77,7 @@ pub fn deinit(self: *Worktree) void {
     _ = self.arena.reset(.free_all);
 }
 
-fn runUpdateReceiver(self: *Worktree, io: Io, receiver: channelpkg.ReceiverType(Scanner.ScanUpdates)) !void {
+fn runUpdateReceiver(self: *Worktree, io: Io, receiver: Scanner.Updates.Receiver) !void {
     var rec = receiver;
     defer rec.close(io);
 
@@ -101,7 +101,7 @@ fn runUpdateReceiver(self: *Worktree, io: Io, receiver: channelpkg.ReceiverType(
     }
 }
 
-pub fn runScanner(scanner: *Scanner, io: Io, sender: channelpkg.SenderType(Scanner.ScanUpdates)) void {
+pub fn runScanner(scanner: *Scanner, io: Io, sender: Scanner.Updates.Sender) void {
     var send = sender;
     defer send.close(io);
 

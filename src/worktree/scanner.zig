@@ -51,7 +51,6 @@ pub fn init(self: *Scanner, gpa: Allocator, arena: Allocator, snapshot: *Snapsho
         .next_entry_id = next_entry_id,
         .state = .{
             .mutex = .init,
-            .phase = .Initial,
             .snapshot = undefined,
         },
     };
@@ -59,9 +58,12 @@ pub fn init(self: *Scanner, gpa: Allocator, arena: Allocator, snapshot: *Snapsho
     try self.state.snapshot.clone(snapshot, gpa);
 }
 
+pub fn deinit(self: *Scanner) void {
+    self.state.snapshot.deinit(self.gpa);
+}
+
 pub fn run(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
     assert(!(try sender.channel.closed(io)));
-    assert(self.state.phase == .Initial);
 
     const stat = try Io.Dir.statFile(
         .cwd(),
@@ -80,7 +82,8 @@ const Worker = struct {
     pub const Channel = ch.Channel(*Message);
 
     pub const Message = struct {
-        buffer: [512]Worker.Job,
+        node: std.SinglyLinkedList.Node = .{},
+        buffer: [128]Worker.Job,
         len: u8,
     };
 
@@ -90,27 +93,34 @@ const Worker = struct {
         sender: Channel.Sender,
     };
 
-    const Pool = std.heap.MemoryPool(*Message);
+    const Pool = std.heap.MemoryPool(Message);
 
     gpa: Allocator,
     arena: Allocator,
     pool: Pool,
     queue: std.SinglyLinkedList,
+    next_entry_id: *atomic.Value(u64),
 
     pub fn work(self: *Worker, state: *State, io: Io, receiver: Channel.Receiver) void {
         var rec = receiver;
         defer rec.close(io);
 
         self._work(state, io, rec) catch |err| {
-            std.log.err("worker err: {}", .{err});
+            if (err != error.Closed) {
+                std.log.err("worker err: {}", .{err});
+            }
         };
 
         self.pool.deinit(self.gpa);
     }
 
     pub fn _work(self: *Worker, state: *State, io: Io, receiver: Channel.Receiver) !void {
+        var rec = receiver;
         var entries: std.ArrayList(Snapshot.Entry) = .empty;
         defer entries.deinit(self.gpa);
+
+        var messages: std.ArrayList(*Message) = .empty;
+        defer messages.deinit(self.gpa);
 
         var path_z: [4096:0]u8 = undefined;
 
@@ -118,75 +128,79 @@ const Worker = struct {
             const message: *Message = if (self.queue.popFirst()) |node|
                 @ptrCast(@alignCast(node))
             else
-                try receiver.getOne(io);
+                try rec.getOne(io);
 
-            defer self.pool.destroy(message);
+            defer if (message.node.next == null) self.pool.destroy(message);
 
             for (0..message.len) |idx| {
-                const job = message.buffer[idx];
+                var job = message.buffer[idx];
                 defer job.sender.close(io);
+
+                try self.scanDir(state, io, &path_z, &job, &entries, &messages);
             }
         }
     }
-};
 
-// fn scanDir(self: *Scanner, io: Io, path_z: [:0]u8, job: *ScanJob, entries: *std.ArrayList(Snapshot.Entry), jobs: *std.ArrayList(ScanJob)) !void {
-//     assert(jobs.items.len == 0);
-//
-//     const abs_path = job.abs_path;
-//     @memcpy(path_z[0..abs_path.len], abs_path);
-//     path_z[abs_path.len] = 0;
-//
-//     const dir = c.opendir(path_z.ptr) orelse return posix.unexpectedErrno(posix.errno(-1));
-//     defer _ = c.closedir(dir);
-//
-//     while (c.readdir(dir)) |entry_raw| {
-//         const entry: *const c.dirent = @ptrCast(@alignCast(entry_raw));
-//         const name = direntNameFromEntry(entry);
-//         const is_dot = name.len == 1;
-//         const is_dotdot = name.len == 2 and name[1] == '.';
-//
-//         if (is_dot or is_dotdot) continue;
-//
-//         const child_path = try std.mem.join(self.arena, "/", &.{ job.path_name, name });
-//         const child_abs_path = try std.mem.join(self.arena, "/", &.{ job.abs_path, name });
-//
-//         try entries.append(self.gpa, .{ .path = child_path, .id = self.next_entry_id.fetchAdd(1, .monotonic) });
-//
-//         if (entry.type != c.DT.DIR) continue;
-//
-//         try jobs.append(self.gpa, .{
-//             .abs_path = child_abs_path,
-//             .path_name = child_path,
-//             .sender = job.sender.clone(),
-//         });
-//     }
-//
-//     {
-//         try self.state.mutex.lock(io);
-//         defer self.state.mutex.unlock(io);
-//         for (entries.items) |entry| try self.state.snapshot.insert(self.gpa, entry);
-//     }
-//
-//     entries.clearRetainingCapacity();
-//
-//     if (jobs.items.len == 0) return;
-//
-//     const slice = try jobs.toOwnedSlice(self.gpa);
-//     errdefer {
-//         for (slice) |*new_job| {
-//             new_job.sender.close(io);
-//         }
-//         self.gpa.free(slice);
-//     }
-//
-//     try job.sender.putOne(io, .{ .batch = slice });
-// }
+    fn scanDir(self: *Worker, state: *State, io: Io, path_z: *[4096:0]u8, job: *const Job, entries: *std.ArrayList(Snapshot.Entry), messages: *std.ArrayList(*Message)) !void {
+        const abs_path = job.abs_path;
+        if (abs_path.len >= path_z.len) return error.NameTooLong;
+        @memcpy(path_z[0..abs_path.len], abs_path);
+        path_z[abs_path.len] = 0;
+
+        var dir = try Io.Dir.openDirAbsolute(io, path_z[0..abs_path.len], .{ .iterate = true });
+        defer dir.close(io);
+
+        var iter = dir.iterate();
+        while (try iter.next(io)) |entry| {
+            if (std.mem.eql(u8, entry.name, ".") or std.mem.eql(u8, entry.name, "..")) continue;
+
+            const child_path = try std.mem.join(self.arena, "/", &.{ job.path_name, entry.name });
+            const child_abs_path = try std.mem.join(self.arena, "/", &.{ job.abs_path, entry.name });
+
+            try entries.append(self.gpa, .{ .path = child_path, .id = self.next_entry_id.fetchAdd(1, .monotonic) });
+
+            if (entry.kind != .directory) continue;
+
+            if (messages.items.len == 0 or messages.items[messages.items.len - 1].len == messages.items[messages.items.len - 1].buffer.len) {
+                const message = try self.pool.create(self.gpa);
+                message.* = .{
+                    .len = 0,
+                    .buffer = undefined,
+                };
+                errdefer self.pool.destroy(message);
+
+                try messages.append(self.gpa, message);
+            }
+
+            const message = messages.items[messages.items.len - 1];
+            message.buffer[message.len] = .{
+                .abs_path = child_abs_path,
+                .path_name = child_path,
+                .sender = @constCast(&job.sender).clone(),
+            };
+            message.len += 1;
+        }
+
+        if (entries.items.len != 0) {
+            try state.lock(io);
+            defer state.unlock(io);
+
+            for (entries.items) |entry| try state.snapshot.insert(self.gpa, entry);
+            entries.clearRetainingCapacity();
+        }
+
+        if (messages.items.len == 0) return;
+
+        const sent = try @constCast(&job.sender).put(io, messages.items, 0);
+        for (messages.items[sent..]) |message| self.queue.prepend(&message.node);
+        messages.clearRetainingCapacity();
+    }
+};
 
 pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
     const cpu_count = try std.Thread.getCpuCount();
 
-    const buffer = try self.gpa.alloc(*Worker.Message, cpu_count * 10);
+    const buffer = try self.gpa.alloc(*Worker.Message, 1024);
     defer self.gpa.free(buffer);
 
     var channel: Worker.Channel = .init(buffer);
@@ -201,13 +215,14 @@ pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
         const message = try self.arena.create(Worker.Message);
         errdefer self.arena.destroy(message);
 
-        message.len = 1;
+        message.* = .{
+            .len = 1,
+            .buffer = undefined,
+        };
         message.buffer[0] = .{
-            .job = .{
-                .abs_path = snapshot.abs_root,
-                .path_name = snapshot.root_name,
-                .sender = _sender,
-            },
+            .abs_path = snapshot.abs_root,
+            .path_name = snapshot.root_name,
+            .sender = _sender,
         };
 
         try _sender.putOneUncancelable(
@@ -224,6 +239,8 @@ pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
             .arena = self.arena,
             .gpa = self.gpa,
             .pool = .empty,
+            .queue = .{},
+            .next_entry_id = self.next_entry_id,
         };
 
         const receiver = channel.receiver();
