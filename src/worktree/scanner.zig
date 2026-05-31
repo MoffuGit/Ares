@@ -86,6 +86,25 @@ const Worker = struct {
         node: std.SinglyLinkedList.Node = .{},
         buffer: [128]Worker.Job,
         len: u8,
+
+        pub fn init(self: *Message) void {
+            self.* = .{
+                .node = .{},
+                .buffer = undefined,
+                .len = 0,
+            };
+        }
+
+        pub fn append(self: *Message, job: Worker.Job) void {
+            assert(self.buffer.len != self.len);
+
+            self.buffer[self.len] = job;
+            self.len += 1;
+        }
+
+        pub fn full(self: *Message) bool {
+            return self.len == self.buffer.len;
+        }
     };
 
     pub const Job = struct {
@@ -120,9 +139,6 @@ const Worker = struct {
         var entries: std.ArrayList(Snapshot.Entry) = .empty;
         defer entries.deinit(self.gpa);
 
-        var messages: std.ArrayList(*Message) = .empty;
-        defer messages.deinit(self.gpa);
-
         var path_z: [4096:0]u8 = undefined;
 
         while (true) {
@@ -131,24 +147,28 @@ const Worker = struct {
             else
                 try rec.getOne(io);
 
-            defer if (message.node.next == null) self.pool.destroy(message);
+            defer self.pool.destroy(message);
 
             for (0..message.len) |idx| {
                 var job = message.buffer[idx];
                 defer job.sender.close(io);
 
-                try self.scanDir(state, io, &path_z, &job, &entries, &messages);
+                try self.scanDir(state, io, &path_z, &job, &entries);
             }
         }
     }
 
-    fn scanDir(self: *Worker, state: *State, io: Io, path_z: *[4096:0]u8, job: *const Job, entries: *std.ArrayList(Snapshot.Entry), messages: *std.ArrayList(*Message)) !void {
+    fn scanDir(self: *Worker, state: *State, io: Io, path_z: *[4096:0]u8, job: *const Job, entries: *std.ArrayList(Snapshot.Entry)) !void {
         const abs_path = job.abs_path;
         @memcpy(path_z[0..abs_path.len], abs_path);
         path_z[abs_path.len] = 0;
 
         const dir = c.opendir(path_z.ptr) orelse return error.OPENDIR;
         defer _ = c.closedir(dir);
+
+        var message = try self.pool.create(self.gpa);
+        message.init();
+
         while (c.readdir(dir)) |entry_raw| {
             const entry: *const c.dirent = @ptrCast(@alignCast(entry_raw));
             const name = direntNameFromEntry(entry);
@@ -162,24 +182,31 @@ const Worker = struct {
 
             if (entry.type != c.DT.DIR) continue;
 
-            if (messages.items.len == 0 or messages.items[messages.items.len - 1].len == messages.items[messages.items.len - 1].buffer.len) {
-                const message = try self.pool.create(self.gpa);
-                message.* = .{
-                    .len = 0,
-                    .buffer = undefined,
-                };
-                errdefer self.pool.destroy(message);
-
-                try messages.append(self.gpa, message);
+            if (message.full()) {
+                self.queue.prepend(&message.node);
+                message = try self.pool.create(self.gpa);
+                message.init();
             }
 
-            const message = messages.items[messages.items.len - 1];
-            message.buffer[message.len] = .{
+            message.append(.{
                 .abs_path = child_abs_path,
                 .path_name = child_path,
                 .sender = @constCast(&job.sender).clone(),
-            };
-            message.len += 1;
+            });
+        }
+
+        if (message.len == 0) {
+            self.pool.destroy(message);
+        } else {
+            self.queue.prepend(&message.node);
+        }
+
+        while (self.queue.popFirst()) |node| {
+            const msg: *Message = @ptrCast(@alignCast(node));
+            if (try @constCast(&job.sender).put(io, &.{msg}, 0) == 0) {
+                self.queue.prepend(node);
+                break;
+            }
         }
 
         if (entries.items.len != 0) {
@@ -189,12 +216,6 @@ const Worker = struct {
             for (entries.items) |entry| try state.snapshot.insert(self.gpa, entry);
             entries.clearRetainingCapacity();
         }
-
-        if (messages.items.len == 0) return;
-
-        const sent = try @constCast(&job.sender).put(io, messages.items, 0);
-        for (messages.items[sent..]) |message| self.queue.prepend(&message.node);
-        messages.clearRetainingCapacity();
     }
 };
 
