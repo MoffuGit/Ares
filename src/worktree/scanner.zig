@@ -44,7 +44,7 @@ const Message = union(enum) {
     job: ScanJob,
 };
 
-buffer: [128 * 128]Message,
+buffer: [4096]Message,
 
 state: State,
 gpa: Allocator,
