@@ -9,7 +9,7 @@ const builtin = @import("builtin");
 const ch = @import("../channel.zig");
 const Snapshot = @import("snapshot.zig");
 
-const UPDATE_INTERVAL: Io.Duration = if (builtin.mode == .Debug) .fromSeconds(5) else .fromMilliseconds(500);
+const UPDATE_INTERVAL: Io.Duration = if (builtin.mode == .Debug) .fromSeconds(5) else .fromMilliseconds(100);
 
 const Scanner = @This();
 
