@@ -111,7 +111,7 @@ pub fn runScanner(scanner: *Scanner, io: Io, sender: Scanner.Updates.Sender) voi
 }
 
 test "Worktree scan every directory entry" {
-    const gpa = std.heap.c_allocator;
+    const gpa = std.testing.allocator;
     const io = testing.io;
 
     var worktree: Worktree = undefined;
@@ -123,8 +123,10 @@ test "Worktree scan every directory entry" {
     try worktree.run(io);
 
     const dir = try std.Io.Dir.openDirAbsolute(io, test_build.chromium_path, .{ .iterate = true });
+    defer dir.close(io);
 
     var walker = try dir.walk(gpa);
+    defer walker.deinit();
 
     var cnt: usize = 1;
 
@@ -135,4 +137,21 @@ test "Worktree scan every directory entry" {
     try worktree.await(io);
 
     try std.testing.expectEqual(cnt, worktree.snapshot.entries.count);
+}
+
+test "Worktree start and stop" {
+    const gpa = std.testing.allocator;
+    const io = testing.io;
+
+    var worktree: Worktree = undefined;
+    try worktree.init(gpa, .{
+        .abs_path = test_build.chromium_path,
+    });
+    defer worktree.deinit();
+
+    try worktree.run(io);
+
+    try worktree.close(io);
+
+    try worktree.await(io);
 }

@@ -64,8 +64,6 @@ pub fn deinit(self: *Scanner) void {
 }
 
 pub fn run(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
-    assert(!(try sender.channel.closed(io)));
-
     const stat = try Io.Dir.statFile(
         .cwd(),
         io,
