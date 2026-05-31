@@ -109,3 +109,30 @@ pub fn runScanner(scanner: *Scanner, io: Io, sender: Scanner.Updates.Sender) voi
         std.log.err("scanner err: {}", .{err});
     };
 }
+
+test "Worktree scan every directory entry" {
+    const gpa = std.heap.c_allocator;
+    const io = testing.io;
+
+    var worktree: Worktree = undefined;
+    try worktree.init(gpa, .{
+        .abs_path = test_build.chromium_path,
+    });
+    defer worktree.deinit();
+
+    try worktree.run(io);
+
+    const dir = try std.Io.Dir.openDirAbsolute(io, test_build.chromium_path, .{ .iterate = true });
+
+    var walker = try dir.walk(gpa);
+
+    var cnt: usize = 1;
+
+    while (try walker.next(io)) |_| {
+        cnt += 1;
+    }
+
+    try worktree.await(io);
+
+    try std.testing.expectEqual(cnt, worktree.snapshot.entries.count);
+}
