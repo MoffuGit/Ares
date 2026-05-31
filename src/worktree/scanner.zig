@@ -71,7 +71,7 @@ pub fn run(self: *Scanner, io: Io, update_sender: *channelpkg.SenderType(ScanUpd
     const stat = try Io.Dir.statFile(.cwd(), io, self.state.snapshot.abs_root, .{});
     if (stat.kind != .directory) return;
 
-    const buffer = try self.gpa.alloc(Message, 1024 * 128);
+    const buffer = try self.gpa.alloc(Message, 1024 * 4);
     defer self.gpa.free(buffer);
     var channel: Channel = .init(buffer);
 
