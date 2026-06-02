@@ -10,11 +10,23 @@ import OdysseyKit
 import os
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-
-    @IBOutlet var window: NSWindow!
     private var app: Odyssey.App!
+    private var projectControllerState: ProjectsState = .uninitialized
+
+    var projectsController: ProjectsController {
+        switch projectControllerState {
+        case .initialized(let controller):
+            return controller
+
+        case .uninitialized:
+            let controller = ProjectsController()
+            projectControllerState = .initialized(controller)
+            return controller
+        }
+    }
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        projectsController.showWindow(nil)
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
@@ -27,4 +39,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return true
     }
+}
+
+private enum ProjectsState {
+    case uninitialized
+    case initialized(ProjectsController)
 }
