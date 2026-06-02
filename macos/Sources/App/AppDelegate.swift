@@ -19,13 +19,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return controller
 
         case .uninitialized:
-            let controller = ProjectsController()
+            let controller = ProjectsController(app: app)
             projectControllerState = .initialized(controller)
             return controller
         }
     }
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        app = Odyssey.App()
         projectsController.showWindow(nil)
         projectsController.window?.center()
     }

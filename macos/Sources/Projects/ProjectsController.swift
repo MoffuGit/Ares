@@ -6,15 +6,17 @@
 //
 
 import AppKit
+import Combine
 
 class ProjectsController: NSWindowController,
     NSWindowDelegate
 {
+    private var cancellables = Set<AnyCancellable>()
 
-    init() {
+    init(app: Odyssey.App) {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
-            styleMask: [.closable, .miniaturizable, .resizable, .titled, .fullSizeContentView],
+            contentRect: NSRect(x: 0, y: 0, width: 450, height: 500),
+            styleMask: [.closable, .miniaturizable, .titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -22,7 +24,9 @@ class ProjectsController: NSWindowController,
         window.titleVisibility = .hidden;
         window.titlebarAppearsTransparent = true;
         window.isRestorable = false;
-        window.contentView = ProjectsContainer()
+        window.contentView = ProjectsContainer(app: app)
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true;
+        window.standardWindowButton(.zoomButton)?.isHidden = true;
 
         super.init(window: window)
         

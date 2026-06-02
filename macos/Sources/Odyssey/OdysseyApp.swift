@@ -5,16 +5,18 @@
 //  Created by Adrian Hess on 01/06/26.
 //
 import OdysseyKit
+import Combine
 import os
 
 extension Odyssey {
-    class App {
+    class App: ObservableObject {
         var app: odyssey_app_t? {
             didSet {
                 guard let old = oldValue else { return }
                 odyssey_app_free(old)
             }
         }
+        @Published var projects: [Project] = []
         
         init() {
             guard let app = odyssey_app_new() else {
