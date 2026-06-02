@@ -27,6 +27,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         projectsController.showWindow(nil)
+        projectsController.window?.center()
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {

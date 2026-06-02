@@ -14,16 +14,19 @@ class ProjectsController: NSWindowController,
     init() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.closable, .miniaturizable, .resizable, .titled],
             backing: .buffered,
             defer: false
         )
 
-        window.title = "Projects"
-        window.center()
+        window.titleVisibility = .hidden;
+        window.titlebarAppearsTransparent = true;
+        window.isRestorable = false;
+        window.contentView = ProjectsContainer()
+
 
         super.init(window: window)
-
+        
         window.delegate = self
     }
 
