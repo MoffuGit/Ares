@@ -10,7 +10,7 @@ class ProjectsContainer: NSView {
     init() {
         super.init(frame: .zero)
         self.wantsLayer = true
-        self.layer?.backgroundColor = NSColor.blue.cgColor
+        self.layer?.backgroundColor = NSColor(hex: "#f8f8f8").cgColor
     }
     
     @available(*, unavailable)
