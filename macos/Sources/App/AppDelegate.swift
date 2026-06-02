@@ -7,11 +7,13 @@
 
 import Cocoa
 import OdysseyKit
+import Combine
 import os
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var app: Odyssey.App!
     private var projectControllerState: ProjectsState = .uninitialized
+    @Published var projects: [Project] = []
 
     var projectsController: ProjectsController {
         switch projectControllerState {
@@ -19,7 +21,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return controller
 
         case .uninitialized:
-            let controller = ProjectsController(app: app)
+            let controller = ProjectsController(app: self)
             projectControllerState = .initialized(controller)
             return controller
         }

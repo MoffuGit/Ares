@@ -22,41 +22,32 @@ struct Project: Identifiable {
 }
 
 struct ProjectsView: View {
-    @ObservedObject var app: Odyssey.App
+    @ObservedObject var app: AppDelegate
     @State private var projects: [Project] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             if projects.isEmpty {
                 Spacer()
-                VStack(spacing: 10) {
-                    Text("Odyssey")
-                        .font(.largeTitle)
-                        .fontWeight(.semibold)
-
-                    Button("Add Project", systemImage: "folder.badge.plus", action: addProject)
+                VStack {
+                    Button("Open Existing Project", systemImage: "folder.badge.plus", action: addProject)
                 }
                 .frame(maxWidth: .infinity)
                 Spacer()
             } else {
                 List(projects) { project in
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading) {
                         Text(project.name)
-                            .font(.headline)
+                            .font(.title2)
+                            .fontWeight(.medium)
 
                         Text(project.abs_path)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
-                    .padding(.vertical, 6)
                 }
                 .listStyle(.inset)
-                .overlay(alignment: .topTrailing) {
-                    Button("Add Project", systemImage: "folder.badge.plus", action: addProject)
-                        .padding(.top, 6)
-                        .padding(.trailing, 16)
-                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

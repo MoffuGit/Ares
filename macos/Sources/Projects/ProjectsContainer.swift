@@ -9,7 +9,7 @@ import SwiftUI
 
 class ProjectsContainer: NSView {
     private let hostingView: NSHostingView<ProjectsView>
-    private let padding: CGFloat = 35.0
+    private let padding: CGFloat = 34.0
     private let lineColor: NSColor = NSColor(hex: "#A8A8A8")
     private let lineWidth: CGFloat = if let scale_factor = NSScreen.main?.backingScaleFactor {
         0.5 / scale_factor
@@ -17,7 +17,7 @@ class ProjectsContainer: NSView {
         0.5
     };
 
-    init(app: Odyssey.App) {
+    init(app: AppDelegate) {
         self.hostingView = NSHostingView(rootView: ProjectsView(app: app))
         
         super.init(frame: .zero)

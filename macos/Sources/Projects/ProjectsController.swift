@@ -13,7 +13,7 @@ class ProjectsController: NSWindowController,
 {
     private var cancellables = Set<AnyCancellable>()
 
-    init(app: Odyssey.App) {
+    init(app: AppDelegate) {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 450, height: 500),
             styleMask: [.closable, .miniaturizable, .titled, .fullSizeContentView],
