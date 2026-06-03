@@ -3,7 +3,7 @@ import Combine
 import SwiftUI
 
 class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
-    private let emptyView: ProjectListEmptyView
+    private var emptyView: NSHostingView<ProjectEmptyView>!
     private let scrollView = NSScrollView()
     private let tableView: NSTableView = {
         let tableView = NSTableView()
@@ -23,12 +23,16 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
 
     init(app: AppDelegate) {
         self.app = app
-        self.emptyView = ProjectListEmptyView(app: app)
 
         super.init(frame: .zero)
 
-        self.wantsLayer = true
-        self.layer?.backgroundColor = NSColor(hex: "#080808").cgColor
+        wantsLayer = true
+        layer?.backgroundColor = NSColor(hex: "#080808").cgColor
+
+        emptyView = NSHostingView(rootView: ProjectEmptyView(app: app))
+        emptyView.translatesAutoresizingMaskIntoConstraints = false
+        emptyView.wantsLayer = true
+        emptyView.layer?.backgroundColor = .clear
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.drawsBackground = true
@@ -59,13 +63,15 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
             scrollView.topAnchor.constraint(equalTo: topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            emptyView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            emptyView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            emptyView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            emptyView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            emptyView.topAnchor.constraint(equalTo: topAnchor),
+            emptyView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
-        emptyView.isHidden = !projects.isEmpty
-        tableView.isHidden = projects.isEmpty
+        updateVisibility()
     }
+
     private func updateVisibility() {
         let isEmpty = projects.isEmpty
         emptyView.isHidden = !isEmpty
@@ -94,56 +100,6 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
 
         cell.stringValue = projects[row].name
         return cell
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-}
-
-private class ProjectListEmptyView: NSStackView {
-    private let app: AppDelegate
-
-    init(app: AppDelegate) {
-        self.app = app
-
-        super.init(frame: .zero)
-
-        translatesAutoresizingMaskIntoConstraints = false
-        orientation = .vertical
-        alignment = .centerX
-        spacing = 18
-
-        let titleLabel = NSTextField(labelWithString: "Odyssey")
-        titleLabel.font = .systemFont(ofSize: 38, weight: .semibold)
-        titleLabel.textColor = .white
-
-        let openButton = AppButton(title: "Open Project", symbolName: "folder")
-        openButton.translatesAutoresizingMaskIntoConstraints = false
-        openButton.target = self
-        openButton.action = #selector(selectNewProject)
-
-        addArrangedSubview(titleLabel)
-        addArrangedSubview(openButton)
-
-        NSLayoutConstraint.activate([
-            openButton.widthAnchor.constraint(equalToConstant: 140),
-            openButton.heightAnchor.constraint(equalToConstant: 28),
-        ])
-    }
-
-    @objc private func selectNewProject() {
-        let panel = NSOpenPanel()
-        panel.title = "Add Project"
-        panel.prompt = "Add Project"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        app.addProject(project: Project(abs_path: url.path))
     }
 
     @available(*, unavailable)
