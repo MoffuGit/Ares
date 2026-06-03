@@ -103,7 +103,11 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
 }
 
 private class ProjectListEmptyView: NSStackView {
+    private let app: AppDelegate
+
     init(app: AppDelegate) {
+        self.app = app
+
         super.init(frame: .zero)
 
         translatesAutoresizingMaskIntoConstraints = false
@@ -115,8 +119,10 @@ private class ProjectListEmptyView: NSStackView {
         titleLabel.font = .systemFont(ofSize: 38, weight: .semibold)
         titleLabel.textColor = .white
 
-        let openButton = OpenProjectButton(app: app)
+        let openButton = AppButton(title: "Open Project", symbolName: "folder")
         openButton.translatesAutoresizingMaskIntoConstraints = false
+        openButton.target = self
+        openButton.action = #selector(selectNewProject)
 
         addArrangedSubview(titleLabel)
         addArrangedSubview(openButton)
@@ -127,90 +133,7 @@ private class ProjectListEmptyView: NSStackView {
         ])
     }
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-}
-
-private class OpenProjectButton: NSControl {
-    private let app: AppDelegate
-    private let imageView = NSImageView()
-    private let label = NSTextField(labelWithString: "Open Project")
-    private var trackingArea: NSTrackingArea?
-    private var isHovered = false {
-        didSet {
-            updateBackgroundColor()
-        }
-    }
-
-    init(app: AppDelegate) {
-        self.app = app
-
-        super.init(frame: .zero)
-
-        wantsLayer = true
-        layer?.cornerRadius = 8
-        updateBackgroundColor()
-
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        imageView.image = NSImage(
-            systemSymbolName: "folder", accessibilityDescription: "Open Project")
-        imageView.contentTintColor = .white
-
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.font = .systemFont(ofSize: 12, weight: .medium)
-        label.textColor = .white
-
-        addSubview(imageView)
-        addSubview(label)
-
-        NSLayoutConstraint.activate([
-            imageView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            imageView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            imageView.widthAnchor.constraint(equalToConstant: 18),
-            imageView.heightAnchor.constraint(equalToConstant: 18),
-
-            label.centerXAnchor.constraint(equalTo: centerXAnchor),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-
-        if let trackingArea {
-            removeTrackingArea(trackingArea)
-        }
-
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        trackingArea = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovered = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHovered = false
-    }
-
-    private func updateBackgroundColor() {
-        layer?.backgroundColor =
-            (!isHovered ? NSColor.systemBlue : NSColor.systemBlue.withAlphaComponent(0.6)).cgColor
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        selectNewProject()
-    }
-
-    private func selectNewProject() {
+    @objc private func selectNewProject() {
         let panel = NSOpenPanel()
         panel.title = "Add Project"
         panel.prompt = "Add Project"
