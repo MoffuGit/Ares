@@ -9,6 +9,10 @@ extension Components {
         var fg: Color = .white
         let action: () -> Void
         let scale: CGFloat = 0.97
+        var horizontalPadding: CGFloat = 12
+        var verticalPadding: CGFloat = 8
+        var minWidth: CGFloat = 44
+        var minHeight: CGFloat = 32
 
         @State private var isHovered = false
         @GestureState private var isPressed = false
@@ -23,9 +27,9 @@ extension Components {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(fg)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .frame(minWidth: 44, minHeight: 32)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
+            .frame(minWidth: minWidth, minHeight: minHeight)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(isHovered ? hoverBg : bg)
