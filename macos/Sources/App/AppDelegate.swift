@@ -6,8 +6,8 @@
 //
 
 import Cocoa
-import OdysseyKit
 import Combine
+import OdysseyKit
 import os
 
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
@@ -42,6 +42,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return true
+    }
+
+    func addProject(project: Project) {
+        projects.append(project)
     }
 }
 

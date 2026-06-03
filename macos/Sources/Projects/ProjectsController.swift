@@ -15,21 +15,21 @@ class ProjectsController: NSWindowController,
 
     init(app: AppDelegate) {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 450, height: 500),
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
             styleMask: [.closable, .miniaturizable, .titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
 
-        window.titleVisibility = .hidden;
-        window.titlebarAppearsTransparent = true;
-        window.isRestorable = false;
-        window.contentView = ProjectsContainer(app: app)
-        window.standardWindowButton(.miniaturizeButton)?.isHidden = true;
-        window.standardWindowButton(.zoomButton)?.isHidden = true;
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isRestorable = false
+        window.contentView = ProjectsView(app: app)
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
 
         super.init(window: window)
-        
+
         window.delegate = self
     }
 
