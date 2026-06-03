@@ -29,6 +29,7 @@ final class AppButton: NSControl {
         }
     }
 
+    private let visualView = NSView()
     private let contentView = NSView()
     private let imageView = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
@@ -51,9 +52,9 @@ final class AppButton: NSControl {
 
         super.init(frame: .zero)
 
-        wantsLayer = true
-        layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-        layer?.cornerRadius = 8
+        visualView.autoresizingMask = [.width, .height]
+        visualView.wantsLayer = true
+        visualView.layer?.cornerRadius = 8
         updateBackgroundColor()
 
         contentView.translatesAutoresizingMaskIntoConstraints = false
@@ -67,15 +68,16 @@ final class AppButton: NSControl {
         titleLabel.textColor = foregroundColor
         titleLabel.stringValue = title
 
-        addSubview(contentView)
+        addSubview(visualView)
+        visualView.addSubview(contentView)
         contentView.addSubview(imageView)
         contentView.addSubview(titleLabel)
 
         NSLayoutConstraint.activate([
-            contentView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            contentView.topAnchor.constraint(equalTo: topAnchor),
-            contentView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            contentView.widthAnchor.constraint(equalTo: widthAnchor),
+            contentView.heightAnchor.constraint(equalTo: heightAnchor),
+            contentView.centerXAnchor.constraint(equalTo: visualView.centerXAnchor),
+            contentView.centerYAnchor.constraint(equalTo: visualView.centerYAnchor),
 
             imageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
             imageView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
@@ -87,6 +89,11 @@ final class AppButton: NSControl {
         ])
     }
 
+    override func layout() {
+        super.layout()
+        updateVisualFrame(animated: false)
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
 
@@ -96,7 +103,9 @@ final class AppButton: NSControl {
 
         let area = NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .enabledDuringMouseDrag],
+            options: [
+                .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .enabledDuringMouseDrag,
+            ],
             owner: self,
             userInfo: nil
         )
@@ -138,17 +147,28 @@ final class AppButton: NSControl {
     }
 
     private func updateBackgroundColor() {
-        layer?.backgroundColor = (isHovered ? hoverBackgroundColor : backgroundColor).cgColor
+        visualView.layer?.backgroundColor =
+            (isHovered ? hoverBackgroundColor : backgroundColor).cgColor
     }
 
     private func updatePressedState() {
-        let scale: CGFloat = isPressed ? 0.94 : 1
+        updateVisualFrame(animated: true)
+    }
+
+    private func updateVisualFrame(animated: Bool) {
+        let insetX = isPressed ? bounds.width * 0.03 : 0
+        let insetY = isPressed ? bounds.height * 0.03 : 0
+        let frame = bounds.insetBy(dx: insetX, dy: insetY)
+
+        guard animated else {
+            visualView.frame = frame
+            return
+        }
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.08
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            context.allowsImplicitAnimation = true
-            layer?.transform = CATransform3DMakeScale(scale, scale, 1)
+            visualView.animator().frame = frame
         }
     }
 
