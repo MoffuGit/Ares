@@ -156,7 +156,7 @@ const Worker = struct {
         }
     }
 
-    fn scanDir(self: *Worker, state: *State, io: Io, path_z: *[4096:0]u8, job: *const Job, entries: *std.ArrayList(Snapshot.Entry)) !void {
+    fn scanDir(self: *Worker, state: *State, io: Io, path_z: [:0]u8, job: *const Job, entries: *std.ArrayList(Snapshot.Entry)) !void {
         const abs_path = job.abs_path;
         @memcpy(path_z[0..abs_path.len], abs_path);
         path_z[abs_path.len] = 0;
@@ -251,7 +251,7 @@ pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
         );
     }
 
-    for (0..cpu_count) |_| {
+    for (0..cpu_count - 2) |_| {
         const worker = try self.arena.create(Worker);
         errdefer self.arena.destroy(worker);
 
