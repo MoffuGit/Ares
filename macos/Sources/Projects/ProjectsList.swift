@@ -66,7 +66,7 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         NSLayoutConstraint.activate([
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: topAnchor, constant: 45),
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             emptyView.leadingAnchor.constraint(equalTo: leadingAnchor),
