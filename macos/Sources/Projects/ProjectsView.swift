@@ -38,8 +38,8 @@ class ProjectsView: NSView {
 
             projectsToolbar.topAnchor.constraint(equalTo: topAnchor, constant: 8),
             projectsToolbar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            projectsToolbar.widthAnchor.constraint(equalToConstant: 24),
-            projectsToolbar.heightAnchor.constraint(equalToConstant: 24),
+            projectsToolbar.widthAnchor.constraint(equalToConstant: 50),
+            projectsToolbar.heightAnchor.constraint(equalToConstant: 30),
         ])
     }
 

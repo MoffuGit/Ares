@@ -2,7 +2,7 @@ import SwiftUI
 
 extension UI {
     public struct Button: View {
-        private let title: String
+        private let title: String?
         private let variant: ButtonVariant
         private let size: ButtonSize
         private let fullWidth: Bool
@@ -18,7 +18,7 @@ extension UI {
         }
 
         public init(
-            _ title: String,
+            _ title: String? = nil,
             variant: ButtonVariant = .primary,
             size: ButtonSize = .md,
             fullWidth: Bool = false,
@@ -49,8 +49,10 @@ extension UI {
                             .font(size.font.font)
                     }
 
-                    Text(title)
-                        .typography(size.font)
+                    if let title = title {
+                        Text(title)
+                            .typography(size.font)
+                    }
 
                     if let icon = icon, iconPosition == .trailing {
                         icon
@@ -85,8 +87,8 @@ extension UI {
                     isPressed = false
                 }
             )
-            .accessibilityLabel(title)
-            .accessibilityAddTraits(.isButton)
+            //.accessibilityLabel(title)
+            //.accessibilityAddTraits(.isButton)
         }
     }
 }

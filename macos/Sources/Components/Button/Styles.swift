@@ -74,11 +74,16 @@ public enum ButtonVariant {
 }
 
 public enum ButtonSize {
-    case sm, md, lg
+    case sm, md, lg, icon
 
     var padding: EdgeInsets {
-        EdgeInsets(
-            top: Padding.`1.5`, leading: Padding.`2`, bottom: Padding.`1.5`, trailing: Padding.`2`)
+        if(self == .icon) {
+            EdgeInsets(
+                top: Padding.`1`, leading: Padding.`1`, bottom: Padding.`1`, trailing: Padding.`1`)
+        } else {
+            EdgeInsets(
+                top: Padding.`1.5`, leading: Padding.`2`, bottom: Padding.`1.5`, trailing: Padding.`2`)
+        }
     }
 
     var font: Typography {
@@ -87,7 +92,7 @@ public enum ButtonSize {
 
     var cornerRadius: CGFloat {
         switch self {
-        case .sm:
+        case .sm, .icon:
             return BorderRadius.md
         case .md, .lg:
             return BorderRadius.lg
