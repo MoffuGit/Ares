@@ -7,7 +7,7 @@ public enum ButtonVariant {
     case ghost
     case link
     case destructive
-    
+
     var backgroundColor: Color {
         switch self {
         case .primary:
@@ -20,7 +20,7 @@ public enum ButtonVariant {
             return Color.red
         }
     }
-    
+
     var foregroundColor: Color {
         switch self {
         case .primary:
@@ -37,7 +37,7 @@ public enum ButtonVariant {
             return Color.white
         }
     }
-    
+
     var borderColor: Color? {
         switch self {
         case .outline:
@@ -46,12 +46,12 @@ public enum ButtonVariant {
             return nil
         }
     }
-    
+
     func getBackgroundColor(isPressed: Bool, isEnabled: Bool) -> Color {
         guard isEnabled else {
             return backgroundColor.opacity(0.5)
         }
-        
+
         if isPressed {
             switch self {
             case .primary:
@@ -68,29 +68,29 @@ public enum ButtonVariant {
                 return Color.red.opacity(0.9)
             }
         }
-        
+
         return backgroundColor
     }
 }
 
 public enum ButtonSize {
     case sm, md, lg
-    
+
     var padding: EdgeInsets {
         EdgeInsets(
             top: Padding.`1.5`, leading: Padding.`2`, bottom: Padding.`1.5`, trailing: Padding.`2`)
     }
-    
+
     var font: Typography {
         return .sm
     }
-    
+
     var cornerRadius: CGFloat {
         switch self {
         case .sm:
-            return 6
+            return BorderRadius.md
         case .md, .lg:
-            return 8
+            return BorderRadius.lg
         }
     }
 }
