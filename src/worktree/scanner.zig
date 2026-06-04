@@ -251,7 +251,7 @@ pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
         );
     }
 
-    for (0..cpu_count - 2) |_| {
+    for (0..cpu_count) |_| {
         const worker = try self.arena.create(Worker);
         errdefer self.arena.destroy(worker);
 
