@@ -52,8 +52,12 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         tableView.dataSource = self
         tableView.delegate = self
         tableView.backgroundColor = NSColor(hex: "#080808")
+        tableView.rowHeight = 60
+        tableView.intercellSpacing = NSSize(width: 0, height: 0)
+        tableView.selectionHighlightStyle = .none
 
         scrollView.documentView = tableView
+
         addSubview(scrollView)
         addSubview(emptyView)
 
@@ -90,20 +94,85 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         let identifier = NSUserInterfaceItemIdentifier("Cell")
 
         let cell =
-            (tableView.makeView(withIdentifier: identifier, owner: self) as? NSTextField)
+            (tableView.makeView(withIdentifier: identifier, owner: self) as? NSHostingView<ProjectListEntryView>)
             ?? {
-                let textField = NSTextField(labelWithString: "")
-                textField.identifier = identifier
-                textField.translatesAutoresizingMaskIntoConstraints = false
-                return textField
+                let hostingView = NSHostingView(rootView: ProjectListEntryView(
+                    project: projects[row],
+                    isFocused: tableView.selectedRow == row,
+                    isFirst: row == 0
+                ))
+                hostingView.identifier = identifier
+                hostingView.translatesAutoresizingMaskIntoConstraints = false
+                return hostingView
             }()
 
-        cell.stringValue = projects[row].name
+        cell.rootView = ProjectListEntryView(
+            project: projects[row],
+            isFocused: tableView.selectedRow == row,
+            isFirst: row == 0
+        )
         return cell
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        tableView.reloadData()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+}
+
+struct ProjectListEntryView: View {
+    let project: Project
+    let isFocused: Bool
+    let isFirst: Bool
+
+    private var borderColor: Color {
+        isFocused ? .blue : Color.white.opacity(0.18)
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(project.name)
+                    .typography(.lg)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                Text(project.abs_path)
+                    .typography(.xs)
+                    .foregroundStyle(.white.opacity(0.48))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(Padding.`4`)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(Color(nsColor: NSColor(hex: "#080808")))
+        .overlay(alignment: .top) {
+            if isFirst {
+                Rectangle()
+                    .fill(borderColor)
+                    .frame(height: 1)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(borderColor)
+                .frame(height: 1)
+        }
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(borderColor)
+                .frame(width: 1)
+        }
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(borderColor)
+                .frame(width: 1)
+        }
     }
 }

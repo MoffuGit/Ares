@@ -9,6 +9,11 @@ public enum Padding {
     public static let `2`: CGFloat = 8
     public static let `3`: CGFloat = 12
     public static let `4`: CGFloat = 16
+    public static let `5`: CGFloat = 20
+    public static let `6`: CGFloat = 24
+    public static let `7`: CGFloat = 28
+    public static let `8`: CGFloat = 32
+    public static let `9`: CGFloat = 36
 }
 
 public enum BorderRadius {
