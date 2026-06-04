@@ -8,7 +8,7 @@
 import SwiftUI
 
 public enum Typography {
-    case xs, sm, base, lg, xl
+    case xs, sm, base, lg, xl, `2xl`,`3xl`,`4xl`,`5xl`
     
     public var font: Font {
         switch self {
@@ -22,6 +22,14 @@ public enum Typography {
             return .system(size: 18)
         case .xl:
             return .system(size: 20)
+        case .`2xl`:
+            return .system(size: 24)
+        case .`3xl`:
+            return .system(size: 30)
+        case .`4xl`:
+            return .system(size: 36)
+        case .`5xl`:
+            return .system(size: 48)
         }
     }
 }

@@ -52,9 +52,10 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         tableView.dataSource = self
         tableView.delegate = self
         tableView.backgroundColor = NSColor(hex: "#080808")
-        tableView.rowHeight = 60
-        tableView.intercellSpacing = NSSize(width: 0, height: 0)
+        tableView.rowHeight = 120
+        tableView.intercellSpacing = .zero
         tableView.selectionHighlightStyle = .none
+        tableView.style = .plain
 
         scrollView.documentView = tableView
 
@@ -64,7 +65,7 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         NSLayoutConstraint.activate([
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.topAnchor.constraint(equalTo: topAnchor, constant: 40),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             emptyView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -85,7 +86,7 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
         projects.count
     }
-
+    
     func tableView(
         _ tableView: NSTableView,
         viewFor tableColumn: NSTableColumn?,
@@ -132,28 +133,27 @@ struct ProjectListEntryView: View {
     let isFirst: Bool
 
     private var borderColor: Color {
-        isFocused ? .blue : Color.white.opacity(0.18)
+        Color(NSColor(hex: "#393939"))
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(project.name)
-                    .typography(.lg)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
+        VStack(alignment: .leading) {
+            Spacer()
+            Text(project.name)
+                .typography(.`3xl`)
+                .foregroundStyle(.white)
+                .lineLimit(1)
 
-                Text(project.abs_path)
-                    .typography(.xs)
-                    .foregroundStyle(.white.opacity(0.48))
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 0)
+            Spacer()
+            
+            Text(project.abs_path)
+                .typography(.xs)
+                .foregroundStyle(.white.opacity(0.48))
+                .fontWeight(.medium)
+                .lineLimit(1)
         }
         .padding(Padding.`4`)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(Color(nsColor: NSColor(hex: "#080808")))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: Alignment.topLeading)
         .overlay(alignment: .top) {
             if isFirst {
                 Rectangle()
@@ -167,14 +167,18 @@ struct ProjectListEntryView: View {
                 .frame(height: 1)
         }
         .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(borderColor)
-                .frame(width: 1)
+            if(isFocused) {
+                Rectangle()
+                    .fill(borderColor)
+                    .frame(width: 1)
+            }
         }
         .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(borderColor)
-                .frame(width: 1)
+            if(isFocused) {
+                Rectangle()
+                    .fill(borderColor)
+                    .frame(width: 1)
+            }
         }
     }
 }
