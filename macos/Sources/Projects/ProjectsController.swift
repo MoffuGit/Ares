@@ -7,11 +7,13 @@
 
 import AppKit
 import Combine
+import SwiftUI
 
 class ProjectsController: NSWindowController,
     NSWindowDelegate
 {
     private var cancellables = Set<AnyCancellable>()
+    private var toolbarAccessory: NSTitlebarAccessoryViewController?
 
     init(app: AppDelegate) {
         let window = NSWindow(
@@ -28,8 +30,22 @@ class ProjectsController: NSWindowController,
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
         window.standardWindowButton(.zoomButton)?.isHidden = true
 
+        let toolbarHostingView = NSHostingView(rootView: ProjectsToolbar(app: app).fixedSize())
+        toolbarHostingView.setContentHuggingPriority(.required, for: .horizontal)
+        toolbarHostingView.setContentHuggingPriority(.required, for: .vertical)
+        toolbarHostingView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        toolbarHostingView.setContentCompressionResistancePriority(.required, for: .vertical)
+        toolbarHostingView.setFrameSize(toolbarHostingView.fittingSize)
+
+        let toolbarAccessory = NSTitlebarAccessoryViewController()
+        toolbarAccessory.view = toolbarHostingView
+        toolbarAccessory.layoutAttribute = .right
+
+        window.addTitlebarAccessoryViewController(toolbarAccessory)
+
         super.init(window: window)
 
+        self.toolbarAccessory = toolbarAccessory
         window.delegate = self
     }
 

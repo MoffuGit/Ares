@@ -56,6 +56,7 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         tableView.intercellSpacing = .zero
         tableView.selectionHighlightStyle = .none
         tableView.style = .plain
+        tableView.allowsEmptySelection = false
 
         scrollView.documentView = tableView
 
@@ -86,7 +87,7 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
         projects.count
     }
-    
+
     func tableView(
         _ tableView: NSTableView,
         viewFor tableColumn: NSTableColumn?,
@@ -121,6 +122,11 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         tableView.reloadData()
     }
 
+    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+        window?.makeFirstResponder(tableView)
+        return true
+    }
+
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
@@ -133,7 +139,12 @@ struct ProjectListEntryView: View {
     let isFirst: Bool
 
     private var borderColor: Color {
-        Color(NSColor(hex: "#393939"))
+        if isFocused {
+            .blue
+        } else {
+
+            Color(NSColor(hex: "#393939"))
+        }
     }
 
     var body: some View {
@@ -145,7 +156,7 @@ struct ProjectListEntryView: View {
                 .lineLimit(1)
 
             Spacer()
-            
+
             Text(project.abs_path)
                 .typography(.xs)
                 .foregroundStyle(.white.opacity(0.48))
@@ -167,14 +178,14 @@ struct ProjectListEntryView: View {
                 .frame(height: 1)
         }
         .overlay(alignment: .leading) {
-            if(isFocused) {
+            if isFocused {
                 Rectangle()
                     .fill(borderColor)
                     .frame(width: 1)
             }
         }
         .overlay(alignment: .trailing) {
-            if(isFocused) {
+            if isFocused {
                 Rectangle()
                     .fill(borderColor)
                     .frame(width: 1)

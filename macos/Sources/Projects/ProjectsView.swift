@@ -15,19 +15,15 @@ struct Project: Identifiable {
 
 class ProjectsView: NSView {
     private let projectsList: NSView
-    private let projectsToolbar: NSView
 
     init(app: AppDelegate) {
         self.projectsList = ProjectsList(app: app)
-        self.projectsToolbar = ProjectsToolbar(app: app)
 
         super.init(frame: .zero)
 
         self.translatesAutoresizingMaskIntoConstraints = false
         projectsList.translatesAutoresizingMaskIntoConstraints = false
-        projectsToolbar.translatesAutoresizingMaskIntoConstraints = false
 
-        addSubview(projectsToolbar)
         addSubview(projectsList)
 
         NSLayoutConstraint.activate([
@@ -35,11 +31,6 @@ class ProjectsView: NSView {
             projectsList.trailingAnchor.constraint(equalTo: trailingAnchor),
             projectsList.topAnchor.constraint(equalTo: topAnchor),
             projectsList.bottomAnchor.constraint(equalTo: bottomAnchor),
-
-            projectsToolbar.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            projectsToolbar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            projectsToolbar.widthAnchor.constraint(equalToConstant: 50),
-            projectsToolbar.heightAnchor.constraint(equalToConstant: 30),
         ])
     }
 
