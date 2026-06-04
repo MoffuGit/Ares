@@ -94,13 +94,15 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         let identifier = NSUserInterfaceItemIdentifier("Cell")
 
         let cell =
-            (tableView.makeView(withIdentifier: identifier, owner: self) as? NSHostingView<ProjectListEntryView>)
+            (tableView.makeView(withIdentifier: identifier, owner: self)
+                as? NSHostingView<ProjectListEntryView>)
             ?? {
-                let hostingView = NSHostingView(rootView: ProjectListEntryView(
-                    project: projects[row],
-                    isFocused: tableView.selectedRow == row,
-                    isFirst: row == 0
-                ))
+                let hostingView = NSHostingView(
+                    rootView: ProjectListEntryView(
+                        project: projects[row],
+                        isFocused: tableView.selectedRow == row,
+                        isFirst: row == 0
+                    ))
                 hostingView.identifier = identifier
                 hostingView.translatesAutoresizingMaskIntoConstraints = false
                 return hostingView
