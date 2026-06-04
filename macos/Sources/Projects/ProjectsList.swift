@@ -103,7 +103,8 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
                     rootView: ProjectListEntryView(
                         project: projects[row],
                         isFocused: tableView.selectedRow == row,
-                        isFirst: row == 0
+                        isPreviousFocused: tableView.selectedRow == row - 1,
+                        isLast: row == projects.count - 1
                     ))
                 hostingView.identifier = identifier
                 hostingView.translatesAutoresizingMaskIntoConstraints = false
@@ -113,8 +114,10 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         cell.rootView = ProjectListEntryView(
             project: projects[row],
             isFocused: tableView.selectedRow == row,
-            isFirst: row == 0
+            isPreviousFocused: tableView.selectedRow == row - 1,
+            isLast: row == projects.count - 1
         )
+        cell.layer?.zPosition = tableView.selectedRow == row ? 1 : 0
         return cell
     }
 
@@ -139,10 +142,19 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
 struct ProjectListEntryView: View {
     let project: Project
     let isFocused: Bool
-    let isFirst: Bool
+    let isPreviousFocused: Bool
+    let isLast: Bool
 
     private var borderColor: Color {
         if isFocused {
+            .blue
+        } else {
+            Color(NSColor(hex: "#393939"))
+        }
+    }
+
+    private var topBorderColor: Color {
+        if isFocused || isPreviousFocused {
             .blue
         } else {
             Color(NSColor(hex: "#393939"))
@@ -168,16 +180,16 @@ struct ProjectListEntryView: View {
         .padding(Padding.`4`)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: Alignment.topLeading)
         .overlay(alignment: .top) {
-            if isFirst {
+            Rectangle()
+                .fill(topBorderColor)
+                .frame(height: 1)
+        }
+        .overlay(alignment: .bottom) {
+            if isLast {
                 Rectangle()
                     .fill(borderColor)
                     .frame(height: 1)
             }
-        }
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(borderColor)
-                .frame(height: 1)
         }
         .overlay(alignment: .leading) {
             if isFocused {
