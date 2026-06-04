@@ -47,6 +47,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     func addProject(project: Project) {
         projects.append(project)
     }
+
+    public func selectNewProject() {
+        let panel = NSOpenPanel()
+        panel.title = "Add Project"
+        panel.prompt = "Add Project"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        addProject(project: Project(abs_path: url.path))
+    }
 }
 
 private enum ProjectsState {
