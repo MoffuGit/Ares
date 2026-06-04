@@ -119,7 +119,10 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
-        tableView.reloadData()
+        tableView.reloadData(
+            forRowIndexes: IndexSet(integersIn: 0..<tableView.numberOfRows),
+            columnIndexes: IndexSet(integer: 0)
+        )
     }
 
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
@@ -142,7 +145,6 @@ struct ProjectListEntryView: View {
         if isFocused {
             .blue
         } else {
-
             Color(NSColor(hex: "#393939"))
         }
     }
