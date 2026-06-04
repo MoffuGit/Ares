@@ -40,6 +40,31 @@ const State = struct {
     }
 };
 
+const MessagePool = struct {
+    const Pool = std.heap.MemoryPool(Worker.Message);
+
+    mutex: Io.Mutex = .init,
+    pool: Pool = .empty,
+
+    pub fn create(self: *MessagePool, io: Io, gpa: Allocator) !*Worker.Message {
+        try self.mutex.lock(io);
+        defer self.mutex.unlock(io);
+
+        return try self.pool.create(gpa);
+    }
+
+    pub fn destroy(self: *MessagePool, io: Io, message: *Worker.Message) void {
+        self.mutex.lock(io) catch unreachable;
+        defer self.mutex.unlock(io);
+
+        self.pool.destroy(message);
+    }
+
+    pub fn deinit(self: *MessagePool, gpa: Allocator) void {
+        self.pool.deinit(gpa);
+    }
+};
+
 state: State,
 gpa: Allocator,
 arena: Allocator,
@@ -111,11 +136,9 @@ const Worker = struct {
         sender: Channel.Sender,
     };
 
-    const Pool = std.heap.MemoryPool(Message);
-
     gpa: Allocator,
     arena: Allocator,
-    pool: Pool,
+    pool: *MessagePool,
     queue: std.SinglyLinkedList,
     next_entry_id: *atomic.Value(u64),
 
@@ -128,8 +151,6 @@ const Worker = struct {
                 std.log.err("worker err: {}", .{err});
             }
         };
-
-        self.pool.deinit(self.gpa);
     }
 
     pub fn _work(self: *Worker, state: *State, io: Io, receiver: Channel.Receiver) !void {
@@ -145,18 +166,26 @@ const Worker = struct {
             else
                 try rec.getOne(io);
 
-            defer self.pool.destroy(message);
+            defer self.pool.destroy(io, message);
 
             for (0..message.len) |idx| {
                 var job = message.buffer[idx];
                 defer job.sender.close(io);
 
-                try self.scanDir(state, io, &path_z, &job, &entries);
+                try self.scanDir(io, &path_z, &job, &entries);
+            }
+
+            if (entries.items.len != 0) {
+                try state.lock(io);
+                defer state.unlock(io);
+
+                for (entries.items) |entry| try state.snapshot.insert(self.gpa, entry);
+                entries.clearRetainingCapacity();
             }
         }
     }
 
-    fn scanDir(self: *Worker, state: *State, io: Io, path_z: [:0]u8, job: *const Job, entries: *std.ArrayList(Snapshot.Entry)) !void {
+    fn scanDir(self: *Worker, io: Io, path_z: [:0]u8, job: *const Job, entries: *std.ArrayList(Snapshot.Entry)) !void {
         const abs_path = job.abs_path;
         @memcpy(path_z[0..abs_path.len], abs_path);
         path_z[abs_path.len] = 0;
@@ -164,7 +193,7 @@ const Worker = struct {
         const dir = c.opendir(path_z.ptr) orelse return error.OPENDIR;
         defer _ = c.closedir(dir);
 
-        var message = try self.pool.create(self.gpa);
+        var message = try self.pool.create(io, self.gpa);
         message.init();
 
         while (c.readdir(dir)) |entry_raw| {
@@ -182,7 +211,7 @@ const Worker = struct {
 
             if (message.full()) {
                 self.queue.prepend(&message.node);
-                message = try self.pool.create(self.gpa);
+                message = try self.pool.create(io, self.gpa);
                 message.init();
             }
 
@@ -194,7 +223,7 @@ const Worker = struct {
         }
 
         if (message.len == 0) {
-            self.pool.destroy(message);
+            self.pool.destroy(io, message);
         } else {
             self.queue.prepend(&message.node);
         }
@@ -205,14 +234,6 @@ const Worker = struct {
                 self.queue.prepend(node);
                 break;
             }
-        }
-
-        if (entries.items.len != 0) {
-            try state.lock(io);
-            defer state.unlock(io);
-
-            for (entries.items) |entry| try state.snapshot.insert(self.gpa, entry);
-            entries.clearRetainingCapacity();
         }
     }
 };
@@ -225,6 +246,8 @@ pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
 
     var channel: Worker.Channel = .init(buffer);
     var group: Io.Group = .init;
+    var pool: MessagePool = .{};
+    defer pool.deinit(self.gpa);
 
     {
         const snapshot = self.state.snapshot;
@@ -258,7 +281,7 @@ pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
         worker.* = .{
             .arena = self.arena,
             .gpa = self.gpa,
-            .pool = .empty,
+            .pool = &pool,
             .queue = .{},
             .next_entry_id = self.next_entry_id,
         };
