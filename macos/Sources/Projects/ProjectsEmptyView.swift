@@ -10,14 +10,7 @@ struct ProjectEmptyView: View {
             Text("Odyssey")
                 .font(.system(size: 38, weight: .semibold))
                 .foregroundStyle(.white)
-
-            Components.Button(
-                title: "Open Project",
-                symbolName: "folder",
-            ) {
-                selectNewProject()
-            }
-            .focusEffectDisabled()
+            UI.Button("Add Project", icon: Image(systemName:"folder"), action: {selectNewProject()})
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
