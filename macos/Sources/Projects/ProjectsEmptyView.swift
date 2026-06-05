@@ -6,9 +6,10 @@ struct ProjectEmptyView: View {
     @State private var showingOpenPanel = false
 
     var body: some View {
-        Text("Odyssey")
-            .font(.system(size: 38, weight: .semibold))
-            .foregroundStyle(.white)
+        Text("You don't have any project yet.\nOpen a new project (+)")
+            .font(Theme.Fonts.sm)
+            .foregroundStyle(Color(Theme.Colors.mutedForeground))
+            .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

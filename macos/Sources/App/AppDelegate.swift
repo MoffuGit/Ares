@@ -15,6 +15,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var projectControllerState: ProjectsState = .uninitialized
     @Published var projects: [Project] = []
 
+    var odysseyApp: Odyssey.App {
+        app
+    }
+
     var projectsController: ProjectsController {
         switch projectControllerState {
         case .initialized(let controller):
@@ -46,6 +50,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func addProject(project: Project) {
         projects.append(project)
+    }
+
+    func openWorkspace(for project: Project) {
+        let controller = WorkspaceController(app: self, project: project)
+        controller.showWindow(nil)
+        controller.window?.center()
     }
 
     public func selectNewProject() {

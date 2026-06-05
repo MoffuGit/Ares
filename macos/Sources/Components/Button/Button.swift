@@ -64,6 +64,7 @@ extension UI {
                     if let icon = icon, iconPosition == .leading {
                         icon
                             .font(size.font)
+                            .frame(width: 16, height: 16)
                     }
 
                     if let title = title {

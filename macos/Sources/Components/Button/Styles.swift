@@ -80,10 +80,7 @@ public enum ButtonSize {
     
     var padding: EdgeInsets {
         switch self {
-        case .iconXs:
-            EdgeInsets(
-                top: Padding.`1.5`, leading: Padding.`1.5`, bottom: Padding.`1.5`, trailing: Padding.`1.5`)
-        case .icon, .sm :
+        case .icon, .sm, .iconXs:
             EdgeInsets(
                 top: Padding.`1`, leading: Padding.`1`, bottom: Padding.`1`, trailing: Padding.`1`)
         default:

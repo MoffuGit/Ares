@@ -5,9 +5,11 @@ import SwiftUI
 class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
     private var emptyView: NSHostingView<ProjectEmptyView>!
     private let scrollView = NSScrollView()
-    private let tableView: NSTableView = {
+    private lazy var tableView: NSTableView = {
         let tableView = NSTableView()
         tableView.translatesAutoresizingMaskIntoConstraints = false
+        tableView.target = self
+        tableView.doubleAction = #selector(openSelectedWorkspace)
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("Value"))
         column.title = "Value"
@@ -52,7 +54,7 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         tableView.dataSource = self
         tableView.delegate = self
         tableView.backgroundColor = NSColor(Theme.Colors.background)
-        tableView.rowHeight = 120
+        tableView.rowHeight = 85
         tableView.intercellSpacing = .zero
         tableView.selectionHighlightStyle = .none
         tableView.style = .plain
@@ -128,6 +130,15 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         )
     }
 
+    @objc private func openSelectedWorkspace(_ sender: NSTableView) {
+        openWorkspace(at: sender.clickedRow)
+    }
+
+    private func openWorkspace(at row: Int) {
+        guard projects.indices.contains(row) else { return }
+        app.openWorkspace(for: projects[row])
+    }
+
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
         window?.makeFirstResponder(tableView)
         return true
@@ -165,7 +176,7 @@ struct ProjectListEntryView: View {
         VStack(alignment: .leading) {
             Spacer()
             Text(project.name)
-                .font(Theme.Fonts.`3xl`)
+                .font(Theme.Fonts.xl)
                 .foregroundStyle(.white)
                 .lineLimit(1)
 
@@ -173,11 +184,10 @@ struct ProjectListEntryView: View {
 
             Text(project.abs_path)
                 .font(Theme.Fonts.xs)
-                .foregroundStyle(.white.opacity(0.48))
-                .fontWeight(.medium)
+                .foregroundStyle(Color(Theme.Colors.mutedForeground))
                 .lineLimit(1)
         }
-        .padding(Padding.`4`)
+        .padding(Padding.`3`)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: Alignment.topLeading)
         .overlay(alignment: .top) {
             Rectangle()

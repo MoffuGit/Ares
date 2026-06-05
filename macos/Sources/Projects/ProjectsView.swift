@@ -49,10 +49,10 @@ class ProjectsView: NSView {
             titlebar.leadingAnchor.constraint(equalTo: leadingAnchor),
             titlebar.trailingAnchor.constraint(equalTo: trailingAnchor),
             titlebar.topAnchor.constraint(equalTo: topAnchor),
-            titlebar.heightAnchor.constraint(equalToConstant: 44),
+            titlebar.heightAnchor.constraint(equalToConstant: 36),
 
-            closeButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            closeButton.topAnchor.constraint(equalTo: topAnchor, constant: 18),
+            closeButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 15),
+            closeButton.topAnchor.constraint(equalTo: topAnchor, constant: 15),
             closeButton.widthAnchor.constraint(equalToConstant: 6),
             closeButton.heightAnchor.constraint(equalToConstant: 6),
         ])
@@ -68,18 +68,31 @@ struct ProjectsTitlebar: View {
     let app: AppDelegate
 
     var body: some View {
-        HStack(alignment: .center) {
+        HStack(alignment: .center, spacing: 0) {
             Spacer()
+            
             Text("Projects")
+                .font(Theme.Fonts.xs.font.leading(.tight))
+                .fontWeight(.light)
+                .foregroundStyle(Color(Theme.Colors.foreground))
+            
             Spacer()
+            
             UI.Button(
-                nil, Image(systemName: "folder"), action: { app.selectNewProject() }
+                nil, Image(systemName: "plus"), action: { app.selectNewProject() }
             )
-            .variant(.outline)
+            .variant(.ghost)
+            .size(.iconXs)
+            
+            UI.Button(
+                nil, Image(systemName: "minus"), action: { app.selectNewProject() }
+            )
+            .variant(.ghost)
             .size(.iconXs)
         }
-        .padding(.horizontal, Padding.`2.5`)
-        .frame(maxWidth: .infinity, maxHeight: 44)
+        .padding(.trailing, Padding.`1.5`)
+        .padding(.leading, Padding.`9`)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(Theme.Colors.background))
         .gesture(WindowDragGesture())
         .allowsWindowActivationEvents()
