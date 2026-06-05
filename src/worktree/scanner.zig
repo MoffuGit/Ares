@@ -196,11 +196,14 @@ const Worker = struct {
         var message = try self.pool.create(io, self.gpa);
         message.init();
 
+        const point = ".";
+        const pointpoint = "..";
+
         while (c.readdir(dir)) |entry_raw| {
             const entry: *const c.dirent = @ptrCast(@alignCast(entry_raw));
             const name = direntNameFromEntry(entry);
 
-            if (std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) continue;
+            if (std.mem.eql(u8, name, point) or std.mem.eql(u8, name, pointpoint)) continue;
 
             const child_path = try std.mem.join(self.arena, "/", &.{ job.path_name, name });
             const child_abs_path = try std.mem.join(self.arena, "/", &.{ job.abs_path, name });
@@ -222,11 +225,7 @@ const Worker = struct {
             });
         }
 
-        if (message.len == 0) {
-            self.pool.destroy(io, message);
-        } else {
-            self.queue.prepend(&message.node);
-        }
+        self.queue.prepend(&message.node);
 
         while (self.queue.popFirst()) |node| {
             const msg: *Message = @ptrCast(@alignCast(node));
