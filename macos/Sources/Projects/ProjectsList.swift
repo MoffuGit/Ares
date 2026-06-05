@@ -54,7 +54,7 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         tableView.dataSource = self
         tableView.delegate = self
         tableView.backgroundColor = NSColor(Theme.Colors.background)
-        tableView.rowHeight = 85
+        tableView.rowHeight = 95
         tableView.intercellSpacing = .zero
         tableView.selectionHighlightStyle = .none
         tableView.style = .plain
@@ -187,7 +187,8 @@ struct ProjectListEntryView: View {
                 .foregroundStyle(Color(Theme.Colors.mutedForeground))
                 .lineLimit(1)
         }
-        .padding(Padding.`3`)
+        .padding(.horizontal, Padding.`3`)
+        .padding(.vertical, Padding.`2.5`)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: Alignment.topLeading)
         .overlay(alignment: .top) {
             Rectangle()
