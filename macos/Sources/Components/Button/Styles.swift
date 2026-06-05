@@ -11,11 +11,11 @@ public enum ButtonVariant {
     var backgroundColor: Color {
         switch self {
         case .primary:
-            return Color(NSColor(hex: "#117DFE"))
+            return Color(Theme.Colors.primary)
         case .secondary:
-            return Color(NSColor(hex: "#141414"))
+            return Color(Theme.Colors.secondary)
         case .outline:
-            return Color(NSColor(hex: "#141414"))
+            return Color(Theme.Colors.background)
         case .ghost, .link:
             return .clear
         case .destructive:
@@ -26,24 +26,24 @@ public enum ButtonVariant {
     var foregroundColor: Color {
         switch self {
         case .primary:
-            return Color.white
+            return Color(Theme.Colors.primaryForeground)
         case .secondary:
-            return Color(NSColor(hex: "#828282"))
+            return Color(Theme.Colors.secondaryForeground)
         case .outline:
-            return Color(NSColor(hex: "#828282"))
+            return Color(Theme.Colors.foreground)
         case .ghost:
-            return Color.white
+            return Color(Theme.Colors.foreground)
         case .link:
-            return Color.white
+            return Color(Theme.Colors.foreground)
         case .destructive:
-            return Color.white
+            return Color(Theme.Colors.destructiveForeground)
         }
     }
     
     var borderColor: Color? {
         switch self {
         case .outline:
-            return Color(NSColor(hex:"#393939"))
+            return Color(Theme.Colors.border)
         default:
             return nil
         }
@@ -57,9 +57,9 @@ public enum ButtonVariant {
         if isPressed {
             switch self {
             case .primary:
-                return Color(NSColor(hex: "#117DFE")).opacity(0.8)
+                return Color(Theme.Colors.primary).opacity(0.8)
             case .secondary:
-                return Color(NSColor(hex: "#141414")).opacity(0.8)
+                return Color(Theme.Colors.secondary).opacity(0.8)
             case .outline:
                 return Color.gray.opacity(0.2)
             case .ghost:
@@ -92,12 +92,12 @@ public enum ButtonSize {
         }
     }
     
-    var font: Typography {
+    var font: ThemeFont {
         switch self{
         case .xs, .iconXs:
-                .xs
+            Theme.Fonts.xs
         default:
-                .sm
+            Theme.Fonts.sm
         }
     }
     

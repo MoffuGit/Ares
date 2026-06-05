@@ -27,7 +27,7 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         super.init(frame: .zero)
 
         wantsLayer = true
-        layer?.backgroundColor = NSColor(hex: "#080808").cgColor
+        layer?.setBackgroundColor(Theme.Colors.background)
 
         emptyView = NSHostingView(rootView: ProjectEmptyView(app: app))
         emptyView.translatesAutoresizingMaskIntoConstraints = false
@@ -36,7 +36,7 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = NSColor(hex: "#080808")
+        scrollView.backgroundColor = NSColor(Theme.Colors.background)
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
 
@@ -51,7 +51,7 @@ class ProjectsList: NSView, NSTableViewDataSource, NSTableViewDelegate {
 
         tableView.dataSource = self
         tableView.delegate = self
-        tableView.backgroundColor = NSColor(hex: "#080808")
+        tableView.backgroundColor = NSColor(Theme.Colors.background)
         tableView.rowHeight = 120
         tableView.intercellSpacing = .zero
         tableView.selectionHighlightStyle = .none
@@ -147,17 +147,17 @@ struct ProjectListEntryView: View {
 
     private var borderColor: Color {
         if isFocused {
-            Color(NSColor(hex: "#117DFE"))
+            Color(Theme.Colors.ring)
         } else {
-            Color(NSColor(hex: "#393939"))
+            Color(Theme.Colors.border)
         }
     }
 
     private var topBorderColor: Color {
         if isFocused || isPreviousFocused {
-             Color(NSColor(hex: "#117DFE"))
+            Color(Theme.Colors.ring)
         } else {
-            Color(NSColor(hex: "#393939"))
+            Color(Theme.Colors.border)
         }
     }
 
@@ -165,14 +165,14 @@ struct ProjectListEntryView: View {
         VStack(alignment: .leading) {
             Spacer()
             Text(project.name)
-                .typography(.`3xl`)
+                .font(Theme.Fonts.`3xl`)
                 .foregroundStyle(.white)
                 .lineLimit(1)
 
             Spacer()
 
             Text(project.abs_path)
-                .typography(.xs)
+                .font(Theme.Fonts.xs)
                 .foregroundStyle(.white.opacity(0.48))
                 .fontWeight(.medium)
                 .lineLimit(1)

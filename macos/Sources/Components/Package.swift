@@ -18,9 +18,9 @@ public enum Padding {
 }
 
 public enum BorderRadius {
-    public static let xs: CGFloat = 2
-    public static let sm: CGFloat = 4
-    public static let md: CGFloat = 6
-    public static let lg: CGFloat = 8
-    public static let xl: CGFloat = 12
+    public static let xs = Theme.Radius.xs
+    public static let sm = Theme.Radius.sm
+    public static let md = Theme.Radius.md
+    public static let lg = Theme.Radius.lg
+    public static let xl = Theme.Radius.xl
 }

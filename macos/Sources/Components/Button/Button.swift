@@ -3,9 +3,8 @@ import SwiftUI
 extension UI {
     public struct Button: View {
         private let title: String?
-        private let variant: ButtonVariant
-        private let size: ButtonSize
-        private let fullWidth: Bool
+        private var variant: ButtonVariant = .primary
+        private var size: ButtonSize = .md
         private let icon: Image?
         private let iconPosition: IconPosition
         private let action: () -> Void
@@ -19,22 +18,40 @@ extension UI {
 
         public init(
             _ title: String? = nil,
-            variant: ButtonVariant = .primary,
-            size: ButtonSize = .md,
-            fullWidth: Bool = false,
+            _ icon: Image? = nil,
+            action: @escaping () -> Void
+        ) {
+            self.title = title
+            self.icon = icon
+            self.iconPosition = .leading
+            self.isEnabled = true
+            self.action = action
+        }
+
+        public init(
+            _ title: String? = nil,
             icon: Image? = nil,
             iconPosition: IconPosition = .leading,
             isEnabled: Bool = true,
             action: @escaping () -> Void
         ) {
             self.title = title
-            self.variant = variant
-            self.size = size
-            self.fullWidth = fullWidth
             self.icon = icon
             self.iconPosition = iconPosition
             self.isEnabled = isEnabled
             self.action = action
+        }
+
+        public func variant(_ variant: ButtonVariant) -> Self {
+            var button = self
+            button.variant = variant
+            return button
+        }
+
+        public func size(_ size: ButtonSize) -> Self {
+            var button = self
+            button.size = size
+            return button
         }
 
         public var body: some View {
@@ -46,21 +63,20 @@ extension UI {
                 HStack(spacing: Padding.`1`) {
                     if let icon = icon, iconPosition == .leading {
                         icon
-                            .font(size.font.font)
+                            .font(size.font)
                     }
 
                     if let title = title {
                         Text(title)
-                            .typography(size.font)
+                            .font(size.font)
                     }
 
                     if let icon = icon, iconPosition == .trailing {
                         icon
-                            .font(size.font.font)
+                            .font(size.font)
                     }
                 }
                 .padding(size.padding)
-                .frame(maxWidth: fullWidth ? .infinity : nil)
                 .background(
                     variant.getBackgroundColor(isPressed: isPressed, isEnabled: isEnabled)
                 )
