@@ -74,7 +74,7 @@ struct ProjectsTitlebar: View {
             Text("Projects")
             Spacer()
             UI.Button(
-               variant: .secondary,  size: .iconXs, icon: Image(systemName: "folder"), action: { app.selectNewProject() }
+               variant: .outline,  size: .iconXs, icon: Image(systemName: "folder"), action: { app.selectNewProject() }
             )
         }
         .padding(.horizontal, Padding.`2.5`)

@@ -14,7 +14,9 @@ public enum ButtonVariant {
             return Color(NSColor(hex: "#117DFE"))
         case .secondary:
             return Color(NSColor(hex: "#141414"))
-        case .outline, .ghost, .link:
+        case .outline:
+            return Color(NSColor(hex: "#141414"))
+        case .ghost, .link:
             return .clear
         case .destructive:
             return Color.red
@@ -28,7 +30,7 @@ public enum ButtonVariant {
         case .secondary:
             return Color(NSColor(hex: "#828282"))
         case .outline:
-            return Color.white.opacity(0.6)
+            return Color(NSColor(hex: "#828282"))
         case .ghost:
             return Color.white
         case .link:

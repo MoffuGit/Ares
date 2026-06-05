@@ -70,7 +70,7 @@ extension UI {
                     RoundedRectangle(cornerRadius: size.cornerRadius)
                         .stroke(
                             variant.borderColor ?? .clear,
-                            lineWidth: variant.borderColor != nil ? 1 : 0)
+                            lineWidth: variant.borderColor != nil ? 0.5 : 0)
                 )
                 .contentShape(Rectangle())
             }
