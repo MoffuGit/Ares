@@ -21,7 +21,7 @@ class ProjectsController: NSWindowController,
 
     init(app: AppDelegate) {
         let window = ProjectsWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
+            contentRect: NSRect(x: 0, y: 0, width: 550, height: 450),
             styleMask: [.closable, .miniaturizable, .borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
