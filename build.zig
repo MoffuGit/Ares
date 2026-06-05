@@ -108,7 +108,7 @@ pub fn build(b: *std.Build) void {
                         .dsym = null,
                     },
                 },
-                .out_path = "Odyssey/OdysseyKit.xcframework",
+                .out_path = "macos/OdysseyKit.xcframework",
             },
         );
 
