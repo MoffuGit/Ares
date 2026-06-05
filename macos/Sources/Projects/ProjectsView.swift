@@ -72,7 +72,7 @@ struct ProjectsTitlebar: View {
         HStack(alignment: .center) {
             Spacer()
             UI.Button(
-                variant: .outline,
+                variant: .primary,
                 size: .icon,
                 icon: Image(systemName: "plus"),
                 action: { app.selectNewProject() }

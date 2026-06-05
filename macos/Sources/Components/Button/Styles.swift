@@ -11,7 +11,7 @@ public enum ButtonVariant {
     var backgroundColor: Color {
         switch self {
         case .primary:
-            return Color.blue
+            return Color(NSColor(hex: "#117DFE"))
         case .secondary:
             return Color.secondary
         case .outline, .ghost, .link:
@@ -28,7 +28,7 @@ public enum ButtonVariant {
         case .secondary:
             return Color.gray
         case .outline:
-            return Color.white
+            return Color.white.opacity(0.6)
         case .ghost:
             return Color.white
         case .link:
@@ -41,7 +41,7 @@ public enum ButtonVariant {
     var borderColor: Color? {
         switch self {
         case .outline:
-            return Color.gray
+            return Color(NSColor(hex:"#393939"))
         default:
             return nil
         }
@@ -55,7 +55,7 @@ public enum ButtonVariant {
         if isPressed {
             switch self {
             case .primary:
-                return Color.blue.opacity(0.9)
+                return Color(NSColor(hex: "#117DFE")).opacity(0.8)
             case .secondary:
                 return Color.secondary.opacity(0.9)
             case .outline:

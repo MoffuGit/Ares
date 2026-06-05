@@ -147,7 +147,7 @@ struct ProjectListEntryView: View {
 
     private var borderColor: Color {
         if isFocused {
-            .blue
+            Color(NSColor(hex: "#117DFE"))
         } else {
             Color(NSColor(hex: "#393939"))
         }
@@ -155,7 +155,7 @@ struct ProjectListEntryView: View {
 
     private var topBorderColor: Color {
         if isFocused || isPreviousFocused {
-            .blue
+             Color(NSColor(hex: "#117DFE"))
         } else {
             Color(NSColor(hex: "#393939"))
         }
