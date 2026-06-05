@@ -6,7 +6,7 @@ struct ProjectEmptyView: View {
     @State private var showingOpenPanel = false
 
     var body: some View {
-        Text("You don't have any project yet.\nOpen a new project (+)")
+        Text("Open a new project (+)")
             .font(Theme.Fonts.sm)
             .foregroundStyle(Color(Theme.Colors.mutedForeground))
             .multilineTextAlignment(.center)
