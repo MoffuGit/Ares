@@ -105,30 +105,7 @@ pub fn run(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
 const Worker = struct {
     pub const Channel = ch.Channel(*Message);
 
-    pub const Message = struct {
-        node: std.SinglyLinkedList.Node = .{},
-        buffer: [128]Worker.Job,
-        len: u8,
-
-        pub fn init(self: *Message) void {
-            self.* = .{
-                .node = .{},
-                .buffer = undefined,
-                .len = 0,
-            };
-        }
-
-        pub fn append(self: *Message, job: Worker.Job) void {
-            assert(self.buffer.len != self.len);
-
-            self.buffer[self.len] = job;
-            self.len += 1;
-        }
-
-        pub fn full(self: *Message) bool {
-            return self.len == self.buffer.len;
-        }
-    };
+    pub const Message = struct { node: std.SinglyLinkedList.Node = .{}, job: Job = undefined };
 
     pub const Job = struct {
         abs_path: []const u8,
@@ -166,21 +143,26 @@ const Worker = struct {
             else
                 try rec.getOne(io);
 
-            defer self.pool.destroy(io, message);
+            var job = message.job;
+            self.pool.destroy(io, message);
+            defer job.sender.close(io);
 
-            for (0..message.len) |idx| {
-                var job = message.buffer[idx];
-                defer job.sender.close(io);
+            try self.scanDir(io, &path_z, &job, &entries);
 
-                try self.scanDir(io, &path_z, &job, &entries);
-            }
-
-            if (entries.items.len != 0) {
+            {
                 try state.lock(io);
                 defer state.unlock(io);
 
                 for (entries.items) |entry| try state.snapshot.insert(self.gpa, entry);
                 entries.clearRetainingCapacity();
+            }
+
+            while (self.queue.popFirst()) |node| {
+                const msg: *Message = @ptrCast(@alignCast(node));
+                if (try @constCast(&job.sender).put(io, &.{msg}, 0) == 0) {
+                    self.queue.prepend(node);
+                    break;
+                }
             }
         }
     }
@@ -194,7 +176,6 @@ const Worker = struct {
         defer _ = c.closedir(dir);
 
         var message = try self.pool.create(io, self.gpa);
-        message.init();
 
         const point = ".";
         const pointpoint = "..";
@@ -212,28 +193,16 @@ const Worker = struct {
 
             if (entry.type != c.DT.DIR) continue;
 
-            if (message.full()) {
-                self.queue.prepend(&message.node);
-                message = try self.pool.create(io, self.gpa);
-                message.init();
-            }
-
-            message.append(.{
+            message.job = .{
                 .abs_path = child_abs_path,
                 .path_name = child_path,
                 .sender = @constCast(&job.sender).clone(),
-            });
+            };
+            self.queue.prepend(&message.node);
+            message = try self.pool.create(io, self.gpa);
         }
 
-        self.queue.prepend(&message.node);
-
-        while (self.queue.popFirst()) |node| {
-            const msg: *Message = @ptrCast(@alignCast(node));
-            if (try @constCast(&job.sender).put(io, &.{msg}, 0) == 0) {
-                self.queue.prepend(node);
-                break;
-            }
-        }
+        self.pool.destroy(io, message);
     }
 };
 
@@ -256,11 +225,7 @@ pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
         const message = try self.arena.create(Worker.Message);
         errdefer self.arena.destroy(message);
 
-        message.* = .{
-            .len = 1,
-            .buffer = undefined,
-        };
-        message.buffer[0] = .{
+        message.job = .{
             .abs_path = snapshot.abs_root,
             .path_name = snapshot.root_name,
             .sender = _sender,
