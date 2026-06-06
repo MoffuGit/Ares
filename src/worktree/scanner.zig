@@ -240,10 +240,9 @@ const Worker = struct {
 pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
     const cpu_count = try std.Thread.getCpuCount();
 
-    const buffer = try self.gpa.alloc(*Worker.Message, 1024);
-    defer self.gpa.free(buffer);
+    var buffer: [1024]*Worker.Message = undefined;
 
-    var channel: Worker.Channel = .init(buffer);
+    var channel: Worker.Channel = .init(&buffer);
     var group: Io.Group = .init;
     var pool: MessagePool = .{};
     defer pool.deinit(self.gpa);
