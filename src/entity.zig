@@ -39,26 +39,44 @@ pub const EntityRefs = struct {
 
         return try self.refs.put(.init(1));
     }
+
+    pub fn reserveMany(self: @This(), buffer: []EntityId, io: Io) !void {
+        try self.rwlock.lock(io);
+        defer self.rwlock.unlock(io);
+
+        var idx: u64 = 0;
+        while (idx < buffer.len) : (idx += 1) {
+            buffer[idx] = try self.refs.put(.init(1));
+        }
+    }
 };
 
 pub const AnyEntity = struct {
     refs: *EntityRefs,
-    entity_id: EntityId,
     type_id: TypeId,
+    id: EntityId,
 
-    pub fn init(refs: *EntityRefs, entity_id: EntityId, type_id: TypeId) @This() {
-        return .{ .refs = refs, .entity_id = entity_id, .type_id = type_id };
+    pub fn init(refs: *EntityRefs, id: EntityId, type_id: TypeId) @This() {
+        return .{ .refs = refs, .id = id, .type_id = type_id };
     }
 
-    pub fn clone(self: @This()) @This() {
-        const ref = self.refs.refs.get(self.entity_id) orelse return self;
+    pub fn clone(self: @This(), io: Io) !@This() {
+        const refs = self.refs;
+        try refs.rwlock.lockShared(io);
+        defer refs.rwlock.unlockShared(io);
+
+        const ref = refs.refs.get(self.id) orelse @panic("Cloning a released AnyEntity");
         const previous = ref.fetchAdd(1, .acq_rel);
         assert(previous > 0);
         return self;
     }
 
-    pub fn close(self: @This(), gpa: Allocator) !void {
-        const ref = self.refs.refs.get(self.entity_id) orelse return;
+    pub fn drop(self: @This(), gpa: Allocator, io: Io) !void {
+        const refs = self.refs;
+        try refs.rwlock.lockShared(io);
+        defer refs.rwlock.unlockShared(io);
+
+        const ref = refs.refs.get(self.id) orelse @panic("Dropping a released AnyEntity");
         const previous = ref.fetchSub(1, .acq_rel);
         assert(previous > 0);
         if (previous == 1) {
@@ -71,16 +89,16 @@ pub fn Entity(comptime T: type) type {
     return struct {
         any: AnyEntity,
 
-        pub fn init(refs: *EntityRefs, entity_id: EntityId) @This() {
-            return .{ .any = .init(refs, entity_id, TypeInfo.init(T)) };
+        pub fn init(refs: *EntityRefs, id: EntityId) @This() {
+            return .{ .any = .init(refs, id, TypeInfo.init(T)) };
         }
 
-        pub fn clone(self: @This()) @This() {
-            return .{ .any = self.any.clone() };
+        pub fn clone(self: @This(), io: Io) !@This() {
+            return .{ .any = try self.any.clone(io) };
         }
 
-        pub fn close(self: @This(), gpa: Allocator) !void {
-            try self.any.close(gpa);
+        pub fn drop(self: @This(), gpa: Allocator, io: Io) !void {
+            try self.any.drop(gpa, io);
         }
 
         pub fn get(self: @This(), store: *EntityStore) ?*T {
@@ -125,16 +143,25 @@ pub const EntityStore = struct {
     pub fn get(self: *@This(), comptime T: type, entity: AnyEntity) ?*T {
         assert(entity.type_id == TypeInfo.init(T));
 
-        const ptr = self.entities.get(entity.entity_id) orelse return null;
+        const ptr = self.entities.get(entity.id) orelse return null;
         return @ptrCast(@alignCast(ptr.*));
     }
 
-    pub fn collectDropped(self: *@This(), gpa: Allocator) void {
+    pub fn collect(self: *@This(), gpa: Allocator, io: Io) !std.ArrayList(struct { *anyopaque, EntityId, TypeId }) {
+        var entities: std.ArrayList(struct { *anyopaque, EntityId, TypeId }) = .empty;
+        errdefer entities.deinit(gpa);
+
+        const refs = &self.refs;
+        try refs.rwlock.lock(io);
+        defer refs.rwlock.unlock(io);
+
         while (self.refs.dropped_entities.pop()) |entity| {
-            const ptr = self.entities.remove(entity.entity_id) orelse continue;
-            entity.type_id.destroyOpaque(gpa, ptr);
-            self.refs.refs.remove(entity.entity_id);
+            const ptr = self.entities.remove(entity.id) orelse continue;
+            self.refs.refs.remove(entity.id);
+            try entities.append(gpa, .{ ptr, entity.id, entity.type_id });
         }
+
+        return entities;
     }
 };
 
@@ -176,13 +203,15 @@ test "closing entity records id and type when ref count reaches zero" {
     const id = try store.reserve(io);
     const entity = try store.insert(id, A, ptr);
 
-    try entity.close(allocator);
+    try entity.drop(allocator, io);
 
-    try std.testing.expectEqual(@as(usize, 1), store.refs.dropped_entities.items.len);
-    try std.testing.expect(store.refs.dropped_entities.items[0].entity_id.eql(id));
-    try std.testing.expectEqual(TypeInfo.init(A), store.refs.dropped_entities.items[0].type_id);
+    var collected = try store.collect(allocator, io);
+    defer collected.deinit(allocator);
 
-    _ = store.refs.dropped_entities.pop();
+    try std.testing.expectEqual(@as(usize, 1), collected.items.len);
+    try std.testing.expectEqual(ptr, @as(*A, @ptrCast(@alignCast(collected.items[0][0]))));
+    try std.testing.expect(collected.items[0][1].eql(id));
+    try std.testing.expectEqual(TypeInfo.init(A), collected.items[0][2]);
 }
 
 test "cloning entity increments ref count" {
@@ -201,40 +230,21 @@ test "cloning entity increments ref count" {
 
     const id = try store.reserve(io);
     const entity = try store.insert(id, A, ptr);
-    const clone = entity.clone();
-    const any_clone = entity.any.clone();
+    const clone = try entity.clone(io);
+    const any_clone = try entity.any.clone(io);
 
-    try entity.close(allocator);
-    try clone.close(allocator);
-    try std.testing.expectEqual(@as(usize, 0), store.refs.dropped_entities.items.len);
+    try entity.drop(allocator, io);
+    try clone.drop(allocator, io);
+    var empty_collected = try store.collect(allocator, io);
+    defer empty_collected.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 0), empty_collected.items.len);
 
-    try any_clone.close(allocator);
-    try std.testing.expectEqual(@as(usize, 1), store.refs.dropped_entities.items.len);
-    try std.testing.expect(store.refs.dropped_entities.items[0].entity_id.eql(id));
-    try std.testing.expectEqual(TypeInfo.init(A), store.refs.dropped_entities.items[0].type_id);
+    try any_clone.drop(allocator, io);
+    var collected = try store.collect(allocator, io);
+    defer collected.deinit(allocator);
 
-    _ = store.refs.dropped_entities.pop();
-}
-
-test "collect dropped entities destroys pointers" {
-    const allocator = std.testing.allocator;
-    const io = std.testing.io;
-
-    const A = struct { value: u32 };
-
-    var store: EntityStore = undefined;
-    try store.init(allocator);
-    defer store.deinit(allocator);
-
-    const ptr = try allocator.create(A);
-    ptr.* = .{ .value = 11 };
-
-    const id = try store.reserve(io);
-    const entity = try store.insert(id, A, ptr);
-
-    try entity.close(allocator);
-    store.collectDropped(allocator);
-
-    try std.testing.expectEqual(@as(usize, 0), store.refs.dropped_entities.items.len);
-    try std.testing.expectEqual(@as(?*A, null), entity.get(&store));
+    try std.testing.expectEqual(@as(usize, 1), collected.items.len);
+    try std.testing.expectEqual(ptr, @as(*A, @ptrCast(@alignCast(collected.items[0][0]))));
+    try std.testing.expect(collected.items[0][1].eql(id));
+    try std.testing.expectEqual(TypeInfo.init(A), collected.items[0][2]);
 }
