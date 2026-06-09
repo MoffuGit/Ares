@@ -3,7 +3,7 @@ import SwiftUI
 
 public enum Theme {
     public enum Colors {
-        public static let background = ThemeColor(hex: "#080808")
+        public static let background = ThemeColor(hex: "#000000")
         public static let foreground = ThemeColor(nsColor: .white)
         public static let card = ThemeColor(hex: "#141414")
         public static let cardForeground = ThemeColor(nsColor: .white)

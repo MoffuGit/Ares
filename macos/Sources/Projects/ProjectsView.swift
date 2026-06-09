@@ -5,12 +5,34 @@ import SwiftUI
 struct Project: Identifiable {
     let id: String
     var abs_path: String
+    var displayPath: String
     var name: String
+    var lastOpened: String
+    var fileCount: Int
+    var directoryCount: Int
+    var totalBytes: Int
     
     init(abs_path: String) {
         self.abs_path = abs_path
         self.id = abs_path
+        self.displayPath = Project.relativeDisplayPath(for: abs_path)
         self.name = URL(fileURLWithPath: abs_path).lastPathComponent
+        self.lastOpened = "Today"
+        self.fileCount = 128
+        self.directoryCount = 24
+        self.totalBytes = 42_000_000
+    }
+
+    private static func relativeDisplayPath(for path: String) -> String {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        let components = url.pathComponents
+        let maxVisibleComponents = 4
+
+        if components.count <= maxVisibleComponents {
+            return url.path
+        }
+
+        return "~/" + components.suffix(maxVisibleComponents - 1).joined(separator: "/")
     }
 }
 

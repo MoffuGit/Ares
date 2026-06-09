@@ -34,7 +34,7 @@ struct WorkspaceRootView: View {
                 .foregroundStyle(.white)
                 .lineLimit(1)
 
-            Text(project.abs_path)
+            Text(project.displayPath)
                 .font(Theme.Fonts.xs)
                 .foregroundStyle(.white.opacity(0.48))
                 .lineLimit(1)

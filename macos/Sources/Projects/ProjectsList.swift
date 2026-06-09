@@ -171,31 +171,58 @@ struct ProjectListEntryView: View {
             Color(Theme.Colors.border)
         }
     }
+
+    private var formattedBytes: String {
+        ByteCountFormatter.string(
+            fromByteCount: Int64(project.totalBytes),
+            countStyle: .file
+        )
+    }
     
     var body: some View {
         HStack(alignment: .top) {
-            VStack(alignment: .leading) {
-                Spacer()
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 12) {
+                    Text("001")
+                        .font(Theme.Fonts.xs)
+                        .foregroundStyle(Color(Theme.Colors.mutedForeground))
+                }
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+                Spacer(minLength: 0)
+
                 Text(project.name)
                     .font(Theme.Fonts.xl)
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                
-                Spacer()
-                
-                Text(project.abs_path)
+
+                Spacer(minLength: 0)
+
+                Text(project.displayPath)
                     .font(Theme.Fonts.xs)
                     .foregroundStyle(Color(Theme.Colors.mutedForeground))
                     .lineLimit(1)
             }
-            .padding(.horizontal, Padding.`1.5`)
-            .padding(.vertical, Padding.`1`)
+            .padding(.horizontal, Padding.`1`)
+            .padding(.vertical, Padding.`0.5`)
+
             Spacer()
-            UI.Button(
-                nil, Image(systemName: "minus"), action: {}
-            )
-            .variant(.ghost)
-            .size(.iconXs)
+
+            VStack(alignment: .trailing, spacing: 0) {
+                UI.Button(
+                    nil, Image(systemName: "minus"), action: {}
+                )
+                .variant(.ghost)
+                .size(.iconXs)
+
+                Spacer()
+
+                Text("\(formattedBytes)")
+                    .font(Theme.Fonts.xs)
+                    .foregroundStyle(Color(Theme.Colors.mutedForeground))
+                    .lineLimit(1)
+            }
         }
         .padding(.horizontal, Padding.`1.5`)
         .padding(.vertical, Padding.`1.5`)
@@ -226,5 +253,16 @@ struct ProjectListEntryView: View {
                     .frame(width: 1)
             }
         }
+    }
+}
+
+private struct ProjectMetadataLabel: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        Text("\(title): \(value)")
+            .font(Theme.Fonts.xs)
+            .foregroundStyle(Color(Theme.Colors.mutedForeground))
     }
 }
