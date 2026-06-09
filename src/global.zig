@@ -14,9 +14,8 @@ const GlobalState = struct {
     const Self = @This();
 
     gpa: std.mem.Allocator,
-    threaded: std.Io.Threaded,
 
-    pub fn init(self: *Self, args: std.process.Args.Vector, environ: std.process.Environ.Block) !void {
+    pub fn init(self: *Self, _: std.process.Args.Vector, _: std.process.Environ.Block) !void {
         const gpa = if (use_safe_allocator)
             safe_allocator.allocator()
         else if (builtin.link_libc)
@@ -26,24 +25,17 @@ const GlobalState = struct {
         else
             comptime unreachable;
 
-        const threaded: std.Io.Threaded = .init(gpa, .{
-            .argv0 = .init(.{ .vector = args }),
-            .environ = .{ .block = environ },
-        });
-
         std.log.info("odyssey zig version={}", .{builtin.zig_version});
         std.log.info("odyssey build optimize={}", .{builtin.mode});
 
         self.* = .{
             .gpa = gpa,
-            .threaded = threaded,
         };
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(_: *Self) void {
         if (use_safe_allocator) {
             _ = safe_allocator.deinit(); // Leaks do not affect return code.
         }
-        self.threaded.deinit();
     }
 };

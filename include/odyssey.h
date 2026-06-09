@@ -14,8 +14,8 @@ void odyssey_deinit(void);
 odyssey_app_t odyssey_app_new(void);
 void odyssey_app_free(odyssey_app_t);
 
-odyssey_workspace_t odyssey_workspace_new(odyssey_app_t);
-void odyssey_workspace_free(odyssey_app_t, odyssey_workspace_t);
+odyssey_workspace_t odyssey_workspace_new();
+void odyssey_workspace_free(odyssey_workspace_t);
 
 #ifdef __cplusplus
 }

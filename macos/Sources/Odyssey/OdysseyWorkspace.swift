@@ -13,13 +13,13 @@ extension Odyssey {
         var workspace: odyssey_workspace_t? {
             didSet {
                 guard let old = oldValue else { return }
-                odyssey_workspace_free(app.app, old)
+                odyssey_workspace_free( old)
             }
         }
 
         init(app: Odyssey.App) {
             self.app = app
-            guard let workspace = odyssey_workspace_new(app.app) else {
+            guard let workspace = odyssey_workspace_new() else {
                 logger.critical("odyssey_workspace_new failed")
                 return
             }

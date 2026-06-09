@@ -37,7 +37,7 @@ fn app_new() !*App {
     var app = try state.gpa.create(App);
     errdefer state.gpa.destroy(app);
 
-    try app.init();
+    try app.init(state.gpa);
 
     return app;
 }
@@ -47,27 +47,24 @@ pub export fn odyssey_app_free(app: *App) void {
     state.gpa.destroy(app);
 }
 
-pub export fn odyssey_workspace_new(app: *App) ?*Workspace {
-    return workspace_new(app) catch |err| {
+pub export fn odyssey_workspace_new() ?*Workspace {
+    return workspace_new() catch |err| {
         std.log.err("error initializing workspace: {}", .{err});
         return null;
     };
 }
 
-fn workspace_new(app: *App) !*Workspace {
+fn workspace_new() !*Workspace {
     const workspace = try state.gpa.create(Workspace);
     errdefer state.gpa.destroy(workspace);
 
     try workspace.init();
     errdefer workspace.deinit(state.gpa);
 
-    try app.add_workspace(workspace, state.gpa);
-
     return workspace;
 }
 
-pub export fn odyssey_workspace_free(app: *App, workspace: *Workspace) void {
-    app.remove_workspace(workspace);
+pub export fn odyssey_workspace_free(workspace: *Workspace) void {
     workspace.deinit(state.gpa);
     state.gpa.destroy(workspace);
 }

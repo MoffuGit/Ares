@@ -129,13 +129,17 @@ fn rootModule(
     test_opts: ?@"test".Options,
 ) *std.Build.Module {
     const prof_mod = prof.module(b, target, optimize, prof_opts);
+    const zio = b.dependency("zio", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     const mod = b.createModule(.{
         .root_source_file = b.path(root_source),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
-        .imports = &.{.{ .name = "prof", .module = prof_mod }},
+        .imports = &.{ .{ .name = "prof", .module = prof_mod }, .{ .name = "zio", .module = zio.module("zio") } },
     });
     if (test_opts) |opts| @"test".addOptions(mod, b, opts);
     return mod;
