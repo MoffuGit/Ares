@@ -62,6 +62,12 @@ pub fn new(self: *App, comptime T: type, function: anytype) !Entity(T) {
 
     return try self.update(self.foreground_runtime.io(), TypeErased.new);
 }
+//NOTE:
+//an update removes the entity from the map
+// @typeInfo(@TypeOf(function)).@"fn".return_type().?
+// pub fn update_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype) !void {}
+//
+// pub fn read_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype) !void {}
 
 pub fn update(self: *App, io: Io, function: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
     self.start_update();
@@ -123,8 +129,8 @@ test "app creates and drops many struct entities" {
                 value.* = .{ .index = 0 };
             }
         }.init);
-        entity.get(&app.entity_store).?.index = index;
-        try testing.expectEqual(index, entity.get(&app.entity_store).?.index);
+        entity.getMut(&app.entity_store).index = index;
+        try testing.expectEqual(index, entity.get(&app.entity_store).index);
     }
 
     for (entities) |entity| {

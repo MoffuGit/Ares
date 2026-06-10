@@ -101,8 +101,12 @@ pub fn Entity(comptime T: type) type {
             try self.any.drop(gpa, io);
         }
 
-        pub fn get(self: @This(), store: *EntityStore) ?*T {
+        pub fn get(self: @This(), store: *EntityStore) *const T {
             return store.get(T, self.any);
+        }
+
+        pub fn getMut(self: @This(), store: *EntityStore) *T {
+            return store.getMut(T, self.any);
         }
     };
 }
@@ -140,10 +144,17 @@ pub const EntityStore = struct {
         return .init(&self.refs, key);
     }
 
-    pub fn get(self: *@This(), comptime T: type, entity: AnyEntity) ?*T {
+    pub fn get(self: *@This(), comptime T: type, entity: AnyEntity) *const T {
         assert(entity.type_id == TypeInfo.init(T));
 
-        const ptr = self.entities.get(entity.id) orelse return null;
+        const ptr = self.entities.get(entity.id) orelse @panic("Reading non existing entity");
+        return @ptrCast(@alignCast(ptr.*));
+    }
+
+    pub fn getMut(self: *@This(), comptime T: type, entity: AnyEntity) *T {
+        assert(entity.type_id == TypeInfo.init(T));
+
+        const ptr = self.entities.getMut(entity.id) orelse @panic("Reading non existing entity");
         return @ptrCast(@alignCast(ptr.*));
     }
 
@@ -158,7 +169,7 @@ pub const EntityStore = struct {
     pub fn popDrop(self: *@This()) ?struct { *anyopaque, EntityId, TypeId } {
         const entity = self.refs.dropped_entities.pop() orelse return null;
 
-        const ptr = self.entities.remove(entity.id) orelse @panic("Droping non existing entity");
+        const ptr = self.entities.remove(entity.id) orelse @panic("Dropping non existing entity");
         self.refs.refs.remove(entity.id);
 
         return .{ ptr, entity.id, entity.type_id };
@@ -199,8 +210,8 @@ test "entity store returns inserted data and rejects wrong type" {
     const id = store.reserve(io);
     const entity = store.insert(id, A, ptr);
 
-    try std.testing.expectEqual(ptr, entity.get(&store).?);
-    try std.testing.expectEqual(@as(u32, 42), entity.get(&store).?.value);
+    try std.testing.expectEqual(ptr, entity.get(&store));
+    try std.testing.expectEqual(@as(u32, 42), entity.get(&store).value);
 }
 
 test "closing entity records id and type when ref count reaches zero" {
