@@ -94,8 +94,12 @@ pub fn Entity(comptime T: type) type {
             return try app.new(io, T, T.init, args);
         }
 
-        pub fn update(self: *@This(), app: *App, io: Io, function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+        pub fn update(self: @This(), app: *App, io: Io, function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
             return try app.update_entity(io, T, self, function, args);
+        }
+
+        pub fn read(self: @This(), app: *App, io: Io, function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+            return try app.read_entity(io, T, self, function, args);
         }
 
         pub fn init(refs: *EntityRefs, id: EntityId) @This() {
@@ -108,14 +112,6 @@ pub fn Entity(comptime T: type) type {
 
         pub fn drop(self: @This(), gpa: Allocator, io: Io) !void {
             try self.any.drop(gpa, io);
-        }
-
-        pub fn get(self: @This(), store: *EntityStore) *const T {
-            return store.get(T, self.any);
-        }
-
-        pub fn getMut(self: @This(), store: *EntityStore) *T {
-            return store.getMut(T, self.any);
         }
     };
 }
@@ -153,18 +149,20 @@ pub const EntityStore = struct {
         return .init(&self.refs, key);
     }
 
-    pub fn get(self: *@This(), comptime T: type, entity: AnyEntity) *const T {
-        assert(entity.type_id == TypeInfo.init(T));
-
-        const ptr = self.entities.get(entity.id) orelse @panic("Reading non existing entity");
+    pub fn get(self: *@This(), comptime T: type, entity: Entity(T)) *const T {
+        const ptr = self.entities.get(entity.any.id) orelse @panic("Reading non existing entity");
         return @ptrCast(@alignCast(ptr.*));
     }
 
-    pub fn getMut(self: *@This(), comptime T: type, entity: AnyEntity) *T {
-        assert(entity.type_id == TypeInfo.init(T));
-
-        const ptr = self.entities.getMut(entity.id) orelse @panic("Reading non existing entity");
+    pub fn getMut(self: *@This(), comptime T: type, entity: Entity(T)) *T {
+        const ptr = self.entities.getMut(entity.any.id) orelse @panic("Reading non existing entity");
         return @ptrCast(@alignCast(ptr.*));
+    }
+
+    pub fn remove(self: *@This(), comptime T: type, entity: Entity(T)) *T {
+        const ptr = self.entities.remove(entity.any.id) orelse @panic("Updating non existing Entity");
+
+        return @as(*T, @ptrCast(@alignCast(ptr)));
     }
 
     pub fn lockRefs(self: *@This(), io: Io) !void {
@@ -219,8 +217,8 @@ test "entity store returns inserted data and rejects wrong type" {
     const id = store.reserve(io);
     const entity = store.insert(id, A, ptr);
 
-    try std.testing.expectEqual(ptr, entity.get(&store));
-    try std.testing.expectEqual(@as(u32, 42), entity.get(&store).value);
+    try std.testing.expectEqual(ptr, store.getMut(A, entity));
+    try std.testing.expectEqual(@as(u32, 42), store.get(A, entity).value);
 }
 
 test "closing entity records id and type when ref count reaches zero" {

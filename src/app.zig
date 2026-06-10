@@ -66,22 +66,34 @@ pub fn new(self: *App, io: Io, comptime T: type, function: anytype, args: anytyp
     return try self.update(io, TypeErased.new, .{ self, io, args });
 }
 
-pub fn update_entity(self: *App, io: Io, comptime T: type, entity: *Entity(T), function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+pub fn update_entity(self: *App, io: Io, comptime T: type, entity: Entity(T), function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
     const Args = @TypeOf(args);
 
     const TypeErased = struct {
-        fn new(app: *App, _entity: *Entity(T), _args: Args) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
-            const ptr = app.entity_store.entities.remove(_entity.any.id) orelse @panic("Updating non existing Entity");
-            defer _ = app.entity_store.entities.put(_entity.any.id, ptr);
+        fn new(app: *App, _entity: Entity(T), _args: Args) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+            const ptr = app.entity_store.remove(T, _entity);
+            defer _ = app.entity_store.insert(_entity.any.id, T, ptr);
 
-            return @call(.auto, function, .{@as(*T, @ptrCast(@alignCast(ptr)))} ++ _args);
+            return @call(.auto, function, .{ptr} ++ _args);
         }
     };
 
     return try self.update(io, TypeErased.new, .{ self, entity, args });
 }
-//
-// pub fn read_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype) !void {}
+
+pub fn read_entity(self: *App, io: Io, comptime T: type, entity: Entity(T), function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+    const Args = @TypeOf(args);
+
+    const TypeErased = struct {
+        fn new(app: *App, _entity: Entity(T), _args: Args) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+            const ptr = app.entity_store.get(T, _entity);
+
+            return @call(.auto, function, .{ptr} ++ _args);
+        }
+    };
+
+    return try self.update(io, TypeErased.new, .{ self, entity, args });
+}
 
 pub fn update(self: *App, io: Io, function: anytype, args: std.meta.ArgsTuple(@TypeOf(function))) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
     self.start_update();
@@ -141,6 +153,10 @@ test "app creates and drops many struct entities" {
         pub fn inc(self: *@This()) void {
             self.index += 1;
         }
+
+        pub fn get_index(self: *const @This()) usize {
+            return self.index;
+        }
     };
 
     const TestEntity = Entity(TestStruct);
@@ -157,7 +173,7 @@ test "app creates and drops many struct entities" {
 
         try entity.update(&app, io, TestStruct.set_index, .{index});
         try entity.update(&app, io, TestStruct.inc, .{});
-        try testing.expectEqual(index + 1, entity.get(&app.entity_store).index);
+        try testing.expectEqual(index + 1, entity.read(&app, io, TestStruct.get_index, .{}));
     }
 
     for (entities) |entity| {
