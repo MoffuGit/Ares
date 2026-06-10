@@ -131,12 +131,12 @@ pub const EntityStore = struct {
         self.refs.deinit(gpa);
     }
 
-    pub fn reserve(self: *@This(), io: Io) !EntityId {
-        return try self.refs.reserve(io);
+    pub fn reserve(self: *@This(), io: Io) EntityId {
+        return self.refs.reserve(io) catch @panic("Entities Overflow");
     }
 
-    pub fn insert(self: *@This(), key: EntityId, comptime T: type, entity: *T) !Entity(T) {
-        _ = try self.entities.put(key, entity);
+    pub fn insert(self: *@This(), key: EntityId, comptime T: type, entity: *T) Entity(T) {
+        _ = self.entities.put(key, entity) catch @panic("Entities Overflow");
         return .init(&self.refs, key);
     }
 
@@ -145,6 +145,23 @@ pub const EntityStore = struct {
 
         const ptr = self.entities.get(entity.id) orelse return null;
         return @ptrCast(@alignCast(ptr.*));
+    }
+
+    pub fn lockRefs(self: *@This(), io: Io) !void {
+        try self.refs.rwlock.lock(io);
+    }
+
+    pub fn unlockRefs(self: *@This(), io: Io) void {
+        self.refs.rwlock.unlock(io);
+    }
+
+    pub fn popDrop(self: *@This()) ?struct { *anyopaque, EntityId, TypeId } {
+        const entity = self.refs.dropped_entities.pop() orelse return null;
+
+        const ptr = self.entities.remove(entity.id) orelse @panic("Droping non existing entity");
+        self.refs.refs.remove(entity.id);
+
+        return .{ ptr, entity.id, entity.type_id };
     }
 
     pub fn collect(self: *@This(), gpa: Allocator, io: Io) !std.ArrayList(struct { *anyopaque, EntityId, TypeId }) {
@@ -179,8 +196,8 @@ test "entity store returns inserted data and rejects wrong type" {
     defer allocator.destroy(ptr);
     ptr.* = .{ .value = 42 };
 
-    const id = try store.reserve(io);
-    const entity = try store.insert(id, A, ptr);
+    const id = store.reserve(io);
+    const entity = store.insert(id, A, ptr);
 
     try std.testing.expectEqual(ptr, entity.get(&store).?);
     try std.testing.expectEqual(@as(u32, 42), entity.get(&store).?.value);
@@ -200,8 +217,8 @@ test "closing entity records id and type when ref count reaches zero" {
     defer allocator.destroy(ptr);
     ptr.* = .{ .value = 7 };
 
-    const id = try store.reserve(io);
-    const entity = try store.insert(id, A, ptr);
+    const id = store.reserve(io);
+    const entity = store.insert(id, A, ptr);
 
     try entity.drop(allocator, io);
 
@@ -228,8 +245,8 @@ test "cloning entity increments ref count" {
     defer allocator.destroy(ptr);
     ptr.* = .{ .value = 9 };
 
-    const id = try store.reserve(io);
-    const entity = try store.insert(id, A, ptr);
+    const id = store.reserve(io);
+    const entity = store.insert(id, A, ptr);
     const clone = try entity.clone(io);
     const any_clone = try entity.any.clone(io);
 

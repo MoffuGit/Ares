@@ -19,10 +19,10 @@ pub const TypeInfo = struct {
         }.info;
     }
 
-    pub fn destroyOpaque(self: *const @This(), allocator: Allocator, ptr: *anyopaque) void {
+    pub fn destroyOpaque(self: *const @This(), gpa: Allocator, ptr: *anyopaque) void {
         if (self.size == 0) return;
 
-        allocator.rawFree(
+        gpa.rawFree(
             @as([*]u8, @ptrCast(ptr))[0..self.size],
             .fromByteUnits(self.alignment),
             @returnAddress(),
