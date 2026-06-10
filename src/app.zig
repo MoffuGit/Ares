@@ -47,33 +47,43 @@ pub fn init(self: *App, gpa: Allocator) !void {
     try self.entity_store.init(gpa);
 }
 
-pub fn new(self: *App, comptime T: type, function: anytype) !Entity(T) {
+pub fn new(self: *App, io: Io, comptime T: type, function: anytype) !Entity(T) {
     const TypeErased = struct {
-        fn new(app: *App, io: Io) anyerror!Entity(T) {
+        fn new(app: *App, _io: Io) anyerror!Entity(T) {
             const entity = try app.gpa.create(T);
             errdefer app.gpa.destroy(entity);
 
             try @call(.auto, function, .{entity});
 
-            const id = app.entity_store.reserve(io);
+            const id = app.entity_store.reserve(_io);
             return app.entity_store.insert(id, T, entity);
         }
     };
 
-    return try self.update(self.foreground_runtime.io(), TypeErased.new);
+    return try self.update(io, TypeErased.new, .{ self, io });
 }
+
 //NOTE:
 //an update removes the entity from the map
 // @typeInfo(@TypeOf(function)).@"fn".return_type().?
-// pub fn update_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype) !void {}
+// pub fn update_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype) !void {
+//     const TypeErased = struct {
+//         fn new(app: *App, io: Io) anyerror!Entity(T) {
+//             try @call(.auto, function, .{entity});
+//
+//             const id = app.entity_store.reserve(io);
+//             return app.entity_store.insert(id, T, entity);
+//         }
+//     };
+// }
 //
 // pub fn read_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype) !void {}
 
-pub fn update(self: *App, io: Io, function: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+pub fn update(self: *App, io: Io, function: anytype, args: std.meta.ArgsTuple(@TypeOf(function))) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
     self.start_update();
     defer self.end_update(io);
 
-    return @call(.auto, function, .{ self, io });
+    return @call(.auto, function, args);
 }
 
 pub fn start_update(self: *App) void {
@@ -111,24 +121,28 @@ pub fn deinit(self: *App) void {
 test "app creates and drops many struct entities" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    const io = testing.io;
     const entity_count = 32;
 
-    const TestEntity = struct {
+    const TestStruct = struct {
         index: usize,
+
+        pub fn init(self: *@This()) !void {
+            self.* = .{ .index = 0 };
+        }
     };
+
+    const TestEntity = Entity(TestStruct);
 
     var app: App = undefined;
     try app.init(allocator);
     defer app.deinit();
 
-    var entities: [entity_count]Entity(TestEntity) = undefined;
+    const io = app.foreground_runtime.io();
+
+    var entities: [entity_count]TestEntity = undefined;
     for (&entities, 0..) |*entity, index| {
-        entity.* = try app.new(TestEntity, struct {
-            fn init(value: *TestEntity) !void {
-                value.* = .{ .index = 0 };
-            }
-        }.init);
+        entity.* = try TestEntity.new(&app, io);
+
         entity.getMut(&app.entity_store).index = index;
         try testing.expectEqual(index, entity.get(&app.entity_store).index);
     }

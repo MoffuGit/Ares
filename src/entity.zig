@@ -1,6 +1,7 @@
 const std = @import("std");
 const atomic = std.atomic;
 const assert = std.debug.assert;
+const App = @import("app.zig");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 
@@ -88,6 +89,10 @@ pub const AnyEntity = struct {
 pub fn Entity(comptime T: type) type {
     return struct {
         any: AnyEntity,
+
+        pub fn new(app: *App, io: Io) !@This() {
+            return try app.new(io, T, T.init);
+        }
 
         pub fn init(refs: *EntityRefs, id: EntityId) @This() {
             return .{ .any = .init(refs, id, TypeInfo.init(T)) };
