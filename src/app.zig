@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
+const assert = std.debug.assert;
 
 const zio = @import("zio");
 const Runtime = zio.Runtime;
@@ -49,7 +50,7 @@ pub fn init(self: *App, gpa: Allocator) !void {
 
 pub fn new(self: *App, io: Io, comptime T: type, function: anytype) !Entity(T) {
     const TypeErased = struct {
-        fn new(app: *App, _io: Io) anyerror!Entity(T) {
+        fn new(app: *App, _io: Io) !Entity(T) {
             const entity = try app.gpa.create(T);
             errdefer app.gpa.destroy(entity);
 
@@ -63,19 +64,20 @@ pub fn new(self: *App, io: Io, comptime T: type, function: anytype) !Entity(T) {
     return try self.update(io, TypeErased.new, .{ self, io });
 }
 
-//NOTE:
-//an update removes the entity from the map
-// @typeInfo(@TypeOf(function)).@"fn".return_type().?
-// pub fn update_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype) !void {
-//     const TypeErased = struct {
-//         fn new(app: *App, io: Io) anyerror!Entity(T) {
-//             try @call(.auto, function, .{entity});
-//
-//             const id = app.entity_store.reserve(io);
-//             return app.entity_store.insert(id, T, entity);
-//         }
-//     };
-// }
+pub fn update_entity(self: *App, io: Io, comptime T: type, entity: *Entity(T), function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+    const Args = @TypeOf(args);
+
+    const TypeErased = struct {
+        fn new(app: *App, _entity: *Entity(T), _args: Args) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+            const ptr = app.entity_store.entities.remove(_entity.any.id) orelse @panic("Updating non existing Entity");
+            defer _ = app.entity_store.entities.put(_entity.any.id, ptr);
+
+            return @call(.auto, function, .{@as(*T, @ptrCast(@alignCast(ptr)))} ++ _args);
+        }
+    };
+
+    return try self.update(io, TypeErased.new, .{ self, entity, args });
+}
 //
 // pub fn read_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype) !void {}
 
@@ -129,6 +131,10 @@ test "app creates and drops many struct entities" {
         pub fn init(self: *@This()) !void {
             self.* = .{ .index = 0 };
         }
+
+        pub fn set_index(self: *@This(), index: usize) void {
+            self.index = index;
+        }
     };
 
     const TestEntity = Entity(TestStruct);
@@ -143,7 +149,7 @@ test "app creates and drops many struct entities" {
     for (&entities, 0..) |*entity, index| {
         entity.* = try TestEntity.new(&app, io);
 
-        entity.getMut(&app.entity_store).index = index;
+        try entity.update(&app, io, TestStruct.set_index, .{index});
         try testing.expectEqual(index, entity.get(&app.entity_store).index);
     }
 

@@ -94,6 +94,10 @@ pub fn Entity(comptime T: type) type {
             return try app.new(io, T, T.init);
         }
 
+        pub fn update(self: *@This(), app: *App, io: Io, function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+            return try app.update_entity(io, T, self, function, args);
+        }
+
         pub fn init(refs: *EntityRefs, id: EntityId) @This() {
             return .{ .any = .init(refs, id, TypeInfo.init(T)) };
         }
@@ -145,7 +149,7 @@ pub const EntityStore = struct {
     }
 
     pub fn insert(self: *@This(), key: EntityId, comptime T: type, entity: *T) Entity(T) {
-        _ = self.entities.put(key, entity) catch @panic("Entities Overflow");
+        _ = self.entities.put(key, entity);
         return .init(&self.refs, key);
     }
 

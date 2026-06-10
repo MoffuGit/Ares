@@ -243,15 +243,15 @@ pub fn SecondaryMap(Value: type) type {
         }
 
         pub fn containsKey(self: @This(), key: Key) bool {
-            if (key.index >= self.slots.len) return false;
+            assert(key.index < self.slots.len);
             return switch (self.slots[key.index]) {
                 .vacant => false,
                 .occupied => |slot| slot.generation == key.generation,
             };
         }
 
-        pub fn put(self: *@This(), key: Key, value: Value) error{Overflow}!?Value {
-            if (key.index >= self.slots.len) return error.Overflow;
+        pub fn put(self: *@This(), key: Key, value: Value) ?Value {
+            assert(key.index < self.slots.len);
 
             const slot = &self.slots[key.index];
             switch (slot.*) {
@@ -270,7 +270,7 @@ pub fn SecondaryMap(Value: type) type {
         }
 
         pub fn remove(self: *@This(), key: Key) ?Value {
-            if (key.index >= self.slots.len) return null;
+            assert(key.index < self.slots.len);
             const slot = &self.slots[key.index];
             switch (slot.*) {
                 .vacant => return null,
@@ -284,7 +284,7 @@ pub fn SecondaryMap(Value: type) type {
         }
 
         pub fn get(self: *const @This(), key: Key) ?*const Value {
-            if (key.index >= self.slots.len) return null;
+            assert(key.index < self.slots.len);
             return switch (self.slots[key.index]) {
                 .vacant => null,
                 .occupied => |*occupied| if (occupied.generation == key.generation) &occupied.value else null,
@@ -292,7 +292,7 @@ pub fn SecondaryMap(Value: type) type {
         }
 
         pub fn getMut(self: *@This(), key: Key) ?*Value {
-            if (key.index >= self.slots.len) return null;
+            assert(key.index < self.slots.len);
             return switch (self.slots[key.index]) {
                 .vacant => null,
                 .occupied => |*occupied| if (occupied.generation == key.generation) &occupied.value else null,
@@ -471,8 +471,8 @@ test "secondary map" {
     try std.testing.expectEqual(0, secondary.count());
     try std.testing.expectEqual(slots.capacity, secondary.capacity());
     try std.testing.expect(!secondary.containsKey(a));
-    try std.testing.expectEqual(null, try secondary.put(a, 10));
-    try std.testing.expectEqual(null, try secondary.put(b, 20));
+    try std.testing.expectEqual(null, secondary.put(a, 10));
+    try std.testing.expectEqual(null, secondary.put(b, 20));
     try std.testing.expectEqual(2, secondary.count());
     try std.testing.expect(secondary.containsKey(a));
     try std.testing.expectEqual(10, secondary.get(a).?.*);
@@ -480,7 +480,7 @@ test "secondary map" {
 
     secondary.getMut(a).?.* += 1;
     try std.testing.expectEqual(11, secondary.get(a).?.*);
-    try std.testing.expectEqual(11, try secondary.put(a, 12));
+    try std.testing.expectEqual(11, secondary.put(a, 12));
     try std.testing.expectEqual(2, secondary.count());
 
     slots.remove(a);
@@ -488,7 +488,7 @@ test "secondary map" {
     try std.testing.expectEqual(a.index, c.index);
     try std.testing.expect(!secondary.containsKey(c));
     try std.testing.expectEqual(null, secondary.get(c));
-    try std.testing.expectEqual(null, try secondary.put(c, 30));
+    try std.testing.expectEqual(null, secondary.put(c, 30));
     try std.testing.expect(!secondary.containsKey(a));
     try std.testing.expectEqual(2, secondary.count());
 
