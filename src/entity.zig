@@ -90,8 +90,8 @@ pub fn Entity(comptime T: type) type {
     return struct {
         any: AnyEntity,
 
-        pub fn new(app: *App, io: Io) !@This() {
-            return try app.new(io, T, T.init);
+        pub fn new(app: *App, io: Io, args: anytype) !@This() {
+            return try app.new(io, T, T.init, args);
         }
 
         pub fn update(self: *@This(), app: *App, io: Io, function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {

@@ -48,20 +48,22 @@ pub fn init(self: *App, gpa: Allocator) !void {
     try self.entity_store.init(gpa);
 }
 
-pub fn new(self: *App, io: Io, comptime T: type, function: anytype) !Entity(T) {
+pub fn new(self: *App, io: Io, comptime T: type, function: anytype, args: anytype) !Entity(T) {
+    const Args = @TypeOf(args);
+
     const TypeErased = struct {
-        fn new(app: *App, _io: Io) !Entity(T) {
+        fn new(app: *App, _io: Io, _args: Args) !Entity(T) {
             const entity = try app.gpa.create(T);
             errdefer app.gpa.destroy(entity);
 
-            try @call(.auto, function, .{entity});
+            try @call(.auto, function, .{entity} ++ _args);
 
             const id = app.entity_store.reserve(_io);
             return app.entity_store.insert(id, T, entity);
         }
     };
 
-    return try self.update(io, TypeErased.new, .{ self, io });
+    return try self.update(io, TypeErased.new, .{ self, io, args });
 }
 
 pub fn update_entity(self: *App, io: Io, comptime T: type, entity: *Entity(T), function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
@@ -135,6 +137,10 @@ test "app creates and drops many struct entities" {
         pub fn set_index(self: *@This(), index: usize) void {
             self.index = index;
         }
+
+        pub fn inc(self: *@This()) void {
+            self.index += 1;
+        }
     };
 
     const TestEntity = Entity(TestStruct);
@@ -147,10 +153,11 @@ test "app creates and drops many struct entities" {
 
     var entities: [entity_count]TestEntity = undefined;
     for (&entities, 0..) |*entity, index| {
-        entity.* = try TestEntity.new(&app, io);
+        entity.* = try TestEntity.new(&app, io, .{});
 
         try entity.update(&app, io, TestStruct.set_index, .{index});
-        try testing.expectEqual(index, entity.get(&app.entity_store).index);
+        try entity.update(&app, io, TestStruct.inc, .{});
+        try testing.expectEqual(index + 1, entity.get(&app.entity_store).index);
     }
 
     for (entities) |entity| {
