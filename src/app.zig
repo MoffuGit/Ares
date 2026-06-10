@@ -3,19 +3,15 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const assert = std.debug.assert;
 
-const zio = @import("zio");
-const Runtime = zio.Runtime;
-
 const ent = @import("entity.zig");
 const Entity = ent.Entity;
 const EntityStore = ent.EntityStore;
 const Workspace = @import("workspace.zig");
+const Runtime = @import("runtime.zig");
 
 pub const App = @This();
 
-foreground_runtime: *Runtime,
-background_runtime: *Runtime,
-
+runtime: Runtime,
 entity_store: EntityStore,
 peding_updates: u16,
 flushing: bool,
@@ -23,29 +19,24 @@ flushing: bool,
 gpa: Allocator,
 
 pub fn init(self: *App, gpa: Allocator) !void {
-    const foreground_runtime = try Runtime.init(gpa, .{
-        .executors = .auto,
-        .enable_main_executor = false,
-    });
-    errdefer foreground_runtime.deinit();
-
-    const background_runtime = try Runtime.init(gpa, .{
-        .executors = .exact(1),
-        .enable_main_executor = true,
-        .enable_task_migration = false,
-    });
-    errdefer background_runtime.deinit();
-
     self.* = .{
+        .runtime = undefined,
         .entity_store = undefined,
-        .foreground_runtime = foreground_runtime,
-        .background_runtime = background_runtime,
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
     };
 
+    try self.runtime.init(gpa);
+    errdefer self.runtime.deinit();
+
     try self.entity_store.init(gpa);
+    errdefer self.entity_store.deinit(gpa);
+}
+
+pub fn deinit(self: *App) void {
+    self.entity_store.deinit(self.gpa);
+    self.runtime.deinit();
 }
 
 pub fn new(self: *App, io: Io, comptime T: type, function: anytype, args: anytype) !Entity(T) {
@@ -128,12 +119,6 @@ pub fn destroy_dropped_entities(self: *App, io: Io) !void {
     }
 }
 
-pub fn deinit(self: *App) void {
-    self.entity_store.deinit(self.gpa);
-    self.background_runtime.deinit();
-    self.foreground_runtime.deinit();
-}
-
 test "app creates and drops many struct entities" {
     const testing = std.testing;
     const allocator = testing.allocator;
@@ -165,7 +150,7 @@ test "app creates and drops many struct entities" {
     try app.init(allocator);
     defer app.deinit();
 
-    const io = app.foreground_runtime.io();
+    const io = app.runtime.foreground.io();
 
     var entities: [entity_count]TestEntity = undefined;
     for (&entities, 0..) |*entity, index| {
