@@ -7,11 +7,9 @@ const ent = @import("entity.zig");
 const Entity = ent.Entity;
 const EntityStore = ent.EntityStore;
 const Workspace = @import("workspace.zig");
-const Runtime = @import("runtime.zig");
 
 pub const App = @This();
 
-runtime: Runtime,
 entity_store: EntityStore,
 peding_updates: u16,
 flushing: bool,
@@ -20,15 +18,11 @@ gpa: Allocator,
 
 pub fn init(self: *App, gpa: Allocator) !void {
     self.* = .{
-        .runtime = undefined,
         .entity_store = undefined,
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
     };
-
-    try self.runtime.init(gpa);
-    errdefer self.runtime.deinit();
 
     try self.entity_store.init(gpa);
     errdefer self.entity_store.deinit(gpa);
@@ -36,7 +30,6 @@ pub fn init(self: *App, gpa: Allocator) !void {
 
 pub fn deinit(self: *App) void {
     self.entity_store.deinit(self.gpa);
-    self.runtime.deinit();
 }
 
 pub fn new(self: *App, io: Io, comptime T: type, function: anytype, args: anytype) !Entity(T) {
@@ -122,6 +115,7 @@ pub fn destroy_dropped_entities(self: *App, io: Io) !void {
 test "app creates and drops many struct entities" {
     const testing = std.testing;
     const allocator = testing.allocator;
+    const io = testing.io;
     const entity_count = 32;
 
     const TestStruct = struct {
@@ -149,8 +143,6 @@ test "app creates and drops many struct entities" {
     var app: App = undefined;
     try app.init(allocator);
     defer app.deinit();
-
-    const io = app.runtime.foreground.io();
 
     var entities: [entity_count]TestEntity = undefined;
     for (&entities, 0..) |*entity, index| {
