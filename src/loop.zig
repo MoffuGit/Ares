@@ -51,10 +51,10 @@ pub fn submit(
     completion: *Completion,
     callback: anytype,
     context: anytype,
-    op_tag: meta.Tag(Operation),
+    comptime op_tag: meta.Tag(Operation),
     op_data: @FieldType(Operation, @tagName(op_tag)),
     resolver: anytype,
-) !void {
+) void {
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
@@ -75,8 +75,31 @@ pub fn submit(
     self.completions.push(completion);
 }
 
+pub fn @"defer"(
+    self: *Loop,
+    completion: *Completion,
+    callback: anytype,
+    context: anytype,
+) void {
+    const Context = @TypeOf(context);
+
+    const TypeErased = struct {
+        fn complete(_: *Loop, _completion: *Completion) void {
+            const _context: Context = @ptrCast(@alignCast(_completion.context));
+            @call(.auto, callback, .{ _context, _completion });
+        }
+    };
+
+    completion.op = .@"defer";
+    completion.context = @ptrCast(@alignCast(context));
+    completion.callback = TypeErased.complete;
+
+    self.completions.push(completion);
+}
+
 pub const Operation = union(enum) {
     noop: void,
+    @"defer": void,
 };
 
 pub const Completion = struct {
@@ -103,26 +126,23 @@ pub const Completion = struct {
     pub fn noopCallback(_: *Loop, _: *Completion) void {}
 };
 
-test "noop" {
+test "defer" {
     var loop: Loop = undefined;
     try loop.init();
     defer loop.deinit();
 
+    var context: u64 = 0;
     var completion: Completion = .noop;
-    var context: void = {};
 
-    try loop.submit(
-        &completion,
-        struct {
-            pub fn noop(_: *void, _: *Completion, _: void) void {}
-        }.noop,
-        &context,
-        .noop,
-        {},
-        struct {
-            pub fn noop(_: *void) void {}
-        }.noop,
-    );
+    loop.@"defer"(&completion, struct {
+        pub fn @"defer"(_context: *u64, _: *Completion) void {
+            _context.* += 1;
+        }
+    }.@"defer", &context);
+
+    try testing.expectEqual(context, 0);
 
     try loop.run(.no_wait);
+
+    try testing.expectEqual(context, 1);
 }
