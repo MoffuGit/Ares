@@ -16,12 +16,14 @@ pub const Loop = @This();
 
 kq: posix.fd_t,
 completions: queue.Intrusive(Completion),
+submissions: queue.Intrusive(Completion),
 
 pub fn init(self: *Loop) !void {
     const kq = posix.system.kqueue();
     self.* = .{
         .kq = kq,
         .completions = .{},
+        .submissions = .{},
     };
 }
 
@@ -72,7 +74,7 @@ pub fn submit(
     completion.context = @ptrCast(@alignCast(context));
     completion.callback = TypeErased.complete;
 
-    self.completions.push(completion);
+    self.submissions.push(completion);
 }
 
 pub fn @"defer"(
