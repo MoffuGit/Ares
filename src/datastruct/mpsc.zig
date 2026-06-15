@@ -44,6 +44,14 @@ pub fn Intrusive(comptime T: type) type {
             @atomicStore(?*T, &prev.next, v, .release);
         }
 
+        /// Returns true if the queue is empty.
+        pub fn empty(self: *Self) bool {
+            const tail = @atomicLoad(*T, &self.tail, .acquire);
+            const head = @atomicLoad(*T, &self.head, .acquire);
+            const next = @atomicLoad(?*T, &tail.next, .acquire);
+            return tail == &self.stub and head == &self.stub and next == null;
+        }
+
         /// Pop the first in element from the queue. This must be called
         /// by only a single consumer at any given time.
         pub fn pop(self: *Self) ?*T {
