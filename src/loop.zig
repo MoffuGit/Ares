@@ -103,7 +103,7 @@ pub fn flush_submissions(self: *Loop, kevents: []posix.Kevent) usize {
         const completion = self.submissions.pop() orelse return acc;
 
         switch (completion.operation) {
-            .read, .noop, .@"defer" => panic("{s} operation reach the submissions queueu", .{@tagName(completion.operation)}),
+            .read, .noop, .@"defer" => panic("{s} operation reached the submissions queueu", .{@tagName(completion.operation)}),
             .machport => |mach| {
                 event.* = .{
                     .ident = @as(c_uint, mach.port),
