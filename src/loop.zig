@@ -79,6 +79,9 @@ pub fn flush(self: *Loop, _: bool) !void {
             &timeout,
         );
 
+        self.inflight += submitted;
+        self.inflight -= completed;
+
         for (events[0..completed]) |ev| {
             if (ev.udata == 0) continue;
 
@@ -129,11 +132,10 @@ pub fn submit(
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
-        fn complete(_loop: *Loop, _completion: *Completion) void {
+        fn complete(_: *Loop, _completion: *Completion) void {
             const result = @call(.auto, resolver, .{&@field(_completion.operation, @tagName(op_tag))});
 
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            _loop.inflight -= 1;
 
             @call(.auto, callback, .{ _context, _completion, result });
         }
@@ -145,7 +147,6 @@ pub fn submit(
         .callback = TypeErased.complete,
     };
     self.submissions.push(completion);
-    self.inflight += 1;
 }
 
 pub fn concurrent(
@@ -219,9 +220,8 @@ pub fn @"defer"(
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
-        fn complete(_loop: *Loop, _completion: *Completion) void {
+        fn complete(_: *Loop, _completion: *Completion) void {
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            _loop.inflight -= 1;
             @call(.auto, callback, .{ _context, _completion });
         }
     };
@@ -231,7 +231,6 @@ pub fn @"defer"(
     completion.callback = TypeErased.complete;
 
     self.completions.push(completion);
-    self.inflight += 1;
 }
 
 pub const Operation = union(enum) {
