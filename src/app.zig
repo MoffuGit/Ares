@@ -288,10 +288,19 @@ test "Observe entities" {
         }
     };
 
+    var index: usize = 0;
+
+    try observed.update(&app, io, TestStruct.set_index, .{index});
+    try observed.update(&app, io, TestStruct.inc, .{});
+    try testing.expectEqual(index + 1, observed.read(&app, io, TestStruct.get_index, .{}));
+    try observed.notify(&app);
+
+    try testing.expect(!context);
+
     const sub = try app.observe(TestStruct, observed, &context, Observed.callback, io);
     sub.enable();
 
-    const index = 0;
+    index = 1;
 
     try observed.update(&app, io, TestStruct.set_index, .{index});
     try observed.update(&app, io, TestStruct.inc, .{});
