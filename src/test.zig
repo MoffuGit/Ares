@@ -3,8 +3,10 @@ const entity = @import("entity.zig");
 const App = @import("app.zig");
 const Worktree = @import("worktree.zig");
 const loop = @import("loop.zig");
+const subscription = @import("subscription.zig");
 
 test {
+    _ = subscription;
     _ = datastruct;
     _ = entity;
     _ = App;
