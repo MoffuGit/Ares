@@ -146,7 +146,7 @@ pub fn submit(
 
     completion.* = .{
         .operation = @unionInit(Operation, @tagName(op_tag), op_data),
-        .context = @ptrCast(@alignCast(context)),
+        .context = context,
         .callback = TypeErased.complete,
     };
     self.submissions.push(completion);
@@ -164,7 +164,7 @@ pub fn concurrent(
 ) !void {
     completion.* = .{
         .operation = @unionInit(Operation, @tagName(op_tag), op_data),
-        .context = @ptrCast(@alignCast(context)),
+        .context = context,
         .callback = undefined,
         .prev = null,
         .next = null,
@@ -228,7 +228,7 @@ pub fn @"defer"(
     };
 
     completion.operation = .@"defer";
-    completion.context = @ptrCast(@alignCast(context));
+    completion.context = context;
     completion.callback = TypeErased.complete;
 
     self.completions.push(completion);
