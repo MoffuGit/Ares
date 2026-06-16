@@ -17,7 +17,7 @@ pub const TypeInfo = struct {
         }.info;
     }
 
-    pub fn destroyOpaque(self: *const @This(), gpa: Allocator, ptr: *anyopaque) void {
+    pub fn destroy(self: *const @This(), gpa: Allocator, ptr: *anyopaque) void {
         if (self.size == 0) return;
 
         gpa.rawFree(
