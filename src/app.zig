@@ -44,7 +44,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     try self.foreground_executor.init();
     errdefer self.foreground_executor.deinit(io);
 
-    try self.background_executor.init(gpa);
+    try self.background_executor.init(gpa, io);
     errdefer self.background_executor.deinit(gpa, io);
 
     try self.entity_store.init(gpa);

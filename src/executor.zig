@@ -29,6 +29,10 @@ const Worker = struct {
         try self.loop.init();
     }
 
+    pub fn run(self: *Worker) !void {
+        self.loop.run(.until_done) catch {};
+    }
+
     pub fn deinit(self: *Worker, io: Io) void {
         self.loop.deinit(io);
     }
@@ -36,8 +40,9 @@ const Worker = struct {
 
 pub const BackgroundExecutor = struct {
     workers: []Worker,
+    group: Io.Group,
 
-    pub fn init(self: *BackgroundExecutor, gpa: Allocator) !void {
+    pub fn init(self: *BackgroundExecutor, gpa: Allocator, io: Io) !void {
         const cpu_count = try std.Thread.getCpuCount();
 
         const workers = try gpa.alloc(Worker, cpu_count);
@@ -45,14 +50,18 @@ pub const BackgroundExecutor = struct {
 
         self.* = .{
             .workers = workers,
+            .group = .init,
         };
 
         for (self.workers) |*worker| {
             try worker.init();
+            try self.group.concurrent(io, Worker.run, .{worker});
         }
     }
 
     pub fn deinit(self: *BackgroundExecutor, gpa: Allocator, io: Io) void {
+        self.group.cancel(io);
+
         for (self.workers) |*worker| {
             worker.deinit(io);
         }
