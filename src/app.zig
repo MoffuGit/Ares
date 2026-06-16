@@ -5,20 +5,26 @@ const assert = std.debug.assert;
 
 const ent = @import("entity.zig");
 const Entity = ent.Entity;
+const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
+const Subscriptions = @import("subscription.zig").Subscriptions;
 const Workspace = @import("workspace.zig");
 
 pub const App = @This();
 
+pub const Observers = Subscriptions(EntityId, &.{*App}, ent.entityOrder);
+
 gpa: Allocator,
 
 entity_store: EntityStore,
+observers: Observers,
 peding_updates: u16,
 flushing: bool,
 
 pub fn init(self: *App, gpa: Allocator) !void {
     self.* = .{
         .entity_store = undefined,
+        .observers = undefined,
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
@@ -26,9 +32,13 @@ pub fn init(self: *App, gpa: Allocator) !void {
 
     try self.entity_store.init(gpa);
     errdefer self.entity_store.deinit(gpa);
+
+    try self.observers.init(gpa);
+    errdefer self.observers.deinit(gpa);
 }
 
 pub fn deinit(self: *App) void {
+    self.observers.deinit(self.gpa);
     self.entity_store.deinit(self.gpa);
 }
 
@@ -108,7 +118,7 @@ pub fn destroy_dropped_entities(self: *App, io: Io) !void {
     defer self.entity_store.unlockRefs(io);
 
     while (self.entity_store.popDrop()) |drop| {
-        drop.@"2".destroyOpaque(self.gpa, drop.@"0");
+        drop.@"2".destroy(self.gpa, drop.@"0");
     }
 }
 

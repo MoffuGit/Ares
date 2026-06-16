@@ -13,6 +13,13 @@ const TypeInfo = typeId.TypeInfo;
 
 pub const EntityId = slotmap.Key;
 
+pub fn entityOrder(a: EntityId, b: EntityId) std.math.Order {
+    const index_order = std.math.order(a.index, b.index);
+    if (index_order != .eq) return index_order;
+
+    return std.math.order(@intFromEnum(a.generation), @intFromEnum(b.generation));
+}
+
 pub const EntityRefs = struct {
     const Refs = slotmap.SlotMap(atomic.Value(u8));
 
