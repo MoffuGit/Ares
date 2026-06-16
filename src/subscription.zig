@@ -53,7 +53,7 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             key: Key,
             id: u32,
 
-            pub fn enable(self: *Subscription) void {
+            pub fn enable(self: *const Subscription) void {
                 self.subscriptions.enable(self);
             }
 

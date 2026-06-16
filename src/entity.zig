@@ -122,6 +122,10 @@ pub fn Entity(comptime T: type) type {
             return try app.read_entity(io, T, self, function, args);
         }
 
+        pub fn notify(self: @This(), app: *App) !void {
+            try app.notify(T, self);
+        }
+
         pub fn init(refs: *EntityRefs, new_id: EntityId) @This() {
             return .{ .any = .init(refs, new_id, TypeInfo.init(T)) };
         }

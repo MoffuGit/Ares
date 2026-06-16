@@ -2,7 +2,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const assert = std.debug.assert;
+const datastruct = @import("datastruct.zig");
 
+const btree = datastruct.btree;
 const ent = @import("entity.zig");
 const Entity = ent.Entity;
 const EntityId = ent.EntityId;
@@ -16,10 +18,14 @@ gpa: Allocator,
 entity_store: EntityStore,
 observers: Observers,
 peding_updates: u16,
+
+notifications: btree.BPlusSet(EntityId, ent.entityOrder),
+
 flushing: bool,
 
 pub fn init(self: *App, gpa: Allocator) !void {
     self.* = .{
+        .notifications = undefined,
         .entity_store = undefined,
         .observers = undefined,
         .peding_updates = 0,
@@ -32,9 +38,13 @@ pub fn init(self: *App, gpa: Allocator) !void {
 
     try self.observers.init(gpa);
     errdefer self.observers.deinit(gpa);
+
+    try self.notifications.init(gpa);
+    errdefer self.notifications.deinit(gpa);
 }
 
 pub fn deinit(self: *App) void {
+    self.notifications.deinit(self.gpa);
     self.observers.deinit(self.gpa);
     self.entity_store.deinit(self.gpa);
 }
@@ -86,6 +96,10 @@ pub fn read_entity(self: *App, io: Io, comptime T: type, entity: Entity(T), func
     return try self.update(io, TypeErased.new, .{ self, entity, args });
 }
 
+pub fn notify(self: *App, comptime T: type, entity: Entity(T)) !void {
+    _ = try self.notifications.insert(self.gpa, entity.id());
+}
+
 pub fn update(self: *App, io: Io, function: anytype, args: std.meta.ArgsTuple(@TypeOf(function))) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
     self.start_update();
     defer self.end_update(io);
@@ -108,6 +122,16 @@ pub fn end_update(self: *App, io: Io) void {
 
 pub fn flush(self: *App, io: Io) !void {
     try self.destroy_dropped_entities(io);
+    try self.flush_notifications();
+}
+
+pub fn flush_notifications(self: *App) !void {
+    var iter = self.notifications.iter();
+    while (iter.next()) |id| {
+        self.observers.notify(id, .{self}, self.gpa);
+    }
+
+    try self.notifications.clear(self.gpa);
 }
 
 pub fn destroy_dropped_entities(self: *App, io: Io) !void {
@@ -145,6 +169,7 @@ pub fn observe(
 
         fn _observe(app: *App, observer: Observer) bool {
             const _entity = observer.any.into(T, observer.io) orelse return false;
+            defer _entity.drop(app.gpa, observer.io) catch {};
             const _context: Context = @ptrCast(@alignCast(observer.userdata));
             callback(app, _entity, _context);
 
@@ -263,7 +288,19 @@ test "Observe entities" {
         }
     };
 
-    _ = try app.observe(TestStruct, observed, &context, Observed.callback, io);
+    const sub = try app.observe(TestStruct, observed, &context, Observed.callback, io);
+    sub.enable();
+
+    const index = 0;
+
+    try observed.update(&app, io, TestStruct.set_index, .{index});
+    try observed.update(&app, io, TestStruct.inc, .{});
+    try testing.expectEqual(index + 1, observed.read(&app, io, TestStruct.get_index, .{}));
+    try observed.notify(&app);
+
+    try app.flush(io);
+
+    try testing.expect(context);
 
     for (entities) |entity| {
         try entity.drop(allocator, io);
