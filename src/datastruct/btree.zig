@@ -706,6 +706,147 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
 
         pool: Node.Pool,
 
+        pub fn init(self: *Self, alloc: Allocator) !void {
+            self.* = .{ .root = undefined, .pool = .empty };
+
+            const root = try self.pool.create(alloc);
+            root.* = .{ .Leaf = .{} };
+
+            self.root = root;
+        }
+
+        pub fn deinit(self: *Self, alloc: Allocator) void {
+            self.pool.deinit(alloc);
+        }
+
+        pub fn clone(self: *const Self, alloc: Allocator) !Self {
+            var node = self.pool.arena_state.used_list;
+            var count: u64 = 0;
+            while (node) |n| {
+                count += 1;
+                node = n.next;
+            }
+
+            var pool = try Node.Pool.initCapacity(alloc, count);
+            errdefer pool.deinit(alloc);
+
+            const root = try self.root.clone(&pool, alloc);
+            return .{ .root = root, .count = self.count, .pool = pool };
+        }
+
+        pub fn insert(self: *Self, alloc: Allocator, key: K, value: V) !?V {
+            defer self.count += 1;
+            var node: Node = Node{ .Leaf = .{} };
+
+            node.add_item(key, value);
+
+            return try self.root.append(node, &self.pool, alloc);
+        }
+
+        pub fn get(self: *Self, key: K) ?V {
+            return self.root.find(key);
+        }
+
+        pub fn clear(self: *Self, alloc: Allocator) !void {
+            _ = self.pool.reset(alloc, .retain_capacity);
+
+            const root = try self.pool.create(alloc);
+            root.* = .{ .Leaf = .{} };
+            self.root = root;
+            self.count = 0;
+        }
+
+        pub fn get_ref(self: *Self, key: K) ?*V {
+            return self.root.find_mut(key);
+        }
+
+        pub fn remove(self: *Self, alloc: Allocator, key: K) ?V {
+            const removed = self.root.delete(key, &self.pool, alloc) orelse return null;
+
+            if (!self.root.is_leaf() and self.root.len() == 1) {
+                const old_root = self.root;
+                self.root = old_root.Internal.childs[0];
+                self.pool.destroy(old_root);
+            }
+
+            self.count -= 1;
+            return removed;
+        }
+
+        pub fn iter(self: *Self) Iterator {
+            return Iterator.init(self);
+        }
+
+        /// Create a range iterator over [start, end] (both inclusive)
+        pub fn range(self: *Self, start: K, end: K) RangeIterator {
+            return RangeIterator.init(self, .{ .inclusive = start }, .{ .inclusive = end });
+        }
+
+        /// Create a range iterator from start (inclusive) to end of tree
+        pub fn rangeFrom(self: *Self, start: K) RangeIterator {
+            return RangeIterator.init(self, .{ .inclusive = start }, .unbounded);
+        }
+
+        /// Create a range iterator from start of tree to end (inclusive)
+        pub fn rangeTo(self: *Self, end: K) RangeIterator {
+            return RangeIterator.init(self, .unbounded, .{ .inclusive = end });
+        }
+
+        /// Create a range iterator with custom bounds
+        pub fn rangeWithBounds(self: *Self, start_bound: Bound, end_bound: Bound) RangeIterator {
+            return RangeIterator.init(self, start_bound, end_bound);
+        }
+
+        pub fn print(self: *const Self, alloc: Allocator) !void {
+            var queue = try std.ArrayList(*Node).initCapacity(alloc, 0);
+            defer queue.deinit(alloc);
+
+            if (self.root.len() == 0) {
+                std.debug.print("Tree is empty.\n", .{});
+                return;
+            }
+
+            try queue.append(alloc, self.root);
+
+            while (queue.items.len > 0) {
+                var next_queue = try std.ArrayList(*Node).initCapacity(alloc, 0);
+                defer next_queue.deinit(alloc);
+
+                while (queue.items.len > 0) {
+                    const node = queue.orderedRemove(0);
+                    if (!node.is_leaf()) {
+                        const internal = node.Internal;
+                        std.debug.print("{s}", .{"{ "});
+                        for (0..internal.len) |i| {
+                            std.debug.print("{}", .{internal.keys[i]});
+                            if (i < internal.len - 1) {
+                                std.debug.print(", ", .{});
+                            }
+                            try next_queue.append(alloc, internal.childs[i]);
+                        }
+                        std.debug.print("{s}", .{" } "});
+                    } else {
+                        const leaf = node.Leaf;
+                        std.debug.print("{s}", .{"{ "});
+                        for (0..leaf.len) |i| {
+                            std.debug.print("{{ {any}, {any} }}", .{ leaf.keys[i], leaf.items[i] });
+                            if (i < leaf.len - 1) {
+                                std.debug.print(", ", .{});
+                            }
+                        }
+                        std.debug.print("{s}", .{" } "});
+                        std.debug.print("\n", .{});
+                    }
+                }
+                std.debug.print("\n", .{});
+
+                queue.clearRetainingCapacity();
+                for (next_queue.items) |node| {
+                    try queue.append(alloc, node);
+                }
+            }
+        }
+
         pub const Iterator = struct {
             leaf: ?*Node,
             index: usize,
@@ -869,147 +1010,6 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
                 return null;
             }
         };
-
-        pub fn init(self: *Self, alloc: Allocator) !void {
-            self.* = .{ .root = undefined, .pool = .empty };
-
-            const root = try self.pool.create(alloc);
-            root.* = .{ .Leaf = .{} };
-
-            self.root = root;
-        }
-
-        pub fn deinit(self: *Self, alloc: Allocator) void {
-            self.pool.deinit(alloc);
-        }
-
-        pub fn clone(self: *const Self, alloc: Allocator) !Self {
-            var node = self.pool.arena_state.used_list;
-            var count: u64 = 0;
-            while (node) |n| {
-                count += 1;
-                node = n.next;
-            }
-
-            var pool = try Node.Pool.initCapacity(alloc, count);
-            errdefer pool.deinit(alloc);
-
-            const root = try self.root.clone(&pool, alloc);
-            return .{ .root = root, .count = self.count, .pool = pool };
-        }
-
-        pub fn insert(self: *Self, alloc: Allocator, key: K, value: V) !?V {
-            defer self.count += 1;
-            var node: Node = Node{ .Leaf = .{} };
-
-            node.add_item(key, value);
-
-            return try self.root.append(node, &self.pool, alloc);
-        }
-
-        pub fn get(self: *Self, key: K) ?V {
-            return self.root.find(key);
-        }
-
-        pub fn clear(self: *Self, alloc: Allocator) !void {
-            _ = self.pool.reset(alloc, .retain_capacity);
-
-            const root = try self.pool.create(alloc);
-            root.* = .{ .Leaf = .{} };
-            self.root = root;
-            self.count = 0;
-        }
-
-        pub fn get_ref(self: *Self, key: K) ?*V {
-            return self.root.find_mut(key);
-        }
-
-        pub fn remove(self: *Self, alloc: Allocator, key: K) ?V {
-            const removed = self.root.delete(key, &self.pool, alloc) orelse return null;
-
-            if (!self.root.is_leaf() and self.root.len() == 1) {
-                const old_root = self.root;
-                self.root = old_root.Internal.childs[0];
-                self.pool.destroy(old_root);
-            }
-
-            self.count -= 1;
-            return removed;
-        }
-
-        pub fn iter(self: *Self) Iterator {
-            return Iterator.init(self);
-        }
-
-        /// Create a range iterator over [start, end] (both inclusive)
-        pub fn range(self: *Self, start: K, end: K) RangeIterator {
-            return RangeIterator.init(self, .{ .inclusive = start }, .{ .inclusive = end });
-        }
-
-        /// Create a range iterator from start (inclusive) to end of tree
-        pub fn rangeFrom(self: *Self, start: K) RangeIterator {
-            return RangeIterator.init(self, .{ .inclusive = start }, .unbounded);
-        }
-
-        /// Create a range iterator from start of tree to end (inclusive)
-        pub fn rangeTo(self: *Self, end: K) RangeIterator {
-            return RangeIterator.init(self, .unbounded, .{ .inclusive = end });
-        }
-
-        /// Create a range iterator with custom bounds
-        pub fn rangeWithBounds(self: *Self, start_bound: Bound, end_bound: Bound) RangeIterator {
-            return RangeIterator.init(self, start_bound, end_bound);
-        }
-
-        pub fn print(self: *const Self, alloc: Allocator) !void {
-            var queue = try std.ArrayList(*Node).initCapacity(alloc, 0);
-            defer queue.deinit(alloc);
-
-            if (self.root.len() == 0) {
-                std.debug.print("Tree is empty.\n", .{});
-                return;
-            }
-
-            try queue.append(alloc, self.root);
-
-            while (queue.items.len > 0) {
-                var next_queue = try std.ArrayList(*Node).initCapacity(alloc, 0);
-                defer next_queue.deinit(alloc);
-
-                while (queue.items.len > 0) {
-                    const node = queue.orderedRemove(0);
-                    if (!node.is_leaf()) {
-                        const internal = node.Internal;
-                        std.debug.print("{s}", .{"{ "});
-                        for (0..internal.len) |i| {
-                            std.debug.print("{}", .{internal.keys[i]});
-                            if (i < internal.len - 1) {
-                                std.debug.print(", ", .{});
-                            }
-                            try next_queue.append(alloc, internal.childs[i]);
-                        }
-                        std.debug.print("{s}", .{" } "});
-                    } else {
-                        const leaf = node.Leaf;
-                        std.debug.print("{s}", .{"{ "});
-                        for (0..leaf.len) |i| {
-                            std.debug.print("{{ {any}, {any} }}", .{ leaf.keys[i], leaf.items[i] });
-                            if (i < leaf.len - 1) {
-                                std.debug.print(", ", .{});
-                            }
-                        }
-                        std.debug.print("{s}", .{" } "});
-                        std.debug.print("\n", .{});
-                    }
-                }
-                std.debug.print("\n", .{});
-
-                queue.clearRetainingCapacity();
-                for (next_queue.items) |node| {
-                    try queue.append(alloc, node);
-                }
-            }
-        }
     };
 }
 
