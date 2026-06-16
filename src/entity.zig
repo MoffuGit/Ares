@@ -110,16 +110,16 @@ pub fn Entity(comptime T: type) type {
     return struct {
         any: AnyEntity,
 
-        pub fn new(app: *App, io: Io, args: anytype) !@This() {
-            return try app.new(io, T, T.init, args);
+        pub fn new(app: *App, args: anytype) !@This() {
+            return try app.new(T, T.init, args);
         }
 
-        pub fn update(self: @This(), app: *App, io: Io, function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
-            return try app.update_entity(io, T, self, function, args);
+        pub fn update(self: @This(), app: *App, function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+            return try app.update_entity(T, self, function, args);
         }
 
-        pub fn read(self: @This(), app: *App, io: Io, function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
-            return try app.read_entity(io, T, self, function, args);
+        pub fn read(self: @This(), app: *App, function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+            return try app.read_entity(T, self, function, args);
         }
 
         pub fn notify(self: @This(), app: *App) !void {

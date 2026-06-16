@@ -2,36 +2,45 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const assert = std.debug.assert;
-const datastruct = @import("datastruct.zig");
 
+const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 const ent = @import("entity.zig");
 const Entity = ent.Entity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
+const executor = @import("executor.zig");
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const Workspace = @import("workspace.zig");
 
 pub const App = @This();
 
 gpa: Allocator,
+io: Io,
 entity_store: EntityStore,
 observers: Observers,
 peding_updates: u16,
+
+foreground_executor: executor.ForegroundExecutor,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
 flushing: bool,
 
-pub fn init(self: *App, gpa: Allocator) !void {
+pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     self.* = .{
         .notifications = undefined,
         .entity_store = undefined,
         .observers = undefined,
+        .foreground_executor = undefined,
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
+        .io = io,
     };
+
+    try self.foreground_executor.init();
+    errdefer self.foreground_executor.deinit(io);
 
     try self.entity_store.init(gpa);
     errdefer self.entity_store.deinit(gpa);
@@ -44,30 +53,31 @@ pub fn init(self: *App, gpa: Allocator) !void {
 }
 
 pub fn deinit(self: *App) void {
+    self.foreground_executor.deinit(self.io);
     self.notifications.deinit(self.gpa);
     self.observers.deinit(self.gpa);
     self.entity_store.deinit(self.gpa);
 }
 
-pub fn new(self: *App, io: Io, comptime T: type, function: anytype, args: anytype) !Entity(T) {
+pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Entity(T) {
     const Args = @TypeOf(args);
 
     const TypeErased = struct {
-        fn new(app: *App, _io: Io, _args: Args) !Entity(T) {
+        fn new(app: *App, _args: Args) !Entity(T) {
             const entity = try app.gpa.create(T);
             errdefer app.gpa.destroy(entity);
 
             try @call(.auto, function, .{entity} ++ _args);
 
-            const id = app.entity_store.reserve(_io);
+            const id = app.entity_store.reserve(app.io);
             return app.entity_store.insert(id, T, entity);
         }
     };
 
-    return try self.update(io, TypeErased.new, .{ self, io, args });
+    return try self.update(TypeErased.new, .{ self, args });
 }
 
-pub fn update_entity(self: *App, io: Io, comptime T: type, entity: Entity(T), function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+pub fn update_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
     const Args = @TypeOf(args);
 
     const TypeErased = struct {
@@ -79,10 +89,10 @@ pub fn update_entity(self: *App, io: Io, comptime T: type, entity: Entity(T), fu
         }
     };
 
-    return try self.update(io, TypeErased.new, .{ self, entity, args });
+    return try self.update(TypeErased.new, .{ self, entity, args });
 }
 
-pub fn read_entity(self: *App, io: Io, comptime T: type, entity: Entity(T), function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+pub fn read_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
     const Args = @TypeOf(args);
 
     const TypeErased = struct {
@@ -93,16 +103,16 @@ pub fn read_entity(self: *App, io: Io, comptime T: type, entity: Entity(T), func
         }
     };
 
-    return try self.update(io, TypeErased.new, .{ self, entity, args });
+    return try self.update(TypeErased.new, .{ self, entity, args });
 }
 
 pub fn notify(self: *App, comptime T: type, entity: Entity(T)) !void {
     _ = try self.notifications.insert(self.gpa, entity.id());
 }
 
-pub fn update(self: *App, io: Io, function: anytype, args: std.meta.ArgsTuple(@TypeOf(function))) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+pub fn update(self: *App, function: anytype, args: std.meta.ArgsTuple(@TypeOf(function))) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
     self.start_update();
-    defer self.end_update(io);
+    defer self.end_update();
 
     return @call(.auto, function, args);
 }
@@ -111,17 +121,18 @@ pub fn start_update(self: *App) void {
     self.peding_updates += 1;
 }
 
-pub fn end_update(self: *App, io: Io) void {
+pub fn end_update(self: *App) void {
     if (!self.flushing and self.peding_updates == 1) {
         self.flushing = true;
-        self.flush(io) catch @panic("Failed to flush app");
+        self.flush() catch @panic("Failed to flush app");
         self.flushing = false;
     }
     self.peding_updates += 1;
 }
 
-pub fn flush(self: *App, io: Io) !void {
-    try self.destroy_dropped_entities(io);
+pub fn flush(self: *App) !void {
+    try self.foreground_executor.run();
+    try self.destroy_dropped_entities();
     try self.flush_notifications();
 }
 
@@ -134,9 +145,9 @@ pub fn flush_notifications(self: *App) !void {
     try self.notifications.clear(self.gpa);
 }
 
-pub fn destroy_dropped_entities(self: *App, io: Io) !void {
-    try self.entity_store.lockRefs(io);
-    defer self.entity_store.unlockRefs(io);
+pub fn destroy_dropped_entities(self: *App) !void {
+    try self.entity_store.lockRefs(self.io);
+    defer self.entity_store.unlockRefs(self.io);
 
     while (self.entity_store.popDrop()) |drop| {
         drop.@"2".destroy(self.gpa, drop.@"0");
@@ -147,7 +158,6 @@ pub const Observers = Subscriptions(EntityId, &.{*App}, ent.entityOrder);
 
 const Observer = struct {
     any: ent.AnyEntity,
-    io: Io,
     userdata: ?*anyopaque,
     callback: *const fn (*App, Observer) bool,
 };
@@ -158,7 +168,6 @@ pub fn observe(
     entity: Entity(T),
     context: anytype,
     comptime callback: *const fn (*App, Entity(T), @TypeOf(context)) void,
-    io: Io,
 ) !Observers.Subscription {
     const Context = @TypeOf(context);
 
@@ -168,8 +177,8 @@ pub fn observe(
         }
 
         fn _observe(app: *App, observer: Observer) bool {
-            const _entity = observer.any.into(T, observer.io) orelse return false;
-            defer _entity.drop(app.gpa, observer.io) catch {};
+            const _entity = observer.any.into(T, app.io) orelse return false;
+            defer _entity.drop(app.gpa, app.io) catch {};
             const _context: Context = @ptrCast(@alignCast(observer.userdata));
             callback(app, _entity, _context);
 
@@ -186,7 +195,6 @@ pub fn observe(
                 .any = entity.any,
                 .userdata = @ptrCast(context),
                 .callback = TypeErased._observe,
-                .io = io,
             },
         },
         self.gpa,
@@ -222,23 +230,23 @@ test "creates/drops entities" {
     const TestEntity = Entity(TestStruct);
 
     var app: App = undefined;
-    try app.init(allocator);
+    try app.init(allocator, io);
     defer app.deinit();
 
     var entities: [entity_count]TestEntity = undefined;
     for (&entities, 0..) |*entity, index| {
-        entity.* = try TestEntity.new(&app, io, .{});
+        entity.* = try TestEntity.new(&app, .{});
 
-        try entity.update(&app, io, TestStruct.set_index, .{index});
-        try entity.update(&app, io, TestStruct.inc, .{});
-        try testing.expectEqual(index + 1, entity.read(&app, io, TestStruct.get_index, .{}));
+        try entity.update(&app, TestStruct.set_index, .{index});
+        try entity.update(&app, TestStruct.inc, .{});
+        try testing.expectEqual(index + 1, entity.read(&app, TestStruct.get_index, .{}));
     }
 
     for (entities) |entity| {
         try entity.drop(allocator, io);
     }
 
-    try app.flush(io);
+    try app.flush();
 }
 
 test "Observe entities" {
@@ -270,12 +278,12 @@ test "Observe entities" {
     const TestEntity = Entity(TestStruct);
 
     var app: App = undefined;
-    try app.init(allocator);
+    try app.init(allocator, io);
     defer app.deinit();
 
     var entities: [entity_count]TestEntity = undefined;
     for (&entities) |*entity| {
-        entity.* = try TestEntity.new(&app, io, .{});
+        entity.* = try TestEntity.new(&app, .{});
     }
 
     const observed = entities[0];
@@ -290,24 +298,24 @@ test "Observe entities" {
 
     var index: usize = 0;
 
-    try observed.update(&app, io, TestStruct.set_index, .{index});
-    try observed.update(&app, io, TestStruct.inc, .{});
-    try testing.expectEqual(index + 1, observed.read(&app, io, TestStruct.get_index, .{}));
+    try observed.update(&app, TestStruct.set_index, .{index});
+    try observed.update(&app, TestStruct.inc, .{});
+    try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
     try observed.notify(&app);
 
     try testing.expect(!context);
 
-    const sub = try app.observe(TestStruct, observed, &context, Observed.callback, io);
+    const sub = try app.observe(TestStruct, observed, &context, Observed.callback);
     sub.enable();
 
     index = 1;
 
-    try observed.update(&app, io, TestStruct.set_index, .{index});
-    try observed.update(&app, io, TestStruct.inc, .{});
-    try testing.expectEqual(index + 1, observed.read(&app, io, TestStruct.get_index, .{}));
+    try observed.update(&app, TestStruct.set_index, .{index});
+    try observed.update(&app, TestStruct.inc, .{});
+    try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
     try observed.notify(&app);
 
-    try app.flush(io);
+    try app.flush();
 
     try testing.expect(context);
 
@@ -315,5 +323,5 @@ test "Observe entities" {
         try entity.drop(allocator, io);
     }
 
-    try app.flush(io);
+    try app.flush();
 }
