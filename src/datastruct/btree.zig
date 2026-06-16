@@ -773,6 +773,10 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             return removed;
         }
 
+        pub fn is_empty(self: *Self) bool {
+            return self.count == 0;
+        }
+
         pub fn iter(self: *Self) Iterator {
             return Iterator.init(self);
         }
