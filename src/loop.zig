@@ -61,7 +61,10 @@ pub fn run(self: *Loop, mode: RunMode) !void {
 }
 
 pub fn done(self: *Loop) bool {
-    return self.submissions.empty() and self.completions.empty() and self.inflight == 0;
+    return self.submissions.empty() and
+        self.completions.empty() and
+        self.inflight == 0 and
+        self.group.token.load(.acquire) == null;
 }
 
 pub fn flush(self: *Loop, _: bool) !void {
@@ -168,7 +171,6 @@ pub fn concurrent(
     };
 
     const Context = @TypeOf(context);
-    self.inflight += 1;
 
     const TypeErased = struct {
         fn concurrent(_loop: *Loop, _completion: *Completion) void {
@@ -180,10 +182,9 @@ pub fn concurrent(
             _loop.completions.push(_completion);
         }
 
-        fn complete(_loop: *Loop, _completion: *Completion) void {
+        fn complete(_: *Loop, _completion: *Completion) void {
             const data = &@field(_completion.operation, @tagName(op_tag));
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            _loop.inflight -= 1;
 
             @call(.auto, callback, .{ _context, _completion, data.result });
         }

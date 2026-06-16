@@ -10,11 +10,11 @@ const Workspace = @import("workspace.zig");
 
 pub const App = @This();
 
+gpa: Allocator,
+
 entity_store: EntityStore,
 peding_updates: u16,
 flushing: bool,
-
-gpa: Allocator,
 
 pub fn init(self: *App, gpa: Allocator) !void {
     self.* = .{

@@ -1012,6 +1012,93 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
         }
     };
 }
+
+pub fn BPlusSet(comptime K: type, comptime comp: *const fn (a: K, b: K) std.math.Order) type {
+    return struct {
+        const Self = @This();
+        const Tree = BPlusTree(K, void, comp);
+
+        tree: Tree,
+
+        pub const Bound = Tree.Bound;
+
+        pub const Iterator = struct {
+            inner: Tree.Iterator,
+
+            pub fn next(self: *Iterator) ?K {
+                const item = self.inner.next() orelse return null;
+                return item.key;
+            }
+        };
+
+        pub const RangeIterator = struct {
+            inner: Tree.RangeIterator,
+
+            pub fn next(self: *RangeIterator) ?K {
+                const item = self.inner.next() orelse return null;
+                return item.key;
+            }
+        };
+
+        pub fn init(self: *Self, alloc: Allocator) !void {
+            try self.tree.init(alloc);
+        }
+
+        pub fn deinit(self: *Self, alloc: Allocator) void {
+            self.tree.deinit(alloc);
+        }
+
+        pub fn clone(self: *const Self, alloc: Allocator) !Self {
+            return .{ .tree = try self.tree.clone(alloc) };
+        }
+
+        pub fn insert(self: *Self, alloc: Allocator, key: K) !bool {
+            const replaced = (try self.tree.insert(alloc, key, {})) != null;
+            if (replaced) self.tree.count -= 1;
+            return !replaced;
+        }
+
+        pub fn contains(self: *Self, key: K) bool {
+            return self.tree.get(key) != null;
+        }
+
+        pub fn remove(self: *Self, alloc: Allocator, key: K) bool {
+            return self.tree.remove(alloc, key) != null;
+        }
+
+        pub fn clear(self: *Self, alloc: Allocator) !void {
+            try self.tree.clear(alloc);
+        }
+
+        pub fn count(self: *const Self) usize {
+            return self.tree.count;
+        }
+
+        pub fn iter(self: *Self) Iterator {
+            return .{ .inner = self.tree.iter() };
+        }
+
+        pub fn range(self: *Self, start: K, end: K) RangeIterator {
+            return .{ .inner = self.tree.range(start, end) };
+        }
+
+        pub fn rangeFrom(self: *Self, start: K) RangeIterator {
+            return .{ .inner = self.tree.rangeFrom(start) };
+        }
+
+        pub fn rangeTo(self: *Self, end: K) RangeIterator {
+            return .{ .inner = self.tree.rangeTo(end) };
+        }
+
+        pub fn rangeWithBounds(self: *Self, start_bound: Bound, end_bound: Bound) RangeIterator {
+            return .{ .inner = self.tree.rangeWithBounds(start_bound, end_bound) };
+        }
+
+        pub fn print(self: *const Self, alloc: Allocator) !void {
+            try self.tree.print(alloc);
+        }
+    };
+}
 //
 fn test_comp(a: usize, b: usize) std.math.Order {
     return std.math.order(a, b);
@@ -1427,4 +1514,75 @@ test "B+ Tree delete - underflow and borrow from right sibling (internal)" {
     try testing.expectEqual(tree.root.height(), 1);
     try testing.expect(!tree.root.is_leaf());
     try testing.expectEqual(tree.root.len(), 12);
+}
+
+test "B+ Set insert contains iterate and duplicate" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusSet(usize, test_comp);
+    var set: T = undefined;
+    try set.init(alloc);
+    defer set.deinit(alloc);
+
+    for (0..90) |key| {
+        try testing.expect(try set.insert(alloc, key));
+    }
+
+    try testing.expectEqual(90, set.count());
+    try testing.expect(set.contains(0));
+    try testing.expect(set.contains(89));
+    try testing.expect(!set.contains(90));
+
+    try testing.expect(!try set.insert(alloc, 42));
+    try testing.expectEqual(90, set.count());
+
+    var iter = set.iter();
+    var expected: usize = 0;
+    while (iter.next()) |key| {
+        try testing.expectEqual(expected, key);
+        expected += 1;
+    }
+    try testing.expectEqual(90, expected);
+}
+
+test "B+ Set remove range clone and clear" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const T = BPlusSet(usize, test_comp);
+    var set: T = undefined;
+    try set.init(alloc);
+    defer set.deinit(alloc);
+
+    for (0..40) |key| {
+        _ = try set.insert(alloc, key);
+    }
+
+    try testing.expect(set.remove(alloc, 0));
+    try testing.expect(set.remove(alloc, 20));
+    try testing.expect(!set.remove(alloc, 99));
+    try testing.expect(!set.contains(0));
+    try testing.expect(!set.contains(20));
+    try testing.expectEqual(38, set.count());
+
+    var range = set.rangeWithBounds(.{ .exclusive = 8 }, .{ .inclusive = 13 });
+    var expected: usize = 9;
+    while (range.next()) |key| {
+        try testing.expectEqual(expected, key);
+        expected += 1;
+    }
+    try testing.expectEqual(14, expected);
+
+    var clone = try set.clone(alloc);
+    defer clone.deinit(alloc);
+
+    try testing.expect(clone.contains(13));
+    try testing.expect(!clone.contains(20));
+    try testing.expectEqual(set.count(), clone.count());
+
+    try set.clear(alloc);
+    try testing.expectEqual(0, set.count());
+    try testing.expect(!set.contains(13));
+    try testing.expect(clone.contains(13));
 }

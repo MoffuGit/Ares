@@ -3,8 +3,6 @@ const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 
 pub const TypeInfo = struct {
-    pub const max_align: std.mem.Alignment = .@"16";
-
     name: [:0]const u8,
     size: usize,
     alignment: u8,
