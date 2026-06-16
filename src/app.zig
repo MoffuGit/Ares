@@ -22,6 +22,7 @@ observers: Observers,
 peding_updates: u16,
 
 foreground_executor: executor.ForegroundExecutor,
+background_executor: executor.BackgroundExecutor,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
@@ -33,6 +34,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
         .entity_store = undefined,
         .observers = undefined,
         .foreground_executor = undefined,
+        .background_executor = undefined,
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
@@ -41,6 +43,9 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 
     try self.foreground_executor.init();
     errdefer self.foreground_executor.deinit(io);
+
+    try self.background_executor.init(gpa);
+    errdefer self.background_executor.deinit(gpa, io);
 
     try self.entity_store.init(gpa);
     errdefer self.entity_store.deinit(gpa);
@@ -53,6 +58,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 }
 
 pub fn deinit(self: *App) void {
+    self.background_executor.deinit(self.gpa, self.io);
     self.foreground_executor.deinit(self.io);
     self.notifications.deinit(self.gpa);
     self.observers.deinit(self.gpa);
