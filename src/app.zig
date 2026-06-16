@@ -12,10 +12,7 @@ const Workspace = @import("workspace.zig");
 
 pub const App = @This();
 
-pub const Observers = Subscriptions(EntityId, &.{*App}, ent.entityOrder);
-
 gpa: Allocator,
-
 entity_store: EntityStore,
 observers: Observers,
 peding_updates: u16,
@@ -122,7 +119,56 @@ pub fn destroy_dropped_entities(self: *App, io: Io) !void {
     }
 }
 
-test "app creates and drops many struct entities" {
+pub const Observers = Subscriptions(EntityId, &.{*App}, ent.entityOrder);
+
+const Observer = struct {
+    any: ent.AnyEntity,
+    io: Io,
+    userdata: ?*anyopaque,
+    callback: *const fn (*App, Observer) bool,
+};
+
+pub fn observe(
+    self: *App,
+    comptime T: type,
+    entity: Entity(T),
+    context: anytype,
+    comptime callback: *const fn (*App, Entity(T), @TypeOf(context)) void,
+    io: Io,
+) !Observers.Subscription {
+    const Context = @TypeOf(context);
+
+    const TypeErased = struct {
+        fn _callback(app: *App, observer: Observer) bool {
+            return observer.callback(app, observer);
+        }
+
+        fn _observe(app: *App, observer: Observer) bool {
+            const _entity = observer.any.into(T, observer.io) orelse return false;
+            const _context: Context = @ptrCast(@alignCast(observer.userdata));
+            callback(app, _entity, _context);
+
+            return true;
+        }
+    };
+
+    return try self.observers.insert(
+        entity.id(),
+        TypeErased._callback,
+        &.{Observer},
+        .{
+            .{
+                .any = entity.any,
+                .userdata = @ptrCast(context),
+                .callback = TypeErased._observe,
+                .io = io,
+            },
+        },
+        self.gpa,
+    );
+}
+
+test "creates/drops entities" {
     const testing = std.testing;
     const allocator = testing.allocator;
     const io = testing.io;
@@ -162,6 +208,62 @@ test "app creates and drops many struct entities" {
         try entity.update(&app, io, TestStruct.inc, .{});
         try testing.expectEqual(index + 1, entity.read(&app, io, TestStruct.get_index, .{}));
     }
+
+    for (entities) |entity| {
+        try entity.drop(allocator, io);
+    }
+
+    try app.flush(io);
+}
+
+test "Observe entities" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+    const entity_count = 32;
+
+    const TestStruct = struct {
+        index: usize,
+
+        pub fn init(self: *@This()) !void {
+            self.* = .{ .index = 0 };
+        }
+
+        pub fn set_index(self: *@This(), index: usize) void {
+            self.index = index;
+        }
+
+        pub fn inc(self: *@This()) void {
+            self.index += 1;
+        }
+
+        pub fn get_index(self: *const @This()) usize {
+            return self.index;
+        }
+    };
+
+    const TestEntity = Entity(TestStruct);
+
+    var app: App = undefined;
+    try app.init(allocator);
+    defer app.deinit();
+
+    var entities: [entity_count]TestEntity = undefined;
+    for (&entities) |*entity| {
+        entity.* = try TestEntity.new(&app, io, .{});
+    }
+
+    const observed = entities[0];
+
+    var context: bool = false;
+
+    const Observed = struct {
+        pub fn callback(_: *App, _: TestEntity, _context: *bool) void {
+            _context.* = true;
+        }
+    };
+
+    _ = try app.observe(TestStruct, observed, &context, Observed.callback, io);
 
     for (entities) |entity| {
         try entity.drop(allocator, io);

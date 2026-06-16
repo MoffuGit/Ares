@@ -68,6 +68,19 @@ pub const AnyEntity = struct {
         return .{ .refs = refs, .id = id, .type_id = type_id };
     }
 
+    pub fn into(self: @This(), T: type, io: Io) ?Entity(T) {
+        const refs = self.refs;
+        refs.rwlock.lockShared(io) catch return null;
+        defer refs.rwlock.unlockShared(io);
+
+        const ref = refs.refs.get(self.id) orelse return null;
+        const previous = ref.fetchAdd(1, .acq_rel);
+        assert(previous > 0);
+        return .{
+            .any = self,
+        };
+    }
+
     pub fn clone(self: @This(), io: Io) !@This() {
         const refs = self.refs;
         try refs.rwlock.lockShared(io);
@@ -109,12 +122,16 @@ pub fn Entity(comptime T: type) type {
             return try app.read_entity(io, T, self, function, args);
         }
 
-        pub fn init(refs: *EntityRefs, id: EntityId) @This() {
-            return .{ .any = .init(refs, id, TypeInfo.init(T)) };
+        pub fn init(refs: *EntityRefs, new_id: EntityId) @This() {
+            return .{ .any = .init(refs, new_id, TypeInfo.init(T)) };
         }
 
         pub fn clone(self: @This(), io: Io) !@This() {
             return .{ .any = try self.any.clone(io) };
+        }
+
+        pub fn id(self: *const @This()) EntityId {
+            return self.any.id;
         }
 
         pub fn drop(self: @This(), gpa: Allocator, io: Io) !void {
@@ -157,17 +174,17 @@ pub const EntityStore = struct {
     }
 
     pub fn get(self: *@This(), comptime T: type, entity: Entity(T)) *const T {
-        const ptr = self.entities.get(entity.any.id) orelse @panic("Reading non existing entity");
+        const ptr = self.entities.get(entity.id()) orelse @panic("Reading non existing entity");
         return @ptrCast(@alignCast(ptr.*));
     }
 
     pub fn getMut(self: *@This(), comptime T: type, entity: Entity(T)) *T {
-        const ptr = self.entities.getMut(entity.any.id) orelse @panic("Reading non existing entity");
+        const ptr = self.entities.getMut(entity.id()) orelse @panic("Reading non existing entity");
         return @ptrCast(@alignCast(ptr.*));
     }
 
     pub fn remove(self: *@This(), comptime T: type, entity: Entity(T)) *T {
-        const ptr = self.entities.remove(entity.any.id) orelse @panic("Updating non existing Entity");
+        const ptr = self.entities.remove(entity.id()) orelse @panic("Updating non existing Entity");
 
         return @as(*T, @ptrCast(@alignCast(ptr)));
     }
