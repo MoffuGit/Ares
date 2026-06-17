@@ -193,7 +193,7 @@ pub fn concurrent(
         fn complete(_: *Loop, _completion: *Completion) void {
             const _context: Context = @ptrCast(@alignCast(_completion.context));
 
-            @call(.auto, callback, .{ _context, _completion, _completion.result });
+            @call(.auto, callback, .{ _context, _completion, _completion.result.? });
         }
     };
 
@@ -290,7 +290,7 @@ pub const Completion = struct {
     };
 
     operation: Operation,
-    result: OperationResult = undefined,
+    result: ?OperationResult = null,
 
     context: ?*anyopaque,
     callback: *const fn (loop: *Loop, completion: *Completion) void,
@@ -322,6 +322,50 @@ test "defer" {
     try loop.run(.no_wait);
 
     try testing.expectEqual(context, 1);
+}
+
+test "read" {
+    const io = testing.io;
+
+    var loop: Loop = undefined;
+    try loop.init();
+    defer loop.deinit(io);
+
+    const contents = "hello from loop";
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const file = try tmp.dir.createFile(io, "read.txt", .{ .read = true });
+    defer file.close(io);
+    try file.writeStreamingAll(io, contents);
+    try testing.expectEqual(@as(i64, 0), posix.system.lseek(file.handle, 0, posix.SEEK.SET));
+
+    var buffer: [contents.len]u8 = undefined;
+    var completion: Completion = .noop;
+    var called = false;
+
+    const Resolver = struct {
+        pub fn perform(self: *Operation.Read) OperationResult {
+            return .{ .read = posix.read(self.fd, self.buffer) };
+        }
+    };
+
+    loop.concurrent(testing.io, &completion, struct {
+        fn read(_called: *bool, _: *Completion, result: OperationResult) void {
+            _called.* = true;
+            testing.expectEqual(@as(usize, contents.len), result.read catch unreachable) catch unreachable;
+        }
+    }.read, &called, .read, .{
+        .fd = file.handle,
+        .buffer = &buffer,
+    }, Resolver.perform) catch unreachable;
+
+    try testing.expect(!called);
+
+    try loop.run(.until_done);
+
+    try testing.expect(called);
+    try testing.expectEqualStrings(contents, &buffer);
 }
 
 test "mach port" {
