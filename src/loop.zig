@@ -193,25 +193,6 @@ pub fn concurrent(
     try self.group.concurrent(io, TypeErased.concurrent, .{ self, completion });
 }
 
-pub fn read(
-    self: *Loop,
-    io: Io,
-    completion: *Completion,
-    callback: anytype,
-    context: anytype,
-    fd: posix.fd_t,
-    buffer: []u8,
-) !void {
-    try self.concurrent(io, completion, callback, context, .read, .{
-        .fd = fd,
-        .buffer = buffer,
-    }, struct {
-        fn read(data: *Operation.Read) OperationResult {
-            return .{ .read = posix.read(data.fd, data.buffer) };
-        }
-    }.read);
-}
-
 pub fn @"defer"(
     self: *Loop,
     completion: *Completion,
@@ -258,7 +239,7 @@ const OperationType = enum {
     machport,
 };
 
-const OperationResult = union(OperationType) {
+pub const OperationResult = union(OperationType) {
     noop: void,
     @"defer": void,
     read: posix.ReadError!usize,
@@ -266,7 +247,7 @@ const OperationResult = union(OperationType) {
 };
 
 pub const Completion = struct {
-    const noop: Completion = .{
+    pub const noop: Completion = .{
         .operation = .noop,
         .context = null,
         .callback = noopCallback,
@@ -310,46 +291,6 @@ test "defer" {
     try loop.run(.no_wait);
 
     try testing.expectEqual(context, 1);
-}
-
-test "read" {
-    const io = testing.io;
-
-    var loop: Loop = undefined;
-    try loop.init();
-    defer loop.deinit(io);
-
-    const expected = "hello";
-    var tmp = testing.tmpDir(.{});
-    defer tmp.cleanup();
-
-    try tmp.dir.writeFile(io, .{ .sub_path = "read.txt", .data = expected });
-    const file = try tmp.dir.openFile(io, "read.txt", .{});
-    defer file.close(io);
-
-    var buffer: [expected.len]u8 = undefined;
-    var completion: Completion = .noop;
-    var context: struct {
-        completed: bool = false,
-        result: ?posix.ReadError!usize = null,
-    } = .{};
-
-    try loop.read(io, &completion, struct {
-        fn read(_context: *@TypeOf(context), _: *Completion, r: OperationResult) void {
-            _context.completed = true;
-            _context.result = r.read;
-        }
-    }.read, &context, file.handle, &buffer);
-
-    try testing.expectEqual(false, context.completed);
-    try testing.expectEqual(@as(?posix.ReadError!usize, null), context.result);
-
-    try loop.run(.until_done);
-
-    try testing.expectEqual(true, context.completed);
-    const bytes_read = try context.result.?;
-    try testing.expectEqual(expected.len, bytes_read);
-    try testing.expectEqualStrings(expected, buffer[0..bytes_read]);
 }
 
 test "mach port" {
