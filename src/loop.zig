@@ -92,8 +92,6 @@ pub fn flush(self: *Loop, _: bool) !void {
         self.inflight += submitted;
         self.inflight -= completed;
 
-        std.log.err("inflight {}", .{self.inflight});
-
         for (events[0..completed]) |ev| {
             if (ev.udata == 0) continue;
 
@@ -152,12 +150,14 @@ pub fn submit(
 
     const TypeErased = struct {
         fn complete(_: *Loop, _completion: *Completion) void {
-            const result = @call(.auto, resolver, .{&@field(_completion.operation, @tagName(op_tag))});
+            if (_completion.result == null) {
+                const result = @call(.auto, resolver, .{&@field(_completion.operation, @tagName(op_tag))});
 
-            _completion.result = result;
+                _completion.result = result;
+            }
 
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            @call(.auto, callback, .{ _context, _completion, result });
+            @call(.auto, callback, .{ _context, _completion, _completion.result.? });
         }
     };
 
@@ -436,28 +436,34 @@ test "read" {
 
 test "mach port" {
     const io = testing.io;
-    const c = std.c;
 
     var loop: Loop = undefined;
     try loop.init();
     defer loop.deinit(io);
 
-    const mach_self = c.mach_task_self();
-    var mach_port: c.mach_port_name_t = undefined;
-    try testing.expectEqual(@as(c.kern_return_t, 0), c.mach_port_allocate(
-        mach_self,
-        c.MACH.PORT.RIGHT.RECEIVE,
-        &mach_port,
+    const mach_self = posix.system.mach_task_self();
+    var mach_port: posix.system.mach_port_name_t = undefined;
+    try testing.expectEqual(posix.system.mach_msg_return_t.SUCCESS, @as(
+        posix.system.mach_msg_return_t,
+        @enumFromInt(
+            posix.system.mach_port_allocate(
+                mach_self,
+                posix.system.MACH.PORT.RIGHT.RECEIVE,
+                &mach_port,
+            ),
+        ),
     ));
-    defer _ = c.mach_port_deallocate(mach_self, mach_port);
+    defer _ = posix.system.mach_port_deallocate(mach_self, mach_port);
 
-    var buffer: [@sizeOf(c.mach_msg_header_t)]u8 = undefined;
-    var completion: Completion = .noop;
     var called = false;
+    var buffer: [@sizeOf(std.c.mach_msg_header_t)]u8 = undefined;
+    var completion: Completion = .noop;
 
     loop.submit(&completion, struct {
-        fn machport(_called: *bool, _: *Completion, _: OperationResult) void {
-            _called.* = true;
+        fn machport(_called: *bool, _: *Completion, res: OperationResult) void {
+            if (res.machport != error.Canceled) {
+                _called.* = true;
+            }
         }
     }.machport, &called, .machport, .{
         .port = mach_port,
@@ -468,32 +474,54 @@ test "mach port" {
         }
     }.machport);
 
-    for (0..10) |_| try loop.run(.no_wait);
+    // Tick so we submit... should not call since we never sent.
+    try loop.run(.no_wait);
     try testing.expect(!called);
 
-    var msg: c.mach_msg_header_t = .{
-        .msgh_bits = @intFromEnum(c.MACH.MSG.TYPE.MAKE_SEND_ONCE),
-        .msgh_size = @sizeOf(c.mach_msg_header_t),
+    // Send a message to the port
+    var msg: posix.system.mach_msg_header_t = .{
+        .msgh_bits = @intFromEnum(posix.system.MACH.MSG.TYPE.MAKE_SEND_ONCE),
+        .msgh_size = @sizeOf(posix.system.mach_msg_header_t),
         .msgh_remote_port = mach_port,
-        .msgh_local_port = c.MACH.PORT.NULL,
+        .msgh_local_port = posix.system.MACH.PORT.NULL,
         .msgh_voucher_port = undefined,
         .msgh_id = undefined,
     };
-    try testing.expectEqual(c.mach_msg_return_t.SUCCESS, c.mach_msg(
-        &msg,
-        .{ .SEND = .{} },
-        msg.msgh_size,
-        0,
-        c.MACH.PORT.NULL,
-        c.MACH.MSG.TIMEOUT_NONE,
-        c.MACH.PORT.NULL,
-    ));
 
+    try testing.expectEqual(
+        posix.system.mach_msg_return_t.SUCCESS,
+        posix.system.mach_msg(
+            &msg,
+            .{ .SEND = .{} },
+            msg.msgh_size,
+            0,
+            posix.system.MACH.PORT.NULL,
+            posix.system.MACH.MSG.TIMEOUT_NONE,
+            posix.system.MACH.PORT.NULL,
+        ),
+    );
+    // We should receive now!
     try loop.run(.until_done);
     try testing.expect(called);
 
+    // We should not receive again
     called = false;
+    loop.submit(&completion, struct {
+        fn machport(_called: *bool, _: *Completion, res: OperationResult) void {
+            if (res.machport != error.Canceled) {
+                _called.* = true;
+            }
+        }
+    }.machport, &called, .machport, .{
+        .port = mach_port,
+        .buffer = &buffer,
+    }, struct {
+        fn machport(_: *Operation.MachPort) OperationResult {
+            return .{ .machport = {} };
+        }
+    }.machport);
 
+    // Tick so we submit... should not call since we never sent.
     try loop.run(.no_wait);
     try testing.expect(!called);
 }
@@ -520,8 +548,10 @@ test "cancel mach port" {
     var called = false;
 
     loop.submit(&completion, struct {
-        fn machport(_called: *bool, _: *Completion, _: OperationResult) void {
-            _called.* = true;
+        fn machport(_called: *bool, _: *Completion, res: OperationResult) void {
+            if (res.machport != error.Canceled) {
+                _called.* = true;
+            }
         }
     }.machport, &called, .machport, .{
         .port = mach_port,
@@ -546,5 +576,7 @@ test "cancel mach port" {
     loop.cancel(&cancellation, &completion, Cancelled.cancel, &canceled);
 
     for (0..10) |_| try loop.run(.no_wait);
+
     try testing.expect(canceled);
+    try testing.expect(!called);
 }
