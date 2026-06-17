@@ -204,7 +204,7 @@ pub fn @"defer"(
     const TypeErased = struct {
         fn complete(_: *Loop, _completion: *Completion) void {
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            @call(.auto, callback, .{ _context, _completion });
+            @call(.auto, callback, .{ _context, _completion, OperationResult{ .@"defer" = {} } });
         }
     };
 
@@ -281,7 +281,7 @@ test "defer" {
     var completion: Completion = .noop;
 
     loop.@"defer"(&completion, struct {
-        pub fn @"defer"(_context: *u64, _: *Completion) void {
+        pub fn @"defer"(_context: *u64, _: *Completion, _: OperationResult) void {
             _context.* += 1;
         }
     }.@"defer", &context);
