@@ -136,11 +136,10 @@ pub fn submit(
 
     const TypeErased = struct {
         fn complete(_: *Loop, _completion: *Completion) void {
-            const result = @call(.auto, resolver, .{&@field(_completion.operation, @tagName(op_tag))});
+            @call(.auto, resolver, .{&@field(_completion.operation, @tagName(op_tag))});
 
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-
-            @call(.auto, callback, .{ _context, _completion, result });
+            @call(.auto, callback, .{ _context, _completion });
         }
     };
 
@@ -174,8 +173,7 @@ pub fn concurrent(
 
     const TypeErased = struct {
         fn concurrent(_loop: *Loop, _completion: *Completion) void {
-            const data = &@field(_completion.operation, @tagName(op_tag));
-            data.result = @call(.auto, resolver, .{data});
+            @call(.auto, resolver, .{&@field(_completion.operation, @tagName(op_tag))});
 
             _completion.callback = complete;
 
@@ -183,10 +181,9 @@ pub fn concurrent(
         }
 
         fn complete(_: *Loop, _completion: *Completion) void {
-            const data = &@field(_completion.operation, @tagName(op_tag));
             const _context: Context = @ptrCast(@alignCast(_completion.context));
 
-            @call(.auto, callback, .{ _context, _completion, data.result });
+            @call(.auto, callback, .{ _context, _completion });
         }
     };
 
@@ -206,8 +203,8 @@ pub fn read(
         .fd = fd,
         .buffer = buffer,
     }, struct {
-        fn read(data: *Operation.Read) posix.ReadError!usize {
-            return posix.read(data.fd, data.buffer);
+        fn read(data: *Operation.Read) void {
+            data.result = posix.read(data.fd, data.buffer);
         }
     }.read);
 }
@@ -322,9 +319,9 @@ test "read" {
     } = .{};
 
     try loop.read(io, &completion, struct {
-        fn read(_context: *@TypeOf(context), _: *Completion, result: posix.ReadError!usize) void {
+        fn read(_context: *@TypeOf(context), c: *Completion) void {
             _context.completed = true;
-            _context.result = result;
+            _context.result = c.operation.read.result;
         }
     }.read, &context, file.handle, &buffer);
 
@@ -361,8 +358,7 @@ test "mach port" {
     var called = false;
 
     loop.submit(&completion, struct {
-        fn machport(_called: *bool, _: *Completion, result: void) void {
-            _ = result;
+        fn machport(_called: *bool, _: *Completion) void {
             _called.* = true;
         }
     }.machport, &called, .machport, .{
