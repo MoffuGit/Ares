@@ -98,7 +98,13 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             self.dropped.deinit(gpa);
         }
 
-        pub fn insert(self: *Self, key: Key, callback: anytype, comptime Fields: []const type, context: std.meta.Tuple(Fields), gpa: Allocator) !Subscription {
+        pub fn insert(
+            self: *Self,
+            key: Key,
+            callback: anytype,
+            context: anytype,
+            gpa: Allocator,
+        ) !Subscription {
             const Context = @TypeOf(context);
 
             const TypeErased = struct {
@@ -238,7 +244,7 @@ test "Subscriptions" {
 
     const key = 42;
     var context = false;
-    var sub = try subscriptions.insert(key, Callback.notify, &.{*bool}, .{&context}, std.testing.allocator);
+    var sub = try subscriptions.insert(key, Callback.notify, .{&context}, std.testing.allocator);
 
     try std.testing.expectEqual(&subscriptions, sub.subscriptions);
     try std.testing.expectEqual(@as(Key, 42), sub.key);

@@ -195,9 +195,8 @@ pub fn observe(
     return try self.observers.insert(
         entity.id(),
         TypeErased._callback,
-        &.{Observer},
         .{
-            .{
+            Observer{
                 .any = entity.any,
                 .userdata = @ptrCast(context),
                 .callback = TypeErased._observe,
