@@ -20,6 +20,7 @@ pub const Loop = @This();
 
 kq: posix.fd_t,
 
+cancellations: mpsc.Intrusive(Completion),
 completions: mpsc.Intrusive(Completion),
 submissions: mpsc.Intrusive(Completion),
 inflight: usize,
@@ -31,12 +32,14 @@ pub fn init(self: *Loop) !void {
     self.* = .{
         .kq = kq,
         .completions = undefined,
+        .cancellations = undefined,
         .submissions = undefined,
         .inflight = 0,
         .group = .init,
     };
     self.completions.init();
     self.submissions.init();
+    self.cancellations.init();
 }
 
 pub fn deinit(self: *Loop, io: Io) void {
@@ -68,6 +71,10 @@ pub fn done(self: *Loop) bool {
 }
 
 pub fn flush(self: *Loop, _: bool) !void {
+    while (self.cancellations.pop()) |c| {
+        c.callback(self, c);
+    }
+
     var events: [256]posix.Kevent = undefined;
 
     const submitted = self.flush_submissions(&events);
@@ -106,7 +113,7 @@ pub fn flush_submissions(self: *Loop, kevents: []posix.Kevent) usize {
         const completion = self.submissions.pop() orelse return acc;
 
         switch (completion.operation) {
-            .read, .noop, .@"defer" => panic("{s} operation reached the submissions queueu", .{@tagName(completion.operation)}),
+            .read, .cancel, .noop, .@"defer" => panic("{s} operation reached the submissions queueu", .{@tagName(completion.operation)}),
             .machport => |mach| {
                 event.* = .{
                     .ident = @as(c_uint, mach.port),
@@ -215,11 +222,35 @@ pub fn @"defer"(
     self.completions.push(completion);
 }
 
+pub fn cancellation(
+    self: *Loop,
+    completion: *Completion,
+    target: *Completion,
+    callback: anytype,
+    context: anytype,
+) void {
+    const Context = @TypeOf(context);
+
+    const TypeErased = struct {
+        fn complete(_: *Loop, _completion: *Completion) void {
+            const _context: Context = @ptrCast(@alignCast(_completion.context));
+            @call(.auto, callback, .{ _context, _completion, OperationResult{ .cancel = {} } });
+        }
+    };
+
+    completion.operation = .{ .cancel = target };
+    completion.context = context;
+    completion.callback = TypeErased.complete;
+
+    self.cancellation.push(completion);
+}
+
 pub const Operation = union(OperationType) {
     noop: void,
     @"defer": void,
     read: Read,
     machport: MachPort,
+    cancel: *Completion,
 
     pub const Read = struct {
         fd: posix.fd_t,
@@ -237,13 +268,18 @@ const OperationType = enum {
     @"defer",
     read,
     machport,
+    cancel,
 };
+
+const Canceled = error{Canceled};
+const ReadError = Canceled || posix.ReadError;
 
 pub const OperationResult = union(OperationType) {
     noop: void,
-    @"defer": void,
-    read: posix.ReadError!usize,
-    machport: void,
+    @"defer": Canceled!void,
+    read: ReadError!usize,
+    machport: Canceled!void,
+    cancel: void,
 };
 
 pub const Completion = struct {
@@ -318,7 +354,7 @@ test "mach port" {
         .buffer = &buffer,
     }, struct {
         fn machport(_: *Operation.MachPort) OperationResult {
-            return .machport;
+            return .{ .machport = {} };
         }
     }.machport);
 
