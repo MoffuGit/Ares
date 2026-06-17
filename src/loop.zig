@@ -235,7 +235,7 @@ pub fn @"defer"(
     self.completions.push(completion);
 }
 
-pub fn cancellation(
+pub fn cancel(
     self: *Loop,
     completion: *Completion,
     target: *Completion,
@@ -266,7 +266,7 @@ pub fn cancellation(
     completion.context = context;
     completion.callback = TypeErased.complete;
 
-    self.cancellation.push(completion);
+    self.cancellations.push(completion);
 }
 
 pub const Operation = union(OperationType) {
