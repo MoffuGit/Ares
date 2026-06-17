@@ -99,35 +99,42 @@ pub fn flush(self: *Loop, _: bool) !void {
 
             const c: *Completion = @ptrFromInt(@as(usize, @intCast(ev.udata)));
 
+            c.state = .completed;
+
             self.completions.push(c);
         }
     }
 
     while (self.completions.pop()) |completion| {
         completion.callback(self, completion);
+        completion.state = .idle;
     }
 }
 
 pub fn flush_submissions(self: *Loop, kevents: []posix.Kevent) usize {
-    for (kevents, 0..) |*event, acc| {
-        const completion = self.submissions.pop() orelse return acc;
-
-        switch (completion.operation) {
-            .read, .cancel, .noop, .@"defer" => panic("{s} operation reached the submissions queueu", .{@tagName(completion.operation)}),
-            .machport => |mach| {
-                event.* = .{
-                    .ident = @as(c_uint, mach.port),
-                    .filter = std.c.EVFILT.MACHPORT,
-                    .flags = std.c.EV.ADD | std.c.EV.ENABLE | std.c.EV.ONESHOT,
-                    .fflags = @bitCast(std.c.MACH.RCV{ .MSG = true }),
-                    .data = 0,
-                    .udata = @intFromPtr(completion),
-                };
-            },
+    var submitted: usize = 0;
+    while (submitted < kevents.len) {
+        const completion = self.submissions.pop() orelse return submitted;
+        if (completion.state == .completed) {
+            self.completions.push(completion);
+            continue;
         }
-    }
 
-    return kevents.len;
+        var event: posix.Kevent = undefined;
+        completion.kevent(&event);
+
+        if (completion.state == .canceled) {
+            event.flags = std.c.EV.DELETE;
+            completion.canceled();
+            self.completions.push(completion);
+        } else {
+            completion.state = .active;
+        }
+
+        kevents[submitted] = event;
+        submitted += 1;
+    }
+    return submitted;
 }
 
 pub fn submit(
@@ -153,6 +160,7 @@ pub fn submit(
     };
 
     completion.* = .{
+        .state = .submitted,
         .operation = @unionInit(Operation, @tagName(op_tag), op_data),
         .context = context,
         .callback = TypeErased.complete,
@@ -171,6 +179,7 @@ pub fn concurrent(
     resolver: anytype,
 ) !void {
     completion.* = .{
+        .state = .active,
         .operation = @unionInit(Operation, @tagName(op_tag), op_data),
         .context = context,
         .callback = undefined,
@@ -186,6 +195,7 @@ pub fn concurrent(
 
             _completion.callback = complete;
             _completion.result = result;
+            _completion.state = .completed;
 
             _loop.completions.push(_completion);
         }
@@ -215,9 +225,12 @@ pub fn @"defer"(
         }
     };
 
-    completion.operation = .@"defer";
-    completion.context = context;
-    completion.callback = TypeErased.complete;
+    completion.* = .{
+        .operation = .@"defer",
+        .context = context,
+        .callback = TypeErased.complete,
+        .state = .completed,
+    };
 
     self.completions.push(completion);
 }
@@ -232,7 +245,18 @@ pub fn cancellation(
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
-        fn complete(_: *Loop, _completion: *Completion) void {
+        fn complete(loop: *Loop, _completion: *Completion) void {
+            const _target = _completion.operation.cancel;
+
+            switch (_target.state) {
+                .idle, .canceled => {},
+                .completed, .submitted => _target.canceled(),
+                .active => {
+                    _target.state = .canceled;
+                    loop.submissions.push(_target);
+                },
+            }
+
             const _context: Context = @ptrCast(@alignCast(_completion.context));
             @call(.auto, callback, .{ _context, _completion, OperationResult{ .cancel = {} } });
         }
@@ -282,11 +306,20 @@ pub const OperationResult = union(OperationType) {
     cancel: void,
 };
 
+const State = enum {
+    idle,
+    submitted,
+    canceled,
+    active,
+    completed,
+};
+
 pub const Completion = struct {
     pub const noop: Completion = .{
         .operation = .noop,
         .context = null,
         .callback = noopCallback,
+        .state = .idle,
     };
 
     operation: Operation,
@@ -298,7 +331,35 @@ pub const Completion = struct {
     prev: ?*Completion = null,
     next: ?*Completion = null,
 
+    state: State,
+
     pub fn noopCallback(_: *Loop, _: *Completion) void {}
+
+    pub fn canceled(self: *Completion) void {
+        self.state = .completed;
+        switch (self.operation) {
+            .noop, .cancel => {},
+            .read => self.result = .{ .read = error.Canceled },
+            .@"defer" => self.result = .{ .@"defer" = error.Canceled },
+            .machport => self.result = .{ .machport = error.Canceled },
+        }
+    }
+
+    pub fn kevent(self: *Completion, event: *posix.Kevent) void {
+        switch (self.operation) {
+            .read, .cancel, .noop, .@"defer" => panic("{s} operation reached the submissions queueu", .{@tagName(self.operation)}),
+            .machport => |mach| {
+                event.* = .{
+                    .ident = @as(c_uint, mach.port),
+                    .filter = std.c.EVFILT.MACHPORT,
+                    .flags = std.c.EV.ADD | std.c.EV.ENABLE | std.c.EV.ONESHOT,
+                    .fflags = @bitCast(std.c.MACH.RCV{ .MSG = true }),
+                    .data = 0,
+                    .udata = @intFromPtr(self),
+                };
+            },
+        }
+    }
 };
 
 test "defer" {
