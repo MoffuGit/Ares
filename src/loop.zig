@@ -136,10 +136,12 @@ pub fn submit(
 
     const TypeErased = struct {
         fn complete(_: *Loop, _completion: *Completion) void {
-            @call(.auto, resolver, .{&@field(_completion.operation, @tagName(op_tag))});
+            const result = @call(.auto, resolver, .{&@field(_completion.operation, @tagName(op_tag))});
+
+            _completion.result = result;
 
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            @call(.auto, callback, .{ _context, _completion });
+            @call(.auto, callback, .{ _context, _completion, result });
         }
     };
 
@@ -173,9 +175,10 @@ pub fn concurrent(
 
     const TypeErased = struct {
         fn concurrent(_loop: *Loop, _completion: *Completion) void {
-            @call(.auto, resolver, .{&@field(_completion.operation, @tagName(op_tag))});
+            const result = @call(.auto, resolver, .{&@field(_completion.operation, @tagName(op_tag))});
 
             _completion.callback = complete;
+            _completion.result = result;
 
             _loop.completions.push(_completion);
         }
@@ -183,7 +186,7 @@ pub fn concurrent(
         fn complete(_: *Loop, _completion: *Completion) void {
             const _context: Context = @ptrCast(@alignCast(_completion.context));
 
-            @call(.auto, callback, .{ _context, _completion });
+            @call(.auto, callback, .{ _context, _completion, _completion.result });
         }
     };
 
@@ -203,8 +206,8 @@ pub fn read(
         .fd = fd,
         .buffer = buffer,
     }, struct {
-        fn read(data: *Operation.Read) void {
-            data.result = posix.read(data.fd, data.buffer);
+        fn read(data: *Operation.Read) OperationResult {
+            return .{ .read = posix.read(data.fd, data.buffer) };
         }
     }.read);
 }
@@ -231,7 +234,7 @@ pub fn @"defer"(
     self.completions.push(completion);
 }
 
-pub const Operation = union(enum) {
+pub const Operation = union(OperationType) {
     noop: void,
     @"defer": void,
     read: Read,
@@ -240,7 +243,6 @@ pub const Operation = union(enum) {
     pub const Read = struct {
         fd: posix.fd_t,
         buffer: []u8,
-        result: posix.ReadError!usize = 0,
     };
 
     pub const MachPort = struct {
@@ -249,16 +251,30 @@ pub const Operation = union(enum) {
     };
 };
 
+const OperationType = enum {
+    noop,
+    @"defer",
+    read,
+    machport,
+};
+
+const OperationResult = union(OperationType) {
+    noop: void,
+    @"defer": void,
+    read: posix.ReadError!usize,
+    machport: void,
+};
+
 pub const Completion = struct {
     const noop: Completion = .{
         .operation = .noop,
         .context = null,
         .callback = noopCallback,
-        .prev = null,
-        .next = null,
     };
 
     operation: Operation,
+    result: OperationResult = undefined,
+
     context: ?*anyopaque,
     callback: *const CallbackFn,
 
@@ -319,9 +335,9 @@ test "read" {
     } = .{};
 
     try loop.read(io, &completion, struct {
-        fn read(_context: *@TypeOf(context), c: *Completion) void {
+        fn read(_context: *@TypeOf(context), _: *Completion, r: OperationResult) void {
             _context.completed = true;
-            _context.result = c.operation.read.result;
+            _context.result = r.read;
         }
     }.read, &context, file.handle, &buffer);
 
@@ -358,14 +374,16 @@ test "mach port" {
     var called = false;
 
     loop.submit(&completion, struct {
-        fn machport(_called: *bool, _: *Completion) void {
+        fn machport(_called: *bool, _: *Completion, _: OperationResult) void {
             _called.* = true;
         }
     }.machport, &called, .machport, .{
         .port = mach_port,
         .buffer = &buffer,
     }, struct {
-        fn machport(_: *Operation.MachPort) void {}
+        fn machport(_: *Operation.MachPort) OperationResult {
+            return .machport;
+        }
     }.machport);
 
     for (0..10) |_| try loop.run(.no_wait);
