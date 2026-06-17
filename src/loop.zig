@@ -92,6 +92,8 @@ pub fn flush(self: *Loop, _: bool) !void {
         self.inflight += submitted;
         self.inflight -= completed;
 
+        std.log.err("inflight {}", .{self.inflight});
+
         for (events[0..completed]) |ev| {
             if (ev.udata == 0) continue;
 
@@ -262,9 +264,12 @@ pub fn cancel(
         }
     };
 
-    completion.operation = .{ .cancel = target };
-    completion.context = context;
-    completion.callback = TypeErased.complete;
+    completion.* = .{
+        .operation = .{ .cancel = target },
+        .context = context,
+        .callback = TypeErased.complete,
+        .state = .active,
+    };
 
     self.cancellations.push(completion);
 }
@@ -352,7 +357,7 @@ pub const Completion = struct {
                 event.* = .{
                     .ident = @as(c_uint, mach.port),
                     .filter = std.c.EVFILT.MACHPORT,
-                    .flags = std.c.EV.ADD | std.c.EV.ENABLE | std.c.EV.ONESHOT,
+                    .flags = std.c.EV.ADD | std.c.EV.ENABLE,
                     .fflags = @bitCast(std.c.MACH.RCV{ .MSG = true }),
                     .data = 0,
                     .udata = @intFromPtr(self),
@@ -491,4 +496,55 @@ test "mach port" {
 
     try loop.run(.no_wait);
     try testing.expect(!called);
+}
+
+test "cancel mach port" {
+    const io = testing.io;
+    const c = std.c;
+
+    var loop: Loop = undefined;
+    try loop.init();
+    defer loop.deinit(io);
+
+    const mach_self = c.mach_task_self();
+    var mach_port: c.mach_port_name_t = undefined;
+    try testing.expectEqual(@as(c.kern_return_t, 0), c.mach_port_allocate(
+        mach_self,
+        c.MACH.PORT.RIGHT.RECEIVE,
+        &mach_port,
+    ));
+    defer _ = c.mach_port_deallocate(mach_self, mach_port);
+
+    var buffer: [@sizeOf(c.mach_msg_header_t)]u8 = undefined;
+    var completion: Completion = .noop;
+    var called = false;
+
+    loop.submit(&completion, struct {
+        fn machport(_called: *bool, _: *Completion, _: OperationResult) void {
+            _called.* = true;
+        }
+    }.machport, &called, .machport, .{
+        .port = mach_port,
+        .buffer = &buffer,
+    }, struct {
+        fn machport(_: *Operation.MachPort) OperationResult {
+            return .{ .machport = {} };
+        }
+    }.machport);
+
+    for (0..10) |_| try loop.run(.no_wait);
+    try testing.expect(!called);
+
+    const Cancelled = struct {
+        fn cancel(context: *bool, _: *Completion, _: OperationResult) void {
+            context.* = true;
+        }
+    };
+    var canceled: bool = false;
+    var cancellation: Completion = .noop;
+
+    loop.cancel(&cancellation, &completion, Cancelled.cancel, &canceled);
+
+    for (0..10) |_| try loop.run(.no_wait);
+    try testing.expect(canceled);
 }
