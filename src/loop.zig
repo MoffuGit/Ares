@@ -257,15 +257,10 @@ pub const Completion = struct {
     result: OperationResult = undefined,
 
     context: ?*anyopaque,
-    callback: *const CallbackFn,
+    callback: *const fn (loop: *Loop, completion: *Completion) void,
 
     prev: ?*Completion = null,
     next: ?*Completion = null,
-
-    pub const CallbackFn = fn (
-        loop: *Loop,
-        completion: *Completion,
-    ) void;
 
     pub fn noopCallback(_: *Loop, _: *Completion) void {}
 };
