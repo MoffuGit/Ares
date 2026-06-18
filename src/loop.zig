@@ -5,12 +5,13 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const posix = std.posix;
-const Kqueue = std.Io.Kqueue;
 const testing = std.testing;
 const Io = std.Io;
 const meta = std.meta;
 const panic = std.debug.panic;
 const builtin = @import("builtin");
+
+const Kevent = std.c.kevent64_s;
 
 const datastruct = @import("datastruct.zig");
 const queue = datastruct.queue;
@@ -75,21 +76,23 @@ pub fn flush(self: *Loop, _: bool) !void {
         c.callback(self, c);
     }
 
-    var events: [256]posix.Kevent = undefined;
+    var events: [256]Kevent = undefined;
 
-    const submitted = self.flush_submissions(&events);
+    const res = self.flush_submissions(&events);
+    const active = res.@"0";
+    const submitted = res.@"1";
 
     if (submitted > 0 or self.completions.empty()) {
         var timeout = std.mem.zeroes(posix.timespec);
 
-        const completed = try Kqueue.kevent(
+        const completed = try kevent(
             self.kq,
             events[0..submitted],
             events[0..events.len],
             &timeout,
         );
 
-        self.inflight += submitted;
+        self.inflight += active;
         self.inflight -= completed;
 
         for (events[0..completed]) |ev| {
@@ -111,30 +114,59 @@ pub fn flush(self: *Loop, _: bool) !void {
     }
 }
 
-pub fn flush_submissions(self: *Loop, kevents: []posix.Kevent) usize {
-    var submitted: usize = 0;
-    while (submitted < kevents.len) {
-        const completion = self.submissions.pop() orelse return submitted;
+pub fn flush_submissions(self: *Loop, kevents: []Kevent) struct { usize, usize } {
+    var active: usize = 0;
+    for (kevents, 0..) |*event, submitted| {
+        const completion = self.submissions.pop() orelse return .{ active, submitted };
+
         if (completion.state == .completed) {
             self.completions.push(completion);
             continue;
         }
 
-        var event: posix.Kevent = undefined;
-        completion.kevent(&event);
+        completion.kevent(event);
 
         if (completion.state == .canceled) {
+            self.inflight -= 1;
+
             event.flags = std.c.EV.DELETE;
             completion.canceled();
             self.completions.push(completion);
         } else {
             completion.state = .active;
+            active += 1;
         }
-
-        kevents[submitted] = event;
-        submitted += 1;
     }
-    return submitted;
+
+    return .{ active, kevents.len };
+}
+
+fn kevent(
+    kq: posix.fd_t,
+    changelist: []const Kevent,
+    eventlist: []Kevent,
+    timeout: ?*const posix.timespec,
+) !usize {
+    while (true) {
+        const rc = std.c.kevent64(
+            kq,
+            changelist.ptr,
+            @intCast(changelist.len),
+            eventlist.ptr,
+            @intCast(eventlist.len),
+            .{},
+            timeout,
+        );
+
+        switch (posix.errno(rc)) {
+            .SUCCESS => return @intCast(rc),
+            .INTR => continue,
+            .ACCES => return error.AccessDenied,
+            .NOENT => return error.EventNotFound,
+            .NOMEM => return error.SystemResources,
+            else => return error.Unexpected,
+        }
+    }
 }
 
 pub fn submit(
@@ -350,17 +382,21 @@ pub const Completion = struct {
         }
     }
 
-    pub fn kevent(self: *Completion, event: *posix.Kevent) void {
+    pub fn kevent(self: *Completion, event: *Kevent) void {
         switch (self.operation) {
             .read, .cancel, .noop, .@"defer" => panic("{s} operation reached the submissions queueu", .{@tagName(self.operation)}),
             .machport => |mach| {
                 event.* = .{
-                    .ident = @as(c_uint, mach.port),
+                    .ident = @intCast(mach.port),
                     .filter = std.c.EVFILT.MACHPORT,
                     .flags = std.c.EV.ADD | std.c.EV.ENABLE,
                     .fflags = @bitCast(std.c.MACH.RCV{ .MSG = true }),
                     .data = 0,
                     .udata = @intFromPtr(self),
+                    .ext = .{
+                        @intFromPtr(mach.buffer.ptr),
+                        mach.buffer.len,
+                    },
                 };
             },
         }
@@ -523,6 +559,7 @@ test "mach port" {
 
     // Tick so we submit... should not call since we never sent.
     try loop.run(.no_wait);
+    try loop.run(.no_wait);
     try testing.expect(!called);
 }
 
@@ -578,5 +615,31 @@ test "cancel mach port" {
     for (0..10) |_| try loop.run(.no_wait);
 
     try testing.expect(canceled);
+    try testing.expect(!called);
+
+    // Send a message to the port
+    var msg: posix.system.mach_msg_header_t = .{
+        .msgh_bits = @intFromEnum(posix.system.MACH.MSG.TYPE.MAKE_SEND_ONCE),
+        .msgh_size = @sizeOf(posix.system.mach_msg_header_t),
+        .msgh_remote_port = mach_port,
+        .msgh_local_port = posix.system.MACH.PORT.NULL,
+        .msgh_voucher_port = undefined,
+        .msgh_id = undefined,
+    };
+
+    try testing.expectEqual(
+        posix.system.mach_msg_return_t.SUCCESS,
+        posix.system.mach_msg(
+            &msg,
+            .{ .SEND = .{} },
+            msg.msgh_size,
+            0,
+            posix.system.MACH.PORT.NULL,
+            posix.system.MACH.MSG.TIMEOUT_NONE,
+            posix.system.MACH.PORT.NULL,
+        ),
+    );
+    // We should receive now!
+    for (0..10) |_| try loop.run(.no_wait);
     try testing.expect(!called);
 }
