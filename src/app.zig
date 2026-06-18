@@ -185,6 +185,7 @@ pub fn observe(
         fn _observe(app: *App, observer: Observer) bool {
             const _entity = observer.any.into(T, app.io) orelse return false;
             defer _entity.drop(app.gpa, app.io) catch {};
+
             const _context: Context = @ptrCast(@alignCast(observer.userdata));
             callback(app, _entity, _context);
 
