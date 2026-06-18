@@ -9,9 +9,8 @@ const testing = std.testing;
 const Io = std.Io;
 const meta = std.meta;
 const panic = std.debug.panic;
-const builtin = @import("builtin");
-
 const Kevent = std.c.kevent64_s;
+const builtin = @import("builtin");
 
 const datastruct = @import("datastruct.zig");
 const queue = datastruct.queue;
@@ -183,9 +182,7 @@ pub fn submit(
     const TypeErased = struct {
         fn complete(_: *Loop, _completion: *Completion) void {
             if (_completion.result == null) {
-                const result = @call(.auto, resolver, .{&@field(_completion.operation, @tagName(op_tag))});
-
-                _completion.result = result;
+                _completion.result = @call(.auto, resolver, .{@field(_completion.operation, @tagName(op_tag))});
             }
 
             const _context: Context = @ptrCast(@alignCast(_completion.context));
@@ -225,7 +222,7 @@ pub fn concurrent(
 
     const TypeErased = struct {
         fn concurrent(_loop: *Loop, _completion: *Completion) void {
-            const result = @call(.auto, resolver, .{&@field(_completion.operation, @tagName(op_tag))});
+            const result = @call(.auto, resolver, .{@field(_completion.operation, @tagName(op_tag))});
 
             _completion.callback = complete;
             _completion.result = result;
@@ -255,7 +252,7 @@ pub fn @"defer"(
     const TypeErased = struct {
         fn complete(_: *Loop, _completion: *Completion) void {
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            @call(.auto, callback, .{ _context, _completion, OperationResult{ .@"defer" = {} } });
+            @call(.auto, callback, .{ _context, _completion, Result{ .@"defer" = {} } });
         }
     };
 
@@ -292,7 +289,7 @@ pub fn cancel(
             }
 
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            @call(.auto, callback, .{ _context, _completion, OperationResult{ .cancel = {} } });
+            @call(.auto, callback, .{ _context, _completion, Result{ .cancel = {} } });
         }
     };
 
@@ -306,22 +303,66 @@ pub fn cancel(
     self.cancellations.push(completion);
 }
 
+pub fn read(
+    self: *Loop,
+    completion: *Completion,
+    function: anytype,
+    context: anytype,
+    data: Read,
+    io: Io,
+) !void {
+    try self.concurrent(
+        io,
+        completion,
+        function,
+        context,
+        .read,
+        data,
+        struct {
+            fn read(op: Read) Result {
+                return .{ .read = posix.read(op.fd, op.buffer) };
+            }
+        }.read,
+    );
+}
+
+pub fn mach(
+    self: *Loop,
+    completion: *Completion,
+    function: anytype,
+    context: anytype,
+    data: MachPort,
+) void {
+    self.submit(
+        completion,
+        function,
+        context,
+        .machport,
+        data,
+        struct {
+            fn machport(_: MachPort) Result {
+                return .{ .machport = {} };
+            }
+        }.machport,
+    );
+}
+
+pub const Read = struct {
+    fd: posix.fd_t,
+    buffer: []u8,
+};
+
+pub const MachPort = struct {
+    port: posix.system.mach_port_name_t,
+    buffer: []u8,
+};
+
 pub const Operation = union(OperationType) {
     noop: void,
     @"defer": void,
     read: Read,
     machport: MachPort,
     cancel: *Completion,
-
-    pub const Read = struct {
-        fd: posix.fd_t,
-        buffer: []u8,
-    };
-
-    pub const MachPort = struct {
-        port: posix.system.mach_port_name_t,
-        buffer: []u8,
-    };
 };
 
 const OperationType = enum {
@@ -335,7 +376,7 @@ const OperationType = enum {
 const Canceled = error{Canceled};
 const ReadError = Canceled || posix.ReadError;
 
-pub const OperationResult = union(OperationType) {
+pub const Result = union(OperationType) {
     noop: void,
     @"defer": Canceled!void,
     read: ReadError!usize,
@@ -360,7 +401,7 @@ pub const Completion = struct {
     };
 
     operation: Operation,
-    result: ?OperationResult = null,
+    result: ?Result = null,
 
     context: ?*anyopaque,
     callback: *const fn (loop: *Loop, completion: *Completion) void,
@@ -385,17 +426,17 @@ pub const Completion = struct {
     pub fn kevent(self: *Completion, event: *Kevent) void {
         switch (self.operation) {
             .read, .cancel, .noop, .@"defer" => panic("{s} operation reached the submissions queueu", .{@tagName(self.operation)}),
-            .machport => |mach| {
+            .machport => |m| {
                 event.* = .{
-                    .ident = @intCast(mach.port),
+                    .ident = @intCast(m.port),
                     .filter = std.c.EVFILT.MACHPORT,
                     .flags = std.c.EV.ADD | std.c.EV.ENABLE,
                     .fflags = @bitCast(std.c.MACH.RCV{ .MSG = true }),
                     .data = 0,
                     .udata = @intFromPtr(self),
                     .ext = .{
-                        @intFromPtr(mach.buffer.ptr),
-                        mach.buffer.len,
+                        @intFromPtr(m.buffer.ptr),
+                        m.buffer.len,
                     },
                 };
             },
@@ -414,7 +455,7 @@ test "defer" {
     var completion: Completion = .noop;
 
     loop.@"defer"(&completion, struct {
-        pub fn @"defer"(_context: *u64, _: *Completion, _: OperationResult) void {
+        pub fn @"defer"(_context: *u64, _: *Completion, _: Result) void {
             _context.* += 1;
         }
     }.@"defer", &context);
@@ -446,21 +487,20 @@ test "read" {
     var completion: Completion = .noop;
     var called = false;
 
-    const Resolver = struct {
-        pub fn perform(self: *Operation.Read) OperationResult {
-            return .{ .read = posix.read(self.fd, self.buffer) };
-        }
-    };
-
-    loop.concurrent(testing.io, &completion, struct {
-        fn read(_called: *bool, _: *Completion, result: OperationResult) void {
-            _called.* = true;
-            testing.expectEqual(@as(usize, contents.len), result.read catch unreachable) catch unreachable;
-        }
-    }.read, &called, .read, .{
-        .fd = file.handle,
-        .buffer = &buffer,
-    }, Resolver.perform) catch unreachable;
+    try loop.read(
+        &completion,
+        struct {
+            fn read(_called: *bool, _: *Completion, _: Result) void {
+                _called.* = true;
+            }
+        }.read,
+        &called,
+        .{
+            .fd = file.handle,
+            .buffer = &buffer,
+        },
+        io,
+    );
 
     try testing.expect(!called);
 
@@ -495,20 +535,21 @@ test "mach port" {
     var buffer: [@sizeOf(std.c.mach_msg_header_t)]u8 = undefined;
     var completion: Completion = .noop;
 
-    loop.submit(&completion, struct {
-        fn machport(_called: *bool, _: *Completion, res: OperationResult) void {
-            if (res.machport != error.Canceled) {
-                _called.* = true;
+    loop.mach(
+        &completion,
+        struct {
+            fn machport(_called: *bool, _: *Completion, res: Result) void {
+                if (res.machport != error.Canceled) {
+                    _called.* = true;
+                }
             }
-        }
-    }.machport, &called, .machport, .{
-        .port = mach_port,
-        .buffer = &buffer,
-    }, struct {
-        fn machport(_: *Operation.MachPort) OperationResult {
-            return .{ .machport = {} };
-        }
-    }.machport);
+        }.machport,
+        &called,
+        .{
+            .port = mach_port,
+            .buffer = &buffer,
+        },
+    );
 
     // Tick so we submit... should not call since we never sent.
     try loop.run(.no_wait);
@@ -542,20 +583,21 @@ test "mach port" {
 
     // We should not receive again
     called = false;
-    loop.submit(&completion, struct {
-        fn machport(_called: *bool, _: *Completion, res: OperationResult) void {
-            if (res.machport != error.Canceled) {
-                _called.* = true;
+    loop.mach(
+        &completion,
+        struct {
+            fn machport(_called: *bool, _: *Completion, res: Result) void {
+                if (res.machport != error.Canceled) {
+                    _called.* = true;
+                }
             }
-        }
-    }.machport, &called, .machport, .{
-        .port = mach_port,
-        .buffer = &buffer,
-    }, struct {
-        fn machport(_: *Operation.MachPort) OperationResult {
-            return .{ .machport = {} };
-        }
-    }.machport);
+        }.machport,
+        &called,
+        .{
+            .port = mach_port,
+            .buffer = &buffer,
+        },
+    );
 
     // Tick so we submit... should not call since we never sent.
     try loop.run(.no_wait);
@@ -584,26 +626,27 @@ test "cancel mach port" {
     var completion: Completion = .noop;
     var called = false;
 
-    loop.submit(&completion, struct {
-        fn machport(_called: *bool, _: *Completion, res: OperationResult) void {
-            if (res.machport != error.Canceled) {
-                _called.* = true;
+    loop.mach(
+        &completion,
+        struct {
+            fn machport(_called: *bool, _: *Completion, res: Result) void {
+                if (res.machport != error.Canceled) {
+                    _called.* = true;
+                }
             }
-        }
-    }.machport, &called, .machport, .{
-        .port = mach_port,
-        .buffer = &buffer,
-    }, struct {
-        fn machport(_: *Operation.MachPort) OperationResult {
-            return .{ .machport = {} };
-        }
-    }.machport);
+        }.machport,
+        &called,
+        .{
+            .port = mach_port,
+            .buffer = &buffer,
+        },
+    );
 
     for (0..10) |_| try loop.run(.no_wait);
     try testing.expect(!called);
 
     const Cancelled = struct {
-        fn cancel(context: *bool, _: *Completion, _: OperationResult) void {
+        fn cancel(context: *bool, _: *Completion, _: Result) void {
             context.* = true;
         }
     };
