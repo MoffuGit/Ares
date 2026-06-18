@@ -24,6 +24,7 @@ cancellations: mpsc.Intrusive(Completion),
 completions: mpsc.Intrusive(Completion),
 submissions: mpsc.Intrusive(Completion),
 inflight: usize,
+stopped: bool,
 
 group: Io.Group,
 
@@ -35,6 +36,7 @@ pub fn init(self: *Loop) !void {
         .cancellations = undefined,
         .submissions = undefined,
         .inflight = 0,
+        .stopped = false,
         .group = .init,
     };
     self.completions.init();
@@ -64,10 +66,15 @@ pub fn run(self: *Loop, mode: RunMode) !void {
 }
 
 pub fn done(self: *Loop) bool {
-    return self.submissions.empty() and
-        self.completions.empty() and
-        self.inflight == 0 and
-        self.group.token.load(.acquire) == null;
+    return self.stopped or
+        (self.submissions.empty() and
+            self.completions.empty() and
+            self.inflight == 0 and
+            self.group.token.load(.acquire) == null);
+}
+
+pub fn stop(self: *Loop) void {
+    self.stopped = true;
 }
 
 pub fn flush(self: *Loop, _: bool) !void {
