@@ -53,22 +53,22 @@ pub const BackgroundExecutor = struct {
             .group = .init,
         };
 
-        for (self.workers, self.stops) |*worker, *stop| {
-            try worker.init(gpa, io);
-            stop.* = try worker.async(
+        for (self.workers, self.stops) |*work, *stop| {
+            try work.init(gpa, io);
+            stop.* = try work.async(
                 struct {
                     fn _stop(_worker: *Worker, _: anyerror!void) void {
                         _worker.stop();
                     }
                 }._stop,
-                .{worker},
+                .{work},
                 &.{},
             );
-            try self.group.concurrent(io, Worker.run, .{ worker, .until_done });
+            try self.group.concurrent(io, Worker.run, .{ work, .until_done });
         }
     }
 
-    fn selectWorker(self: *BackgroundExecutor) *Worker {
+    fn worker(self: *BackgroundExecutor) *Worker {
         const index = self.next_worker.fetchAdd(1, .monotonic) % self.workers.len;
         return &self.workers[index];
     }
@@ -78,7 +78,7 @@ pub const BackgroundExecutor = struct {
         function: anytype,
         context: std.meta.ArgsTuple(@TypeOf(function)),
     ) !Handler {
-        return try self.selectWorker().@"defer"(function, context);
+        return try self.worker().@"defer"(function, context);
     }
 
     pub fn read(
@@ -87,7 +87,7 @@ pub const BackgroundExecutor = struct {
         context: anytype,
         data: Loop.Read,
     ) !Handler {
-        return try self.selectWorker().read(function, context, data);
+        return try self.worker().read(function, context, data);
     }
 
     pub fn async(
@@ -96,7 +96,7 @@ pub const BackgroundExecutor = struct {
         context: anytype,
         buffer: []u8,
     ) !Async {
-        return try self.selectWorker().async(function, context, buffer);
+        return try self.worker().async(function, context, buffer);
     }
 
     pub fn deinit(self: *BackgroundExecutor, gpa: Allocator, io: Io) void {
