@@ -34,6 +34,7 @@ pub const ForegroundExecutor = struct {
 pub const BackgroundExecutor = struct {
     workers: []Worker,
     stops: []Async,
+    next_worker: atomic.Value(usize),
     group: Io.Group,
 
     pub fn init(self: *BackgroundExecutor, gpa: Allocator, io: Io) !void {
@@ -48,6 +49,7 @@ pub const BackgroundExecutor = struct {
         self.* = .{
             .workers = workers,
             .stops = stops,
+            .next_worker = .init(0),
             .group = .init,
         };
 
@@ -64,6 +66,37 @@ pub const BackgroundExecutor = struct {
             );
             try self.group.concurrent(io, Worker.run, .{ worker, .until_done });
         }
+    }
+
+    fn selectWorker(self: *BackgroundExecutor) *Worker {
+        const index = self.next_worker.fetchAdd(1, .monotonic) % self.workers.len;
+        return &self.workers[index];
+    }
+
+    pub fn @"defer"(
+        self: *BackgroundExecutor,
+        function: anytype,
+        context: std.meta.ArgsTuple(@TypeOf(function)),
+    ) !Handler {
+        return try self.selectWorker().@"defer"(function, context);
+    }
+
+    pub fn read(
+        self: *BackgroundExecutor,
+        function: anytype,
+        context: anytype,
+        data: Loop.Read,
+    ) !Handler {
+        return try self.selectWorker().read(function, context, data);
+    }
+
+    pub fn async(
+        self: *BackgroundExecutor,
+        function: anytype,
+        context: anytype,
+        buffer: []u8,
+    ) !Async {
+        return try self.selectWorker().async(function, context, buffer);
     }
 
     pub fn deinit(self: *BackgroundExecutor, gpa: Allocator, io: Io) void {
