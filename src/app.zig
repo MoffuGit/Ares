@@ -41,7 +41,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
         .io = io,
     };
 
-    try self.foreground_executor.init();
+    try self.foreground_executor.init(self.gpa);
     errdefer self.foreground_executor.deinit(io);
 
     try self.background_executor.init(gpa, io);
@@ -116,7 +116,11 @@ pub fn notify(self: *App, comptime T: type, entity: Entity(T)) !void {
     _ = try self.notifications.insert(self.gpa, entity.id());
 }
 
-pub fn update(self: *App, function: anytype, args: std.meta.ArgsTuple(@TypeOf(function))) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+pub fn update(
+    self: *App,
+    function: anytype,
+    args: std.meta.ArgsTuple(@TypeOf(function)),
+) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
     self.start_update();
     defer self.end_update();
 
@@ -137,7 +141,7 @@ pub fn end_update(self: *App) void {
 }
 
 pub fn flush(self: *App) !void {
-    try self.foreground_executor.run();
+    self.foreground_executor.run();
     try self.destroy_dropped_entities();
     try self.flush_notifications();
 }
@@ -191,9 +195,13 @@ pub fn observe(
 
             return true;
         }
+
+        fn enable(sub: Observers.Subscription) void {
+            sub.enable();
+        }
     };
 
-    return try self.observers.insert(
+    const sub = try self.observers.insert(
         entity.id(),
         TypeErased._callback,
         .{
@@ -205,6 +213,11 @@ pub fn observe(
         },
         self.gpa,
     );
+
+    const handler = try self.foreground_executor.@"defer"(TypeErased.enable, .{sub});
+    handler.detach();
+
+    return sub;
 }
 
 test "creates/drops entities" {
@@ -312,7 +325,7 @@ test "Observe entities" {
     try testing.expect(!context);
 
     const sub = try app.observe(TestStruct, observed, &context, Observed.callback);
-    sub.enable();
+    _ = sub;
 
     index = 1;
 
@@ -324,6 +337,83 @@ test "Observe entities" {
     try app.flush();
 
     try testing.expect(context);
+
+    for (entities) |entity| {
+        try entity.drop(allocator, io);
+    }
+
+    try app.flush();
+}
+
+test "Observe entities drop before enable" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+    const entity_count = 32;
+
+    const TestStruct = struct {
+        index: usize,
+
+        pub fn init(self: *@This()) !void {
+            self.* = .{ .index = 0 };
+        }
+
+        pub fn set_index(self: *@This(), index: usize) void {
+            self.index = index;
+        }
+
+        pub fn inc(self: *@This()) void {
+            self.index += 1;
+        }
+
+        pub fn get_index(self: *const @This()) usize {
+            return self.index;
+        }
+    };
+
+    const TestEntity = Entity(TestStruct);
+
+    var app: App = undefined;
+    try app.init(allocator, io);
+    defer app.deinit();
+
+    var entities: [entity_count]TestEntity = undefined;
+    for (&entities) |*entity| {
+        entity.* = try TestEntity.new(&app, .{});
+    }
+
+    const observed = entities[0];
+
+    var context: bool = false;
+
+    const Observed = struct {
+        pub fn callback(_: *App, _: TestEntity, _context: *bool) void {
+            _context.* = true;
+        }
+    };
+
+    var index: usize = 0;
+
+    try observed.update(&app, TestStruct.set_index, .{index});
+    try observed.update(&app, TestStruct.inc, .{});
+    try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
+    try observed.notify(&app);
+
+    try testing.expect(!context);
+
+    const sub = try app.observe(TestStruct, observed, &context, Observed.callback);
+    try sub.unsubscribe(allocator);
+
+    index = 1;
+
+    try observed.update(&app, TestStruct.set_index, .{index});
+    try observed.update(&app, TestStruct.inc, .{});
+    try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
+    try observed.notify(&app);
+
+    try app.flush();
+
+    try testing.expect(!context);
 
     for (entities) |entity| {
         try entity.drop(allocator, io);

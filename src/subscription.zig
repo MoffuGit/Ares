@@ -57,10 +57,8 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
                 self.subscriptions.enable(self);
             }
 
-            pub fn unsubscribe(self: *Subscription, gpa: Allocator) void {
-                self.subscriptions.unsubscribe(self, gpa) catch |err| {
-                    debug.panic("Unsubscribe err: {}", .{err});
-                };
+            pub fn unsubscribe(self: *const Subscription, gpa: Allocator) !void {
+                try self.subscriptions.unsubscribe(self, gpa);
             }
         };
 
@@ -95,6 +93,7 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
                 };
             }
             self.subscribers.deinit(gpa);
+            self.clearDrops(gpa);
             self.dropped.deinit(gpa);
         }
 
@@ -147,9 +146,9 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
         }
 
         pub fn enable(self: *Self, sub: *const Subscription) void {
-            const maybe_subscribers = self.subscribers.get_ref(sub.key).?;
+            const maybe_subscribers = self.subscribers.get_ref(sub.key) orelse return;
             if (maybe_subscribers.*) |*subscribers| {
-                const subscriber = subscribers.get_ref(sub.id).?;
+                const subscriber = subscribers.get_ref(sub.id) orelse return;
                 subscriber.active = true;
             }
         }
@@ -167,6 +166,10 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
                 }
             }
 
+            self.clearDrops(gpa);
+        }
+
+        pub fn clearDrops(self: *Self, gpa: Allocator) void {
             var dropped = self.dropped.iter();
             while (dropped.next()) |drop| {
                 const maybe_dropped_subscribers = self.subscribers.get_ref(drop.key) orelse {
@@ -205,17 +208,18 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             }
         }
 
-        pub fn unsubscribe(self: *Self, sub: Subscription, gpa: Allocator) void {
-            const subscribers = self.subscribers.get_ref(sub.key) orelse return;
-            if (subscribers) |subs| {
+        pub fn unsubscribe(self: *Self, sub: *const Subscription, gpa: Allocator) !void {
+            var subscribers = self.subscribers.get(sub.key) orelse return;
+            if (subscribers) |*subs| {
                 if (subs.remove(gpa, sub.id)) |removed| {
                     removed.free(gpa);
                 }
                 if (subs.is_empty()) {
+                    subs.deinit(gpa);
                     _ = self.subscribers.remove(gpa, sub.key);
                 }
             } else {
-                self.dropped.insert(gpa, .{ .id = sub.id, .key = sub.key });
+                _ = try self.dropped.insert(gpa, .{ .id = sub.id, .key = sub.key });
             }
         }
     };

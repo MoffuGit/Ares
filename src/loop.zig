@@ -115,8 +115,8 @@ pub fn flush(self: *Loop, _: bool) !void {
     }
 
     while (self.completions.pop()) |completion| {
-        completion.callback(self, completion);
         completion.state = .idle;
+        completion.callback(self, completion);
     }
 }
 
