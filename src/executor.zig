@@ -33,6 +33,7 @@ pub const ForegroundExecutor = struct {
 
 pub const BackgroundExecutor = struct {
     workers: []Worker,
+    stops: []Async,
     group: Io.Group,
 
     pub fn init(self: *BackgroundExecutor, gpa: Allocator, io: Io) !void {
@@ -41,24 +42,48 @@ pub const BackgroundExecutor = struct {
         const workers = try gpa.alloc(Worker, cpu_count);
         errdefer gpa.free(workers);
 
+        const stops = try gpa.alloc(Async, cpu_count);
+        errdefer gpa.free(stops);
+
         self.* = .{
             .workers = workers,
+            .stops = stops,
             .group = .init,
         };
 
-        for (self.workers) |*worker| {
+        for (self.workers, self.stops) |*worker, *stop| {
             try worker.init(gpa, io);
+            stop.* = try worker.async(
+                struct {
+                    fn _stop(_worker: *Worker, _: anyerror!void) void {
+                        _worker.stop();
+                    }
+                }._stop,
+                .{worker},
+                &.{},
+            );
             try self.group.concurrent(io, Worker.run, .{ worker, .until_done });
         }
     }
 
     pub fn deinit(self: *BackgroundExecutor, gpa: Allocator, io: Io) void {
+        for (self.stops) |*stop| {
+            stop.notifier.notify() catch |err| {
+                std.log.err("Error while stopping a worker: {}", .{err});
+            };
+        }
+
         self.group.cancel(io);
+
+        for (self.stops) |*stop| {
+            stop.handler.drop();
+        }
 
         for (self.workers) |*worker| {
             worker.deinit();
         }
 
+        gpa.free(self.stops);
         gpa.free(self.workers);
     }
 };
@@ -85,6 +110,10 @@ const Worker = struct {
         self.loop.run(mode) catch |err| {
             debug.panic("Worker {} loop err: {}", .{ self.id, err });
         };
+    }
+
+    fn stop(worker: *Worker) void {
+        worker.loop.stop();
     }
 
     pub fn @"defer"(
