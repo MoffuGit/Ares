@@ -112,8 +112,8 @@ pub const BackgroundExecutor = struct {
             stop.handler.drop();
         }
 
-        for (self.workers) |*worker| {
-            worker.deinit();
+        for (self.workers) |*work| {
+            work.deinit();
         }
 
         gpa.free(self.stops);
