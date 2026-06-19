@@ -41,8 +41,8 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
         .io = io,
     };
 
-    try self.foreground_executor.init(self.gpa);
-    errdefer self.foreground_executor.deinit(io);
+    try self.foreground_executor.init(self.gpa, io);
+    errdefer self.foreground_executor.deinit();
 
     try self.background_executor.init(gpa, io);
     errdefer self.background_executor.deinit(gpa, io);
@@ -59,7 +59,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 
 pub fn deinit(self: *App) void {
     self.background_executor.deinit(self.gpa, self.io);
-    self.foreground_executor.deinit(self.io);
+    self.foreground_executor.deinit();
     self.notifications.deinit(self.gpa);
     self.observers.deinit(self.gpa);
     self.entity_store.deinit(self.gpa);
@@ -324,8 +324,7 @@ test "Observe entities" {
 
     try testing.expect(!context);
 
-    const sub = try app.observe(TestStruct, observed, &context, Observed.callback);
-    _ = sub;
+    _ = try app.observe(TestStruct, observed, &context, Observed.callback);
 
     index = 1;
 

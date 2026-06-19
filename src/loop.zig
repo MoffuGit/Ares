@@ -26,11 +26,13 @@ submissions: mpsc.Intrusive(Completion),
 inflight: usize,
 stopped: bool,
 
+io: Io,
 group: Io.Group,
 
-pub fn init(self: *Loop) !void {
+pub fn init(self: *Loop, io: Io) !void {
     const kq = posix.system.kqueue();
     self.* = .{
+        .io = io,
         .kq = kq,
         .completions = undefined,
         .cancellations = undefined,
@@ -44,10 +46,10 @@ pub fn init(self: *Loop) !void {
     self.cancellations.init();
 }
 
-pub fn deinit(self: *Loop, io: Io) void {
+pub fn deinit(self: *Loop) void {
     assert(self.kq > -1);
 
-    self.group.cancel(io);
+    self.group.cancel(self.io);
 
     _ = posix.system.close(self.kq);
     self.kq = -1;
@@ -208,7 +210,6 @@ pub fn submit(
 
 pub fn concurrent(
     self: *Loop,
-    io: Io,
     completion: *Completion,
     callback: anytype,
     context: anytype,
@@ -216,22 +217,12 @@ pub fn concurrent(
     op_data: @FieldType(Operation, @tagName(op_tag)),
     resolver: anytype,
 ) !void {
-    completion.* = .{
-        .state = .active,
-        .operation = @unionInit(Operation, @tagName(op_tag), op_data),
-        .context = context,
-        .callback = undefined,
-        .prev = null,
-        .next = null,
-    };
-
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
         fn concurrent(_loop: *Loop, _completion: *Completion) void {
             const result = @call(.auto, resolver, .{@field(_completion.operation, @tagName(op_tag))});
 
-            _completion.callback = complete;
             _completion.result = result;
             _completion.state = .completed;
 
@@ -245,7 +236,16 @@ pub fn concurrent(
         }
     };
 
-    try self.group.concurrent(io, TypeErased.concurrent, .{ self, completion });
+    completion.* = .{
+        .state = .active,
+        .operation = @unionInit(Operation, @tagName(op_tag), op_data),
+        .context = context,
+        .callback = TypeErased.complete,
+        .prev = null,
+        .next = null,
+    };
+
+    try self.group.concurrent(self.io, TypeErased.concurrent, .{ self, completion });
 }
 
 pub fn @"defer"(
@@ -316,10 +316,8 @@ pub fn read(
     function: anytype,
     context: anytype,
     data: Read,
-    io: Io,
 ) !void {
     try self.concurrent(
-        io,
         completion,
         function,
         context,
@@ -455,8 +453,8 @@ test "defer" {
     const io = testing.io;
 
     var loop: Loop = undefined;
-    try loop.init();
-    defer loop.deinit(io);
+    try loop.init(io);
+    defer loop.deinit();
 
     var context: u64 = 0;
     var completion: Completion = .noop;
@@ -478,8 +476,8 @@ test "read" {
     const io = testing.io;
 
     var loop: Loop = undefined;
-    try loop.init();
-    defer loop.deinit(io);
+    try loop.init(io);
+    defer loop.deinit();
 
     const contents = "hello from loop";
     var tmp = testing.tmpDir(.{});
@@ -506,7 +504,6 @@ test "read" {
             .fd = file.handle,
             .buffer = &buffer,
         },
-        io,
     );
 
     try testing.expect(!called);
@@ -521,8 +518,8 @@ test "mach port" {
     const io = testing.io;
 
     var loop: Loop = undefined;
-    try loop.init();
-    defer loop.deinit(io);
+    try loop.init(io);
+    defer loop.deinit();
 
     const mach_self = posix.system.mach_task_self();
     var mach_port: posix.system.mach_port_name_t = undefined;
@@ -539,7 +536,7 @@ test "mach port" {
     defer _ = posix.system.mach_port_deallocate(mach_self, mach_port);
 
     var called = false;
-    var buffer: [@sizeOf(std.c.mach_msg_header_t)]u8 = undefined;
+    var buffer: [@sizeOf(posix.system.mach_msg_header_t)]u8 = undefined;
     var completion: Completion = .noop;
 
     loop.mach(
@@ -617,8 +614,8 @@ test "cancel mach port" {
     const c = std.c;
 
     var loop: Loop = undefined;
-    try loop.init();
-    defer loop.deinit(io);
+    try loop.init(io);
+    defer loop.deinit();
 
     const mach_self = c.mach_task_self();
     var mach_port: c.mach_port_name_t = undefined;
