@@ -178,7 +178,7 @@ pub fn observe(
     comptime callback: anytype,
 ) !Observers.Subscription {
     const AnyEntity = @TypeOf(entity);
-    if (@typeInfo(AnyEntity) != .@"struct" or !@hasDecl(AnyEntity, "Type") or AnyEntity != Entity(AnyEntity.Type)) {
+    if (!@hasDecl(AnyEntity, "Type") or !@hasField(AnyEntity, "any") or !@hasDecl(AnyEntity, "id")) {
         @compileError("entity must be an Entity(T)");
     }
 
