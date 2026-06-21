@@ -1,3 +1,6 @@
+//This App and many parts/ideas of it came from gpui (https://github.com/zed-industries/zed/tree/main/crates/gpui)
+//LICENSE: [ZED]
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
