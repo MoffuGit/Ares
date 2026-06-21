@@ -128,8 +128,8 @@ pub fn Entity(comptime T: type) type {
             try app.notify(T, self);
         }
 
-        pub fn init(refs: *EntityRefs, new_id: EntityId) @This() {
-            return .{ .any = .init(refs, new_id, TypeInfo.init(T)) };
+        pub fn init(store: *EntityStore, new_id: EntityId) @This() {
+            return .{ .any = .init(&store.refs, new_id, TypeInfo.init(T)) };
         }
 
         pub fn clone(self: @This(), io: Io) !@This() {
@@ -174,9 +174,8 @@ pub const EntityStore = struct {
         return self.refs.reserve(io) catch @panic("Entities Overflow");
     }
 
-    pub fn insert(self: *@This(), key: EntityId, comptime T: type, entity: *T) Entity(T) {
+    pub fn insert(self: *@This(), key: EntityId, entity: *anyopaque) void {
         _ = self.entities.put(key, entity);
-        return .init(&self.refs, key);
     }
 
     pub fn get(self: *@This(), comptime T: type, entity: Entity(T)) *const T {
@@ -245,7 +244,8 @@ test "entity store returns inserted data and rejects wrong type" {
     ptr.* = .{ .value = 42 };
 
     const id = store.reserve(io);
-    const entity = store.insert(id, A, ptr);
+    const entity: Entity(A) = .init(&store, id);
+    store.insert(id, ptr);
 
     try std.testing.expectEqual(ptr, store.getMut(A, entity));
     try std.testing.expectEqual(@as(u32, 42), store.get(A, entity).value);
@@ -266,7 +266,8 @@ test "closing entity records id and type when ref count reaches zero" {
     ptr.* = .{ .value = 7 };
 
     const id = store.reserve(io);
-    const entity = store.insert(id, A, ptr);
+    const entity: Entity(A) = .init(&store, id);
+    store.insert(id, ptr);
 
     try entity.drop(allocator, io);
 
@@ -294,7 +295,8 @@ test "cloning entity increments ref count" {
     ptr.* = .{ .value = 9 };
 
     const id = store.reserve(io);
-    const entity = store.insert(id, A, ptr);
+    const entity: Entity(A) = .init(&store, id);
+    store.insert(id, ptr);
     const clone = try entity.clone(io);
     const any_clone = try entity.any.clone(io);
 
@@ -335,7 +337,8 @@ test "destroying dropped entity calls optional deinit" {
     ptr.* = .{ .deinit_called = &deinit_called };
 
     const id = store.reserve(io);
-    const entity = store.insert(id, A, ptr);
+    const entity: Entity(A) = .init(&store, id);
+    store.insert(id, ptr);
 
     try entity.drop(allocator, io);
 

@@ -69,13 +69,17 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
 
     const TypeErased = struct {
         fn new(app: *App, _args: Args) !Entity(T) {
-            const entity = try app.gpa.create(T);
-            errdefer app.gpa.destroy(entity);
-
-            try @call(.auto, function, .{ entity, app } ++ _args);
+            const prt = try app.gpa.create(T);
+            errdefer app.gpa.destroy(prt);
 
             const id = app.entity_store.reserve(app.io);
-            return app.entity_store.insert(id, T, entity);
+            const entity: Entity(T) = .init(&app.entity_store, id);
+
+            try @call(.auto, function, .{ prt, entity, app } ++ _args);
+
+            app.entity_store.insert(id, prt);
+
+            return entity;
         }
     };
 
@@ -88,7 +92,7 @@ pub fn update_entity(self: *App, comptime T: type, entity: Entity(T), function: 
     const TypeErased = struct {
         fn new(app: *App, _entity: Entity(T), _args: Args) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
             const ptr = app.entity_store.remove(T, _entity);
-            defer _ = app.entity_store.insert(_entity.any.id, T, ptr);
+            defer app.entity_store.insert(_entity.any.id, ptr);
 
             return @call(.auto, function, .{ptr} ++ _args);
         }
@@ -234,7 +238,7 @@ test "creates/drops entities" {
     const TestStruct = struct {
         index: usize,
 
-        pub fn init(self: *@This(), _: *App) !void {
+        pub fn init(self: *@This(), _: Entity(@This()), _: *App) !void {
             self.* = .{ .index = 0 };
         }
 
@@ -282,7 +286,7 @@ test "Observe entities" {
     const TestStruct = struct {
         index: usize,
 
-        pub fn init(self: *@This(), _: *App) !void {
+        pub fn init(self: *@This(), _: Entity(@This()), _: *App) !void {
             self.* = .{ .index = 0 };
         }
 
@@ -358,7 +362,7 @@ test "Observe entities drop before enable" {
     const TestStruct = struct {
         index: usize,
 
-        pub fn init(self: *@This(), _: *App) !void {
+        pub fn init(self: *@This(), _: Entity(@This()), _: *App) !void {
             self.* = .{ .index = 0 };
         }
 
