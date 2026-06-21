@@ -50,7 +50,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     try self.background_executor.init(gpa, io);
     errdefer self.background_executor.deinit(gpa, io);
 
-    try self.entity_store.init(gpa);
+    try self.entity_store.init(gpa, io);
     errdefer self.entity_store.deinit(gpa);
 
     try self.observers.init(gpa);
@@ -76,7 +76,7 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
             const prt = try app.gpa.create(T);
             errdefer app.gpa.destroy(prt);
 
-            const id = app.entity_store.reserve(app.io);
+            const id = app.entity_store.reserve();
             const entity: Entity(T) = .init(&app.entity_store, id);
 
             try @call(.auto, function, .{ prt, entity, app } ++ _args);
@@ -163,8 +163,8 @@ pub fn flush_notifications(self: *App) !void {
 }
 
 pub fn destroy_dropped_entities(self: *App) !void {
-    try self.entity_store.lockRefs(self.io);
-    defer self.entity_store.unlockRefs(self.io);
+    try self.entity_store.lockRefs();
+    defer self.entity_store.unlockRefs();
 
     while (self.entity_store.popDrop()) |drop| {
         self.observers.remove(drop.@"1", self.gpa);
@@ -192,8 +192,8 @@ pub fn observe(
 
     const TypeErased = struct {
         fn _callback(app: *App, observer: Observer, _args: Args) bool {
-            const _entity = observer.into(T, app.io) orelse return false;
-            defer _entity.drop(app.gpa, app.io) catch {};
+            const _entity = observer.into(T) orelse return false;
+            defer _entity.drop() catch {};
 
             return @call(.auto, function, .{ app, _entity } ++ _args);
         }
@@ -243,8 +243,8 @@ pub fn Context(comptime T: type) type {
                     any: AnyEntity,
                     _args: Args,
                 ) bool {
-                    const _entity = any.into(T, app.io) orelse return false;
-                    defer _entity.drop(app.gpa, app.io) catch {};
+                    const _entity = any.into(T) orelse return false;
+                    defer _entity.drop() catch {};
 
                     _entity.update(app, function, .{observed} ++ _args) catch return false;
 
@@ -299,7 +299,7 @@ test "creates/drops entities" {
     }
 
     for (entities) |entity| {
-        try entity.drop(allocator, io);
+        try entity.drop();
     }
 
     try app.flush();
@@ -376,7 +376,7 @@ test "Observe entities" {
     try testing.expect(context);
 
     for (entities) |entity| {
-        try entity.drop(allocator, io);
+        try entity.drop();
     }
 
     try app.flush();
@@ -442,8 +442,8 @@ test "Context observes entities" {
     try testing.expectEqual(1, observer.read(&app, ObserverState.get_observed_updates, .{}));
     try testing.expectEqual(42, observer.read(&app, ObserverState.get_last_observed_index, .{}));
 
-    try observer.drop(allocator, io);
-    try observed.drop(allocator, io);
+    try observer.drop();
+    try observed.drop();
     try app.flush();
 }
 
@@ -472,7 +472,7 @@ test "Context observe removes subscription when observer is dropped" {
     var context = Context(ObserverState).new(&app, observer);
     _ = try context.observe(observed, ObserverState.observe, .{});
 
-    try observer.drop(allocator, io);
+    try observer.drop();
     try app.flush();
 
     try testing.expect(app.observers.subscribers.get(observed.id()) != null);
@@ -482,7 +482,7 @@ test "Context observe removes subscription when observer is dropped" {
 
     try testing.expectEqual(null, app.observers.subscribers.get(observed.id()));
 
-    try observed.drop(allocator, io);
+    try observed.drop();
     try app.flush();
 }
 
@@ -512,12 +512,12 @@ test "Context observe removes subscription when observed is dropped" {
     var context = Context(ObserverState).new(&app, observer);
     _ = try context.observe(observed, ObserverState.observe, .{});
 
-    try observed.drop(allocator, io);
+    try observed.drop();
     try app.flush();
 
     try testing.expectEqual(null, app.observers.subscribers.get(observed_id));
 
-    try observer.drop(allocator, io);
+    try observer.drop();
     try app.flush();
 }
 
@@ -594,7 +594,7 @@ test "Observe entities drop before enable" {
     try testing.expect(!context);
 
     for (entities) |entity| {
-        try entity.drop(allocator, io);
+        try entity.drop();
     }
 
     try app.flush();
