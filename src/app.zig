@@ -72,7 +72,7 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
             const entity = try app.gpa.create(T);
             errdefer app.gpa.destroy(entity);
 
-            try @call(.auto, function, .{entity} ++ _args ++ .{app});
+            try @call(.auto, function, .{ entity, app } ++ _args);
 
             const id = app.entity_store.reserve(app.io);
             return app.entity_store.insert(id, T, entity);
