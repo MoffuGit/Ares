@@ -201,7 +201,7 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
                     var owned_subs = subs;
                     var iter = owned_subs.iter();
                     while (iter.next()) |entry| {
-                        entry.value.free(entry.value.context, gpa);
+                        entry.value.free(gpa);
                     }
                     owned_subs.deinit(gpa);
                 }

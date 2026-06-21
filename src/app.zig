@@ -10,6 +10,7 @@ const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 const ent = @import("entity.zig");
 const Entity = ent.Entity;
+const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
 const executor = @import("executor.zig");
@@ -166,47 +167,36 @@ pub fn destroy_dropped_entities(self: *App) !void {
     defer self.entity_store.unlockRefs(self.io);
 
     while (self.entity_store.popDrop()) |drop| {
+        self.observers.remove(drop.@"1", self.gpa);
         drop.@"2".destroy(self.gpa, drop.@"0");
     }
 }
 
 pub const Observers = Subscriptions(EntityId, &.{*App}, ent.entityOrder);
 
-const Observer = struct {
-    any: ent.AnyEntity,
-    userdata: ?*anyopaque,
-    callback: *const fn (*App, Observer) bool,
-};
+const Observer = ent.AnyEntity;
 
 pub fn observe(
     self: *App,
     entity: anytype,
-    context: anytype,
-    comptime callback: anytype,
+    function: anytype,
+    args: anytype,
 ) !Observers.Subscription {
-    const AnyEntity = @TypeOf(entity);
-    if (!@hasDecl(AnyEntity, "Type") or !@hasField(AnyEntity, "any") or !@hasDecl(AnyEntity, "id")) {
+    const _Entity = @TypeOf(entity);
+    if (!@hasDecl(_Entity, "Type") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
         @compileError("entity must be an Entity(T)");
     }
 
-    const T = AnyEntity.Type;
-    const Context = @TypeOf(context);
+    const T = _Entity.Type;
+    const Args = @TypeOf(args);
 
     const TypeErased = struct {
-        fn _callback(app: *App, observer: Observer) bool {
-            return observer.callback(app, observer);
-        }
-
-        fn _observe(app: *App, observer: Observer) bool {
-            const _entity = observer.any.into(T, app.io) orelse return false;
+        fn _callback(app: *App, observer: Observer, _args: Args) bool {
+            const _entity = observer.into(T, app.io) orelse return false;
             defer _entity.drop(app.gpa, app.io) catch {};
 
-            const _context: Context = @ptrCast(@alignCast(observer.userdata));
-            callback(app, _entity, _context);
-
-            return true;
+            return @call(.auto, function, .{ app, _entity } ++ _args);
         }
-
         fn enable(sub: Observers.Subscription) executor.Action {
             sub.enable();
             return .disarm;
@@ -216,13 +206,7 @@ pub fn observe(
     const sub = try self.observers.insert(
         entity.id(),
         TypeErased._callback,
-        .{
-            Observer{
-                .any = entity.any,
-                .userdata = @ptrCast(context),
-                .callback = TypeErased._observe,
-            },
-        },
+        .{ entity.any, args },
         self.gpa,
     );
 
@@ -230,6 +214,47 @@ pub fn observe(
     handler.detach();
 
     return sub;
+}
+
+pub fn Context(comptime T: type) type {
+    return struct {
+        const _Entity = Entity(T);
+
+        app: *App,
+        entity: _Entity,
+
+        pub fn new(app: *App, entity: _Entity) @This() {
+            return .{ .app = app, .entity = entity };
+        }
+
+        pub fn observe(
+            self: *@This(),
+            entity: anytype,
+            function: anytype,
+            args: anytype,
+        ) !Observers.Subscription {
+            const Args = @TypeOf(args);
+            const Observed = @TypeOf(entity);
+
+            const TypeErased = struct {
+                pub fn callback(
+                    app: *App,
+                    observed: Observed,
+                    any: AnyEntity,
+                    _args: Args,
+                ) bool {
+                    const _entity = any.into(T, app.io) orelse return false;
+                    defer _entity.drop(app.gpa, app.io) catch {};
+
+                    _entity.update(app, function, .{observed} ++ _args) catch return false;
+
+                    return true;
+                }
+            };
+
+            return try self.app.observe(entity, TypeErased.callback, .{ self.entity.any, args });
+        }
+    };
 }
 
 test "creates/drops entities" {
@@ -322,8 +347,9 @@ test "Observe entities" {
     var context: bool = false;
 
     const Observed = struct {
-        pub fn callback(_: *App, _: TestEntity, _context: *bool) void {
+        pub fn callback(_: *App, _: TestEntity, _context: *bool) bool {
             _context.* = true;
+            return false;
         }
     };
 
@@ -336,7 +362,7 @@ test "Observe entities" {
 
     try testing.expect(!context);
 
-    _ = try app.observe(observed, &context, Observed.callback);
+    _ = try app.observe(observed, Observed.callback, .{&context});
 
     index = 1;
 
@@ -353,6 +379,145 @@ test "Observe entities" {
         try entity.drop(allocator, io);
     }
 
+    try app.flush();
+}
+
+test "Context observes entities" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+
+    const Observed = struct {
+        index: usize,
+
+        pub fn init(self: *@This(), _: Entity(@This()), _: *App) !void {
+            self.* = .{ .index = 0 };
+        }
+
+        pub fn set_index(self: *@This(), index: usize) void {
+            self.index = index;
+        }
+
+        pub fn get_index(self: *const @This()) usize {
+            return self.index;
+        }
+    };
+
+    const ObserverState = struct {
+        observed_updates: usize,
+        last_observed_index: usize,
+
+        pub fn init(self: *@This(), _: Entity(@This()), _: *App) !void {
+            self.* = .{ .observed_updates = 0, .last_observed_index = 0 };
+        }
+
+        pub fn observe(self: *@This(), observed: Entity(Observed), app: *App) void {
+            self.observed_updates += 1;
+            self.last_observed_index = observed.read(app, Observed.get_index, .{}) catch @panic("read failed");
+        }
+
+        pub fn get_observed_updates(self: *const @This()) usize {
+            return self.observed_updates;
+        }
+
+        pub fn get_last_observed_index(self: *const @This()) usize {
+            return self.last_observed_index;
+        }
+    };
+
+    var app: App = undefined;
+    try app.init(allocator, io);
+    defer app.deinit();
+
+    const observer = try Entity(ObserverState).new(&app, .{});
+    const observed = try Entity(Observed).new(&app, .{});
+
+    var context = Context(ObserverState).new(&app, observer);
+    _ = try context.observe(observed, ObserverState.observe, .{&app});
+
+    try observed.update(&app, Observed.set_index, .{42});
+    try observed.notify(&app);
+    try app.flush();
+
+    try testing.expectEqual(1, observer.read(&app, ObserverState.get_observed_updates, .{}));
+    try testing.expectEqual(42, observer.read(&app, ObserverState.get_last_observed_index, .{}));
+
+    try observer.drop(allocator, io);
+    try observed.drop(allocator, io);
+    try app.flush();
+}
+
+test "Context observe removes subscription when observer is dropped" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+
+    const Observed = struct {
+        pub fn init(_: *@This(), _: Entity(@This()), _: *App) !void {}
+    };
+
+    const ObserverState = struct {
+        pub fn init(_: *@This(), _: Entity(@This()), _: *App) !void {}
+
+        pub fn observe(_: *@This(), _: Entity(Observed)) void {}
+    };
+
+    var app: App = undefined;
+    try app.init(allocator, io);
+    defer app.deinit();
+
+    const observer = try Entity(ObserverState).new(&app, .{});
+    const observed = try Entity(Observed).new(&app, .{});
+
+    var context = Context(ObserverState).new(&app, observer);
+    _ = try context.observe(observed, ObserverState.observe, .{});
+
+    try observer.drop(allocator, io);
+    try app.flush();
+
+    try testing.expect(app.observers.subscribers.get(observed.id()) != null);
+
+    try observed.notify(&app);
+    try app.flush();
+
+    try testing.expectEqual(null, app.observers.subscribers.get(observed.id()));
+
+    try observed.drop(allocator, io);
+    try app.flush();
+}
+
+test "Context observe removes subscription when observed is dropped" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+
+    const Observed = struct {
+        pub fn init(_: *@This(), _: Entity(@This()), _: *App) !void {}
+    };
+
+    const ObserverState = struct {
+        pub fn init(_: *@This(), _: Entity(@This()), _: *App) !void {}
+
+        pub fn observe(_: *@This(), _: Entity(Observed)) void {}
+    };
+
+    var app: App = undefined;
+    try app.init(allocator, io);
+    defer app.deinit();
+
+    const observer = try Entity(ObserverState).new(&app, .{});
+    const observed = try Entity(Observed).new(&app, .{});
+    const observed_id = observed.id();
+
+    var context = Context(ObserverState).new(&app, observer);
+    _ = try context.observe(observed, ObserverState.observe, .{});
+
+    try observed.drop(allocator, io);
+    try app.flush();
+
+    try testing.expectEqual(null, app.observers.subscribers.get(observed_id));
+
+    try observer.drop(allocator, io);
     try app.flush();
 }
 
@@ -398,8 +563,10 @@ test "Observe entities drop before enable" {
     var context: bool = false;
 
     const Observed = struct {
-        pub fn callback(_: *App, _: TestEntity, _context: *bool) void {
+        pub fn callback(_: *App, _: TestEntity, _context: *bool) bool {
             _context.* = true;
+
+            return false;
         }
     };
 
@@ -412,7 +579,7 @@ test "Observe entities drop before enable" {
 
     try testing.expect(!context);
 
-    const sub = try app.observe(observed, &context, Observed.callback);
+    const sub = try app.observe(observed, Observed.callback, .{&context});
     try sub.unsubscribe(allocator);
 
     index = 1;
