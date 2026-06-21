@@ -311,3 +311,37 @@ test "cloning entity increments ref count" {
     try std.testing.expect(collected.items[0][1].eql(id));
     try std.testing.expectEqual(TypeInfo.init(A), collected.items[0][2]);
 }
+
+test "destroying dropped entity calls optional deinit" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+
+    const A = struct {
+        deinit_called: *bool,
+
+        pub fn deinit(self: *@This()) void {
+            self.deinit_called.* = true;
+        }
+    };
+
+    var store: EntityStore = undefined;
+    try store.init(allocator);
+    defer store.deinit(allocator);
+
+    var deinit_called = false;
+    const ptr = try allocator.create(A);
+    ptr.* = .{ .deinit_called = &deinit_called };
+
+    const id = store.reserve(io);
+    const entity = store.insert(id, A, ptr);
+
+    try entity.drop(allocator, io);
+
+    const drop = store.popDrop().?;
+    try std.testing.expectEqual(ptr, @as(*A, @ptrCast(@alignCast(drop.@"0"))));
+    try std.testing.expect(drop.@"1".eql(id));
+    try std.testing.expectEqual(TypeInfo.init(A), drop.@"2");
+
+    drop.@"2".destroy(allocator, drop.@"0");
+    try std.testing.expect(deinit_called);
+}
