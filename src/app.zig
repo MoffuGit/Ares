@@ -90,11 +90,11 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     return try self.update(TypeErased.new, .{ self, args });
 }
 
-pub fn update_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+pub fn update_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
     const Args = @TypeOf(args);
 
     const TypeErased = struct {
-        fn new(app: *App, _entity: Entity(T), _args: Args) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+        fn new(app: *App, _entity: Entity(T), _args: Args) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
             const ptr = app.entity_store.remove(T, _entity);
             defer app.entity_store.insert(_entity.any.id, ptr);
 
@@ -102,21 +102,21 @@ pub fn update_entity(self: *App, comptime T: type, entity: Entity(T), function: 
         }
     };
 
-    return try self.update(TypeErased.new, .{ self, entity, args });
+    return self.update(TypeErased.new, .{ self, entity, args });
 }
 
-pub fn read_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype, args: anytype) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+pub fn read_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
     const Args = @TypeOf(args);
 
     const TypeErased = struct {
-        fn new(app: *App, _entity: Entity(T), _args: Args) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+        fn new(app: *App, _entity: Entity(T), _args: Args) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
             const ptr = app.entity_store.get(T, _entity);
 
             return @call(.auto, function, .{ptr} ++ _args);
         }
     };
 
-    return try self.update(TypeErased.new, .{ self, entity, args });
+    return self.update(TypeErased.new, .{ self, entity, args });
 }
 
 pub fn notify(self: *App, comptime T: type, entity: Entity(T)) !void {
@@ -127,7 +127,7 @@ pub fn update(
     self: *App,
     function: anytype,
     args: std.meta.ArgsTuple(@TypeOf(function)),
-) !@typeInfo(@TypeOf(function)).@"fn".return_type.? {
+) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
     self.start_update();
     defer self.end_update();
 
@@ -193,7 +193,7 @@ pub fn observe(
     const TypeErased = struct {
         fn _callback(app: *App, observer: Observer, _args: Args) bool {
             const _entity = observer.into(T) orelse return false;
-            defer _entity.drop() catch {};
+            defer _entity.drop();
 
             return @call(.auto, function, .{ app, _entity } ++ _args);
         }
@@ -244,9 +244,9 @@ pub fn Context(comptime T: type) type {
                     _args: Args,
                 ) bool {
                     const _entity = any.into(T) orelse return false;
-                    defer _entity.drop() catch {};
+                    defer _entity.drop();
 
-                    _entity.update(app, function, .{observed} ++ _args) catch return false;
+                    _entity.update(app, function, .{observed} ++ _args);
 
                     return true;
                 }
@@ -293,13 +293,13 @@ test "creates/drops entities" {
     for (&entities, 0..) |*entity, index| {
         entity.* = try TestEntity.new(&app, .{});
 
-        try entity.update(&app, TestStruct.set_index, .{index});
-        try entity.update(&app, TestStruct.inc, .{});
+        entity.update(&app, TestStruct.set_index, .{index});
+        entity.update(&app, TestStruct.inc, .{});
         try testing.expectEqual(index + 1, entity.read(&app, TestStruct.get_index, .{}));
     }
 
     for (entities) |entity| {
-        try entity.drop();
+        entity.drop();
     }
 
     try app.flush();
@@ -355,8 +355,8 @@ test "Observe entities" {
 
     var index: usize = 0;
 
-    try observed.update(&app, TestStruct.set_index, .{index});
-    try observed.update(&app, TestStruct.inc, .{});
+    observed.update(&app, TestStruct.set_index, .{index});
+    observed.update(&app, TestStruct.inc, .{});
     try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
     try observed.notify(&app);
 
@@ -366,8 +366,8 @@ test "Observe entities" {
 
     index = 1;
 
-    try observed.update(&app, TestStruct.set_index, .{index});
-    try observed.update(&app, TestStruct.inc, .{});
+    observed.update(&app, TestStruct.set_index, .{index});
+    observed.update(&app, TestStruct.inc, .{});
     try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
     try observed.notify(&app);
 
@@ -376,7 +376,7 @@ test "Observe entities" {
     try testing.expect(context);
 
     for (entities) |entity| {
-        try entity.drop();
+        entity.drop();
     }
 
     try app.flush();
@@ -413,7 +413,7 @@ test "Context observes entities" {
 
         pub fn observe(self: *@This(), observed: Entity(Observed), app: *App) void {
             self.observed_updates += 1;
-            self.last_observed_index = observed.read(app, Observed.get_index, .{}) catch @panic("read failed");
+            self.last_observed_index = observed.read(app, Observed.get_index, .{});
         }
 
         pub fn get_observed_updates(self: *const @This()) usize {
@@ -435,15 +435,15 @@ test "Context observes entities" {
     var context = Context(ObserverState).new(&app, observer);
     _ = try context.observe(observed, ObserverState.observe, .{&app});
 
-    try observed.update(&app, Observed.set_index, .{42});
+    observed.update(&app, Observed.set_index, .{42});
     try observed.notify(&app);
     try app.flush();
 
     try testing.expectEqual(1, observer.read(&app, ObserverState.get_observed_updates, .{}));
     try testing.expectEqual(42, observer.read(&app, ObserverState.get_last_observed_index, .{}));
 
-    try observer.drop();
-    try observed.drop();
+    observer.drop();
+    observed.drop();
     try app.flush();
 }
 
@@ -472,7 +472,7 @@ test "Context observe removes subscription when observer is dropped" {
     var context = Context(ObserverState).new(&app, observer);
     _ = try context.observe(observed, ObserverState.observe, .{});
 
-    try observer.drop();
+    observer.drop();
     try app.flush();
 
     try testing.expect(app.observers.subscribers.get(observed.id()) != null);
@@ -482,7 +482,7 @@ test "Context observe removes subscription when observer is dropped" {
 
     try testing.expectEqual(null, app.observers.subscribers.get(observed.id()));
 
-    try observed.drop();
+    observed.drop();
     try app.flush();
 }
 
@@ -512,12 +512,12 @@ test "Context observe removes subscription when observed is dropped" {
     var context = Context(ObserverState).new(&app, observer);
     _ = try context.observe(observed, ObserverState.observe, .{});
 
-    try observed.drop();
+    observed.drop();
     try app.flush();
 
     try testing.expectEqual(null, app.observers.subscribers.get(observed_id));
 
-    try observer.drop();
+    observer.drop();
     try app.flush();
 }
 
@@ -572,8 +572,8 @@ test "Observe entities drop before enable" {
 
     var index: usize = 0;
 
-    try observed.update(&app, TestStruct.set_index, .{index});
-    try observed.update(&app, TestStruct.inc, .{});
+    observed.update(&app, TestStruct.set_index, .{index});
+    observed.update(&app, TestStruct.inc, .{});
     try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
     try observed.notify(&app);
 
@@ -584,8 +584,8 @@ test "Observe entities drop before enable" {
 
     index = 1;
 
-    try observed.update(&app, TestStruct.set_index, .{index});
-    try observed.update(&app, TestStruct.inc, .{});
+    observed.update(&app, TestStruct.set_index, .{index});
+    observed.update(&app, TestStruct.inc, .{});
     try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
     try observed.notify(&app);
 
@@ -594,7 +594,7 @@ test "Observe entities drop before enable" {
     try testing.expect(!context);
 
     for (entities) |entity| {
-        try entity.drop();
+        entity.drop();
     }
 
     try app.flush();
