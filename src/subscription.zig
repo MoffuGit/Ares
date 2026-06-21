@@ -1,10 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const debug = std.debug;
+const assert = debug.assert;
 
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
-const assert = debug.assert;
 
 pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *const fn (Key, Key) std.math.Order) type {
     return struct {

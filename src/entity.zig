@@ -1,17 +1,16 @@
 const std = @import("std");
 const atomic = std.atomic;
 const assert = std.debug.assert;
-const App = @import("app.zig");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 
+const App = @import("app.zig");
 const datastruct = @import("datastruct.zig");
 const slotmap = datastruct.slotmap;
+pub const EntityId = slotmap.Key;
 const typeId = @import("typeId.zig");
 const TypeId = typeId.TypeId;
 const TypeInfo = typeId.TypeInfo;
-
-pub const EntityId = slotmap.Key;
 
 pub fn entityOrder(a: EntityId, b: EntityId) std.math.Order {
     const index_order = std.math.order(a.index, b.index);
