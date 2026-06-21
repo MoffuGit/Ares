@@ -108,6 +108,8 @@ pub const AnyEntity = struct {
 
 pub fn Entity(comptime T: type) type {
     return struct {
+        pub const Type = T;
+
         any: AnyEntity,
 
         pub fn new(app: *App, args: anytype) !@This() {

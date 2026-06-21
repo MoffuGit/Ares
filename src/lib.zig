@@ -3,7 +3,6 @@ const assert = std.debug.assert;
 const builtin = @import("builtin");
 
 const App = @import("app.zig");
-const Workspace = @import("workspace.zig");
 const global = @import("global.zig");
 
 const state = &@import("global.zig").state;

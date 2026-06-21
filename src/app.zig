@@ -11,7 +11,6 @@ const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
 const executor = @import("executor.zig");
 const Subscriptions = @import("subscription.zig").Subscriptions;
-const Workspace = @import("workspace.zig");
 
 pub const App = @This();
 
@@ -73,7 +72,7 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
             const entity = try app.gpa.create(T);
             errdefer app.gpa.destroy(entity);
 
-            try @call(.auto, function, .{entity} ++ _args);
+            try @call(.auto, function, .{entity} ++ _args ++ .{app});
 
             const id = app.entity_store.reserve(app.io);
             return app.entity_store.insert(id, T, entity);
@@ -174,11 +173,16 @@ const Observer = struct {
 
 pub fn observe(
     self: *App,
-    comptime T: type,
-    entity: Entity(T),
+    entity: anytype,
     context: anytype,
-    comptime callback: *const fn (*App, Entity(T), @TypeOf(context)) void,
+    comptime callback: anytype,
 ) !Observers.Subscription {
+    const AnyEntity = @TypeOf(entity);
+    if (@typeInfo(AnyEntity) != .@"struct" or !@hasDecl(AnyEntity, "Type") or AnyEntity != Entity(AnyEntity.Type)) {
+        @compileError("entity must be an Entity(T)");
+    }
+
+    const T = AnyEntity.Type;
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
@@ -230,7 +234,7 @@ test "creates/drops entities" {
     const TestStruct = struct {
         index: usize,
 
-        pub fn init(self: *@This()) !void {
+        pub fn init(self: *@This(), _: *App) !void {
             self.* = .{ .index = 0 };
         }
 
@@ -278,7 +282,7 @@ test "Observe entities" {
     const TestStruct = struct {
         index: usize,
 
-        pub fn init(self: *@This()) !void {
+        pub fn init(self: *@This(), _: *App) !void {
             self.* = .{ .index = 0 };
         }
 
@@ -325,7 +329,7 @@ test "Observe entities" {
 
     try testing.expect(!context);
 
-    _ = try app.observe(TestStruct, observed, &context, Observed.callback);
+    _ = try app.observe(observed, &context, Observed.callback);
 
     index = 1;
 
@@ -354,7 +358,7 @@ test "Observe entities drop before enable" {
     const TestStruct = struct {
         index: usize,
 
-        pub fn init(self: *@This()) !void {
+        pub fn init(self: *@This(), _: *App) !void {
             self.* = .{ .index = 0 };
         }
 
@@ -401,7 +405,7 @@ test "Observe entities drop before enable" {
 
     try testing.expect(!context);
 
-    const sub = try app.observe(TestStruct, observed, &context, Observed.callback);
+    const sub = try app.observe(observed, &context, Observed.callback);
     try sub.unsubscribe(allocator);
 
     index = 1;
