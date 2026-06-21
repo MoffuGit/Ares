@@ -2,6 +2,7 @@
 //Sources:
 // - TigerBeetle: https://github.com/tigerbeetle/tigerbeetle/tree/main [LIBXEV]
 // - Libxev: https://github.com/mitchellh/libxev [TIGERBEETLE]
+
 const std = @import("std");
 const assert = std.debug.assert;
 const posix = std.posix;
@@ -13,16 +14,20 @@ const Kevent = std.c.kevent64_s;
 const builtin = @import("builtin");
 
 const datastruct = @import("datastruct.zig");
-const queue = datastruct.queue;
-const mpsc = datastruct.mpsc;
+const multi_mpsc = datastruct.multi_mpsc;
+
+const Queues = union(enum) {
+    cancellations: Completion,
+    canceling: Completion,
+    completions: Completion,
+    submissions: Completion,
+};
 
 pub const Loop = @This();
 
 kq: posix.fd_t,
 
-cancellations: mpsc.Intrusive(Completion),
-completions: mpsc.Intrusive(Completion),
-submissions: mpsc.Intrusive(Completion),
+queues: multi_mpsc.MultiIntrusive(Queues),
 inflight: usize,
 stopped: bool,
 
@@ -34,16 +39,12 @@ pub fn init(self: *Loop, io: Io) !void {
     self.* = .{
         .io = io,
         .kq = kq,
-        .completions = undefined,
-        .cancellations = undefined,
-        .submissions = undefined,
+        .queues = undefined,
         .inflight = 0,
         .stopped = false,
         .group = .init,
     };
-    self.completions.init();
-    self.submissions.init();
-    self.cancellations.init();
+    self.queues.init();
 }
 
 pub fn deinit(self: *Loop) void {
@@ -69,8 +70,8 @@ pub fn run(self: *Loop, mode: RunMode) !void {
 
 pub fn done(self: *Loop) bool {
     return self.stopped or
-        (self.submissions.empty() and
-            self.completions.empty() and
+        (self.queues.empty(.submissions) and
+            self.queues.empty(.completions) and
             self.inflight == 0 and
             self.group.token.load(.acquire) == null);
 }
@@ -80,17 +81,20 @@ pub fn stop(self: *Loop) void {
 }
 
 pub fn flush(self: *Loop, _: bool) !void {
-    while (self.cancellations.pop()) |c| {
-        c.callback(self, c);
+    while (self.queues.pop(.cancellations)) |c| {
+        _ = c.callback(self, c);
     }
 
     var events: [256]Kevent = undefined;
 
-    const res = self.flush_submissions(&events);
-    const active = res.@"0";
-    const submitted = res.@"1";
+    const canceled = self.flush_cancellations(&events);
+    const active = if (canceled < events.len)
+        self.flush_submissions(events[canceled..])
+    else
+        0;
+    const submitted = canceled + active;
 
-    if (submitted > 0 or self.completions.empty()) {
+    if (submitted > 0 or self.queues.empty(.completions)) {
         var timeout = std.mem.zeroes(posix.timespec);
 
         const completed = try kevent(
@@ -101,52 +105,71 @@ pub fn flush(self: *Loop, _: bool) !void {
         );
 
         self.inflight += active;
-        self.inflight -= completed;
 
         for (events[0..completed]) |ev| {
             if (ev.udata == 0) continue;
 
             if (ev.flags & std.c.EV.DELETE != 0) continue;
 
+            self.inflight -= 1;
+
             const c: *Completion = @ptrFromInt(@as(usize, @intCast(ev.udata)));
 
             c.state = .completed;
 
-            self.completions.push(c);
+            self.queues.push(.completions, c);
         }
     }
 
-    while (self.completions.pop()) |completion| {
+    while (self.queues.pop(.completions)) |completion| {
         completion.state = .idle;
-        completion.callback(self, completion);
+        switch (completion.callback(self, completion)) {
+            .rearm => {
+                completion.state = .submitted;
+                self.queues.push(.submissions, completion);
+            },
+            .disarm => {},
+        }
     }
 }
 
-pub fn flush_submissions(self: *Loop, kevents: []Kevent) struct { usize, usize } {
+pub fn flush_cancellations(self: *Loop, kevents: []Kevent) usize {
+    var submitted: usize = 0;
+
+    while (submitted < kevents.len) {
+        const event = &kevents[submitted];
+        const completion = self.queues.pop(.canceling) orelse break;
+        submitted += 1;
+
+        self.inflight -= 1;
+
+        completion.kevent(event);
+        event.flags = std.c.EV.DELETE;
+        completion.canceled();
+        self.queues.push(.completions, completion);
+    }
+
+    return submitted;
+}
+
+pub fn flush_submissions(self: *Loop, kevents: []Kevent) usize {
     var active: usize = 0;
-    for (kevents, 0..) |*event, submitted| {
-        const completion = self.submissions.pop() orelse return .{ active, submitted };
+
+    while (active < kevents.len) {
+        const completion = self.queues.pop(.submissions) orelse break;
 
         if (completion.state == .completed) {
-            self.completions.push(completion);
+            self.queues.push(.completions, completion);
             continue;
         }
 
+        const event = &kevents[active];
         completion.kevent(event);
-
-        if (completion.state == .canceled) {
-            self.inflight -= 1;
-
-            event.flags = std.c.EV.DELETE;
-            completion.canceled();
-            self.completions.push(completion);
-        } else {
-            completion.state = .active;
-            active += 1;
-        }
+        completion.state = .active;
+        active += 1;
     }
 
-    return .{ active, kevents.len };
+    return active;
 }
 
 fn kevent(
@@ -189,13 +212,13 @@ pub fn submit(
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
-        fn complete(_: *Loop, _completion: *Completion) void {
+        fn complete(_: *Loop, _completion: *Completion) Action {
             if (_completion.result == null) {
                 _completion.result = @call(.auto, resolver, .{@field(_completion.operation, @tagName(op_tag))});
             }
 
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            @call(.auto, callback, .{ _context, _completion, _completion.result.? });
+            return @call(.auto, callback, .{ _context, _completion, _completion.result.? });
         }
     };
 
@@ -205,7 +228,7 @@ pub fn submit(
         .context = context,
         .callback = TypeErased.complete,
     };
-    self.submissions.push(completion);
+    self.queues.push(.submissions, completion);
 }
 
 pub fn concurrent(
@@ -220,24 +243,32 @@ pub fn concurrent(
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
-        fn concurrent(_loop: *Loop, _completion: *Completion) void {
+        fn _concurrent(_loop: *Loop, _completion: *Completion) void {
             const result = @call(.auto, resolver, .{@field(_completion.operation, @tagName(op_tag))});
 
             _completion.result = result;
             _completion.state = .completed;
 
-            _loop.completions.push(_completion);
+            _loop.queues.push(.completions, _completion);
         }
 
-        fn complete(_: *Loop, _completion: *Completion) void {
+        fn complete(loop: *Loop, _completion: *Completion) Action {
             const _context: Context = @ptrCast(@alignCast(_completion.context));
+            const action: Action = @call(.auto, callback, .{ _context, _completion, _completion.result.? });
 
-            @call(.auto, callback, .{ _context, _completion, _completion.result.? });
+            if (action == .rearm) {
+                _completion.state = .concurrent;
+                loop.group.concurrent(loop.io, _concurrent, .{ loop, _completion }) catch |err| {
+                    std.log.err("Can't add concurrent call: {}", .{err});
+                };
+            }
+
+            return .disarm;
         }
     };
 
     completion.* = .{
-        .state = .active,
+        .state = .concurrent,
         .operation = @unionInit(Operation, @tagName(op_tag), op_data),
         .context = context,
         .callback = TypeErased.complete,
@@ -245,7 +276,7 @@ pub fn concurrent(
         .next = null,
     };
 
-    try self.group.concurrent(self.io, TypeErased.concurrent, .{ self, completion });
+    try self.group.concurrent(self.io, TypeErased._concurrent, .{ self, completion });
 }
 
 pub fn @"defer"(
@@ -257,9 +288,9 @@ pub fn @"defer"(
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
-        fn complete(_: *Loop, _completion: *Completion) void {
+        fn complete(_: *Loop, _completion: *Completion) Action {
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            @call(.auto, callback, .{ _context, _completion, Result{ .@"defer" = {} } });
+            return @call(.auto, callback, .{ _context, _completion, Result{ .@"defer" = {} } });
         }
     };
 
@@ -270,7 +301,7 @@ pub fn @"defer"(
         .state = .completed,
     };
 
-    self.completions.push(completion);
+    self.queues.push(.completions, completion);
 }
 
 pub fn cancel(
@@ -283,20 +314,20 @@ pub fn cancel(
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
-        fn complete(loop: *Loop, _completion: *Completion) void {
+        fn complete(loop: *Loop, _completion: *Completion) Action {
             const _target = _completion.operation.cancel;
 
             switch (_target.state) {
-                .idle, .canceled => {},
+                .idle, .canceled, .concurrent => {},
                 .completed, .submitted => _target.canceled(),
                 .active => {
                     _target.state = .canceled;
-                    loop.submissions.push(_target);
+                    loop.queues.push(.canceling, _target);
                 },
             }
 
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            @call(.auto, callback, .{ _context, _completion, Result{ .cancel = {} } });
+            return @call(.auto, callback, .{ _context, _completion, Result{ .cancel = {} } });
         }
     };
 
@@ -304,10 +335,10 @@ pub fn cancel(
         .operation = .{ .cancel = target },
         .context = context,
         .callback = TypeErased.complete,
-        .state = .active,
+        .state = .submitted,
     };
 
-    self.cancellations.push(completion);
+    self.queues.push(.cancellations, completion);
 }
 
 pub fn read(
@@ -390,11 +421,17 @@ pub const Result = union(OperationType) {
 };
 
 const State = enum {
+    concurrent,
     idle,
     submitted,
     canceled,
     active,
     completed,
+};
+
+pub const Action = enum {
+    rearm,
+    disarm,
 };
 
 pub const Completion = struct {
@@ -409,14 +446,16 @@ pub const Completion = struct {
     result: ?Result = null,
 
     context: ?*anyopaque,
-    callback: *const fn (loop: *Loop, completion: *Completion) void,
+    callback: *const fn (loop: *Loop, completion: *Completion) Action,
 
     prev: ?*Completion = null,
     next: ?*Completion = null,
 
     state: State,
 
-    pub fn noopCallback(_: *Loop, _: *Completion) void {}
+    pub fn noopCallback(_: *Loop, _: *Completion) Action {
+        return .disarm;
+    }
 
     pub fn canceled(self: *Completion) void {
         self.state = .completed;
@@ -460,8 +499,9 @@ test "defer" {
     var completion: Completion = .noop;
 
     loop.@"defer"(&completion, struct {
-        pub fn @"defer"(_context: *u64, _: *Completion, _: Result) void {
+        pub fn @"defer"(_context: *u64, _: *Completion, _: Result) Action {
             _context.* += 1;
+            return .disarm;
         }
     }.@"defer", &context);
 
@@ -495,8 +535,9 @@ test "read" {
     try loop.read(
         &completion,
         struct {
-            fn read(_called: *bool, _: *Completion, _: Result) void {
+            fn read(_called: *bool, _: *Completion, _: Result) Action {
                 _called.* = true;
+                return .disarm;
             }
         }.read,
         &called,
@@ -511,6 +552,49 @@ test "read" {
     try loop.run(.until_done);
 
     try testing.expect(called);
+    try testing.expectEqualStrings(contents, &buffer);
+}
+
+test "read rearm" {
+    const io = testing.io;
+
+    var loop: Loop = undefined;
+    try loop.init(io);
+    defer loop.deinit();
+
+    const contents = "hello again";
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const file = try tmp.dir.createFile(io, "read-rearm.txt", .{ .read = true });
+    defer file.close(io);
+    try file.writeStreamingAll(io, contents ++ contents);
+    try testing.expectEqual(@as(i64, 0), posix.system.lseek(file.handle, 0, posix.SEEK.SET));
+
+    var buffer: [contents.len]u8 = undefined;
+    var completion: Completion = .noop;
+    var calls: usize = 0;
+
+    try loop.read(
+        &completion,
+        struct {
+            fn read(_calls: *usize, _: *Completion, res: Result) Action {
+                const read_len = res.read catch @panic("read failed");
+
+                _calls.* += 1;
+                return if (read_len > 0) .rearm else .disarm;
+            }
+        }.read,
+        &calls,
+        .{
+            .fd = file.handle,
+            .buffer = &buffer,
+        },
+    );
+
+    try loop.run(.until_done);
+
+    try testing.expectEqual(@as(usize, 3), calls);
     try testing.expectEqualStrings(contents, &buffer);
 }
 
@@ -542,10 +626,11 @@ test "mach port" {
     loop.mach(
         &completion,
         struct {
-            fn machport(_called: *bool, _: *Completion, res: Result) void {
+            fn machport(_called: *bool, _: *Completion, res: Result) Action {
                 if (res.machport != error.Canceled) {
                     _called.* = true;
                 }
+                return .disarm;
             }
         }.machport,
         &called,
@@ -590,10 +675,11 @@ test "mach port" {
     loop.mach(
         &completion,
         struct {
-            fn machport(_called: *bool, _: *Completion, res: Result) void {
+            fn machport(_called: *bool, _: *Completion, res: Result) Action {
                 if (res.machport != error.Canceled) {
                     _called.* = true;
                 }
+                return .disarm;
             }
         }.machport,
         &called,
@@ -633,10 +719,11 @@ test "cancel mach port" {
     loop.mach(
         &completion,
         struct {
-            fn machport(_called: *bool, _: *Completion, res: Result) void {
+            fn machport(_called: *bool, _: *Completion, res: Result) Action {
                 if (res.machport != error.Canceled) {
                     _called.* = true;
                 }
+                return .disarm;
             }
         }.machport,
         &called,
@@ -650,8 +737,9 @@ test "cancel mach port" {
     try testing.expect(!called);
 
     const Cancelled = struct {
-        fn cancel(context: *bool, _: *Completion, _: Result) void {
+        fn cancel(context: *bool, _: *Completion, _: Result) Action {
             context.* = true;
+            return .disarm;
         }
     };
     var canceled: bool = false;

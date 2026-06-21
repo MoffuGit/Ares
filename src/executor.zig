@@ -10,6 +10,7 @@ const system = posix.system;
 
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
+pub const Action = Loop.Action;
 
 pub const ForegroundExecutor = struct {
     worker: Worker,
@@ -28,6 +29,15 @@ pub const ForegroundExecutor = struct {
 
     pub fn @"defer"(self: *ForegroundExecutor, function: anytype, args: anytype) !Handler {
         return try self.worker.@"defer"(function, args);
+    }
+
+    pub fn async(
+        self: *ForegroundExecutor,
+        function: anytype,
+        context: anytype,
+        buffer: []u8,
+    ) !Async {
+        self.worker.async(function, context, buffer);
     }
 };
 
@@ -57,8 +67,9 @@ pub const BackgroundExecutor = struct {
             try work.init(gpa, io);
             stop.* = try work.async(
                 struct {
-                    fn _stop(_worker: *Worker, _: anyerror!void) void {
+                    fn _stop(_worker: *Worker, _: anyerror!void) Action {
                         _worker.stop();
+                        return .disarm;
                     }
                 }._stop,
                 .{work},
@@ -157,13 +168,18 @@ const Worker = struct {
         const Context = @TypeOf(context);
 
         const TypeErased = struct {
-            fn complete(task: *Task, _: *Completion, _: Loop.Result) void {
-                if (!task.isCanceled()) {
+            fn complete(task: *Task, _: *Completion, _: Loop.Result) Action {
+                var action: Action = .disarm;
+                if (!task.canceled()) {
                     const _context: *Context = @ptrCast(@alignCast(task.context.ptr));
-                    @call(.auto, function, _context.*);
+                    action = @call(.auto, function, _context.*);
                 }
 
-                task.complete();
+                if (action == .disarm) {
+                    task.complete();
+                }
+
+                return action;
             }
         };
 
@@ -182,15 +198,17 @@ const Worker = struct {
         const Context = @TypeOf(context);
 
         const TypeErased = struct {
-            fn complete(task: *Task, _: *Completion, res: Loop.Result) void {
+            fn complete(task: *Task, _: *Completion, res: Loop.Result) Action {
                 const _context: *Context = @ptrCast(@alignCast(task.context.ptr));
-                @call(
+                const action: Action = @call(
                     .auto,
                     function,
                     _context.* ++ .{res.read},
                 );
-
-                task.complete();
+                if (action == .disarm) {
+                    task.complete();
+                }
+                return action;
             }
         };
 
@@ -209,9 +227,10 @@ const Worker = struct {
         const Context = @TypeOf(context);
 
         const TypeErased = struct {
-            fn complete(task: *Task, c: *Completion, res: Loop.Result) void {
+            fn complete(task: *Task, c: *Completion, res: Loop.Result) Action {
+                drain(c.operation.machport.port);
                 const _context: *Context = @ptrCast(@alignCast(task.context.ptr));
-                @call(
+                const action: Action = @call(
                     .auto,
                     function,
                     _context.* ++ .{res.machport},
@@ -222,7 +241,36 @@ const Worker = struct {
                     c.operation.machport.port,
                 );
 
-                task.complete();
+                if (action == .disarm) {
+                    task.complete();
+                }
+
+                return action;
+            }
+            fn drain(port: posix.system.mach_port_name_t) void {
+                var message: struct {
+                    header: system.mach_msg_header_t,
+                } = undefined;
+
+                while (true) {
+                    switch (system.mach_msg(
+                        &message.header,
+                        .{ .RCV = .{ .TIMEOUT = true } },
+                        0,
+                        @sizeOf(@TypeOf(message)),
+                        port,
+                        system.MACH.MSG.TIMEOUT_NONE,
+                        system.MACH.PORT.NULL,
+                    )) {
+                        .RCV_TIMED_OUT => return,
+                        .SUCCESS => {},
+                        .RCV_TOO_LARGE => {},
+                        else => |err| {
+                            std.log.warn("mach msg drain err, may duplicate async wakeups err={}", .{err});
+                            return;
+                        },
+                    }
+                }
             }
         };
 
@@ -327,11 +375,17 @@ pub const Task = struct {
             old = self.state.cmpxchgWeak(old, new, .release, .acquire) orelse break;
         }
 
-        self.worker.loop.cancel(&self.cancelation, &self.completion, cancelCallback, self);
-    }
-
-    pub fn cancelCallback(self: *Task, _: *Completion, _: Loop.Result) void {
-        self.release();
+        self.worker.loop.cancel(
+            &self.cancelation,
+            &self.completion,
+            struct {
+                fn cancel(task: *Task, _: *Completion, _: Loop.Result) Action {
+                    task.release();
+                    return .disarm;
+                }
+            }.cancel,
+            self,
+        );
     }
 
     fn complete(self: *Task) void {
@@ -377,7 +431,7 @@ pub const Task = struct {
         if (old.refs == 1 and !old.handler) self.destroy();
     }
 
-    fn isCanceled(self: *Task) bool {
+    fn canceled(self: *Task) bool {
         return self.state.load(.acquire).canceled;
     }
 
@@ -412,10 +466,6 @@ pub const Async = struct {
 pub const Notifier = struct {
     port: system.mach_port_name_t,
 
-    pub fn drain(self: *Notifier) !void {
-        _ = self;
-    }
-
     pub fn notify(self: *Notifier) !void {
         var msg: posix.system.mach_msg_header_t = .{
             .msgh_bits = @intFromEnum(system.MACH.MSG.TYPE.COPY_SEND),
@@ -446,19 +496,23 @@ pub const Notifier = struct {
     }
 };
 
-fn testDeferTask(calls: *u32) void {
+fn testDeferTask(calls: *u32) Action {
     calls.* += 1;
+    return .disarm;
 }
 
-fn testReadTask(calls: *u32, bytes_read: *usize, result: anyerror!usize) void {
+fn testReadTask(calls: *u32, bytes_read: *usize, result: anyerror!usize) Action {
     calls.* += 1;
     bytes_read.* = result catch 0;
+    return .disarm;
 }
 
-fn testMachTask(calls: *u32, result: anyerror!void) void {
+fn testMachTask(calls: *u32, result: anyerror!void) Action {
     if (result != error.Canceled) {
         calls.* += 1;
     }
+
+    return .disarm;
 }
 
 test "task completes and stays alive until handler detaches" {
@@ -542,6 +596,12 @@ test "Async notifier completes task" {
     worker.run(.no_wait);
     try testing.expectEqual(@as(u32, 0), calls);
 
+    try async.notifier.notify();
+    try async.notifier.notify();
+    try async.notifier.notify();
+    try async.notifier.notify();
+    try async.notifier.notify();
+    try async.notifier.notify();
     try async.notifier.notify();
     worker.run(.until_done);
 

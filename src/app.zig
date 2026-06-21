@@ -196,8 +196,9 @@ pub fn observe(
             return true;
         }
 
-        fn enable(sub: Observers.Subscription) void {
+        fn enable(sub: Observers.Subscription) executor.Action {
             sub.enable();
+            return .disarm;
         }
     };
 
