@@ -272,7 +272,6 @@ pub fn concurrent(
         .operation = @unionInit(Operation, @tagName(op_tag), op_data),
         .context = context,
         .callback = TypeErased.complete,
-        .prev = null,
         .next = null,
     };
 
@@ -448,7 +447,6 @@ pub const Completion = struct {
     context: ?*anyopaque,
     callback: *const fn (loop: *Loop, completion: *Completion) Action,
 
-    prev: ?*Completion = null,
     next: ?*Completion = null,
 
     state: State,
