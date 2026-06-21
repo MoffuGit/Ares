@@ -37,34 +37,12 @@ fn app_new() !*App {
     var app = try state.gpa.create(App);
     errdefer state.gpa.destroy(app);
 
-    try app.init(state.gpa);
+    try app.init(state.gpa, state.threaded.io());
 
     return app;
 }
 
 pub export fn odyssey_app_free(app: *App) void {
-    app.deinit(state.gpa);
+    app.deinit();
     state.gpa.destroy(app);
-}
-
-pub export fn odyssey_workspace_new() ?*Workspace {
-    return workspace_new() catch |err| {
-        std.log.err("error initializing workspace: {}", .{err});
-        return null;
-    };
-}
-
-fn workspace_new() !*Workspace {
-    const workspace = try state.gpa.create(Workspace);
-    errdefer state.gpa.destroy(workspace);
-
-    try workspace.init();
-    errdefer workspace.deinit(state.gpa);
-
-    return workspace;
-}
-
-pub export fn odyssey_workspace_free(workspace: *Workspace) void {
-    workspace.deinit(state.gpa);
-    state.gpa.destroy(workspace);
 }

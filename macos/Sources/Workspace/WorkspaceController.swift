@@ -12,11 +12,7 @@ private final class WorkspaceWindow: NSWindow {
 }
 
 final class WorkspaceController: NSWindowController, NSWindowDelegate {
-    private let workspace: Odyssey.Workspace
-
     init(app: AppDelegate, project: Project) {
-        self.workspace = Odyssey.Workspace(app: app.odysseyApp)
-
         let window = WorkspaceWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
