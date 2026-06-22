@@ -77,15 +77,20 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
 
     const TypeErased = struct {
         fn new(app: *App, _args: Args) !Entity(T) {
-            const prt = try app.arena.allocator().create(T);
+            const arena = app.arena.allocator();
+
+            const ptr = try arena.create(T);
+            errdefer arena.destroy(ptr);
 
             const id = app.entity_store.reserve();
+            errdefer app.entity_store.recycle(id);
+
             const entity: Entity(T) = .init(&app.entity_store, id);
             const ctx: Context(T) = .new(app, entity);
 
-            try @call(.auto, function, .{ prt, ctx } ++ _args);
+            try @call(.auto, function, .{ ptr, ctx } ++ _args);
 
-            app.entity_store.insert(id, prt);
+            app.entity_store.insert(id, ptr);
 
             return entity;
         }
@@ -192,9 +197,11 @@ pub fn destroy_dropped_entities(self: *App) void {
     defer self.entity_store.unlockRefs();
 
     while (self.entity_store.popDrop()) |drop| {
-        self.observers.remove(drop.@"1", self.gpa);
-        drop.@"2".deinit(drop.@"0");
-        self.entity_store.recycle(drop.@"1");
+        const ptr, const key, const type_info = drop;
+
+        self.observers.remove(key, self.gpa);
+        type_info.deinit(ptr);
+        self.entity_store.recycle(key);
     }
 }
 
