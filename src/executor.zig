@@ -27,8 +27,8 @@ pub const ForegroundExecutor = struct {
         self.worker.deinit();
     }
 
-    pub fn @"defer"(self: *ForegroundExecutor, function: anytype, args: anytype) !Handler {
-        return try self.worker.@"defer"(function, args);
+    pub fn @"defer"(self: *ForegroundExecutor, function: anytype, args: anytype) Handler {
+        return self.worker.@"defer"(function, args);
     }
 
     pub fn async(
@@ -135,19 +135,63 @@ pub const BackgroundExecutor = struct {
 var worker_next_id: u32 = 0;
 
 const Worker = struct {
-    loop: Loop,
+    pool: heap.MemoryPool(Task),
+    mutex: Io.Mutex,
     gpa: Allocator,
+    loop: Loop,
     id: u32,
+    io: Io,
 
     pub fn init(self: *Worker, gpa: Allocator, io: Io) !void {
         self.* = .{
             .gpa = gpa,
+            .io = io,
             .id = worker_next_id,
             .loop = undefined,
+            .mutex = .init,
+            .pool = try .initCapacity(gpa, 100),
         };
-
         worker_next_id += 1;
         try self.loop.init(io);
+    }
+
+    pub fn deinit(self: *Worker) void {
+        self.loop.deinit();
+        self.pool.deinit(self.gpa);
+    }
+
+    pub fn new(self: *Worker, context: anytype) *Task {
+        const Context = @TypeOf(context);
+
+        if (@sizeOf(Context) > Task.max_context_size or @alignOf(Context) > Task.max_context_alignment) {
+            @compileError("executor task context has incorrect size or aligment");
+        }
+
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
+
+        const task = self.pool.create(self.gpa) catch {
+            @panic("Worker Tasks Overflow");
+        };
+
+        task.* = .{
+            .completion = .noop,
+            .cancelation = .noop,
+            .worker = self,
+            .context = undefined,
+            .alignment = @alignOf(Context),
+            .len = @sizeOf(Context),
+        };
+        @as(*Context, @ptrCast(@alignCast(&task.context))).* = context;
+
+        return task;
+    }
+
+    pub fn destroy(self: *Worker, task: *Task) void {
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
+
+        self.pool.destroy(task);
     }
 
     pub fn run(self: *Worker, mode: Loop.RunMode) void {
@@ -164,14 +208,14 @@ const Worker = struct {
         self: *Worker,
         function: anytype,
         context: std.meta.ArgsTuple(@TypeOf(function)),
-    ) !Handler {
+    ) Handler {
         const Context = @TypeOf(context);
 
         const TypeErased = struct {
             fn complete(task: *Task, _: *Completion, _: Loop.Result) Action {
                 var action: Action = .disarm;
                 if (!task.canceled()) {
-                    const _context: *Context = @ptrCast(@alignCast(task.context.ptr));
+                    const _context: *Context = @ptrCast(@alignCast(&task.context));
                     action = @call(.auto, function, _context.*);
                 }
 
@@ -183,7 +227,7 @@ const Worker = struct {
             }
         };
 
-        const task = try Task.create(self, context);
+        const task = self.new(context);
 
         self.loop.@"defer"(&task.completion, TypeErased.complete, task);
         return .{ .task = task };
@@ -199,7 +243,7 @@ const Worker = struct {
 
         const TypeErased = struct {
             fn complete(task: *Task, _: *Completion, res: Loop.Result) Action {
-                const _context: *Context = @ptrCast(@alignCast(task.context.ptr));
+                const _context: *Context = @ptrCast(@alignCast(&task.context));
                 const action: Action = @call(
                     .auto,
                     function,
@@ -212,7 +256,7 @@ const Worker = struct {
             }
         };
 
-        const task = try Task.create(self, context);
+        const task = self.new(context);
 
         try self.loop.read(&task.completion, TypeErased.complete, task, data);
         return .{ .task = task };
@@ -229,7 +273,7 @@ const Worker = struct {
         const TypeErased = struct {
             fn complete(task: *Task, c: *Completion, res: Loop.Result) Action {
                 drain(c.operation.machport.port);
-                const _context: *Context = @ptrCast(@alignCast(task.context.ptr));
+                const _context: *Context = @ptrCast(@alignCast(&task.context));
                 const action: Action = @call(
                     .auto,
                     function,
@@ -274,7 +318,7 @@ const Worker = struct {
             }
         };
 
-        const task = try Task.create(self, context);
+        const task = self.new(context);
 
         const mach_self = system.mach_task_self();
         var mach_port: system.mach_port_name_t = undefined;
@@ -317,10 +361,6 @@ const Worker = struct {
         self.loop.mach(&task.completion, TypeErased.complete, task, .{ .port = mach_port, .buffer = buffer });
         return .{ .handler = .{ .task = task }, .notifier = .{ .port = mach_port } };
     }
-
-    pub fn deinit(self: *Worker) void {
-        self.loop.deinit();
-    }
 };
 
 const State = packed struct(u8) {
@@ -331,34 +371,17 @@ const State = packed struct(u8) {
 };
 
 pub const Task = struct {
+    const max_context_size = 128;
+    const max_context_alignment = 16;
+
     completion: Completion,
     cancelation: Completion,
+    context: [max_context_size]u8 align(max_context_alignment),
     worker: *Worker,
-    context: []u8,
     alignment: u8,
+    len: u8,
 
     state: atomic.Value(State) = .init(.{ .handler = true, .refs = 1 }),
-
-    fn create(worker: *Worker, context: anytype) !*Task {
-        const Context = @TypeOf(context);
-
-        const task = try worker.gpa.create(Task);
-        errdefer worker.gpa.destroy(task);
-
-        const copy = try worker.gpa.create(Context);
-        errdefer worker.gpa.destroy(copy);
-        copy.* = context;
-
-        task.* = .{
-            .completion = .noop,
-            .cancelation = .noop,
-            .worker = worker,
-            .context = @ptrCast(copy),
-            .alignment = @alignOf(Context),
-        };
-
-        return task;
-    }
 
     fn cancel(self: *Task) void {
         var old = self.state.load(.acquire);
@@ -436,9 +459,7 @@ pub const Task = struct {
     }
 
     fn destroy(self: *Task) void {
-        const gpa = self.worker.gpa;
-        gpa.rawFree(self.context, .fromByteUnits(self.alignment), @returnAddress());
-        gpa.destroy(self);
+        self.worker.destroy(self);
     }
 };
 
@@ -525,7 +546,7 @@ test "task completes and stays alive until handler detaches" {
 
     var calls: u32 = 0;
 
-    var handler = try worker.@"defer"(testDeferTask, .{&calls});
+    var handler = worker.@"defer"(testDeferTask, .{&calls});
 
     worker.run(.until_done);
 
@@ -623,7 +644,7 @@ test "task can cancel" {
 
     var calls: u32 = 0;
 
-    var handler = try worker.@"defer"(testDeferTask, .{&calls});
+    var handler = worker.@"defer"(testDeferTask, .{&calls});
     handler.cancel();
 
     worker.run(.until_done);
@@ -641,7 +662,7 @@ test "dropping handler cancels pending task" {
 
     var calls: u32 = 0;
 
-    var handler = try worker.@"defer"(testDeferTask, .{&calls});
+    var handler = worker.@"defer"(testDeferTask, .{&calls});
     handler.drop();
 
     worker.run(.until_done);
@@ -659,7 +680,7 @@ test "task can detach" {
 
     var calls: u32 = 0;
 
-    var handler = try worker.@"defer"(testDeferTask, .{&calls});
+    var handler = worker.@"defer"(testDeferTask, .{&calls});
     handler.detach();
 
     worker.run(.until_done);

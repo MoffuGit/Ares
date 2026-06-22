@@ -229,7 +229,7 @@ pub fn observe(
         self.gpa,
     );
 
-    const handler = try self.foreground_executor.@"defer"(TypeErased.enable, .{sub});
+    const handler = self.foreground_executor.@"defer"(TypeErased.enable, .{sub});
     handler.detach();
 
     return sub;
@@ -279,7 +279,7 @@ pub fn Context(comptime T: type) type {
             return try self.app.observe(entity, TypeErased.callback, .{ self.entity.any, args });
         }
 
-        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) !executor.Handler {
+        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) executor.Handler {
             const Args = @TypeOf(args);
             const TypeErased = struct {
                 pub fn @"defer"(any: AnyEntity, app: *App, _args: Args) executor.Action {
@@ -291,7 +291,7 @@ pub fn Context(comptime T: type) type {
                     return @call(.auto, function, .{ctx} ++ _args);
                 }
             };
-            return try self.app.foreground_executor.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
+            return self.app.foreground_executor.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
         }
 
         pub fn async(self: *const @This(), function: anytype, args: anytype, buffer: []u8) !executor.Async {
@@ -541,7 +541,7 @@ test "Context defer runs on foreground executor with entity context" {
     const entity = try Entity(State).new(&app, .{});
 
     var context = Context(State).new(&app, entity);
-    var handler = try context.@"defer"(State.deferred, .{42});
+    var handler = context.@"defer"(State.deferred, .{42});
 
     try testing.expectEqual(0, entity.read(&app, State.get_calls, .{}));
 
