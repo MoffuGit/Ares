@@ -97,8 +97,8 @@ fn runUpdateReceiver(ctx: Context(Worktree), io: Io, receiver: Scanner.Updates.R
         else => return false,
     };
 
-    ctx.entity.update(ctx.app, applyUpdate, .{ io, update });
-    ctx.entity.notify(ctx.app);
+    ctx.update(applyUpdate, .{ io, update });
+    ctx.notify();
 
     return true;
 }

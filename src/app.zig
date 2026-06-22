@@ -237,6 +237,14 @@ pub fn Context(comptime T: type) type {
             return self.app.gpa;
         }
 
+        pub fn update(self: *const @This(), function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
+            return self.entity.update(self.app, function, args);
+        }
+
+        pub fn notify(self: *const @This()) void {
+            self.entity.notify(self.app);
+        }
+
         pub fn observe(
             self: *const @This(),
             entity: anytype,
