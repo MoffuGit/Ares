@@ -73,30 +73,25 @@ pub fn deinit(self: *App) void {
 }
 
 pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Entity(T) {
-    const Args = @TypeOf(args);
+    self.start_update();
+    defer self.end_update();
 
-    const TypeErased = struct {
-        fn new(app: *App, _args: Args) !Entity(T) {
-            const arena = app.arena.allocator();
+    const arena = self.arena.allocator();
 
-            const ptr = try arena.create(T);
-            errdefer arena.destroy(ptr);
+    const ptr = try arena.create(T);
+    errdefer arena.destroy(ptr);
 
-            const id = app.entity_store.reserve();
-            errdefer app.entity_store.recycle(id);
+    const id = self.entity_store.reserve();
+    errdefer self.entity_store.recycle(id);
 
-            const entity: Entity(T) = .init(&app.entity_store, id);
-            const ctx: Context(T) = .new(app, entity);
+    const entity: Entity(T) = .init(&self.entity_store, id);
+    const ctx: Context(T) = .new(self, entity);
 
-            try @call(.auto, function, .{ ptr, ctx } ++ _args);
+    try @call(.auto, function, .{ ptr, ctx } ++ args);
 
-            app.entity_store.insert(id, ptr);
+    self.entity_store.insert(id, ptr);
 
-            return entity;
-        }
-    };
-
-    return try self.update(TypeErased.new, .{ self, args });
+    return entity;
 }
 
 pub fn update_entity(self: *App, entity: anytype, function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
@@ -106,18 +101,14 @@ pub fn update_entity(self: *App, entity: anytype, function: anytype, args: anyty
     }
 
     const T = _Entity.EntityType;
-    const Args = @TypeOf(args);
 
-    const TypeErased = struct {
-        fn new(app: *App, _entity: Entity(T), _args: Args) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
-            const ptr = app.entity_store.remove(T, _entity);
-            defer app.entity_store.insert(_entity.any.id, ptr);
+    self.start_update();
+    defer self.end_update();
 
-            return @call(.auto, function, .{ptr} ++ _args);
-        }
-    };
+    const ptr = self.entity_store.remove(T, entity);
+    defer self.entity_store.insert(entity.any.id, ptr);
 
-    return self.update(TypeErased.new, .{ self, entity, args });
+    return @call(.auto, function, .{ptr} ++ args);
 }
 
 pub fn read_entity(self: *App, entity: anytype, function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
@@ -127,17 +118,13 @@ pub fn read_entity(self: *App, entity: anytype, function: anytype, args: anytype
     }
 
     const T = _Entity.EntityType;
-    const Args = @TypeOf(args);
 
-    const TypeErased = struct {
-        fn new(app: *App, _entity: Entity(T), _args: Args) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
-            const ptr = app.entity_store.get(T, _entity);
+    self.start_update();
+    defer self.end_update();
 
-            return @call(.auto, function, .{ptr} ++ _args);
-        }
-    };
+    const ptr = self.entity_store.get(T, entity);
 
-    return self.update(TypeErased.new, .{ self, entity, args });
+    return @call(.auto, function, .{ptr} ++ args);
 }
 
 pub fn notify(self: *App, entity: anytype) void {
@@ -149,17 +136,6 @@ pub fn notify(self: *App, entity: anytype) void {
     _ = self.notifications.insert(self.gpa, entity.id()) catch |err| {
         std.log.err("We cannot notify, err: {}", .{err});
     };
-}
-
-pub fn update(
-    self: *App,
-    function: anytype,
-    args: std.meta.ArgsTuple(@TypeOf(function)),
-) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
-    self.start_update();
-    defer self.end_update();
-
-    return @call(.auto, function, args);
 }
 
 pub fn start_update(self: *App) void {

@@ -86,7 +86,11 @@ pub fn deinit(self: *Worktree) void {
     self.arena.deinit();
 }
 
-fn runUpdateReceiver(ctx: Context(Worktree), io: Io, receiver: Scanner.Updates.Receiver, _: anyerror!void) bool {
+fn runUpdateReceiver(ctx: Context(Worktree), io: Io, receiver: Scanner.Updates.Receiver, res: anyerror!void) bool {
+    if (res == error.Canceled) {
+        return false;
+    }
+
     var rec = receiver;
 
     const update = rec.getOne(io) catch |err| switch (err) {
