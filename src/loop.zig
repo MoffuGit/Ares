@@ -36,6 +36,12 @@ group: Io.Group,
 
 pub fn init(self: *Loop, io: Io) !void {
     const kq = posix.system.kqueue();
+
+    switch (posix.errno(kq)) {
+        .SUCCESS => {},
+        else => |err| return posix.unexpectedErrno(err),
+    }
+
     self.* = .{
         .io = io,
         .kq = kq,
