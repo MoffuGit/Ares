@@ -323,9 +323,12 @@ test "cloning entity increments ref count" {
     try std.testing.expectEqual(TypeInfo.init(A), collected.items[0][2]);
 }
 
-test "destroying dropped entity calls optional deinit" {
+test "dropping arena-backed entity calls optional deinit" {
     const allocator = std.testing.allocator;
     const io = std.testing.io;
+
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
 
     const A = struct {
         deinit_called: *bool,
@@ -340,7 +343,7 @@ test "destroying dropped entity calls optional deinit" {
     defer store.deinit(allocator);
 
     var deinit_called = false;
-    const ptr = try allocator.create(A);
+    const ptr = try arena.allocator().create(A);
     ptr.* = .{ .deinit_called = &deinit_called };
 
     const id = store.reserve();
@@ -354,7 +357,7 @@ test "destroying dropped entity calls optional deinit" {
     try std.testing.expect(drop.@"1".eql(id));
     try std.testing.expectEqual(TypeInfo.init(A), drop.@"2");
 
-    drop.@"2".destroy(allocator, drop.@"0");
+    drop.@"2".deinit(drop.@"0");
     try std.testing.expect(deinit_called);
 }
 

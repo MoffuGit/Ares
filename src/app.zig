@@ -5,6 +5,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const assert = std.debug.assert;
+const heap = std.heap;
 
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
@@ -19,6 +20,7 @@ const Subscriptions = @import("subscription.zig").Subscriptions;
 pub const App = @This();
 
 gpa: Allocator,
+arena: heap.ArenaAllocator,
 io: Io,
 entity_store: EntityStore,
 observers: Observers,
@@ -41,6 +43,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
+        .arena = .init(gpa),
         .io = io,
     };
 
@@ -66,6 +69,7 @@ pub fn deinit(self: *App) void {
     self.notifications.deinit(self.gpa);
     self.observers.deinit(self.gpa);
     self.entity_store.deinit(self.gpa);
+    self.arena.deinit();
 }
 
 pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Entity(T) {
@@ -73,8 +77,7 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
 
     const TypeErased = struct {
         fn new(app: *App, _args: Args) !Entity(T) {
-            const prt = try app.gpa.create(T);
-            errdefer app.gpa.destroy(prt);
+            const prt = try app.arena.allocator().create(T);
 
             const id = app.entity_store.reserve();
             const entity: Entity(T) = .init(&app.entity_store, id);
@@ -186,7 +189,7 @@ pub fn destroy_dropped_entities(self: *App) !void {
 
     while (self.entity_store.popDrop()) |drop| {
         self.observers.remove(drop.@"1", self.gpa);
-        drop.@"2".destroy(self.gpa, drop.@"0");
+        drop.@"2".deinit(drop.@"0");
         self.entity_store.recycle(drop.@"1");
     }
 }
