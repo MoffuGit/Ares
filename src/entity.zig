@@ -111,7 +111,7 @@ pub const AnyEntity = struct {
 
 pub fn Entity(comptime T: type) type {
     return struct {
-        pub const Type = T;
+        pub const EntityType = T;
 
         any: AnyEntity,
 
@@ -120,15 +120,15 @@ pub fn Entity(comptime T: type) type {
         }
 
         pub fn update(self: @This(), app: *App, function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
-            return app.update_entity(T, self, function, args);
+            return app.update_entity(self, function, args);
         }
 
         pub fn read(self: @This(), app: *App, function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
-            return app.read_entity(T, self, function, args);
+            return app.read_entity(self, function, args);
         }
 
         pub fn notify(self: @This(), app: *App) !void {
-            try app.notify(T, self);
+            try app.notify(self);
         }
 
         pub fn init(store: *EntityStore, new_id: EntityId) @This() {

@@ -90,7 +90,13 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     return try self.update(TypeErased.new, .{ self, args });
 }
 
-pub fn update_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
+pub fn update_entity(self: *App, entity: anytype, function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
+    const _Entity = @TypeOf(entity);
+    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
+        @compileError("entity must be an Entity(T)");
+    }
+
+    const T = _Entity.EntityType;
     const Args = @TypeOf(args);
 
     const TypeErased = struct {
@@ -105,7 +111,13 @@ pub fn update_entity(self: *App, comptime T: type, entity: Entity(T), function: 
     return self.update(TypeErased.new, .{ self, entity, args });
 }
 
-pub fn read_entity(self: *App, comptime T: type, entity: Entity(T), function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
+pub fn read_entity(self: *App, entity: anytype, function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
+    const _Entity = @TypeOf(entity);
+    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
+        @compileError("entity must be an Entity(T)");
+    }
+
+    const T = _Entity.EntityType;
     const Args = @TypeOf(args);
 
     const TypeErased = struct {
@@ -119,7 +131,12 @@ pub fn read_entity(self: *App, comptime T: type, entity: Entity(T), function: an
     return self.update(TypeErased.new, .{ self, entity, args });
 }
 
-pub fn notify(self: *App, comptime T: type, entity: Entity(T)) !void {
+pub fn notify(self: *App, entity: anytype) !void {
+    const _Entity = @TypeOf(entity);
+    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
+        @compileError("entity must be an Entity(T)");
+    }
+
     _ = try self.notifications.insert(self.gpa, entity.id());
 }
 
@@ -174,8 +191,6 @@ pub fn destroy_dropped_entities(self: *App) !void {
 
 pub const Observers = Subscriptions(EntityId, &.{*App}, ent.entityOrder);
 
-const Observer = ent.AnyEntity;
-
 pub fn observe(
     self: *App,
     entity: anytype,
@@ -183,15 +198,15 @@ pub fn observe(
     args: anytype,
 ) !Observers.Subscription {
     const _Entity = @TypeOf(entity);
-    if (!@hasDecl(_Entity, "Type") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
+    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
         @compileError("entity must be an Entity(T)");
     }
 
-    const T = _Entity.Type;
+    const T = _Entity.EntityType;
     const Args = @TypeOf(args);
 
     const TypeErased = struct {
-        fn _callback(app: *App, observer: Observer, _args: Args) bool {
+        fn _callback(app: *App, observer: AnyEntity, _args: Args) bool {
             const _entity = observer.into(T) orelse return false;
             defer _entity.drop();
 
