@@ -78,8 +78,9 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
 
             const id = app.entity_store.reserve();
             const entity: Entity(T) = .init(&app.entity_store, id);
+            const ctx: Context(T) = .new(app, entity);
 
-            try @call(.auto, function, .{ prt, entity, app } ++ _args);
+            try @call(.auto, function, .{ prt, ctx } ++ _args);
 
             app.entity_store.insert(id, prt);
 
@@ -209,7 +210,6 @@ pub fn observe(
         fn _callback(app: *App, observer: AnyEntity, _args: Args) bool {
             const _entity = observer.into(T) orelse return false;
             defer _entity.drop();
-
             return @call(.auto, function, .{ app, _entity } ++ _args);
         }
         fn enable(sub: Observers.Subscription) executor.Action {
@@ -242,8 +242,12 @@ pub fn Context(comptime T: type) type {
             return .{ .app = app, .entity = entity };
         }
 
+        pub fn gpa(self: *const @This()) Allocator {
+            return self.app.gpa;
+        }
+
         pub fn observe(
-            self: *@This(),
+            self: *const @This(),
             entity: anytype,
             function: anytype,
             args: anytype,
@@ -261,7 +265,8 @@ pub fn Context(comptime T: type) type {
                     const _entity = any.into(T) orelse return false;
                     defer _entity.drop();
 
-                    _entity.update(app, function, .{observed} ++ _args);
+                    const ctx: Context(T) = .new(app, _entity);
+                    _entity.update(app, function, .{ observed, ctx } ++ _args);
 
                     return true;
                 }
@@ -281,7 +286,7 @@ test "creates/drops entities" {
     const TestStruct = struct {
         index: usize,
 
-        pub fn init(self: *@This(), _: Entity(@This()), _: *App) !void {
+        pub fn init(self: *@This(), _: Context(@This())) !void {
             self.* = .{ .index = 0 };
         }
 
@@ -329,7 +334,7 @@ test "Observe entities" {
     const TestStruct = struct {
         index: usize,
 
-        pub fn init(self: *@This(), _: Entity(@This()), _: *App) !void {
+        pub fn init(self: *@This(), _: Context(@This())) !void {
             self.* = .{ .index = 0 };
         }
 
@@ -405,7 +410,7 @@ test "Context observes entities" {
     const Observed = struct {
         index: usize,
 
-        pub fn init(self: *@This(), _: Entity(@This()), _: *App) !void {
+        pub fn init(self: *@This(), _: Context(@This())) !void {
             self.* = .{ .index = 0 };
         }
 
@@ -422,13 +427,13 @@ test "Context observes entities" {
         observed_updates: usize,
         last_observed_index: usize,
 
-        pub fn init(self: *@This(), _: Entity(@This()), _: *App) !void {
+        pub fn init(self: *@This(), _: Context(@This())) !void {
             self.* = .{ .observed_updates = 0, .last_observed_index = 0 };
         }
 
-        pub fn observe(self: *@This(), observed: Entity(Observed), app: *App) void {
+        pub fn observe(self: *@This(), observed: Entity(Observed), ctx: Context(@This())) void {
             self.observed_updates += 1;
-            self.last_observed_index = observed.read(app, Observed.get_index, .{});
+            self.last_observed_index = observed.read(ctx.app, Observed.get_index, .{});
         }
 
         pub fn get_observed_updates(self: *const @This()) usize {
@@ -448,7 +453,7 @@ test "Context observes entities" {
     const observed = try Entity(Observed).new(&app, .{});
 
     var context = Context(ObserverState).new(&app, observer);
-    _ = try context.observe(observed, ObserverState.observe, .{&app});
+    _ = try context.observe(observed, ObserverState.observe, .{});
 
     observed.update(&app, Observed.set_index, .{42});
     try observed.notify(&app);
@@ -468,13 +473,13 @@ test "Context observe removes subscription when observer is dropped" {
     const io = testing.io;
 
     const Observed = struct {
-        pub fn init(_: *@This(), _: Entity(@This()), _: *App) !void {}
+        pub fn init(_: *@This(), _: Context(@This())) !void {}
     };
 
     const ObserverState = struct {
-        pub fn init(_: *@This(), _: Entity(@This()), _: *App) !void {}
+        pub fn init(_: *@This(), _: Context(@This())) !void {}
 
-        pub fn observe(_: *@This(), _: Entity(Observed)) void {}
+        pub fn observe(_: *@This(), _: Entity(Observed), _: Context(@This())) void {}
     };
 
     var app: App = undefined;
@@ -507,13 +512,13 @@ test "Context observe removes subscription when observed is dropped" {
     const io = testing.io;
 
     const Observed = struct {
-        pub fn init(_: *@This(), _: Entity(@This()), _: *App) !void {}
+        pub fn init(_: *@This(), _: Context(@This())) !void {}
     };
 
     const ObserverState = struct {
-        pub fn init(_: *@This(), _: Entity(@This()), _: *App) !void {}
+        pub fn init(_: *@This(), _: Context(@This())) !void {}
 
-        pub fn observe(_: *@This(), _: Entity(Observed)) void {}
+        pub fn observe(_: *@This(), _: Entity(Observed), _: Context(@This())) void {}
     };
 
     var app: App = undefined;
@@ -545,7 +550,7 @@ test "Observe entities drop before enable" {
     const TestStruct = struct {
         index: usize,
 
-        pub fn init(self: *@This(), _: Entity(@This()), _: *App) !void {
+        pub fn init(self: *@This(), _: Context(@This())) !void {
             self.* = .{ .index = 0 };
         }
 
