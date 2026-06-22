@@ -3,16 +3,18 @@ const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Io = std.Io;
+
+const prof = @import("prof");
+const tripwire = prof.tripwire;
+const test_build = @import("test_build");
+
+const App = @import("app.zig");
+const Entity = App.Entity;
+const Context = App.Context;
 const channelpkg = @import("channel.zig");
 const Channel = channelpkg.Channel;
 const Scanner = @import("worktree/scanner.zig");
 const Snapshot = @import("worktree/snapshot.zig");
-const prof = @import("prof");
-const tripwire = prof.tripwire;
-const test_build = @import("test_build");
-const App = @import("app.zig");
-const Entity = App.Entity;
-const Context = App.Context;
 
 pub const Worktree = @This();
 
@@ -28,13 +30,15 @@ scanning: bool,
 snapshot: Snapshot,
 scanner: Scanner,
 
+async_buffer: [32]u8,
 buffer: [8]Scanner.Updates,
 updates_channel: Scanner.Updates.Channel,
 group: Io.Group,
 next_entry_id: std.atomic.Value(u64),
 
-pub fn init(self: *Worktree, _: Context(Worktree), gpa: Allocator, opts: Options) !void {
+pub fn init(self: *Worktree, ctx: Context(Worktree), gpa: Allocator, opts: Options, io: Io) !void {
     self.* = .{
+        .async_buffer = undefined,
         .scanning = false,
         .rwlock = .init,
         .arena = ArenaAllocator.init(gpa),
@@ -58,6 +62,9 @@ pub fn init(self: *Worktree, _: Context(Worktree), gpa: Allocator, opts: Options
     errdefer self.snapshot.deinit(gpa);
     try self.snapshot.insert(gpa, .{ .id = self.next_entry_id.fetchAdd(1, .monotonic), .path = root_name });
 
+    var async = try ctx.async(runUpdateReceiver, .{ io, self.updates_channel.receiver() }, &self.async_buffer);
+    defer async.handler.drop();
+
     try self.scanner.init(gpa, arena, &self.snapshot, &self.next_entry_id);
 }
 
@@ -66,7 +73,6 @@ pub fn await(self: *Worktree, io: Io) !void {
 }
 
 pub fn run(self: *Worktree, io: Io) !void {
-    try self.group.concurrent(io, runUpdateReceiver, .{ self, io, self.updates_channel.receiver() });
     try self.group.concurrent(io, runScanner, .{ &self.scanner, io, self.updates_channel.sender() });
 }
 
@@ -80,27 +86,30 @@ pub fn deinit(self: *Worktree) void {
     self.arena.deinit();
 }
 
-fn runUpdateReceiver(self: *Worktree, io: Io, receiver: Scanner.Updates.Receiver) !void {
+fn runUpdateReceiver(ctx: Context(Worktree), io: Io, receiver: Scanner.Updates.Receiver, _: anyerror!void) bool {
     var rec = receiver;
-    defer rec.close(io);
 
-    while (true) {
-        switch (rec.getOne(io) catch return) {
-            .started => {
-                try self.rwlock.lock(io);
-                defer self.rwlock.unlock(io);
+    const update = rec.getOne(io) catch |err| switch (err) {
+        else => return false,
+    };
 
-                self.scanning = true;
-            },
-            .updated => |update| {
-                try self.rwlock.lock(io);
-                defer self.rwlock.unlock(io);
+    ctx.entity.update(ctx.app, applyUpdate, .{ io, update });
+    ctx.entity.notify(ctx.app);
 
-                self.snapshot.deinit(self.gpa);
-                self.snapshot = update.snapshot;
-                self.scanning = update.scanning;
-            },
-        }
+    return true;
+}
+
+fn applyUpdate(self: *Worktree, io: Io, update: Scanner.Updates) void {
+    self.rwlock.lockUncancelable(io);
+    defer self.rwlock.unlock(io);
+
+    switch (update) {
+        .started => self.scanning = true,
+        .updated => |updated| {
+            self.snapshot.deinit(self.gpa);
+            self.snapshot = updated.snapshot;
+            self.scanning = updated.scanning;
+        },
     }
 }
 

@@ -15,7 +15,7 @@ test "Bench Worktree" {
     defer app.deinit();
 
     var bench: prof.Benchmark = undefined;
-    bench.init(gpa, .{ .stop_ms = 20000, .name = "WORKTREE" });
+    bench.init(gpa, .{ .max_iter = 1, .name = "WORKTREE" });
     defer bench.deinit();
 
     const res = try bench.run(App, &app, gpa, io, initialWorktreeScan);
@@ -23,10 +23,17 @@ test "Bench Worktree" {
 }
 
 pub fn initialWorktreeScan(app: *App, gpa: std.mem.Allocator, io: std.Io, _: *prof.Profiler) !void {
-    const worktree: Entity(Worktree) = try .new(app, .{ gpa, Worktree.Options{ .abs_path = test_build.chromium_path } });
+    const worktree: Entity(Worktree) = try .new(
+        app,
+        .{
+            gpa,
+            Worktree.Options{ .abs_path = test_build.chromium_path },
+            io,
+        },
+    );
     defer {
         worktree.drop();
-        app.flush() catch @panic("flush failed");
+        app.flush();
     }
 
     _ = worktree.update(

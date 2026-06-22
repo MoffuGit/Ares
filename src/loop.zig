@@ -129,12 +129,9 @@ pub fn flush(self: *Loop, _: bool) !void {
 
     while (self.queues.pop(.completions)) |completion| {
         completion.state = .idle;
-        switch (completion.callback(self, completion)) {
-            .rearm => {
-                completion.state = .submitted;
-                self.queues.push(.submissions, completion);
-            },
-            .disarm => {},
+        if (completion.callback(self, completion)) {
+            completion.state = .submitted;
+            self.queues.push(.submissions, completion);
         }
     }
 }
@@ -218,7 +215,7 @@ pub fn submit(
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
-        fn complete(_: *Loop, _completion: *Completion) Action {
+        fn complete(_: *Loop, _completion: *Completion) bool {
             if (_completion.result == null) {
                 _completion.result = @call(.auto, resolver, .{@field(_completion.operation, @tagName(op_tag))});
             }
@@ -258,18 +255,17 @@ pub fn concurrent(
             _loop.queues.push(.completions, _completion);
         }
 
-        fn complete(loop: *Loop, _completion: *Completion) Action {
+        fn complete(loop: *Loop, _completion: *Completion) bool {
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            const action: Action = @call(.auto, callback, .{ _context, _completion, _completion.result.? });
 
-            if (action == .rearm) {
+            if (@call(.auto, callback, .{ _context, _completion, _completion.result.? })) {
                 _completion.state = .concurrent;
                 loop.group.concurrent(loop.io, _concurrent, .{ loop, _completion }) catch |err| {
                     std.log.err("Can't add concurrent call: {}", .{err});
                 };
             }
 
-            return .disarm;
+            return false;
         }
     };
 
@@ -293,7 +289,7 @@ pub fn @"defer"(
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
-        fn complete(_: *Loop, _completion: *Completion) Action {
+        fn complete(_: *Loop, _completion: *Completion) bool {
             const _context: Context = @ptrCast(@alignCast(_completion.context));
             return @call(.auto, callback, .{ _context, _completion, Result{ .@"defer" = {} } });
         }
@@ -319,7 +315,7 @@ pub fn cancel(
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
-        fn complete(loop: *Loop, _completion: *Completion) Action {
+        fn complete(loop: *Loop, _completion: *Completion) bool {
             const _target = _completion.operation.cancel;
 
             switch (_target.state) {
@@ -332,7 +328,9 @@ pub fn cancel(
             }
 
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            return @call(.auto, callback, .{ _context, _completion, Result{ .cancel = {} } });
+            @call(.auto, callback, .{ _context, _completion, Result{ .cancel = {} } });
+
+            return false;
         }
     };
 
@@ -434,11 +432,6 @@ const State = enum {
     completed,
 };
 
-pub const Action = enum {
-    rearm,
-    disarm,
-};
-
 pub const Completion = struct {
     pub const noop: Completion = .{
         .operation = .noop,
@@ -451,14 +444,14 @@ pub const Completion = struct {
     result: ?Result = null,
 
     context: ?*anyopaque,
-    callback: *const fn (loop: *Loop, completion: *Completion) Action,
+    callback: *const fn (loop: *Loop, completion: *Completion) bool,
 
     next: ?*Completion = null,
 
     state: State,
 
-    pub fn noopCallback(_: *Loop, _: *Completion) Action {
-        return .disarm;
+    pub fn noopCallback(_: *Loop, _: *Completion) bool {
+        return false;
     }
 
     pub fn canceled(self: *Completion) void {
@@ -503,9 +496,9 @@ test "defer" {
     var completion: Completion = .noop;
 
     loop.@"defer"(&completion, struct {
-        pub fn @"defer"(_context: *u64, _: *Completion, _: Result) Action {
+        pub fn @"defer"(_context: *u64, _: *Completion, _: Result) bool {
             _context.* += 1;
-            return .disarm;
+            return false;
         }
     }.@"defer", &context);
 
@@ -539,9 +532,9 @@ test "read" {
     try loop.read(
         &completion,
         struct {
-            fn read(_called: *bool, _: *Completion, _: Result) Action {
+            fn read(_called: *bool, _: *Completion, _: Result) bool {
                 _called.* = true;
-                return .disarm;
+                return false;
             }
         }.read,
         &called,
@@ -582,11 +575,11 @@ test "read rearm" {
     try loop.read(
         &completion,
         struct {
-            fn read(_calls: *usize, _: *Completion, res: Result) Action {
+            fn read(_calls: *usize, _: *Completion, res: Result) bool {
                 const read_len = res.read catch @panic("read failed");
 
                 _calls.* += 1;
-                return if (read_len > 0) .rearm else .disarm;
+                return read_len > 0;
             }
         }.read,
         &calls,
@@ -630,11 +623,11 @@ test "mach port" {
     loop.mach(
         &completion,
         struct {
-            fn machport(_called: *bool, _: *Completion, res: Result) Action {
+            fn machport(_called: *bool, _: *Completion, res: Result) bool {
                 if (res.machport != error.Canceled) {
                     _called.* = true;
                 }
-                return .disarm;
+                return false;
             }
         }.machport,
         &called,
@@ -679,11 +672,11 @@ test "mach port" {
     loop.mach(
         &completion,
         struct {
-            fn machport(_called: *bool, _: *Completion, res: Result) Action {
+            fn machport(_called: *bool, _: *Completion, res: Result) bool {
                 if (res.machport != error.Canceled) {
                     _called.* = true;
                 }
-                return .disarm;
+                return false;
             }
         }.machport,
         &called,
@@ -723,11 +716,11 @@ test "cancel mach port" {
     loop.mach(
         &completion,
         struct {
-            fn machport(_called: *bool, _: *Completion, res: Result) Action {
+            fn machport(_called: *bool, _: *Completion, res: Result) bool {
                 if (res.machport != error.Canceled) {
                     _called.* = true;
                 }
-                return .disarm;
+                return false;
             }
         }.machport,
         &called,
@@ -741,9 +734,8 @@ test "cancel mach port" {
     try testing.expect(!called);
 
     const Cancelled = struct {
-        fn cancel(context: *bool, _: *Completion, _: Result) Action {
+        fn cancel(context: *bool, _: *Completion, _: Result) void {
             context.* = true;
-            return .disarm;
         }
     };
     var canceled: bool = false;

@@ -10,29 +10,28 @@ const system = posix.system;
 
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
-pub const Action = Loop.Action;
 
 pub const ForegroundExecutor = struct {
     worker: Worker,
 
-    pub fn init(self: *ForegroundExecutor, gpa: Allocator, io: Io) !void {
+    pub fn init(self: *@This(), gpa: Allocator, io: Io) !void {
         try self.worker.init(gpa, io);
     }
 
-    pub fn run(self: *ForegroundExecutor) void {
+    pub fn run(self: *@This()) void {
         self.worker.run(.no_wait);
     }
 
-    pub fn deinit(self: *ForegroundExecutor) void {
+    pub fn deinit(self: *@This()) void {
         self.worker.deinit();
     }
 
-    pub fn @"defer"(self: *ForegroundExecutor, function: anytype, args: anytype) Handler {
+    pub fn @"defer"(self: *@This(), function: anytype, args: anytype) Handler {
         return self.worker.@"defer"(function, args);
     }
 
     pub fn async(
-        self: *ForegroundExecutor,
+        self: *@This(),
         function: anytype,
         context: anytype,
         buffer: []u8,
@@ -47,7 +46,7 @@ pub const BackgroundExecutor = struct {
     next_worker: atomic.Value(usize),
     group: Io.Group,
 
-    pub fn init(self: *BackgroundExecutor, gpa: Allocator, io: Io) !void {
+    pub fn init(self: *@This(), gpa: Allocator, io: Io) !void {
         const cpu_count = try std.Thread.getCpuCount();
 
         const workers = try gpa.alloc(Worker, cpu_count);
@@ -67,9 +66,9 @@ pub const BackgroundExecutor = struct {
             try work.init(gpa, io);
             stop.* = try work.async(
                 struct {
-                    fn _stop(_worker: *Worker, _: anyerror!void) Action {
+                    fn _stop(_worker: *Worker, _: anyerror!void) bool {
                         _worker.stop();
-                        return .disarm;
+                        return false;
                     }
                 }._stop,
                 .{work},
@@ -79,13 +78,13 @@ pub const BackgroundExecutor = struct {
         }
     }
 
-    fn worker(self: *BackgroundExecutor) *Worker {
+    fn worker(self: *@This()) *Worker {
         const index = self.next_worker.fetchAdd(1, .monotonic) % self.workers.len;
         return &self.workers[index];
     }
 
     pub fn @"defer"(
-        self: *BackgroundExecutor,
+        self: *@This(),
         function: anytype,
         context: std.meta.ArgsTuple(@TypeOf(function)),
     ) !Handler {
@@ -93,7 +92,7 @@ pub const BackgroundExecutor = struct {
     }
 
     pub fn read(
-        self: *BackgroundExecutor,
+        self: *@This(),
         function: anytype,
         context: anytype,
         data: Loop.Read,
@@ -102,7 +101,7 @@ pub const BackgroundExecutor = struct {
     }
 
     pub fn async(
-        self: *BackgroundExecutor,
+        self: *@This(),
         function: anytype,
         context: anytype,
         buffer: []u8,
@@ -110,7 +109,7 @@ pub const BackgroundExecutor = struct {
         return try self.worker().async(function, context, buffer);
     }
 
-    pub fn deinit(self: *BackgroundExecutor, gpa: Allocator, io: Io) void {
+    pub fn deinit(self: *@This(), gpa: Allocator, io: Io) void {
         for (self.stops) |*stop| {
             stop.notifier.notify() catch |err| {
                 std.log.err("Error while stopping a worker: {}", .{err});
@@ -210,18 +209,15 @@ const Worker = struct {
         const Context = @TypeOf(context);
 
         const TypeErased = struct {
-            fn complete(task: *Task, _: *Completion, _: Loop.Result) Action {
-                var action: Action = .disarm;
-                if (!task.canceled()) {
-                    const _context: *Context = @ptrCast(@alignCast(&task.context));
-                    action = @call(.auto, function, _context.*);
-                }
+            fn complete(task: *Task, _: *Completion, _: Loop.Result) bool {
+                if (task.canceled()) return false;
 
-                if (action == .disarm) {
-                    task.complete();
-                }
+                const _context: *Context = @ptrCast(@alignCast(&task.context));
+                const rearm = @call(.auto, function, _context.*);
 
-                return action;
+                if (rearm) task.complete();
+
+                return rearm;
             }
         };
 
@@ -240,17 +236,16 @@ const Worker = struct {
         const Context = @TypeOf(context);
 
         const TypeErased = struct {
-            fn complete(task: *Task, _: *Completion, res: Loop.Result) Action {
+            fn complete(task: *Task, _: *Completion, res: Loop.Result) bool {
                 const _context: *Context = @ptrCast(@alignCast(&task.context));
-                const action: Action = @call(
+                const rearm = @call(
                     .auto,
                     function,
                     _context.* ++ .{res.read},
                 );
-                if (action == .disarm) {
-                    task.complete();
-                }
-                return action;
+                if (rearm) task.complete();
+
+                return rearm;
             }
         };
 
@@ -269,10 +264,10 @@ const Worker = struct {
         const Context = @TypeOf(context);
 
         const TypeErased = struct {
-            fn complete(task: *Task, c: *Completion, res: Loop.Result) Action {
+            fn complete(task: *Task, c: *Completion, res: Loop.Result) bool {
                 drain(c.operation.machport.port);
                 const _context: *Context = @ptrCast(@alignCast(&task.context));
-                const action: Action = @call(
+                const rearm = @call(
                     .auto,
                     function,
                     _context.* ++ .{res.machport},
@@ -283,11 +278,9 @@ const Worker = struct {
                     c.operation.machport.port,
                 );
 
-                if (action == .disarm) {
-                    task.complete();
-                }
+                if (rearm) task.complete();
 
-                return action;
+                return rearm;
             }
             fn drain(port: posix.system.mach_port_name_t) void {
                 var message: struct {
@@ -398,9 +391,8 @@ pub const Task = struct {
             &self.cancelation,
             &self.completion,
             struct {
-                fn cancel(task: *Task, _: *Completion, _: Loop.Result) Action {
+                fn cancel(task: *Task, _: *Completion, _: Loop.Result) void {
                     task.release();
-                    return .disarm;
                 }
             }.cancel,
             self,
@@ -513,23 +505,23 @@ pub const Notifier = struct {
     }
 };
 
-fn testDeferTask(calls: *u32) Action {
+fn testDeferTask(calls: *u32) bool {
     calls.* += 1;
-    return .disarm;
+    return false;
 }
 
-fn testReadTask(calls: *u32, bytes_read: *usize, result: anyerror!usize) Action {
+fn testReadTask(calls: *u32, bytes_read: *usize, result: anyerror!usize) bool {
     calls.* += 1;
     bytes_read.* = result catch 0;
-    return .disarm;
+    return false;
 }
 
-fn testMachTask(calls: *u32, result: anyerror!void) Action {
+fn testMachTask(calls: *u32, result: anyerror!void) bool {
     if (result != error.Canceled) {
         calls.* += 1;
     }
 
-    return .disarm;
+    return false;
 }
 
 test "task completes and stays alive until handler detaches" {

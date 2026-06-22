@@ -127,8 +127,8 @@ pub fn Entity(comptime T: type) type {
             return app.read_entity(self, function, args);
         }
 
-        pub fn notify(self: @This(), app: *App) !void {
-            try app.notify(self);
+        pub fn notify(self: @This(), app: *App) void {
+            app.notify(self);
         }
 
         pub fn init(store: *EntityStore, new_id: EntityId) @This() {

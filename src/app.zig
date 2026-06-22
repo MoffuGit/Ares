@@ -135,13 +135,15 @@ pub fn read_entity(self: *App, entity: anytype, function: anytype, args: anytype
     return self.update(TypeErased.new, .{ self, entity, args });
 }
 
-pub fn notify(self: *App, entity: anytype) !void {
+pub fn notify(self: *App, entity: anytype) void {
     const _Entity = @TypeOf(entity);
     if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
         @compileError("entity must be an Entity(T)");
     }
 
-    _ = try self.notifications.insert(self.gpa, entity.id());
+    _ = self.notifications.insert(self.gpa, entity.id()) catch |err| {
+        std.log.err("We cannot notify, err: {}", .{err});
+    };
 }
 
 pub fn update(
@@ -216,9 +218,9 @@ pub fn observe(
             defer _entity.drop();
             return @call(.auto, function, .{ app, _entity } ++ _args);
         }
-        fn enable(sub: Observers.Subscription) executor.Action {
+        fn enable(sub: Observers.Subscription) bool {
             sub.enable();
-            return .disarm;
+            return false;
         }
     };
 
@@ -282,8 +284,8 @@ pub fn Context(comptime T: type) type {
         pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) executor.Handler {
             const Args = @TypeOf(args);
             const TypeErased = struct {
-                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args) executor.Action {
-                    const _entity = any.into(T) orelse return .disarm;
+                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args) bool {
+                    const _entity = any.into(T) orelse return false;
                     defer _entity.drop();
 
                     const ctx: Context(T) = .new(app, _entity);
@@ -297,8 +299,8 @@ pub fn Context(comptime T: type) type {
         pub fn async(self: *const @This(), function: anytype, args: anytype, buffer: []u8) !executor.Async {
             const Args = @TypeOf(args);
             const TypeErased = struct {
-                pub fn async(any: AnyEntity, app: *App, _args: Args, result: anyerror!void) executor.Action {
-                    const _entity = any.into(T) orelse return .disarm;
+                pub fn async(any: AnyEntity, app: *App, _args: Args, result: anyerror!void) bool {
+                    const _entity = any.into(T) orelse return false;
                     defer _entity.drop();
 
                     const ctx: Context(T) = .new(app, _entity);
@@ -413,7 +415,7 @@ test "Observe entities" {
     observed.update(&app, TestStruct.set_index, .{index});
     observed.update(&app, TestStruct.inc, .{});
     try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
-    try observed.notify(&app);
+    observed.notify(&app);
 
     try testing.expect(!context);
 
@@ -424,7 +426,7 @@ test "Observe entities" {
     observed.update(&app, TestStruct.set_index, .{index});
     observed.update(&app, TestStruct.inc, .{});
     try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
-    try observed.notify(&app);
+    observed.notify(&app);
 
     app.flush();
 
@@ -491,7 +493,7 @@ test "Context observes entities" {
     _ = try context.observe(observed, ObserverState.observe, .{});
 
     observed.update(&app, Observed.set_index, .{42});
-    try observed.notify(&app);
+    observed.notify(&app);
     app.flush();
 
     try testing.expectEqual(1, observer.read(&app, ObserverState.get_observed_updates, .{}));
@@ -515,9 +517,9 @@ test "Context defer runs on foreground executor with entity context" {
             self.* = .{ .calls = 0, .last_value = 0 };
         }
 
-        pub fn deferred(ctx: Context(@This()), value: usize) executor.Action {
+        pub fn deferred(ctx: Context(@This()), value: usize) bool {
             ctx.entity.update(ctx.app, set, .{value});
-            return .disarm;
+            return false;
         }
 
         pub fn set(self: *@This(), value: usize) void {
@@ -568,9 +570,9 @@ test "Context async runs on foreground executor with entity context" {
             self.* = .{ .calls = 0, .last_value = 0 };
         }
 
-        pub fn deferred(ctx: Context(@This()), value: usize, _: anyerror!void) executor.Action {
+        pub fn deferred(ctx: Context(@This()), value: usize, _: anyerror!void) bool {
             ctx.entity.update(ctx.app, set, .{value});
-            return .disarm;
+            return false;
         }
 
         pub fn set(self: *@This(), value: usize) void {
@@ -641,7 +643,7 @@ test "Context observe removes subscription when observer is dropped" {
 
     try testing.expect(app.observers.subscribers.get(observed.id()) != null);
 
-    try observed.notify(&app);
+    observed.notify(&app);
     app.flush();
 
     try testing.expectEqual(null, app.observers.subscribers.get(observed.id()));
@@ -739,7 +741,7 @@ test "Observe entities drop before enable" {
     observed.update(&app, TestStruct.set_index, .{index});
     observed.update(&app, TestStruct.inc, .{});
     try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
-    try observed.notify(&app);
+    observed.notify(&app);
 
     try testing.expect(!context);
 
@@ -751,7 +753,7 @@ test "Observe entities drop before enable" {
     observed.update(&app, TestStruct.set_index, .{index});
     observed.update(&app, TestStruct.inc, .{});
     try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
-    try observed.notify(&app);
+    observed.notify(&app);
 
     app.flush();
 
