@@ -5,6 +5,7 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 
 const App = @import("app.zig");
+const UpdateFrame = App.UpdateFrame;
 const datastruct = @import("datastruct.zig");
 const slotmap = datastruct.slotmap;
 pub const EntityId = slotmap.Key;
@@ -119,12 +120,12 @@ pub fn Entity(comptime T: type) type {
             return try app.new(T, T.init, args);
         }
 
-        pub fn update(self: @This(), app: *App, function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
-            return app.update_entity(self, function, args);
+        pub fn update(self: @This(), app: *App) struct { *T, UpdateFrame } {
+            return app.update_frame(T, self);
         }
 
-        pub fn read(self: @This(), app: *App, function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
-            return app.read_entity(self, function, args);
+        pub fn read(self: @This(), app: *App) *const T {
+            return app.read_entity(T, self);
         }
 
         pub fn notify(self: @This(), app: *App) void {

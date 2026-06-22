@@ -10,6 +10,8 @@ const heap = std.heap;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 const ent = @import("entity.zig");
+const typeId = @import("typeId.zig");
+const TypeInfo = typeId.TypeInfo;
 pub const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
@@ -94,37 +96,29 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     return entity;
 }
 
-pub fn update_entity(self: *App, entity: anytype, function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
-    const _Entity = @TypeOf(entity);
-    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
-        @compileError("entity must be an Entity(T)");
+pub const UpdateFrame = struct {
+    app: *App,
+    any: AnyEntity,
+
+    pub fn end(self: *const @This(), ptr: anytype) void {
+        const T = @TypeOf(ptr);
+
+        assert(self.any.type_id == TypeInfo.init(@typeInfo(T).pointer.child));
+
+        self.app.entity_store.insert(self.any.id, ptr);
+        self.app.end_update();
     }
+};
 
-    const T = _Entity.EntityType;
-
+pub fn update_frame(self: *App, comptime T: type, entity: Entity(T)) struct { *T, UpdateFrame } {
     self.start_update();
-    defer self.end_update();
-
     const ptr = self.entity_store.remove(T, entity);
-    defer self.entity_store.insert(entity.any.id, ptr);
 
-    return @call(.auto, function, .{ptr} ++ args);
+    return .{ ptr, .{ .any = entity.any, .app = self } };
 }
 
-pub fn read_entity(self: *App, entity: anytype, function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
-    const _Entity = @TypeOf(entity);
-    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
-        @compileError("entity must be an Entity(T)");
-    }
-
-    const T = _Entity.EntityType;
-
-    self.start_update();
-    defer self.end_update();
-
-    const ptr = self.entity_store.get(T, entity);
-
-    return @call(.auto, function, .{ptr} ++ args);
+pub fn read_entity(self: *App, comptime T: type, entity: Entity(T)) *const T {
+    return self.entity_store.get(T, entity);
 }
 
 pub fn notify(self: *App, entity: anytype) void {
@@ -203,6 +197,7 @@ pub fn observe(
             defer _entity.drop();
             return @call(.auto, function, .{ app, _entity } ++ _args);
         }
+
         fn enable(sub: Observers.Subscription) bool {
             sub.enable();
             return false;
@@ -237,8 +232,8 @@ pub fn Context(comptime T: type) type {
             return self.app.gpa;
         }
 
-        pub fn update(self: *const @This(), function: anytype, args: anytype) @typeInfo(@TypeOf(function)).@"fn".return_type.? {
-            return self.entity.update(self.app, function, args);
+        pub fn update(self: *const @This()) struct { *T, UpdateFrame } {
+            return self.entity.update(self.app);
         }
 
         pub fn notify(self: *const @This()) void {
@@ -265,7 +260,11 @@ pub fn Context(comptime T: type) type {
                     defer _entity.drop();
 
                     const ctx: Context(T) = .new(app, _entity);
-                    _entity.update(app, function, .{ observed, ctx } ++ _args);
+
+                    const ptr, const _update = _entity.update(app);
+                    defer _update.end(ptr);
+
+                    @call(.auto, function, .{ ptr, observed, ctx } ++ _args);
 
                     return true;
                 }
@@ -327,10 +326,6 @@ test "creates/drops entities" {
         pub fn inc(self: *@This()) void {
             self.index += 1;
         }
-
-        pub fn get_index(self: *const @This()) usize {
-            return self.index;
-        }
     };
 
     const TestEntity = Entity(TestStruct);
@@ -343,9 +338,15 @@ test "creates/drops entities" {
     for (&entities, 0..) |*entity, index| {
         entity.* = try TestEntity.new(&app, .{});
 
-        entity.update(&app, TestStruct.set_index, .{index});
-        entity.update(&app, TestStruct.inc, .{});
-        try testing.expectEqual(index + 1, entity.read(&app, TestStruct.get_index, .{}));
+        {
+            const ptr, const update = entity.update(&app);
+            defer update.end(ptr);
+
+            ptr.set_index(index);
+            ptr.inc();
+        }
+
+        try testing.expectEqual(index + 1, entity.read(&app).index);
     }
 
     for (entities) |entity| {
@@ -375,10 +376,6 @@ test "Observe entities" {
         pub fn inc(self: *@This()) void {
             self.index += 1;
         }
-
-        pub fn get_index(self: *const @This()) usize {
-            return self.index;
-        }
     };
 
     const TestEntity = Entity(TestStruct);
@@ -405,9 +402,14 @@ test "Observe entities" {
 
     var index: usize = 0;
 
-    observed.update(&app, TestStruct.set_index, .{index});
-    observed.update(&app, TestStruct.inc, .{});
-    try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
+    {
+        const ptr, const update = observed.update(&app);
+        defer update.end(ptr);
+
+        ptr.set_index(index);
+        ptr.inc();
+    }
+    try testing.expectEqual(index + 1, observed.read(&app).index);
     observed.notify(&app);
 
     try testing.expect(!context);
@@ -416,9 +418,14 @@ test "Observe entities" {
 
     index = 1;
 
-    observed.update(&app, TestStruct.set_index, .{index});
-    observed.update(&app, TestStruct.inc, .{});
-    try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
+    {
+        const ptr, const update = observed.update(&app);
+        defer update.end(ptr);
+
+        ptr.set_index(index);
+        ptr.inc();
+    }
+    try testing.expectEqual(index + 1, observed.read(&app).index);
     observed.notify(&app);
 
     app.flush();
@@ -447,10 +454,6 @@ test "Context observes entities" {
         pub fn set_index(self: *@This(), index: usize) void {
             self.index = index;
         }
-
-        pub fn get_index(self: *const @This()) usize {
-            return self.index;
-        }
     };
 
     const ObserverState = struct {
@@ -463,11 +466,7 @@ test "Context observes entities" {
 
         pub fn observe(self: *@This(), observed: Entity(Observed), ctx: Context(@This())) void {
             self.observed_updates += 1;
-            self.last_observed_index = observed.read(ctx.app, Observed.get_index, .{});
-        }
-
-        pub fn get_observed_updates(self: *const @This()) usize {
-            return self.observed_updates;
+            self.last_observed_index = observed.read(ctx.app).index;
         }
 
         pub fn get_last_observed_index(self: *const @This()) usize {
@@ -485,12 +484,17 @@ test "Context observes entities" {
     var context = Context(ObserverState).new(&app, observer);
     _ = try context.observe(observed, ObserverState.observe, .{});
 
-    observed.update(&app, Observed.set_index, .{42});
+    {
+        const ptr, const update = observed.update(&app);
+        defer update.end(ptr);
+
+        ptr.set_index(42);
+    }
     observed.notify(&app);
     app.flush();
 
-    try testing.expectEqual(1, observer.read(&app, ObserverState.get_observed_updates, .{}));
-    try testing.expectEqual(42, observer.read(&app, ObserverState.get_last_observed_index, .{}));
+    try testing.expectEqual(1, observer.read(&app).observed_updates);
+    try testing.expectEqual(42, observer.read(&app).last_observed_index);
 
     observer.drop();
     observed.drop();
@@ -511,17 +515,17 @@ test "Context defer runs on foreground executor with entity context" {
         }
 
         pub fn deferred(ctx: Context(@This()), value: usize) bool {
-            ctx.entity.update(ctx.app, set, .{value});
+            const ptr, const update = ctx.update();
+            defer update.end(ptr);
+
+            ptr.set(value);
+
             return false;
         }
 
         pub fn set(self: *@This(), value: usize) void {
             self.calls += 1;
             self.last_value = value;
-        }
-
-        pub fn get_calls(self: *const @This()) usize {
-            return self.calls;
         }
 
         pub fn get_last_value(self: *const @This()) usize {
@@ -538,12 +542,12 @@ test "Context defer runs on foreground executor with entity context" {
     var context = Context(State).new(&app, entity);
     var handler = context.@"defer"(State.deferred, .{42});
 
-    try testing.expectEqual(0, entity.read(&app, State.get_calls, .{}));
+    try testing.expectEqual(0, entity.read(&app).calls);
 
     app.flush();
 
-    try testing.expectEqual(1, entity.read(&app, State.get_calls, .{}));
-    try testing.expectEqual(42, entity.read(&app, State.get_last_value, .{}));
+    try testing.expectEqual(1, entity.read(&app).calls);
+    try testing.expectEqual(42, entity.read(&app).last_value);
 
     handler.drop();
     entity.drop();
@@ -564,21 +568,16 @@ test "Context async runs on foreground executor with entity context" {
         }
 
         pub fn deferred(ctx: Context(@This()), value: usize, _: anyerror!void) bool {
-            ctx.entity.update(ctx.app, set, .{value});
+            const ptr, const update = ctx.update();
+            defer update.end(ptr);
+
+            ptr.set(value);
             return false;
         }
 
         pub fn set(self: *@This(), value: usize) void {
             self.calls += 1;
             self.last_value = value;
-        }
-
-        pub fn get_calls(self: *const @This()) usize {
-            return self.calls;
-        }
-
-        pub fn get_last_value(self: *const @This()) usize {
-            return self.last_value;
         }
     };
 
@@ -592,14 +591,14 @@ test "Context async runs on foreground executor with entity context" {
     var buffer: [32]u8 = undefined;
     var async = try context.async(State.deferred, .{42}, &buffer);
 
-    try testing.expectEqual(0, entity.read(&app, State.get_calls, .{}));
+    try testing.expectEqual(0, entity.read(&app).calls);
 
     try async.notifier.notify();
 
     app.flush();
 
-    try testing.expectEqual(1, entity.read(&app, State.get_calls, .{}));
-    try testing.expectEqual(42, entity.read(&app, State.get_last_value, .{}));
+    try testing.expectEqual(1, entity.read(&app).calls);
+    try testing.expectEqual(42, entity.read(&app).last_value);
 
     async.handler.drop();
     entity.drop();
@@ -700,10 +699,6 @@ test "Observe entities drop before enable" {
         pub fn inc(self: *@This()) void {
             self.index += 1;
         }
-
-        pub fn get_index(self: *const @This()) usize {
-            return self.index;
-        }
     };
 
     const TestEntity = Entity(TestStruct);
@@ -731,9 +726,14 @@ test "Observe entities drop before enable" {
 
     var index: usize = 0;
 
-    observed.update(&app, TestStruct.set_index, .{index});
-    observed.update(&app, TestStruct.inc, .{});
-    try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
+    {
+        const ptr, const update = observed.update(&app);
+        defer update.end(ptr);
+
+        ptr.set_index(index);
+        ptr.inc();
+    }
+    try testing.expectEqual(index + 1, observed.read(&app).index);
     observed.notify(&app);
 
     try testing.expect(!context);
@@ -743,9 +743,14 @@ test "Observe entities drop before enable" {
 
     index = 1;
 
-    observed.update(&app, TestStruct.set_index, .{index});
-    observed.update(&app, TestStruct.inc, .{});
-    try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
+    {
+        const ptr, const update = observed.update(&app);
+        defer update.end(ptr);
+
+        ptr.set_index(index);
+        ptr.inc();
+    }
+    try testing.expectEqual(index + 1, observed.read(&app).index);
     observed.notify(&app);
 
     app.flush();

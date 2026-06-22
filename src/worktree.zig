@@ -93,21 +93,13 @@ fn runUpdateReceiver(ctx: Context(Worktree), io: Io, receiver: Scanner.Updates.R
 
     var rec = receiver;
 
-    const update = rec.getOne(io) catch |err| switch (err) {
-        else => return false,
-    };
+    const self, const update = ctx.update();
+    defer update.end(self);
 
-    ctx.update(applyUpdate, .{ io, update });
-    ctx.notify();
-
-    return true;
-}
-
-fn applyUpdate(self: *Worktree, io: Io, update: Scanner.Updates) void {
     self.rwlock.lockUncancelable(io);
     defer self.rwlock.unlock(io);
 
-    switch (update) {
+    switch (rec.getOne(io) catch return false) {
         .started => self.scanning = true,
         .updated => |updated| {
             self.snapshot.deinit(self.gpa);
@@ -115,6 +107,10 @@ fn applyUpdate(self: *Worktree, io: Io, update: Scanner.Updates) void {
             self.scanning = updated.scanning;
         },
     }
+
+    ctx.notify();
+
+    return true;
 }
 
 pub fn runScanner(scanner: *Scanner, io: Io, sender: Scanner.Updates.Sender) void {

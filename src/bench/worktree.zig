@@ -36,14 +36,9 @@ pub fn initialWorktreeScan(app: *App, gpa: std.mem.Allocator, io: std.Io, _: *pr
         app.flush();
     }
 
-    _ = worktree.update(
-        app,
-        struct {
-            fn read(tree: *Worktree, _io: std.Io) void {
-                tree.run(_io) catch return;
-                tree.await(_io) catch return;
-            }
-        }.read,
-        .{io},
-    );
+    const ptr, const update = worktree.update(app);
+    defer update.end(ptr);
+
+    ptr.run(io) catch return;
+    ptr.await(io) catch return;
 }
