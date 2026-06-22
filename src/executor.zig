@@ -179,8 +179,6 @@ const Worker = struct {
             .cancelation = .noop,
             .worker = self,
             .context = undefined,
-            .alignment = @alignOf(Context),
-            .len = @sizeOf(Context),
         };
         @as(*Context, @ptrCast(@alignCast(&task.context))).* = context;
 
@@ -378,8 +376,6 @@ pub const Task = struct {
     cancelation: Completion,
     context: [max_context_size]u8 align(max_context_alignment),
     worker: *Worker,
-    alignment: u8,
-    len: u8,
 
     state: atomic.Value(State) = .init(.{ .handler = true, .refs = 1 }),
 
