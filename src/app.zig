@@ -162,29 +162,29 @@ pub fn start_update(self: *App) void {
 pub fn end_update(self: *App) void {
     if (!self.flushing and self.peding_updates == 1) {
         self.flushing = true;
-        self.flush() catch @panic("Failed to flush app");
+        self.flush();
         self.flushing = false;
     }
     self.peding_updates += 1;
 }
 
-pub fn flush(self: *App) !void {
+pub fn flush(self: *App) void {
     self.foreground_executor.run();
-    try self.destroy_dropped_entities();
-    try self.flush_notifications();
+    self.destroy_dropped_entities();
+    self.flush_notifications();
 }
 
-pub fn flush_notifications(self: *App) !void {
+pub fn flush_notifications(self: *App) void {
     var iter = self.notifications.iter();
     while (iter.next()) |id| {
         self.observers.notify(id, .{self}, self.gpa);
     }
 
-    try self.notifications.clear(self.gpa);
+    self.notifications.clear(self.gpa);
 }
 
-pub fn destroy_dropped_entities(self: *App) !void {
-    try self.entity_store.lockRefs();
+pub fn destroy_dropped_entities(self: *App) void {
+    self.entity_store.lockRefs();
     defer self.entity_store.unlockRefs();
 
     while (self.entity_store.popDrop()) |drop| {
@@ -357,7 +357,7 @@ test "creates/drops entities" {
         entity.drop();
     }
 
-    try app.flush();
+    app.flush();
 }
 
 test "Observe entities" {
@@ -426,7 +426,7 @@ test "Observe entities" {
     try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
     try observed.notify(&app);
 
-    try app.flush();
+    app.flush();
 
     try testing.expect(context);
 
@@ -434,7 +434,7 @@ test "Observe entities" {
         entity.drop();
     }
 
-    try app.flush();
+    app.flush();
 }
 
 test "Context observes entities" {
@@ -492,14 +492,14 @@ test "Context observes entities" {
 
     observed.update(&app, Observed.set_index, .{42});
     try observed.notify(&app);
-    try app.flush();
+    app.flush();
 
     try testing.expectEqual(1, observer.read(&app, ObserverState.get_observed_updates, .{}));
     try testing.expectEqual(42, observer.read(&app, ObserverState.get_last_observed_index, .{}));
 
     observer.drop();
     observed.drop();
-    try app.flush();
+    app.flush();
 }
 
 test "Context defer runs on foreground executor with entity context" {
@@ -545,14 +545,14 @@ test "Context defer runs on foreground executor with entity context" {
 
     try testing.expectEqual(0, entity.read(&app, State.get_calls, .{}));
 
-    try app.flush();
+    app.flush();
 
     try testing.expectEqual(1, entity.read(&app, State.get_calls, .{}));
     try testing.expectEqual(42, entity.read(&app, State.get_last_value, .{}));
 
     handler.drop();
     entity.drop();
-    try app.flush();
+    app.flush();
 }
 
 test "Context async runs on foreground executor with entity context" {
@@ -601,14 +601,14 @@ test "Context async runs on foreground executor with entity context" {
 
     try async.notifier.notify();
 
-    try app.flush();
+    app.flush();
 
     try testing.expectEqual(1, entity.read(&app, State.get_calls, .{}));
     try testing.expectEqual(42, entity.read(&app, State.get_last_value, .{}));
 
     async.handler.drop();
     entity.drop();
-    try app.flush();
+    app.flush();
 }
 
 test "Context observe removes subscription when observer is dropped" {
@@ -637,17 +637,17 @@ test "Context observe removes subscription when observer is dropped" {
     _ = try context.observe(observed, ObserverState.observe, .{});
 
     observer.drop();
-    try app.flush();
+    app.flush();
 
     try testing.expect(app.observers.subscribers.get(observed.id()) != null);
 
     try observed.notify(&app);
-    try app.flush();
+    app.flush();
 
     try testing.expectEqual(null, app.observers.subscribers.get(observed.id()));
 
     observed.drop();
-    try app.flush();
+    app.flush();
 }
 
 test "Context observe removes subscription when observed is dropped" {
@@ -677,12 +677,12 @@ test "Context observe removes subscription when observed is dropped" {
     _ = try context.observe(observed, ObserverState.observe, .{});
 
     observed.drop();
-    try app.flush();
+    app.flush();
 
     try testing.expectEqual(null, app.observers.subscribers.get(observed_id));
 
     observer.drop();
-    try app.flush();
+    app.flush();
 }
 
 test "Observe entities drop before enable" {
@@ -753,7 +753,7 @@ test "Observe entities drop before enable" {
     try testing.expectEqual(index + 1, observed.read(&app, TestStruct.get_index, .{}));
     try observed.notify(&app);
 
-    try app.flush();
+    app.flush();
 
     try testing.expect(!context);
 
@@ -761,5 +761,5 @@ test "Observe entities drop before enable" {
         entity.drop();
     }
 
-    try app.flush();
+    app.flush();
 }

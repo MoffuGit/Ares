@@ -197,8 +197,8 @@ pub const EntityStore = struct {
         return @as(*T, @ptrCast(@alignCast(ptr)));
     }
 
-    pub fn lockRefs(self: *@This()) !void {
-        try self.refs.rwlock.lock(self.refs.io);
+    pub fn lockRefs(self: *@This()) void {
+        self.refs.rwlock.lockUncancelable(self.refs.io);
     }
 
     pub fn unlockRefs(self: *@This()) void {

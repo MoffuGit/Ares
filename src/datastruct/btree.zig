@@ -747,10 +747,12 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             return self.root.find(key);
         }
 
-        pub fn clear(self: *Self, alloc: Allocator) !void {
+        pub fn clear(self: *Self, alloc: Allocator) void {
             _ = self.pool.reset(alloc, .retain_capacity);
 
-            const root = try self.pool.create(alloc);
+            const root = self.pool.create(alloc) catch |err| {
+                panic("Unexpected error while creating root: {}", .{err});
+            };
             root.* = .{ .Leaf = .{} };
             self.root = root;
             self.count = 0;
@@ -1070,8 +1072,8 @@ pub fn BPlusSet(comptime K: type, comptime comp: *const fn (a: K, b: K) std.math
             return self.tree.remove(alloc, key) != null;
         }
 
-        pub fn clear(self: *Self, alloc: Allocator) !void {
-            try self.tree.clear(alloc);
+        pub fn clear(self: *Self, alloc: Allocator) void {
+            self.tree.clear(alloc);
         }
 
         pub fn count(self: *const Self) usize {
@@ -1585,7 +1587,7 @@ test "B+ Set remove range clone and clear" {
     try testing.expect(!clone.contains(20));
     try testing.expectEqual(set.count(), clone.count());
 
-    try set.clear(alloc);
+    set.clear(alloc);
     try testing.expectEqual(0, set.count());
     try testing.expect(!set.contains(13));
     try testing.expect(clone.contains(13));
