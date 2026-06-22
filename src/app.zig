@@ -10,14 +10,14 @@ const heap = std.heap;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 const ent = @import("entity.zig");
-const typeId = @import("typeId.zig");
-const TypeInfo = typeId.TypeInfo;
 pub const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
 const executor = @import("executor.zig");
 const Subscriptions = @import("subscription.zig").Subscriptions;
+const typeId = @import("typeId.zig");
+const TypeInfo = typeId.TypeInfo;
 
 pub const App = @This();
 
@@ -234,6 +234,10 @@ pub fn Context(comptime T: type) type {
 
         pub fn update(self: *const @This()) struct { *T, UpdateFrame } {
             return self.entity.update(self.app);
+        }
+
+        pub fn read(self: *const @This()) *T {
+            return self.entity.read(self.app);
         }
 
         pub fn notify(self: *const @This()) void {
