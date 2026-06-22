@@ -187,6 +187,7 @@ pub fn destroy_dropped_entities(self: *App) !void {
     while (self.entity_store.popDrop()) |drop| {
         self.observers.remove(drop.@"1", self.gpa);
         drop.@"2".destroy(self.gpa, drop.@"0");
+        self.entity_store.recycle(drop.@"1");
     }
 }
 

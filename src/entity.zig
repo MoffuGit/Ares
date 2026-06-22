@@ -214,6 +214,10 @@ pub const EntityStore = struct {
         return .{ ptr, entity.id, entity.type_id };
     }
 
+    pub fn recycle(self: *@This(), id: EntityId) void {
+        self.refs.refs.recycle(id);
+    }
+
     pub fn collect(self: *@This(), gpa: Allocator) !std.ArrayList(struct { *anyopaque, EntityId, TypeId }) {
         var entities: std.ArrayList(struct { *anyopaque, EntityId, TypeId }) = .empty;
         errdefer entities.deinit(gpa);
@@ -352,4 +356,31 @@ test "destroying dropped entity calls optional deinit" {
 
     drop.@"2".destroy(allocator, drop.@"0");
     try std.testing.expect(deinit_called);
+}
+
+test "destroyed entities recycle ids" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+
+    const A = struct { value: u32 };
+
+    var store: EntityStore = undefined;
+    try store.init(allocator, io);
+    defer store.deinit(allocator);
+
+    const ptr = try allocator.create(A);
+    defer allocator.destroy(ptr);
+    ptr.* = .{ .value = 1 };
+
+    const id = store.reserve();
+    const entity: Entity(A) = .init(&store, id);
+    store.insert(id, ptr);
+
+    entity.drop();
+    const drop = store.popDrop().?;
+    try std.testing.expect(drop.@"1".eql(id));
+    store.recycle(drop.@"1");
+
+    const recycled = store.reserve();
+    try std.testing.expectEqual(id.index, recycled.index);
 }

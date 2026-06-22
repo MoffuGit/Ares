@@ -10,6 +10,9 @@ const Snapshot = @import("worktree/snapshot.zig");
 const prof = @import("prof");
 const tripwire = prof.tripwire;
 const test_build = @import("test_build");
+const App = @import("app.zig");
+const Entity = App.Entity;
+const Context = App.Context;
 
 pub const Worktree = @This();
 
@@ -30,7 +33,7 @@ updates_channel: Scanner.Updates.Channel,
 group: Io.Group,
 next_entry_id: std.atomic.Value(u64),
 
-pub fn init(self: *Worktree, gpa: Allocator, opts: Options) !void {
+pub fn init(self: *Worktree, _: Context(Worktree), gpa: Allocator, opts: Options) !void {
     self.* = .{
         .scanning = false,
         .rwlock = .init,
@@ -45,7 +48,7 @@ pub fn init(self: *Worktree, gpa: Allocator, opts: Options) !void {
     };
 
     const arena = self.arena.allocator();
-    errdefer _ = self.arena.reset(.free_all);
+    errdefer _ = self.arena.deinit();
 
     const abs_root = try arena.dupe(u8, opts.abs_path);
     const basename = std.fs.path.basename(abs_root);
@@ -74,7 +77,7 @@ pub fn close(self: *Worktree, io: Io) !void {
 pub fn deinit(self: *Worktree) void {
     self.scanner.deinit();
     self.snapshot.deinit(self.gpa);
-    _ = self.arena.reset(.free_all);
+    self.arena.deinit();
 }
 
 fn runUpdateReceiver(self: *Worktree, io: Io, receiver: Scanner.Updates.Receiver) !void {
