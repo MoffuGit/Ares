@@ -27,14 +27,12 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
         );
 
         pub const Subscriber = struct {
+            const max_context_size = 128;
+            const max_context_alignment = 16;
+
             active: bool,
             callback: Callback,
-            context: []u8,
-            alignment: u8,
-
-            fn free(self: Subscriber, gpa: Allocator) void {
-                gpa.rawFree(self.context, .fromByteUnits(self.alignment), @returnAddress());
-            }
+            context: [max_context_size]u8 align(max_context_alignment),
         };
 
         pub const Dropped = struct {
@@ -84,11 +82,6 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             var outer = self.subscribers.iter();
             while (outer.next()) |entry| {
                 if (self.subscribers.get_ref(entry.key)) |maybe_subscribers| if (maybe_subscribers.*) |*subscribers| {
-                    var inner = subscribers.iter();
-                    while (inner.next()) |subscriber| {
-                        const sub = subscriber.value;
-                        sub.free(gpa);
-                    }
                     subscribers.deinit(gpa);
                 };
             }
@@ -106,9 +99,13 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
         ) !Subscription {
             const Context = @TypeOf(context);
 
+            if (@sizeOf(Context) > Subscriber.max_context_size or @alignOf(Context) > Subscriber.max_context_alignment) {
+                @compileError("subscriber context has incorrect size or aligment");
+            }
+
             const TypeErased = struct {
                 fn _callback(sub: Subscriber, args: Args) bool {
-                    const _context: *Context = @ptrCast(@alignCast(sub.context.ptr));
+                    const _context: *const Context = @ptrCast(@alignCast(&sub.context));
                     return @call(.auto, callback, args ++ _context.*);
                 }
             };
@@ -116,16 +113,13 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             const id = self.next_id;
             self.next_id += 1;
 
-            const copy = try gpa.create(Context);
-            errdefer gpa.destroy(copy);
-            copy.* = context;
-
             const sub = Subscriber{
                 .active = false,
                 .callback = TypeErased._callback,
-                .context = @ptrCast(copy),
-                .alignment = @alignOf(Context),
+                .context = undefined,
             };
+
+            @as(*Context, @ptrCast(@alignCast(@constCast(&sub.context)))).* = context;
 
             if (self.subscribers.get_ref(key)) |subs| {
                 const old = try subs.*.?.insert(gpa, id, sub);
@@ -133,10 +127,7 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             } else {
                 var subscribers: btree.BPlusTree(u32, Subscriber, Order.order) = undefined;
                 try subscribers.init(gpa);
-                errdefer {
-                    sub.free(gpa);
-                    subscribers.deinit(gpa);
-                }
+                errdefer subscribers.deinit(gpa);
 
                 _ = try subscribers.insert(gpa, id, sub);
                 _ = try self.subscribers.insert(gpa, key, subscribers);
@@ -180,10 +171,8 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
                     _ = self.dropped.remove(gpa, drop);
                     continue;
                 };
+                _ = dropped_subscribers.remove(gpa, drop.id);
 
-                if (dropped_subscribers.remove(gpa, drop.id)) |removed| {
-                    removed.free(gpa);
-                }
                 _ = self.dropped.remove(gpa, drop);
 
                 if (dropped_subscribers.is_empty()) {
@@ -198,12 +187,8 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
         pub fn remove(self: *Self, key: Key, gpa: Allocator) void {
             if (self.subscribers.remove(gpa, key)) |subscribers| {
                 if (subscribers) |subs| {
-                    var owned_subs = subs;
-                    var iter = owned_subs.iter();
-                    while (iter.next()) |entry| {
-                        entry.value.free(gpa);
-                    }
-                    owned_subs.deinit(gpa);
+                    var mutable_subs = subs;
+                    mutable_subs.deinit(gpa);
                 }
             }
         }
@@ -211,9 +196,7 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
         pub fn unsubscribe(self: *Self, sub: *const Subscription, gpa: Allocator) !void {
             var subscribers = self.subscribers.get(sub.key) orelse return;
             if (subscribers) |*subs| {
-                if (subs.remove(gpa, sub.id)) |removed| {
-                    removed.free(gpa);
-                }
+                _ = subs.remove(gpa, sub.id);
                 if (subs.is_empty()) {
                     subs.deinit(gpa);
                     _ = self.subscribers.remove(gpa, sub.key);
