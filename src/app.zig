@@ -207,8 +207,8 @@ pub fn observe(
     const Args = @TypeOf(args);
 
     const TypeErased = struct {
-        fn _callback(app: *App, observer: AnyEntity, _args: Args) bool {
-            const _entity = observer.into(T) orelse return false;
+        fn _callback(app: *App, observed: AnyEntity, _args: Args) bool {
+            const _entity = observed.into(T) orelse return false;
             defer _entity.drop();
             return @call(.auto, function, .{ app, _entity } ++ _args);
         }
