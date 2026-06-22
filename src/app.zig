@@ -171,6 +171,8 @@ pub fn end_update(self: *App) void {
 }
 
 pub fn flush(self: *App) void {
+    //WARN:
+    //on the future, running the executor will be a separated function
     self.foreground_executor.run();
     self.destroy_dropped_entities();
     self.flush_notifications();
