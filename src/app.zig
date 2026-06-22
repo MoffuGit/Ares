@@ -274,6 +274,37 @@ pub fn Context(comptime T: type) type {
 
             return try self.app.observe(entity, TypeErased.callback, .{ self.entity.any, args });
         }
+
+        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) !executor.Handler {
+            const Args = @TypeOf(args);
+            const TypeErased = struct {
+                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args) executor.Action {
+                    const _entity = any.into(T) orelse return .disarm;
+                    defer _entity.drop();
+
+                    const ctx: Context(T) = .new(app, _entity);
+
+                    return @call(.auto, function, .{ctx} ++ _args);
+                }
+            };
+            return try self.app.foreground_executor.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
+        }
+
+        pub fn async(self: *const @This(), function: anytype, args: anytype, buffer: []u8) !executor.Async {
+            const Args = @TypeOf(args);
+            const TypeErased = struct {
+                pub fn async(any: AnyEntity, app: *App, _args: Args, result: anyerror!void) executor.Action {
+                    const _entity = any.into(T) orelse return .disarm;
+                    defer _entity.drop();
+
+                    const ctx: Context(T) = .new(app, _entity);
+
+                    return @call(.auto, function, .{ctx} ++ _args ++ .{result});
+                }
+            };
+
+            return try self.app.foreground_executor.async(TypeErased.async, .{ self.entity.any, self.app, args }, buffer);
+        }
     };
 }
 
@@ -464,6 +495,115 @@ test "Context observes entities" {
 
     observer.drop();
     observed.drop();
+    try app.flush();
+}
+
+test "Context defer runs on foreground executor with entity context" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+
+    const State = struct {
+        calls: usize,
+        last_value: usize,
+
+        pub fn init(self: *@This(), _: Context(@This())) !void {
+            self.* = .{ .calls = 0, .last_value = 0 };
+        }
+
+        pub fn deferred(ctx: Context(@This()), value: usize) executor.Action {
+            ctx.entity.update(ctx.app, set, .{value});
+            return .disarm;
+        }
+
+        pub fn set(self: *@This(), value: usize) void {
+            self.calls += 1;
+            self.last_value = value;
+        }
+
+        pub fn get_calls(self: *const @This()) usize {
+            return self.calls;
+        }
+
+        pub fn get_last_value(self: *const @This()) usize {
+            return self.last_value;
+        }
+    };
+
+    var app: App = undefined;
+    try app.init(allocator, io);
+    defer app.deinit();
+
+    const entity = try Entity(State).new(&app, .{});
+
+    var context = Context(State).new(&app, entity);
+    var handler = try context.@"defer"(State.deferred, .{42});
+
+    try testing.expectEqual(0, entity.read(&app, State.get_calls, .{}));
+
+    try app.flush();
+
+    try testing.expectEqual(1, entity.read(&app, State.get_calls, .{}));
+    try testing.expectEqual(42, entity.read(&app, State.get_last_value, .{}));
+
+    handler.drop();
+    entity.drop();
+    try app.flush();
+}
+
+test "Context async runs on foreground executor with entity context" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+
+    const State = struct {
+        calls: usize,
+        last_value: usize,
+
+        pub fn init(self: *@This(), _: Context(@This())) !void {
+            self.* = .{ .calls = 0, .last_value = 0 };
+        }
+
+        pub fn deferred(ctx: Context(@This()), value: usize, _: anyerror!void) executor.Action {
+            ctx.entity.update(ctx.app, set, .{value});
+            return .disarm;
+        }
+
+        pub fn set(self: *@This(), value: usize) void {
+            self.calls += 1;
+            self.last_value = value;
+        }
+
+        pub fn get_calls(self: *const @This()) usize {
+            return self.calls;
+        }
+
+        pub fn get_last_value(self: *const @This()) usize {
+            return self.last_value;
+        }
+    };
+
+    var app: App = undefined;
+    try app.init(allocator, io);
+    defer app.deinit();
+
+    const entity = try Entity(State).new(&app, .{});
+
+    var context = Context(State).new(&app, entity);
+    var buffer: [32]u8 = undefined;
+    var async = try context.async(State.deferred, .{42}, &buffer);
+
+    try testing.expectEqual(0, entity.read(&app, State.get_calls, .{}));
+
+    try async.notifier.notify();
+
+    try app.flush();
+
+    try testing.expectEqual(1, entity.read(&app, State.get_calls, .{}));
+    try testing.expectEqual(42, entity.read(&app, State.get_last_value, .{}));
+
+    async.handler.drop();
+    entity.drop();
     try app.flush();
 }
 

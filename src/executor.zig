@@ -37,7 +37,7 @@ pub const ForegroundExecutor = struct {
         context: anytype,
         buffer: []u8,
     ) !Async {
-        self.worker.async(function, context, buffer);
+        return try self.worker.async(function, context, buffer);
     }
 };
 
@@ -353,7 +353,7 @@ pub const Task = struct {
             .completion = .noop,
             .cancelation = .noop,
             .worker = worker,
-            .context = std.mem.asBytes(copy),
+            .context = @ptrCast(copy),
             .alignment = @alignOf(Context),
         };
 
