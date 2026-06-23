@@ -113,13 +113,13 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             const id = self.next_id;
             self.next_id += 1;
 
-            const sub = Subscriber{
+            var sub = Subscriber{
                 .active = false,
                 .callback = TypeErased._callback,
                 .context = undefined,
             };
 
-            @as(*Context, @ptrCast(@alignCast(@constCast(&sub.context)))).* = context;
+            @as(*Context, @ptrCast(@alignCast(&sub.context))).* = context;
 
             if (self.subscribers.get_ref(key)) |subs| {
                 const old = try subs.*.?.insert(gpa, id, sub);
