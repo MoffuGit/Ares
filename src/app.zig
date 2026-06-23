@@ -9,13 +9,17 @@ const heap = std.heap;
 
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
+
 const ent = @import("entity.zig");
 pub const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
+
 const executor = @import("executor.zig");
 pub const Handler = executor.Handler;
+pub const Notifier = executor.Notifier;
+
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;

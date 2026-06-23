@@ -60,20 +60,18 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), gpa: Allocator, opts: Optio
     errdefer self.snapshot.deinit(gpa);
     try self.snapshot.insert(gpa, .{ .id = self.next_entry_id.fetchAdd(1, .monotonic), .path = root_name });
 
-    const handler, const notifier = try ctx.async(runUpdateReceiver, .{ io, self.updates_channel.receiver() });
-    _ = notifier;
+    const handler, const notifier = try ctx.async(awaitUpdates, .{ io, self.updates_channel.receiver() });
+    errdefer handler.drop();
 
     self.handlers = handler;
 
     try self.scanner.init(gpa, arena, &self.snapshot, &self.next_entry_id);
+
+    try self.group.concurrent(io, runScanner, .{ &self.scanner, io, self.updates_channel.sender(), notifier });
 }
 
 pub fn await(self: *Worktree, io: Io) !void {
     try self.group.await(io);
-}
-
-pub fn run(self: *Worktree, io: Io) !void {
-    try self.group.concurrent(io, runScanner, .{ &self.scanner, io, self.updates_channel.sender() });
 }
 
 pub fn close(self: *Worktree, io: Io) !void {
@@ -87,7 +85,7 @@ pub fn deinit(self: *Worktree) void {
     self.arena.deinit();
 }
 
-fn runUpdateReceiver(ctx: Context(Worktree), io: Io, receiver: Scanner.Updates.Receiver, res: anyerror!void) bool {
+fn awaitUpdates(ctx: Context(Worktree), io: Io, receiver: Scanner.Updates.Receiver, res: anyerror!void) bool {
     if (res == error.Canceled) {
         return false;
     }
@@ -111,9 +109,11 @@ fn runUpdateReceiver(ctx: Context(Worktree), io: Io, receiver: Scanner.Updates.R
     return true;
 }
 
-pub fn runScanner(scanner: *Scanner, io: Io, sender: Scanner.Updates.Sender) void {
+pub fn runScanner(scanner: *Scanner, io: Io, sender: Scanner.Updates.Sender, notifier: App.Notifier) void {
     var send = sender;
     defer send.close(io);
+
+    _ = notifier;
 
     scanner.run(io, &send) catch |err| {
         if (err != error.Closed) {

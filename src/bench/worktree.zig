@@ -39,6 +39,5 @@ pub fn initialWorktreeScan(app: *App, gpa: std.mem.Allocator, io: std.Io, _: *pr
     const ptr, const update = worktree.update(app);
     defer update.end(ptr);
 
-    ptr.run(io) catch return;
     ptr.await(io) catch return;
 }
