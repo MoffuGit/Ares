@@ -129,7 +129,7 @@ pub const BackgroundExecutor = struct {
 var worker_next_id: u32 = 0;
 
 const Worker = struct {
-    pool: heap.MemoryPool(Task),
+    pool: heap.memory_pool.Extra(Task, .{ .alignment = null, .growable = false }),
     mutex: Io.Mutex,
     gpa: Allocator,
     loop: Loop,
@@ -164,7 +164,7 @@ const Worker = struct {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
 
-        const task = self.pool.create(self.gpa) catch {
+        const task = self.pool.create(undefined) catch {
             @panic("Worker Tasks Overflow");
         };
 
@@ -205,7 +205,10 @@ const Worker = struct {
 
         const TypeErased = struct {
             fn complete(task: *Task, _: *Completion, _: Loop.Result) bool {
-                if (task.canceled()) return false;
+                if (task.canceled()) {
+                    task.complete();
+                    return false;
+                }
 
                 const _context: *Context = @ptrCast(@alignCast(&task.context));
                 const rearm = @call(.auto, function, _context.*);
@@ -369,22 +372,30 @@ pub const Task = struct {
     cancelation: Completion,
     context: [max_context_size]u8 align(max_context_alignment),
     worker: *Worker,
+    group_next: ?*Task = null,
 
     state: atomic.Value(State) = .init(.{ .handler = true, .refs = 1 }),
+
+    fn groupNext(self: *Task) *?*Task {
+        return &self.group_next;
+    }
 
     fn cancel(self: *Task) void {
         var old = self.state.load(.acquire);
         while (true) {
-            if (old.completed == true and old.refs == 0) {
-                return self.destroy();
-            }
+            if (!old.handler) return;
 
             var new = old;
-            new.canceled = true;
-            new.refs += 1;
             new.handler = false;
+            new.canceled = true;
+            if (!old.completed) new.refs += 1;
 
-            old = self.state.cmpxchgWeak(old, new, .release, .acquire) orelse break;
+            old = self.state.cmpxchgWeak(old, new, .acq_rel, .acquire) orelse break;
+        }
+
+        if (old.completed) {
+            if (old.refs == 0 and !old.handler) self.destroy();
+            return;
         }
 
         self.worker.loop.cancel(
@@ -411,7 +422,7 @@ pub const Task = struct {
             old = self.state.cmpxchgWeak(old, new, .acq_rel, .acquire) orelse break;
         }
 
-        if (old.refs == 1 and !old.handler) self.destroy();
+        if (old.refs == 0 and !old.handler) self.destroy();
     }
 
     fn release(self: *Task) void {
@@ -463,7 +474,53 @@ pub const Handler = struct {
     }
 
     pub fn drop(self: *const Handler) void {
-        self.task.cancel();
+        self.cancel();
+    }
+};
+
+pub const Group = struct {
+    head: ?*Task = null,
+
+    pub const init: Group = .{};
+
+    pub fn adopt(self: *Group, handler: Handler) void {
+        const task = handler.task;
+        task.groupNext().* = self.head;
+        self.head = task;
+    }
+
+    pub fn push(self: *Group, handler: Handler) void {
+        self.adopt(handler);
+    }
+
+    pub fn cancel(self: *Group) void {
+        var task = self.takeAll();
+        while (task) |current| {
+            const next = current.groupNext().*;
+            current.groupNext().* = null;
+            current.cancel();
+            task = next;
+        }
+    }
+
+    pub fn detach(self: *Group) void {
+        var task = self.takeAll();
+        while (task) |current| {
+            const next = current.groupNext().*;
+            current.groupNext().* = null;
+            current.releaseHandler();
+            task = next;
+        }
+    }
+
+    pub fn drop(self: *Group) void {
+        self.cancel();
+    }
+
+    fn takeAll(self: *Group) ?*Task {
+        const head = self.head;
+        self.head = null;
+        return head;
     }
 };
 
@@ -670,4 +727,73 @@ test "task can detach" {
     worker.run(.until_done);
 
     try testing.expectEqual(@as(u32, 1), calls);
+}
+
+test "handler group drops pending tasks as a unit" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+
+    var worker: Worker = undefined;
+    try worker.init(gpa, io);
+    defer worker.deinit();
+
+    var calls: u32 = 0;
+    var group: Group = .init;
+
+    const handler_1 = worker.@"defer"(testDeferTask, .{&calls});
+    const handler_2 = worker.@"defer"(testDeferTask, .{&calls});
+    group.adopt(handler_1);
+    group.adopt(handler_2);
+
+    group.drop();
+
+    worker.run(.until_done);
+
+    try testing.expectEqual(@as(u32, 0), calls);
+}
+
+test "handler group detaches pending tasks as a unit" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+
+    var worker: Worker = undefined;
+    try worker.init(gpa, io);
+    defer worker.deinit();
+
+    var calls: u32 = 0;
+    var group: Group = .init;
+
+    const handler_1 = worker.@"defer"(testDeferTask, .{&calls});
+    const handler_2 = worker.@"defer"(testDeferTask, .{&calls});
+    group.push(handler_1);
+    group.push(handler_2);
+
+    group.detach();
+
+    worker.run(.until_done);
+
+    try testing.expectEqual(@as(u32, 2), calls);
+}
+
+test "handler group consumes completed tasks as a unit" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+
+    var worker: Worker = undefined;
+    try worker.init(gpa, io);
+    defer worker.deinit();
+
+    var calls: u32 = 0;
+    var group: Group = .init;
+
+    const handler_1 = worker.@"defer"(testDeferTask, .{&calls});
+    const handler_2 = worker.@"defer"(testDeferTask, .{&calls});
+    group.adopt(handler_1);
+    group.adopt(handler_2);
+
+    worker.run(.until_done);
+
+    try testing.expectEqual(@as(u32, 2), calls);
+
+    group.drop();
 }
