@@ -25,7 +25,6 @@ pub const Options = struct {
 arena: ArenaAllocator,
 gpa: Allocator,
 
-rwlock: Io.RwLock,
 scanning: bool,
 snapshot: Snapshot,
 scanner: Scanner,
@@ -34,11 +33,11 @@ buffer: [8]Scanner.Updates,
 updates_channel: Scanner.Updates.Channel,
 group: Io.Group,
 next_entry_id: std.atomic.Value(u64),
+handlers: App.Handler,
 
 pub fn init(self: *Worktree, ctx: Context(Worktree), gpa: Allocator, opts: Options, io: Io) !void {
     self.* = .{
         .scanning = false,
-        .rwlock = .init,
         .arena = ArenaAllocator.init(gpa),
         .gpa = gpa,
         .group = .init,
@@ -47,6 +46,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), gpa: Allocator, opts: Optio
         .buffer = undefined,
         .next_entry_id = .init(0),
         .updates_channel = .init(&self.buffer),
+        .handlers = undefined,
     };
 
     const arena = self.arena.allocator();
@@ -60,8 +60,10 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), gpa: Allocator, opts: Optio
     errdefer self.snapshot.deinit(gpa);
     try self.snapshot.insert(gpa, .{ .id = self.next_entry_id.fetchAdd(1, .monotonic), .path = root_name });
 
-    var async = try ctx.async(runUpdateReceiver, .{ io, self.updates_channel.receiver() });
-    defer async.handler.drop();
+    const handler, const notifier = try ctx.async(runUpdateReceiver, .{ io, self.updates_channel.receiver() });
+    _ = notifier;
+
+    self.handlers = handler;
 
     try self.scanner.init(gpa, arena, &self.snapshot, &self.next_entry_id);
 }
@@ -79,6 +81,7 @@ pub fn close(self: *Worktree, io: Io) !void {
 }
 
 pub fn deinit(self: *Worktree) void {
+    self.handlers.drop();
     self.scanner.deinit();
     self.snapshot.deinit(self.gpa);
     self.arena.deinit();
@@ -93,9 +96,6 @@ fn runUpdateReceiver(ctx: Context(Worktree), io: Io, receiver: Scanner.Updates.R
 
     const self, const update = ctx.update();
     defer update.end(self);
-
-    self.rwlock.lockUncancelable(io);
-    defer self.rwlock.unlock(io);
 
     switch (rec.getOne(io) catch return false) {
         .started => self.scanning = true,

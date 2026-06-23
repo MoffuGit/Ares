@@ -15,6 +15,7 @@ const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
 const executor = @import("executor.zig");
+pub const Handler = executor.Handler;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
@@ -592,18 +593,18 @@ test "Context async runs on foreground executor with entity context" {
     const entity = try Entity(State).new(&app, .{});
 
     var context = Context(State).new(&app, entity);
-    var async = try context.async(State.deferred, .{42});
+    const handler, const notifier = try context.async(State.deferred, .{42});
 
     try testing.expectEqual(0, entity.read(&app).calls);
 
-    try async.notifier.notify();
+    try notifier.notify();
 
     app.flush();
 
     try testing.expectEqual(1, entity.read(&app).calls);
     try testing.expectEqual(42, entity.read(&app).last_value);
 
-    async.handler.drop();
+    handler.drop();
     entity.drop();
     app.flush();
 }

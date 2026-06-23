@@ -104,8 +104,9 @@ pub const BackgroundExecutor = struct {
     }
 
     pub fn deinit(self: *@This(), gpa: Allocator, io: Io) void {
-        for (self.stops) |*stop| {
-            stop.notifier.notify() catch |err| {
+        for (self.stops) |stop| {
+            const notifier = stop.@"1";
+            notifier.notify() catch |err| {
                 std.log.err("Error while stopping a worker: {}", .{err});
             };
         }
@@ -113,7 +114,7 @@ pub const BackgroundExecutor = struct {
         self.group.cancel(io);
 
         for (self.stops) |*stop| {
-            stop.handler.drop();
+            stop.@"0".drop();
         }
 
         for (self.workers) |*work| {
@@ -343,7 +344,7 @@ const Worker = struct {
             @sizeOf(@TypeOf(limits)) / @sizeOf(system.natural_t),
         ) != 0) return error.MachPortAllocFailed;
         self.loop.mach(&task.completion, TypeErased.complete, task, .{ .port = mach_port, .buffer = .{ .array = undefined } });
-        return .{ .handler = .{ .task = task }, .notifier = .{ .port = mach_port } };
+        return .{ .{ .task = task }, .{ .port = mach_port } };
     }
 };
 
@@ -447,7 +448,7 @@ pub const Task = struct {
 pub const Handler = struct {
     task: *Task,
 
-    pub fn cancel(self: *Handler) void {
+    pub fn cancel(self: *const Handler) void {
         self.task.cancel();
     }
 
@@ -455,20 +456,17 @@ pub const Handler = struct {
         self.task.releaseHandler();
     }
 
-    pub fn drop(self: *Handler) void {
+    pub fn drop(self: *const Handler) void {
         self.task.cancel();
     }
 };
 
-pub const Async = struct {
-    handler: Handler,
-    notifier: Notifier,
-};
+pub const Async = struct { Handler, Notifier };
 
 pub const Notifier = struct {
     port: system.mach_port_name_t,
 
-    pub fn notify(self: *Notifier) !void {
+    pub fn notify(self: *const Notifier) !void {
         var msg: posix.system.mach_msg_header_t = .{
             .msgh_bits = @intFromEnum(system.MACH.MSG.TYPE.COPY_SEND),
             .msgh_size = @sizeOf(posix.system.mach_msg_header_t),
@@ -592,23 +590,23 @@ test "Async notifier completes task" {
 
     var calls: u32 = 0;
 
-    var async = try worker.async(testMachTask, .{&calls});
+    const handler, const notifier = try worker.async(testMachTask, .{&calls});
 
     worker.run(.no_wait);
     try testing.expectEqual(@as(u32, 0), calls);
 
-    try async.notifier.notify();
-    try async.notifier.notify();
-    try async.notifier.notify();
-    try async.notifier.notify();
-    try async.notifier.notify();
-    try async.notifier.notify();
-    try async.notifier.notify();
+    try notifier.notify();
+    try notifier.notify();
+    try notifier.notify();
+    try notifier.notify();
+    try notifier.notify();
+    try notifier.notify();
+    try notifier.notify();
     worker.run(.until_done);
 
     try testing.expectEqual(@as(u32, 1), calls);
 
-    async.handler.drop();
+    handler.drop();
     worker.run(.until_done);
 
     try testing.expectEqual(@as(u32, 1), calls);
