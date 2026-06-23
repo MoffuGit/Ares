@@ -210,7 +210,7 @@ const Worker = struct {
                 const _context: *Context = @ptrCast(@alignCast(&task.context));
                 const rearm = @call(.auto, function, _context.*);
 
-                if (rearm) task.complete();
+                if (!rearm) task.complete();
 
                 return rearm;
             }
@@ -238,7 +238,7 @@ const Worker = struct {
                     function,
                     _context.* ++ .{res.read},
                 );
-                if (rearm) task.complete();
+                if (!rearm) task.complete();
 
                 return rearm;
             }
@@ -267,12 +267,14 @@ const Worker = struct {
                     _context.* ++ .{res.machport},
                 );
 
-                _ = system.mach_port_deallocate(
-                    posix.system.mach_task_self(),
-                    c.operation.machport.port,
-                );
+                if (!rearm) {
+                    _ = system.mach_port_deallocate(
+                        posix.system.mach_task_self(),
+                        c.operation.machport.port,
+                    );
 
-                if (rearm) task.complete();
+                    task.complete();
+                }
 
                 return rearm;
             }
@@ -326,22 +328,26 @@ const Worker = struct {
         }
 
         const mach_port_limits = extern struct { mpl_qlimit: system.natural_t };
+        const MACH_PORT_LIMITS_INFO = 1;
+
         const mach = struct {
-            extern fn mach_port_set_attributes(
+            const mach_port_flavor_t = c_int;
+
+            extern "c" fn mach_port_set_attributes(
                 task: system.ipc_space_t,
                 name: system.mach_port_name_t,
-                flavor: system.natural_t,
-                port_info: *system.integer_t,
-                port_infoCnt: system.mach_msg_type_number_t,
-            ) system.kern_return_t;
+                flavor: mach_port_flavor_t,
+                info: *anyopaque,
+                count: system.mach_msg_type_number_t,
+            ) posix.system.kern_return_t;
         };
         var limits: mach_port_limits = .{ .mpl_qlimit = 1 };
         if (mach.mach_port_set_attributes(
             mach_self,
             mach_port,
-            1,
-            @ptrCast(&limits),
-            @sizeOf(@TypeOf(limits)) / @sizeOf(system.natural_t),
+            MACH_PORT_LIMITS_INFO,
+            &limits,
+            @sizeOf(@TypeOf(limits)),
         ) != 0) return error.MachPortAllocFailed;
         self.loop.mach(&task.completion, TypeErased.complete, task, .{ .port = mach_port, .buffer = .{ .array = undefined } });
         return .{ .{ .task = task }, .{ .port = mach_port } };
@@ -478,7 +484,7 @@ pub const Notifier = struct {
 
         switch (system.mach_msg(
             &msg,
-            .{ .SEND = .{ .TIMEOUT = true } },
+            .{ .SEND = .{ .TIMEOUT = true, .MSG = true } },
             msg.msgh_size,
             0,
             system.MACH.PORT.NULL,
