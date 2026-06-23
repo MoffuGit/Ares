@@ -15,8 +15,8 @@ pub const Read = Loop.Read;
 pub const ForegroundExecutor = struct {
     worker: Worker,
 
-    pub fn init(self: *@This(), gpa: Allocator, io: Io) !void {
-        try self.worker.init(gpa, io);
+    pub fn init(self: *@This(), fixed: Allocator, io: Io) !void {
+        try self.worker.init(fixed, io);
     }
 
     pub fn run(self: *@This()) void {
@@ -42,14 +42,14 @@ pub const BackgroundExecutor = struct {
     next_worker: atomic.Value(usize),
     group: Io.Group,
 
-    pub fn init(self: *@This(), gpa: Allocator, io: Io) !void {
+    pub fn init(self: *@This(), fixed: Allocator, io: Io) !void {
         const cpu_count = try std.Thread.getCpuCount();
 
-        const workers = try gpa.alloc(Worker, cpu_count);
-        errdefer gpa.free(workers);
+        const workers = try fixed.alloc(Worker, cpu_count);
+        errdefer fixed.free(workers);
 
-        const stops = try gpa.alloc(Await, cpu_count);
-        errdefer gpa.free(stops);
+        const stops = try fixed.alloc(Await, cpu_count);
+        errdefer fixed.free(stops);
 
         self.* = .{
             .workers = workers,
@@ -59,7 +59,7 @@ pub const BackgroundExecutor = struct {
         };
 
         for (self.workers, self.stops) |*work, *stop| {
-            try work.init(gpa, io);
+            try work.init(fixed, io);
             stop.* = try work.await(
                 struct {
                     fn _stop(_worker: *Worker, _: anyerror!void) bool {
@@ -103,7 +103,7 @@ pub const BackgroundExecutor = struct {
         return try self.worker().await(function, context);
     }
 
-    pub fn deinit(self: *@This(), gpa: Allocator, io: Io) void {
+    pub fn deinit(self: *@This(), fixed: Allocator, io: Io) void {
         for (self.stops) |stop| {
             const notifier = stop.@"1";
             notifier.notify() catch |err| {
@@ -121,21 +121,21 @@ pub const BackgroundExecutor = struct {
             work.deinit();
         }
 
-        gpa.free(self.stops);
-        gpa.free(self.workers);
+        fixed.free(self.stops);
+        fixed.free(self.workers);
     }
 };
 
 const Worker = struct {
     pool: heap.MemoryPool(Task),
     mutex: Io.Mutex,
-    gpa: Allocator,
+    fixed: Allocator,
     loop: Loop,
     io: Io,
 
-    pub fn init(self: *Worker, gpa: Allocator, io: Io) !void {
+    pub fn init(self: *Worker, fixed: Allocator, io: Io) !void {
         self.* = .{
-            .gpa = gpa,
+            .fixed = fixed,
             .io = io,
             .loop = undefined,
             .mutex = .init,
@@ -146,7 +146,7 @@ const Worker = struct {
 
     pub fn deinit(self: *Worker) void {
         self.loop.deinit();
-        self.pool.deinit(self.gpa);
+        self.pool.deinit(self.fixed);
     }
 
     pub fn new(self: *Worker, context: anytype) *Task {
@@ -159,7 +159,7 @@ const Worker = struct {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
 
-        const task = self.pool.create(self.gpa) catch {
+        const task = self.pool.create(self.fixed) catch {
             @panic("Worker Tasks Overflow");
         };
 

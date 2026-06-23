@@ -1,6 +1,5 @@
 //This App and many parts/ideas of it came from gpui (https://github.com/zed-industries/zed/tree/main/crates/gpui)
 //LICENSE: [ZED]
-
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
@@ -22,10 +21,14 @@ const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 
+pub const APP_BUFFER_SIZE = 16 * 1024 * 1024;
+
 pub const App = @This();
 
 gpa: Allocator,
-arena: heap.ArenaAllocator,
+buffer: []u8,
+alloc: heap.FixedBufferAllocator,
+fixed: Allocator,
 io: Io,
 entity_store: EntityStore,
 observers: Observers,
@@ -39,6 +42,9 @@ notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 flushing: bool,
 
 pub fn init(self: *App, gpa: Allocator, io: Io) !void {
+    const buffer = try gpa.alloc(u8, APP_BUFFER_SIZE);
+    errdefer gpa.free(buffer);
+
     self.* = .{
         .notifications = undefined,
         .entity_store = undefined,
@@ -48,43 +54,44 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
-        .arena = .init(gpa),
+        .buffer = buffer,
+        .alloc = .init(buffer),
+        .fixed = undefined,
         .io = io,
     };
+    self.fixed = self.alloc.threadSafeAllocator();
 
-    try self.foreground_executor.init(self.gpa, io);
+    try self.foreground_executor.init(self.fixed, io);
     errdefer self.foreground_executor.deinit();
 
-    try self.background_executor.init(gpa, io);
-    errdefer self.background_executor.deinit(gpa, io);
+    try self.background_executor.init(self.fixed, io);
+    errdefer self.background_executor.deinit(self.fixed, io);
 
-    try self.entity_store.init(gpa, 100);
-    errdefer self.entity_store.deinit(gpa);
+    try self.entity_store.init(self.fixed, 100);
+    errdefer self.entity_store.deinit(self.fixed);
 
-    try self.observers.init(gpa);
-    errdefer self.observers.deinit(gpa);
+    try self.observers.init(self.fixed);
+    errdefer self.observers.deinit(self.fixed);
 
-    try self.notifications.init(gpa);
-    errdefer self.notifications.deinit(gpa);
+    try self.notifications.init(self.fixed);
+    errdefer self.notifications.deinit(self.fixed);
 }
 
 pub fn deinit(self: *App) void {
-    self.background_executor.deinit(self.gpa, self.io);
+    self.background_executor.deinit(self.fixed, self.io);
     self.foreground_executor.deinit();
-    self.notifications.deinit(self.gpa);
-    self.observers.deinit(self.gpa);
-    self.entity_store.deinit(self.gpa);
-    self.arena.deinit();
+    self.notifications.deinit(self.fixed);
+    self.observers.deinit(self.fixed);
+    self.entity_store.deinit(self.fixed);
+    self.gpa.free(self.buffer);
 }
 
 pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Entity(T) {
     self.start_update();
     defer self.end_update();
 
-    const arena = self.arena.allocator();
-
-    const ptr = try arena.create(T);
-    errdefer arena.destroy(ptr);
+    const ptr = try self.fixed.create(T);
+    errdefer self.fixed.destroy(ptr);
 
     const id = self.entity_store.insert(ptr);
     errdefer self.entity_store.recycle(id);
@@ -133,7 +140,7 @@ pub fn notify(self: *App, entity: anytype) void {
         @compileError("entity must be an Entity(T)");
     }
 
-    _ = self.notifications.insert(self.gpa, entity.id()) catch |err| {
+    _ = self.notifications.insert(self.fixed, entity.id()) catch |err| {
         std.log.err("We cannot notify, err: {}", .{err});
     };
 }
@@ -157,22 +164,29 @@ pub fn flush(self: *App) void {
     self.foreground_executor.run();
     self.destroy_dropped_entities();
     self.flush_notifications();
+    self.log_buffer_usage();
+}
+
+fn log_buffer_usage(self: *const App) void {
+    const used = self.alloc.end_index;
+    const percent = @as(f64, @floatFromInt(used)) * 100.0 / @as(f64, @floatFromInt(self.buffer.len));
+    std.log.info("app buffer usage: {d:.2}% ({d}/{d} bytes)", .{ percent, used, self.buffer.len });
 }
 
 pub fn flush_notifications(self: *App) void {
     var iter = self.notifications.iter();
     while (iter.next()) |id| {
-        self.observers.notify(id, .{self}, self.gpa);
+        self.observers.notify(id, .{self}, self.fixed);
     }
 
-    self.notifications.clear(self.gpa);
+    self.notifications.clear(self.fixed);
 }
 
 pub fn destroy_dropped_entities(self: *App) void {
     while (self.entity_store.popDrop()) |drop| {
         const ptr, const key, const type_info = drop;
 
-        self.observers.remove(key, self.gpa);
+        self.observers.remove(key, self.fixed);
         type_info.deinit(ptr);
         self.entity_store.recycle(key);
     }
@@ -210,7 +224,7 @@ pub fn observe(
         entity.id(),
         TypeErased._callback,
         .{ entity.any, args },
-        self.gpa,
+        self.fixed,
     );
 
     const handler = self.foreground_executor.@"defer"(TypeErased.enable, .{sub});
@@ -232,6 +246,10 @@ pub fn Context(comptime T: type) type {
 
         pub fn gpa(self: *const @This()) Allocator {
             return self.app.gpa;
+        }
+
+        pub fn fixed(self: *const @This()) Allocator {
+            return self.app.fixed;
         }
 
         pub fn update(self: *const @This()) struct { *T, UpdateFrame } {
@@ -745,7 +763,7 @@ test "Observe entities drop before enable" {
     try testing.expect(!context);
 
     const sub = try app.observe(observed, Observed.callback, .{&context});
-    try sub.unsubscribe(allocator);
+    try sub.unsubscribeApp();
 
     index = 1;
 

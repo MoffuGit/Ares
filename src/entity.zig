@@ -90,24 +90,24 @@ pub const EntityStore = struct {
     updates: Updates,
     dropped: std.ArrayList(AnyEntity),
 
-    pub fn init(self: *@This(), gpa: Allocator, capacity: usize) !void {
-        var entities = try Entities.init(gpa, capacity);
-        errdefer entities.deinit(gpa);
+    pub fn init(self: *@This(), fixed: Allocator, capacity: usize) !void {
+        var entities = try Entities.init(fixed, capacity);
+        errdefer entities.deinit(fixed);
 
-        var updates = try Updates.init(gpa, capacity);
-        errdefer updates.deinit(gpa);
+        var updates = try Updates.init(fixed, capacity);
+        errdefer updates.deinit(fixed);
 
         self.* = .{
             .entities = entities,
             .updates = updates,
-            .dropped = try .initCapacity(gpa, capacity),
+            .dropped = try .initCapacity(fixed, capacity),
         };
     }
 
-    pub fn deinit(self: *@This(), gpa: Allocator) void {
-        self.entities.deinit(gpa);
-        self.updates.deinit(gpa);
-        self.dropped.deinit(gpa);
+    pub fn deinit(self: *@This(), fixed: Allocator) void {
+        self.entities.deinit(fixed);
+        self.updates.deinit(fixed);
+        self.dropped.deinit(fixed);
     }
 
     pub fn insert(self: *@This(), ptr: *anyopaque) EntityId {
@@ -140,14 +140,14 @@ pub const EntityStore = struct {
         self.entities.recycle(id);
     }
 
-    pub fn collect(self: *@This(), gpa: Allocator) !std.ArrayList(struct { *anyopaque, EntityId, TypeId }) {
+    pub fn collect(self: *@This(), fixed: Allocator) !std.ArrayList(struct { *anyopaque, EntityId, TypeId }) {
         var entities: std.ArrayList(struct { *anyopaque, EntityId, TypeId }) = .empty;
-        errdefer entities.deinit(gpa);
+        errdefer entities.deinit(fixed);
 
         while (self.dropped.pop()) |entity| {
             const ptr = self.entities.remove(entity.id) orelse continue;
             _ = self.updates.remove(entity.id);
-            try entities.append(gpa, .{ ptr, entity.id, entity.type_id });
+            try entities.append(fixed, .{ ptr, entity.id, entity.type_id });
         }
 
         return entities;
