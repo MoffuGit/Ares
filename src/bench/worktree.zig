@@ -6,6 +6,18 @@ const Worktree = @import("../worktree.zig");
 const App = @import("../app.zig");
 const Entity = App.Entity;
 
+const WorktreeScanObserver = struct {
+    scanning: bool,
+
+    pub fn init(self: *@This(), _: App.Context(@This())) !void {
+        self.* = .{ .scanning = true };
+    }
+
+    pub fn observe(self: *@This(), worktree: Entity(Worktree), ctx: App.Context(@This())) void {
+        self.scanning = worktree.read(ctx.app).scanning;
+    }
+};
+
 test "Bench Worktree" {
     const gpa = std.heap.c_allocator;
     const io = testing.io;
@@ -23,6 +35,8 @@ test "Bench Worktree" {
 }
 
 pub fn initialWorktreeScan(app: *App, gpa: std.mem.Allocator, io: std.Io, _: *prof.Profiler) !void {
+    defer app.flush();
+
     const worktree: Entity(Worktree) = try .new(
         app,
         .{
@@ -31,8 +45,15 @@ pub fn initialWorktreeScan(app: *App, gpa: std.mem.Allocator, io: std.Io, _: *pr
             io,
         },
     );
-    defer {
-        worktree.drop();
+    defer worktree.drop();
+
+    const observer = try Entity(WorktreeScanObserver).new(app, .{});
+    defer observer.drop();
+
+    var ctx = App.Context(WorktreeScanObserver).new(app, observer);
+    _ = try ctx.observe(worktree, WorktreeScanObserver.observe, .{});
+
+    while (observer.read(app).scanning) {
         app.flush();
     }
 

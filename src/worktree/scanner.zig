@@ -5,6 +5,7 @@ const atomic = std.atomic;
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 const builtin = @import("builtin");
+const App = @import("../app.zig");
 
 const ch = @import("../channel.zig");
 const Snapshot = @import("snapshot.zig");
@@ -63,7 +64,7 @@ pub fn deinit(self: *Scanner) void {
     self.state.snapshot.deinit(self.gpa);
 }
 
-pub fn run(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
+pub fn run(self: *Scanner, io: Io, sender: *Updates.Sender, notifier: App.Notifier) !void {
     const stat = try Io.Dir.statFile(
         .cwd(),
         io,
@@ -74,7 +75,7 @@ pub fn run(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
     if (stat.kind != .directory) return;
     try sender.putOne(io, .started);
 
-    try self.initial_scan(io, sender);
+    try self.initial_scan(io, sender, notifier);
 }
 
 const Worker = struct {
@@ -176,7 +177,7 @@ const Worker = struct {
     }
 };
 
-pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
+pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender, notifier: App.Notifier) !void {
     const cpu_count = try std.Thread.getCpuCount();
 
     var buffer: [1024]Worker.Job = undefined;
@@ -226,18 +227,18 @@ pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender) !void {
         switch (try select.await()) {
             .group => {
                 select.cancelDiscard();
-                try self.send_update(io, false, sender);
+                try self.send_update(io, false, sender, notifier);
                 break;
             },
             .timeout => {
-                try self.send_update(io, true, sender);
+                try self.send_update(io, true, sender, notifier);
                 try select.concurrent(.timeout, Io.sleep, .{ io, UPDATE_INTERVAL, .real });
             },
         }
     }
 }
 
-pub fn send_update(self: *Scanner, io: Io, scanning: bool, sender: *Updates.Sender) !void {
+pub fn send_update(self: *Scanner, io: Io, scanning: bool, sender: *Updates.Sender, notifier: App.Notifier) !void {
     var snapshot: Snapshot = undefined;
     {
         try self.state.lock(io);
@@ -247,6 +248,8 @@ pub fn send_update(self: *Scanner, io: Io, scanning: bool, sender: *Updates.Send
     }
 
     try sender.putOne(io, .{ .updated = .{ .snapshot = snapshot, .scanning = scanning } });
+
+    try notifier.notify();
 }
 
 inline fn direntNameFromEntry(entry: *const c.dirent) []const u8 {

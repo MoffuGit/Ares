@@ -116,9 +116,7 @@ pub fn runScanner(scanner: *Scanner, io: Io, sender: Scanner.Updates.Sender, not
     var send = sender;
     defer send.close(io);
 
-    _ = notifier;
-
-    scanner.run(io, &send) catch |err| {
+    scanner.run(io, &send, notifier) catch |err| {
         if (err != error.Closed) {
             std.log.err("scanner err: {}", .{err});
         }
