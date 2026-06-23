@@ -30,13 +30,8 @@ pub const ForegroundExecutor = struct {
         return self.worker.@"defer"(function, args);
     }
 
-    pub fn async(
-        self: *@This(),
-        function: anytype,
-        context: anytype,
-        buffer: []u8,
-    ) !Async {
-        return try self.worker.async(function, context, buffer);
+    pub fn async(self: *@This(), function: anytype, context: anytype) !Async {
+        return try self.worker.async(function, context);
     }
 };
 
@@ -72,7 +67,6 @@ pub const BackgroundExecutor = struct {
                     }
                 }._stop,
                 .{work},
-                &.{},
             );
             try self.group.concurrent(io, Worker.run, .{ work, .until_done });
         }
@@ -259,7 +253,6 @@ const Worker = struct {
         self: *Worker,
         function: anytype,
         context: anytype,
-        buffer: []u8,
     ) !Async {
         const Context = @TypeOf(context);
 
@@ -349,7 +342,7 @@ const Worker = struct {
             @ptrCast(&limits),
             @sizeOf(@TypeOf(limits)) / @sizeOf(system.natural_t),
         ) != 0) return error.MachPortAllocFailed;
-        self.loop.mach(&task.completion, TypeErased.complete, task, .{ .port = mach_port, .buffer = buffer });
+        self.loop.mach(&task.completion, TypeErased.complete, task, .{ .port = mach_port, .buffer = .{ .array = undefined } });
         return .{ .handler = .{ .task = task }, .notifier = .{ .port = mach_port } };
     }
 };
@@ -573,7 +566,7 @@ test "read task completes and stays alive until handler detaches" {
         .{ &calls, &bytes_read },
         .{
             .fd = file.handle,
-            .buffer = &buffer,
+            .buffer = .{ .slice = &buffer },
         },
     );
 
@@ -598,9 +591,8 @@ test "Async notifier completes task" {
     defer worker.deinit();
 
     var calls: u32 = 0;
-    var buffer: [32]u8 = undefined;
 
-    var async = try worker.async(testMachTask, .{&calls}, &buffer);
+    var async = try worker.async(testMachTask, .{&calls});
 
     worker.run(.no_wait);
     try testing.expectEqual(@as(u32, 0), calls);

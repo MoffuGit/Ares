@@ -292,7 +292,7 @@ pub fn Context(comptime T: type) type {
             return self.app.foreground_executor.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
         }
 
-        pub fn async(self: *const @This(), function: anytype, args: anytype, buffer: []u8) !executor.Async {
+        pub fn async(self: *const @This(), function: anytype, args: anytype) !executor.Async {
             const Args = @TypeOf(args);
             const TypeErased = struct {
                 pub fn async(any: AnyEntity, app: *App, _args: Args, result: anyerror!void) bool {
@@ -305,7 +305,7 @@ pub fn Context(comptime T: type) type {
                 }
             };
 
-            return try self.app.foreground_executor.async(TypeErased.async, .{ self.entity.any, self.app, args }, buffer);
+            return try self.app.foreground_executor.async(TypeErased.async, .{ self.entity.any, self.app, args });
         }
     };
 }
@@ -592,8 +592,7 @@ test "Context async runs on foreground executor with entity context" {
     const entity = try Entity(State).new(&app, .{});
 
     var context = Context(State).new(&app, entity);
-    var buffer: [32]u8 = undefined;
-    var async = try context.async(State.deferred, .{42}, &buffer);
+    var async = try context.async(State.deferred, .{42});
 
     try testing.expectEqual(0, entity.read(&app).calls);
 

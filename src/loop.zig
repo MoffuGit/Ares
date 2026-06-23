@@ -359,7 +359,11 @@ pub fn read(
         data,
         struct {
             fn read(op: Read) Result {
-                return .{ .read = posix.read(op.fd, op.buffer) };
+                const buffer: []u8 = switch (op.buffer) {
+                    .slice => |slice| slice,
+                    .array => |array| @constCast(&array),
+                };
+                return .{ .read = posix.read(op.fd, buffer) };
             }
         }.read,
     );
@@ -386,14 +390,19 @@ pub fn mach(
     );
 }
 
+pub const ReadBuffer = union(enum) {
+    slice: []u8,
+    array: [32]u8,
+};
+
 pub const Read = struct {
     fd: posix.fd_t,
-    buffer: []u8,
+    buffer: ReadBuffer,
 };
 
 pub const MachPort = struct {
     port: posix.system.mach_port_name_t,
-    buffer: []u8,
+    buffer: ReadBuffer,
 };
 
 pub const Operation = union(OperationType) {
@@ -468,6 +477,10 @@ pub const Completion = struct {
         switch (self.operation) {
             .read, .cancel, .noop, .@"defer" => panic("{s} operation reached the submissions queueu", .{@tagName(self.operation)}),
             .machport => |m| {
+                const buffer: []u8 = switch (m.buffer) {
+                    .slice => |slice| slice,
+                    .array => |array| @constCast(&array),
+                };
                 event.* = .{
                     .ident = @intCast(m.port),
                     .filter = std.c.EVFILT.MACHPORT,
@@ -476,8 +489,8 @@ pub const Completion = struct {
                     .data = 0,
                     .udata = @intFromPtr(self),
                     .ext = .{
-                        @intFromPtr(m.buffer.ptr),
-                        m.buffer.len,
+                        @intFromPtr(buffer.ptr),
+                        buffer.len,
                     },
                 };
             },
@@ -540,7 +553,7 @@ test "read" {
         &called,
         .{
             .fd = file.handle,
-            .buffer = &buffer,
+            .buffer = .{ .slice = &buffer },
         },
     );
 
@@ -585,7 +598,7 @@ test "read rearm" {
         &calls,
         .{
             .fd = file.handle,
-            .buffer = &buffer,
+            .buffer = .{ .slice = &buffer },
         },
     );
 
@@ -633,7 +646,7 @@ test "mach port" {
         &called,
         .{
             .port = mach_port,
-            .buffer = &buffer,
+            .buffer = .{ .slice = &buffer },
         },
     );
 
@@ -682,7 +695,7 @@ test "mach port" {
         &called,
         .{
             .port = mach_port,
-            .buffer = &buffer,
+            .buffer = .{ .slice = &buffer },
         },
     );
 
@@ -726,7 +739,7 @@ test "cancel mach port" {
         &called,
         .{
             .port = mach_port,
-            .buffer = &buffer,
+            .buffer = .{ .slice = &buffer },
         },
     );
 

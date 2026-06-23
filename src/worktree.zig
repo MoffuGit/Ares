@@ -30,7 +30,6 @@ scanning: bool,
 snapshot: Snapshot,
 scanner: Scanner,
 
-async_buffer: [32]u8,
 buffer: [8]Scanner.Updates,
 updates_channel: Scanner.Updates.Channel,
 group: Io.Group,
@@ -38,7 +37,6 @@ next_entry_id: std.atomic.Value(u64),
 
 pub fn init(self: *Worktree, ctx: Context(Worktree), gpa: Allocator, opts: Options, io: Io) !void {
     self.* = .{
-        .async_buffer = undefined,
         .scanning = false,
         .rwlock = .init,
         .arena = ArenaAllocator.init(gpa),
@@ -62,7 +60,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), gpa: Allocator, opts: Optio
     errdefer self.snapshot.deinit(gpa);
     try self.snapshot.insert(gpa, .{ .id = self.next_entry_id.fetchAdd(1, .monotonic), .path = root_name });
 
-    var async = try ctx.async(runUpdateReceiver, .{ io, self.updates_channel.receiver() }, &self.async_buffer);
+    var async = try ctx.async(runUpdateReceiver, .{ io, self.updates_channel.receiver() });
     defer async.handler.drop();
 
     try self.scanner.init(gpa, arena, &self.snapshot, &self.next_entry_id);
