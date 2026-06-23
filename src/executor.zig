@@ -31,14 +31,14 @@ pub const ForegroundExecutor = struct {
         return self.worker.@"defer"(function, args);
     }
 
-    pub fn async(self: *@This(), function: anytype, context: anytype) !Async {
-        return try self.worker.async(function, context);
+    pub fn await(self: *@This(), function: anytype, context: anytype) !Await {
+        return try self.worker.await(function, context);
     }
 };
 
 pub const BackgroundExecutor = struct {
     workers: []Worker,
-    stops: []Async,
+    stops: []Await,
     next_worker: atomic.Value(usize),
     group: Io.Group,
 
@@ -48,7 +48,7 @@ pub const BackgroundExecutor = struct {
         const workers = try gpa.alloc(Worker, cpu_count);
         errdefer gpa.free(workers);
 
-        const stops = try gpa.alloc(Async, cpu_count);
+        const stops = try gpa.alloc(Await, cpu_count);
         errdefer gpa.free(stops);
 
         self.* = .{
@@ -60,7 +60,7 @@ pub const BackgroundExecutor = struct {
 
         for (self.workers, self.stops) |*work, *stop| {
             try work.init(gpa, io);
-            stop.* = try work.async(
+            stop.* = try work.await(
                 struct {
                     fn _stop(_worker: *Worker, _: anyerror!void) bool {
                         _worker.stop();
@@ -99,8 +99,8 @@ pub const BackgroundExecutor = struct {
         self: *@This(),
         function: anytype,
         context: anytype,
-    ) !Async {
-        return try self.worker().async(function, context);
+    ) !Await {
+        return try self.worker().await(function, context);
     }
 
     pub fn deinit(self: *@This(), gpa: Allocator, io: Io) void {
@@ -126,26 +126,21 @@ pub const BackgroundExecutor = struct {
     }
 };
 
-var worker_next_id: u32 = 0;
-
 const Worker = struct {
-    pool: heap.memory_pool.Extra(Task, .{ .alignment = null, .growable = false }),
+    pool: heap.MemoryPool(Task),
     mutex: Io.Mutex,
     gpa: Allocator,
     loop: Loop,
-    id: u32,
     io: Io,
 
     pub fn init(self: *Worker, gpa: Allocator, io: Io) !void {
         self.* = .{
             .gpa = gpa,
             .io = io,
-            .id = worker_next_id,
             .loop = undefined,
             .mutex = .init,
-            .pool = try .initCapacity(gpa, 100),
+            .pool = .empty,
         };
-        worker_next_id += 1;
         try self.loop.init(io);
     }
 
@@ -164,7 +159,7 @@ const Worker = struct {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
 
-        const task = self.pool.create(undefined) catch {
+        const task = self.pool.create(self.gpa) catch {
             @panic("Worker Tasks Overflow");
         };
 
@@ -188,7 +183,7 @@ const Worker = struct {
 
     pub fn run(self: *Worker, mode: Loop.RunMode) void {
         self.loop.run(mode) catch |err| {
-            debug.panic("Worker {} loop err: {}", .{ self.id, err });
+            debug.panic("Worker  err: {}", .{err});
         };
     }
 
@@ -253,11 +248,11 @@ const Worker = struct {
         return .{ .task = task };
     }
 
-    pub fn async(
+    pub fn await(
         self: *Worker,
         function: anytype,
         context: anytype,
-    ) !Async {
+    ) !Await {
         const Context = @TypeOf(context);
 
         const TypeErased = struct {
@@ -528,7 +523,7 @@ pub const Group = struct {
     }
 };
 
-pub const Async = struct { Handler, Notifier };
+pub const Await = struct { Handler, Notifier };
 
 pub const Notifier = struct {
     port: system.mach_port_name_t,
@@ -657,7 +652,7 @@ test "Async notifier completes task" {
 
     var calls: u32 = 0;
 
-    const handler, const notifier = try worker.async(testMachTask, .{&calls});
+    const handler, const notifier = try worker.await(testMachTask, .{&calls});
 
     worker.run(.no_wait);
     try testing.expectEqual(@as(u32, 0), calls);

@@ -292,7 +292,7 @@ pub fn Context(comptime T: type) type {
             return self.app.foreground_executor.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
         }
 
-        pub fn async(self: *const @This(), function: anytype, args: anytype) !executor.Async {
+        pub fn await(self: *const @This(), function: anytype, args: anytype) !executor.Await {
             const Args = @TypeOf(args);
             const TypeErased = struct {
                 pub fn async(any: AnyEntity, app: *App, _args: Args, result: anyerror!void) bool {
@@ -304,19 +304,11 @@ pub fn Context(comptime T: type) type {
                 }
             };
 
-            return try self.app.foreground_executor.async(TypeErased.async, .{ self.entity.any, self.app, args });
+            return try self.app.foreground_executor.await(TypeErased.async, .{ self.entity.any, self.app, args });
         }
 
-        pub fn backgroundAsync(self: *const @This(), function: anytype, args: anytype) !executor.Async {
-            return try self.app.background_executor.async(function, args);
-        }
-
-        pub fn bg_defer(self: *const @This(), function: anytype, args: anytype) executor.Handler {
-            return self.app.background_executor.@"defer"(function, args);
-        }
-
-        pub fn bg_read(self: *const @This(), function: anytype, args: anytype, data: executor.Read) !executor.Async {
-            return try self.app.background_executor.read(function, args, data);
+        pub fn concurrent(self: *const App) *executor.BackgroundExecutor {
+            return &self.background_executor;
         }
     };
 }
@@ -603,7 +595,7 @@ test "Context async runs on foreground executor with entity context" {
     const entity = try Entity(State).new(&app, .{});
 
     var context = Context(State).new(&app, entity);
-    const handler, const notifier = try context.async(State.deferred, .{42});
+    const handler, const notifier = try context.await(State.deferred, .{42});
 
     try testing.expectEqual(0, entity.read(&app).calls);
 
