@@ -95,13 +95,16 @@ fn awaitUpdates(ctx: Context(Worktree), io: Io, receiver: Scanner.Updates.Receiv
     const self, const update = ctx.update();
     defer update.end(self);
 
-    switch (rec.getOne(io) catch return false) {
-        .started => self.scanning = true,
-        .updated => |updated| {
-            self.snapshot.deinit(self.gpa);
-            self.snapshot = updated.snapshot;
-            self.scanning = updated.scanning;
-        },
+    var buffer: [8]Scanner.Updates = undefined;
+    for (0..rec.get(io, &buffer, 0) catch return false) |idx| {
+        switch (buffer[idx]) {
+            .started => self.scanning = true,
+            .updated => |updated| {
+                self.snapshot.deinit(self.gpa);
+                self.snapshot = updated.snapshot;
+                self.scanning = updated.scanning;
+            },
+        }
     }
 
     ctx.notify();
