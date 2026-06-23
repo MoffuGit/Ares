@@ -57,7 +57,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     try self.background_executor.init(gpa, io);
     errdefer self.background_executor.deinit(gpa, io);
 
-    try self.entity_store.init(gpa);
+    try self.entity_store.init(gpa, 100);
     errdefer self.entity_store.deinit(gpa);
 
     try self.observers.init(gpa);
@@ -85,15 +85,16 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     const ptr = try arena.create(T);
     errdefer arena.destroy(ptr);
 
-    const id = self.entity_store.reserve();
+    const id = self.entity_store.insert(ptr);
     errdefer self.entity_store.recycle(id);
 
     const entity: Entity(T) = .init(&self.entity_store, id);
     const ctx: Context(T) = .new(self, entity);
 
-    try @call(.auto, function, .{ ptr, ctx } ++ args);
+    self.entity_store.start_update(id);
+    defer self.entity_store.end_update(id);
 
-    self.entity_store.insert(id, ptr);
+    try @call(.auto, function, .{ ptr, ctx } ++ args);
 
     return entity;
 }
@@ -107,14 +108,16 @@ pub const UpdateFrame = struct {
 
         assert(self.any.type_id == TypeInfo.init(@typeInfo(T).pointer.child));
 
-        self.app.entity_store.insert(self.any.id, ptr);
+        self.app.entity_store.end_update(self.any.id);
         self.app.end_update();
     }
 };
 
 pub fn update_frame(self: *App, comptime T: type, entity: Entity(T)) struct { *T, UpdateFrame } {
     self.start_update();
-    const ptr = self.entity_store.remove(T, entity);
+    self.entity_store.start_update(entity.any.id);
+
+    const ptr = self.entity_store.get(T, entity);
 
     return .{ ptr, .{ .any = entity.any, .app = self } };
 }
@@ -193,7 +196,6 @@ pub fn observe(
     const TypeErased = struct {
         fn _callback(app: *App, observed: AnyEntity, _args: Args) bool {
             const _entity = observed.into(T) orelse return false;
-            defer _entity.drop();
             return @call(.auto, function, .{ app, _entity } ++ _args);
         }
 
@@ -260,7 +262,6 @@ pub fn Context(comptime T: type) type {
                     _args: Args,
                 ) bool {
                     const _entity = any.into(T) orelse return false;
-                    defer _entity.drop();
 
                     const ctx: Context(T) = .new(app, _entity);
 
@@ -281,7 +282,6 @@ pub fn Context(comptime T: type) type {
             const TypeErased = struct {
                 pub fn @"defer"(any: AnyEntity, app: *App, _args: Args) bool {
                     const _entity = any.into(T) orelse return false;
-                    defer _entity.drop();
 
                     const ctx: Context(T) = .new(app, _entity);
 
@@ -296,7 +296,6 @@ pub fn Context(comptime T: type) type {
             const TypeErased = struct {
                 pub fn async(any: AnyEntity, app: *App, _args: Args, result: anyerror!void) bool {
                     const _entity = any.into(T) orelse return false;
-                    defer _entity.drop();
 
                     const ctx: Context(T) = .new(app, _entity);
 

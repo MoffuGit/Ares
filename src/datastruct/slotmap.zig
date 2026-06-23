@@ -184,8 +184,9 @@ pub fn SlotMap(Value: type) type {
         }
 
         /// Removes the value associated with the given key. The key remains valid.
-        pub fn remove(self: *@This(), key: Key) void {
-            if (!self.contains(key)) return;
+        pub fn remove(self: *@This(), key: Key) ?Value {
+            if (!self.contains(key)) return null;
+
             self.slots[key.index].generation =
                 @enumFromInt(@intFromEnum(self.slots[key.index].generation) +% 1);
             if (self.slots[key.index].generation == .invalid) {
@@ -194,6 +195,8 @@ pub fn SlotMap(Value: type) type {
                 self.free[self.free_count] = key.index;
                 self.free_count += 1;
             }
+
+            return self.slots[key.index].value;
         }
 
         /// Similar to `remove`, but allows the key to be reused in the future.
@@ -242,7 +245,7 @@ pub fn SecondaryMap(Value: type) type {
             return self.slots.len;
         }
 
-        pub fn containsKey(self: @This(), key: Key) bool {
+        pub fn contains(self: @This(), key: Key) bool {
             assert(key.index < self.slots.len);
             return switch (self.slots[key.index]) {
                 .vacant => false,
@@ -340,14 +343,14 @@ test "slot map" {
     try std.testing.expectError(error.Overflow, slots.put('d'));
 
     try std.testing.expect(slots.contains(a));
-    slots.remove(a);
+    _ = slots.remove(a);
     try std.testing.expectEqual(2, slots.count());
     try std.testing.expect(!slots.contains(a));
-    slots.remove(a);
+    _ = slots.remove(a);
     try std.testing.expectEqual(2, slots.count());
     try std.testing.expect(!slots.contains(a));
 
-    slots.remove(c);
+    _ = slots.remove(c);
     try std.testing.expectEqual(1, slots.count());
     try std.testing.expect(!slots.contains(a));
     try std.testing.expect(slots.contains(b));
@@ -386,9 +389,9 @@ test "slot map" {
     try std.testing.expectEqual('e', slots.get(e).?.*);
 
     // Make sure we ignore slots whose generations wrap
-    slots.remove(b);
-    slots.remove(d);
-    slots.remove(e);
+    _ = slots.remove(b);
+    _ = slots.remove(d);
+    _ = slots.remove(e);
     try std.testing.expectEqual(0, slots.count());
     slots.slots[b.index].generation = @enumFromInt(std.math.maxInt(u32) - 1);
     slots.slots[d.index].generation = @enumFromInt(std.math.maxInt(u32) - 1);
@@ -400,7 +403,7 @@ test "slot map" {
         const e_new = try slots.put('z');
         try std.testing.expectEqual(1, slots.count());
         try std.testing.expectEqual(e.index, e_new.index);
-        slots.remove(e_new);
+        _ = slots.remove(e_new);
         try std.testing.expectEqual(0, slots.count());
         try std.testing.expect(!slots.contains(e_new));
     }
@@ -410,7 +413,7 @@ test "slot map" {
         const d_new = try slots.put('z');
         try std.testing.expectEqual(1, slots.count());
         try std.testing.expectEqual(d.index, d_new.index);
-        slots.remove(d_new);
+        _ = slots.remove(d_new);
         try std.testing.expectEqual(0, slots.count());
         try std.testing.expect(!slots.contains(d_new));
     }
@@ -420,7 +423,7 @@ test "slot map" {
         const b_new = try slots.put('z');
         try std.testing.expectEqual(1, slots.count());
         try std.testing.expectEqual(b.index, b_new.index);
-        slots.remove(b_new);
+        _ = slots.remove(b_new);
         try std.testing.expectEqual(0, slots.count());
         try std.testing.expect(!slots.contains(b_new));
     }
@@ -470,11 +473,11 @@ test "secondary map" {
 
     try std.testing.expectEqual(0, secondary.count());
     try std.testing.expectEqual(slots.capacity, secondary.capacity());
-    try std.testing.expect(!secondary.containsKey(a));
+    try std.testing.expect(!secondary.contains(a));
     try std.testing.expectEqual(null, secondary.put(a, 10));
     try std.testing.expectEqual(null, secondary.put(b, 20));
     try std.testing.expectEqual(2, secondary.count());
-    try std.testing.expect(secondary.containsKey(a));
+    try std.testing.expect(secondary.contains(a));
     try std.testing.expectEqual(10, secondary.get(a).?.*);
     try std.testing.expectEqual(20, secondary.getMut(b).?.*);
 
@@ -483,13 +486,13 @@ test "secondary map" {
     try std.testing.expectEqual(11, secondary.put(a, 12));
     try std.testing.expectEqual(2, secondary.count());
 
-    slots.remove(a);
+    _ = slots.remove(a);
     const c = try slots.put('c');
     try std.testing.expectEqual(a.index, c.index);
-    try std.testing.expect(!secondary.containsKey(c));
+    try std.testing.expect(!secondary.contains(c));
     try std.testing.expectEqual(null, secondary.get(c));
     try std.testing.expectEqual(null, secondary.put(c, 30));
-    try std.testing.expect(!secondary.containsKey(a));
+    try std.testing.expect(!secondary.contains(a));
     try std.testing.expectEqual(2, secondary.count());
 
     try std.testing.expectEqual(20, secondary.remove(b).?);
@@ -498,7 +501,7 @@ test "secondary map" {
 
     secondary.clear();
     try std.testing.expectEqual(0, secondary.count());
-    try std.testing.expect(!secondary.containsKey(c));
+    try std.testing.expect(!secondary.contains(c));
 }
 
 // Basically just making sure it compiles
