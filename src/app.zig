@@ -306,6 +306,10 @@ pub fn Context(comptime T: type) type {
 
             return try self.app.foreground_executor.async(TypeErased.async, .{ self.entity.any, self.app, args });
         }
+
+        pub fn backgroundAsync(self: *const @This(), function: anytype, args: anytype) !executor.Async {
+            return try self.app.background_executor.async(function, args);
+        }
     };
 }
 

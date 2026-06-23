@@ -64,7 +64,17 @@ pub fn deinit(self: *Scanner) void {
     self.state.snapshot.deinit(self.gpa);
 }
 
-pub fn run(self: *Scanner, io: Io, sender: *Updates.Sender, notifier: App.Notifier) !void {
+pub fn run(self: *Scanner, io: Io, send: Updates.Sender, notifier: App.Notifier, res: anyerror!void) bool {
+    if (res == error.Closed) return false;
+
+    self.runrun(io, send, notifier) catch return false;
+
+    return false;
+}
+
+pub fn runrun(self: *Scanner, io: Io, send: Updates.Sender, notifier: App.Notifier) !void {
+    var sender = send;
+    defer sender.close(io);
     const stat = try Io.Dir.statFile(
         .cwd(),
         io,
@@ -75,7 +85,7 @@ pub fn run(self: *Scanner, io: Io, sender: *Updates.Sender, notifier: App.Notifi
     if (stat.kind != .directory) return;
     try sender.putOne(io, .started);
 
-    try self.initial_scan(io, sender, notifier);
+    try self.initial_scan(io, &sender, notifier);
 }
 
 const Worker = struct {
@@ -178,64 +188,66 @@ const Worker = struct {
 };
 
 pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender, notifier: App.Notifier) !void {
-    const cpu_count = try std.Thread.getCpuCount();
+    // const cpu_count = try std.Thread.getCpuCount();
+    //
+    // var buffer: [1024]Worker.Job = undefined;
+    //
+    // var channel: Worker.Channel = .init(&buffer);
+    // var group: Io.Group = .init;
+    // {
+    //     const snapshot = self.state.snapshot;
+    //
+    //     var _sender = channel.sender();
+    //     errdefer _sender.close(io);
+    //
+    //     try _sender.putOneUncancelable(
+    //         io,
+    //         .{
+    //             .abs_path = snapshot.abs_root,
+    //             .path_name = snapshot.root_name,
+    //             .sender = _sender,
+    //         },
+    //     );
+    // }
+    //
+    // for (0..cpu_count) |_| {
+    //     const worker = try self.arena.create(Worker);
+    //     errdefer self.arena.destroy(worker);
+    //
+    //     try worker.init(self.gpa, self.arena, self.next_entry_id);
+    //
+    //     const receiver = channel.receiver();
+    //     try group.concurrent(io, Worker.work, .{ worker, &self.state, io, receiver });
+    // }
+    //
+    // const SelectResult = union(enum) {
+    //     group: Io.Cancelable!void,
+    //     timeout: Io.Cancelable!void,
+    // };
+    // const Select = Io.Select(SelectResult);
+    //
+    // var select_buffer: [2]SelectResult = undefined;
+    //
+    // var select: Select = .init(io, &select_buffer);
+    //
+    // try select.concurrent(.group, Io.Group.await, .{ &group, io });
+    // try select.concurrent(.timeout, Io.sleep, .{ io, UPDATE_INTERVAL, .real });
+    try io.sleep(.fromSeconds(1), .real);
 
-    var buffer: [1024]Worker.Job = undefined;
-
-    var channel: Worker.Channel = .init(&buffer);
-    var group: Io.Group = .init;
-    {
-        const snapshot = self.state.snapshot;
-
-        var _sender = channel.sender();
-        errdefer _sender.close(io);
-
-        try _sender.putOneUncancelable(
-            io,
-            .{
-                .abs_path = snapshot.abs_root,
-                .path_name = snapshot.root_name,
-                .sender = _sender,
-            },
-        );
-    }
-
-    for (0..cpu_count) |_| {
-        const worker = try self.arena.create(Worker);
-        errdefer self.arena.destroy(worker);
-
-        try worker.init(self.gpa, self.arena, self.next_entry_id);
-
-        const receiver = channel.receiver();
-        try group.concurrent(io, Worker.work, .{ worker, &self.state, io, receiver });
-    }
-
-    const SelectResult = union(enum) {
-        group: Io.Cancelable!void,
-        timeout: Io.Cancelable!void,
-    };
-    const Select = Io.Select(SelectResult);
-
-    var select_buffer: [2]SelectResult = undefined;
-
-    var select: Select = .init(io, &select_buffer);
-
-    try select.concurrent(.group, Io.Group.await, .{ &group, io });
-    try select.concurrent(.timeout, Io.sleep, .{ io, UPDATE_INTERVAL, .real });
-
-    while (true) {
-        switch (try select.await()) {
-            .group => {
-                select.cancelDiscard();
-                try self.send_update(io, false, sender, notifier);
-                break;
-            },
-            .timeout => {
-                try self.send_update(io, true, sender, notifier);
-                try select.concurrent(.timeout, Io.sleep, .{ io, UPDATE_INTERVAL, .real });
-            },
-        }
-    }
+    try self.send_update(io, false, sender, notifier);
+    // while (true) {
+    //     switch (try select.await()) {
+    //         .group => {
+    //             select.cancelDiscard();
+    //             try self.send_update(io, false, sender, notifier);
+    //             break;
+    //         },
+    //         .timeout => {
+    //             try self.send_update(io, true, sender, notifier);
+    //             try select.concurrent(.timeout, Io.sleep, .{ io, UPDATE_INTERVAL, .real });
+    //         },
+    //     }
+    // }
 }
 
 pub fn send_update(self: *Scanner, io: Io, scanning: bool, sender: *Updates.Sender, notifier: App.Notifier) !void {

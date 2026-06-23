@@ -31,16 +31,14 @@ scanner: Scanner,
 
 buffer: [8]Scanner.Updates,
 updates_channel: Scanner.Updates.Channel,
-group: Io.Group,
 next_entry_id: std.atomic.Value(u64),
-handlers: App.Handler,
+handlers: [1]App.Handler,
 
 pub fn init(self: *Worktree, ctx: Context(Worktree), gpa: Allocator, opts: Options, io: Io) !void {
     self.* = .{
         .scanning = false,
         .arena = ArenaAllocator.init(gpa),
         .gpa = gpa,
-        .group = .init,
         .snapshot = undefined,
         .scanner = undefined,
         .buffer = undefined,
@@ -63,15 +61,18 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), gpa: Allocator, opts: Optio
     const handler, const notifier = try ctx.async(awaitUpdates, .{ io, self.updates_channel.receiver() });
     errdefer handler.drop();
 
-    self.handlers = handler;
+    self.handlers = .{handler};
 
     try self.scanner.init(gpa, arena, &self.snapshot, &self.next_entry_id);
+    errdefer self.scanner.deinit();
 
-    try self.group.concurrent(io, runScanner, .{ &self.scanner, io, self.updates_channel.sender(), notifier });
-}
+    const bg_handler, const bg_notifier = try ctx.backgroundAsync(
+        Scanner.run,
+        .{ &self.scanner, io, self.updates_channel.sender(), notifier },
+    );
+    bg_handler.detach();
 
-pub fn await(self: *Worktree, io: Io) !void {
-    try self.group.await(io);
+    try bg_notifier.notify();
 }
 
 pub fn close(self: *Worktree, io: Io) !void {
@@ -79,7 +80,9 @@ pub fn close(self: *Worktree, io: Io) !void {
 }
 
 pub fn deinit(self: *Worktree) void {
-    self.handlers.drop();
+    for (self.handlers) |handler| {
+        handler.drop();
+    }
     self.scanner.deinit();
     self.snapshot.deinit(self.gpa);
     self.arena.deinit();
@@ -110,15 +113,4 @@ fn awaitUpdates(ctx: Context(Worktree), io: Io, receiver: Scanner.Updates.Receiv
     ctx.notify();
 
     return true;
-}
-
-pub fn runScanner(scanner: *Scanner, io: Io, sender: Scanner.Updates.Sender, notifier: App.Notifier) void {
-    var send = sender;
-    defer send.close(io);
-
-    scanner.run(io, &send, notifier) catch |err| {
-        if (err != error.Closed) {
-            std.log.err("scanner err: {}", .{err});
-        }
-    };
 }

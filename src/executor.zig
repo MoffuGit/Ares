@@ -98,9 +98,8 @@ pub const BackgroundExecutor = struct {
         self: *@This(),
         function: anytype,
         context: anytype,
-        buffer: []u8,
     ) !Async {
-        return try self.worker().async(function, context, buffer);
+        return try self.worker().async(function, context);
     }
 
     pub fn deinit(self: *@This(), gpa: Allocator, io: Io) void {
@@ -481,20 +480,21 @@ pub const Handler = struct {
 pub const Group = struct {
     head: ?*Task = null,
 
+    mutex: Io.Mutex = .init,
+
     pub const init: Group = .{};
 
-    pub fn adopt(self: *Group, handler: Handler) void {
+    pub fn add(self: *Group, io: Io, handler: Handler) void {
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
+
         const task = handler.task;
         task.groupNext().* = self.head;
         self.head = task;
     }
 
-    pub fn push(self: *Group, handler: Handler) void {
-        self.adopt(handler);
-    }
-
-    pub fn cancel(self: *Group) void {
-        var task = self.takeAll();
+    pub fn cancel(self: *Group, io: Io) void {
+        var task = self.takeAll(io);
         while (task) |current| {
             const next = current.groupNext().*;
             current.groupNext().* = null;
@@ -503,8 +503,8 @@ pub const Group = struct {
         }
     }
 
-    pub fn detach(self: *Group) void {
-        var task = self.takeAll();
+    pub fn detach(self: *Group, io: Io) void {
+        var task = self.takeAll(io);
         while (task) |current| {
             const next = current.groupNext().*;
             current.groupNext().* = null;
@@ -513,11 +513,14 @@ pub const Group = struct {
         }
     }
 
-    pub fn drop(self: *Group) void {
-        self.cancel();
+    pub fn drop(self: *Group, io: Io) void {
+        self.cancel(io);
     }
 
-    fn takeAll(self: *Group) ?*Task {
+    fn takeAll(self: *Group, io: Io) ?*Task {
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
+
         const head = self.head;
         self.head = null;
         return head;
@@ -742,10 +745,10 @@ test "handler group drops pending tasks as a unit" {
 
     const handler_1 = worker.@"defer"(testDeferTask, .{&calls});
     const handler_2 = worker.@"defer"(testDeferTask, .{&calls});
-    group.adopt(handler_1);
-    group.adopt(handler_2);
+    group.add(io, handler_1);
+    group.add(io, handler_2);
 
-    group.drop();
+    group.drop(io);
 
     worker.run(.until_done);
 
@@ -765,10 +768,10 @@ test "handler group detaches pending tasks as a unit" {
 
     const handler_1 = worker.@"defer"(testDeferTask, .{&calls});
     const handler_2 = worker.@"defer"(testDeferTask, .{&calls});
-    group.push(handler_1);
-    group.push(handler_2);
+    group.add(io, handler_1);
+    group.add(io, handler_2);
 
-    group.detach();
+    group.detach(io);
 
     worker.run(.until_done);
 
@@ -788,12 +791,12 @@ test "handler group consumes completed tasks as a unit" {
 
     const handler_1 = worker.@"defer"(testDeferTask, .{&calls});
     const handler_2 = worker.@"defer"(testDeferTask, .{&calls});
-    group.adopt(handler_1);
-    group.adopt(handler_2);
+    group.add(io, handler_1);
+    group.add(io, handler_2);
 
     worker.run(.until_done);
 
     try testing.expectEqual(@as(u32, 2), calls);
 
-    group.drop();
+    group.drop(io);
 }
