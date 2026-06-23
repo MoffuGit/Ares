@@ -27,7 +27,7 @@ test "Bench Worktree" {
     defer app.deinit();
 
     var bench: prof.Benchmark = undefined;
-    bench.init(gpa, .{ .stop_ms = 2000, .name = "WORKTREE" });
+    bench.init(gpa, .{ .stop_ms = 20000, .name = "WORKTREE" });
     defer bench.deinit();
 
     const res = try bench.run(App, &app, gpa, io, initialWorktreeScan);
