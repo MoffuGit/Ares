@@ -164,7 +164,7 @@ pub fn SlotMap(Value: type) type {
         /// false otherwise.
         ///
         /// Asserts that the key was once valid, unless the generation is set to invalid.
-        pub fn containsKey(self: @This(), key: Key) bool {
+        pub fn contains(self: @This(), key: Key) bool {
             // Get the current generation
             const gen = self.slots[key.index].generation;
 
@@ -179,13 +179,13 @@ pub fn SlotMap(Value: type) type {
 
         /// Retrieves the value associated with the given key, or `null` if it no longer exists.
         pub fn get(self: *const @This(), key: Key) ?*Value {
-            if (!self.containsKey(key)) return null;
+            if (!self.contains(key)) return null;
             return &self.slots[key.index].value;
         }
 
         /// Removes the value associated with the given key. The key remains valid.
         pub fn remove(self: *@This(), key: Key) void {
-            if (!self.containsKey(key)) return;
+            if (!self.contains(key)) return;
             self.slots[key.index].generation =
                 @enumFromInt(@intFromEnum(self.slots[key.index].generation) +% 1);
             if (self.slots[key.index].generation == .invalid) {
@@ -198,7 +198,7 @@ pub fn SlotMap(Value: type) type {
 
         /// Similar to `remove`, but allows the key to be reused in the future.
         pub fn recycle(self: *@This(), key: Key) void {
-            if (!self.containsKey(key)) return;
+            if (!self.contains(key)) return;
             self.free[self.free_count] = key.index;
             self.free_count += 1;
         }
@@ -339,19 +339,19 @@ test "slot map" {
 
     try std.testing.expectError(error.Overflow, slots.put('d'));
 
-    try std.testing.expect(slots.containsKey(a));
+    try std.testing.expect(slots.contains(a));
     slots.remove(a);
     try std.testing.expectEqual(2, slots.count());
-    try std.testing.expect(!slots.containsKey(a));
+    try std.testing.expect(!slots.contains(a));
     slots.remove(a);
     try std.testing.expectEqual(2, slots.count());
-    try std.testing.expect(!slots.containsKey(a));
+    try std.testing.expect(!slots.contains(a));
 
     slots.remove(c);
     try std.testing.expectEqual(1, slots.count());
-    try std.testing.expect(!slots.containsKey(a));
-    try std.testing.expect(slots.containsKey(b));
-    try std.testing.expect(!slots.containsKey(c));
+    try std.testing.expect(!slots.contains(a));
+    try std.testing.expect(slots.contains(b));
+    try std.testing.expect(!slots.contains(c));
 
     try std.testing.expectEqual(null, slots.get(a));
     try std.testing.expectEqual('b', slots.get(b).?.*);
@@ -402,7 +402,7 @@ test "slot map" {
         try std.testing.expectEqual(e.index, e_new.index);
         slots.remove(e_new);
         try std.testing.expectEqual(0, slots.count());
-        try std.testing.expect(!slots.containsKey(e_new));
+        try std.testing.expect(!slots.contains(e_new));
     }
     try std.testing.expectEqual(1, slots.saturated);
 
@@ -412,7 +412,7 @@ test "slot map" {
         try std.testing.expectEqual(d.index, d_new.index);
         slots.remove(d_new);
         try std.testing.expectEqual(0, slots.count());
-        try std.testing.expect(!slots.containsKey(d_new));
+        try std.testing.expect(!slots.contains(d_new));
     }
     try std.testing.expectEqual(2, slots.saturated);
 
@@ -422,7 +422,7 @@ test "slot map" {
         try std.testing.expectEqual(b.index, b_new.index);
         slots.remove(b_new);
         try std.testing.expectEqual(0, slots.count());
-        try std.testing.expect(!slots.containsKey(b_new));
+        try std.testing.expect(!slots.contains(b_new));
     }
     try std.testing.expectEqual(3, slots.saturated);
     try std.testing.expectEqual(0, slots.count());
