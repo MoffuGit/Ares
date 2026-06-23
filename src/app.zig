@@ -17,6 +17,7 @@ const EntityStore = ent.EntityStore;
 const executor = @import("executor.zig");
 pub const Handler = executor.Handler;
 pub const Notifier = executor.Notifier;
+pub const Group = executor.Group;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
