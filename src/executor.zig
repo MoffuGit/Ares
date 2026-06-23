@@ -10,6 +10,7 @@ const system = posix.system;
 
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
+pub const Read = Loop.Read;
 
 pub const ForegroundExecutor = struct {
     worker: Worker,
@@ -81,15 +82,15 @@ pub const BackgroundExecutor = struct {
         self: *@This(),
         function: anytype,
         context: std.meta.ArgsTuple(@TypeOf(function)),
-    ) !Handler {
-        return try self.worker().@"defer"(function, context);
+    ) Handler {
+        return self.worker().@"defer"(function, context);
     }
 
     pub fn read(
         self: *@This(),
         function: anytype,
         context: anytype,
-        data: Loop.Read,
+        data: Read,
     ) !Handler {
         return try self.worker().read(function, context, data);
     }

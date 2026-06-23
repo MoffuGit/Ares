@@ -310,6 +310,14 @@ pub fn Context(comptime T: type) type {
         pub fn backgroundAsync(self: *const @This(), function: anytype, args: anytype) !executor.Async {
             return try self.app.background_executor.async(function, args);
         }
+
+        pub fn bg_defer(self: *const @This(), function: anytype, args: anytype) executor.Handler {
+            return self.app.background_executor.@"defer"(function, args);
+        }
+
+        pub fn bg_read(self: *const @This(), function: anytype, args: anytype, data: executor.Read) !executor.Async {
+            return try self.app.background_executor.read(function, args, data);
+        }
     };
 }
 
