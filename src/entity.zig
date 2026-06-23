@@ -25,17 +25,13 @@ pub const EntityRefs = struct {
 
     refs: Refs,
     gpa: Allocator,
-    io: Io,
     dropped_entities: std.ArrayList(AnyEntity),
-    rwlock: Io.RwLock,
 
-    pub fn init(gpa: Allocator, io: Io, capacity: usize) !@This() {
+    pub fn init(gpa: Allocator, capacity: usize) !@This() {
         return .{
             .gpa = gpa,
-            .io = io,
             .refs = try .init(gpa, capacity),
             .dropped_entities = try .initCapacity(gpa, capacity),
-            .rwlock = .init,
         };
     }
 
@@ -46,16 +42,10 @@ pub const EntityRefs = struct {
     }
 
     pub fn reserve(self: *@This()) !EntityId {
-        try self.rwlock.lock(self.io);
-        defer self.rwlock.unlock(self.io);
-
         return try self.refs.put(.init(1));
     }
 
     pub fn reserveMany(self: @This(), buffer: []EntityId) !void {
-        try self.rwlock.lock(self.io);
-        defer self.rwlock.unlock(self.io);
-
         var idx: u64 = 0;
         while (idx < buffer.len) : (idx += 1) {
             buffer[idx] = try self.refs.put(.init(1));
@@ -74,8 +64,6 @@ pub const AnyEntity = struct {
 
     pub fn into(self: @This(), T: type) ?Entity(T) {
         const refs = self.refs;
-        refs.rwlock.lockSharedUncancelable(refs.io);
-        defer refs.rwlock.unlockShared(refs.io);
 
         const ref = refs.refs.get(self.id) orelse return null;
         const previous = ref.fetchAdd(1, .acq_rel);
@@ -87,8 +75,6 @@ pub const AnyEntity = struct {
 
     pub fn clone(self: @This()) @This() {
         const refs = self.refs;
-        refs.rwlock.lockSharedUncancelable(refs.io);
-        defer refs.rwlock.unlockShared(refs.io);
 
         const ref = refs.refs.get(self.id) orelse @panic("Cloning a released AnyEntity");
         const previous = ref.fetchAdd(1, .acq_rel);
@@ -98,8 +84,6 @@ pub const AnyEntity = struct {
 
     pub fn drop(self: @This()) void {
         const refs = self.refs;
-        refs.rwlock.lockSharedUncancelable(refs.io);
-        defer refs.rwlock.unlockShared(refs.io);
 
         const ref = refs.refs.get(self.id) orelse @panic("Dropping a released AnyEntity");
         const previous = ref.fetchSub(1, .acq_rel);
@@ -156,8 +140,8 @@ pub const EntityStore = struct {
     entities: Entities,
     refs: EntityRefs,
 
-    pub fn init(self: *@This(), gpa: Allocator, io: Io) !void {
-        var refs = try EntityRefs.init(gpa, io, 100);
+    pub fn init(self: *@This(), gpa: Allocator) !void {
+        var refs = try EntityRefs.init(gpa, 100);
         errdefer refs.deinit();
 
         const entities = try Entities.init(gpa, refs.refs.capacity);
@@ -198,14 +182,6 @@ pub const EntityStore = struct {
         return @as(*T, @ptrCast(@alignCast(ptr)));
     }
 
-    pub fn lockRefs(self: *@This()) void {
-        self.refs.rwlock.lockUncancelable(self.refs.io);
-    }
-
-    pub fn unlockRefs(self: *@This()) void {
-        self.refs.rwlock.unlock(self.refs.io);
-    }
-
     pub fn popDrop(self: *@This()) ?struct { *anyopaque, EntityId, TypeId } {
         const entity = self.refs.dropped_entities.pop() orelse return null;
 
@@ -223,10 +199,6 @@ pub const EntityStore = struct {
         var entities: std.ArrayList(struct { *anyopaque, EntityId, TypeId }) = .empty;
         errdefer entities.deinit(gpa);
 
-        const refs = &self.refs;
-        try refs.rwlock.lock(refs.io);
-        defer refs.rwlock.unlock(refs.io);
-
         while (self.refs.dropped_entities.pop()) |entity| {
             const ptr = self.entities.remove(entity.id) orelse continue;
             self.refs.refs.remove(entity.id);
@@ -239,12 +211,11 @@ pub const EntityStore = struct {
 
 test "entity store returns inserted data and rejects wrong type" {
     const allocator = std.testing.allocator;
-    const io = std.testing.io;
 
     const A = struct { value: u32 };
 
     var store: EntityStore = undefined;
-    try store.init(allocator, io);
+    try store.init(allocator);
     defer store.deinit(allocator);
 
     const ptr = try allocator.create(A);
@@ -261,12 +232,11 @@ test "entity store returns inserted data and rejects wrong type" {
 
 test "closing entity records id and type when ref count reaches zero" {
     const allocator = std.testing.allocator;
-    const io = std.testing.io;
 
     const A = struct { value: u32 };
 
     var store: EntityStore = undefined;
-    try store.init(allocator, io);
+    try store.init(allocator);
     defer store.deinit(allocator);
 
     const ptr = try allocator.create(A);
@@ -290,12 +260,11 @@ test "closing entity records id and type when ref count reaches zero" {
 
 test "cloning entity increments ref count" {
     const allocator = std.testing.allocator;
-    const io = std.testing.io;
 
     const A = struct { value: u32 };
 
     var store: EntityStore = undefined;
-    try store.init(allocator, io);
+    try store.init(allocator);
     defer store.deinit(allocator);
 
     const ptr = try allocator.create(A);
@@ -326,7 +295,6 @@ test "cloning entity increments ref count" {
 
 test "dropping arena-backed entity calls optional deinit" {
     const allocator = std.testing.allocator;
-    const io = std.testing.io;
 
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
@@ -340,7 +308,7 @@ test "dropping arena-backed entity calls optional deinit" {
     };
 
     var store: EntityStore = undefined;
-    try store.init(allocator, io);
+    try store.init(allocator);
     defer store.deinit(allocator);
 
     var deinit_called = false;
@@ -364,12 +332,11 @@ test "dropping arena-backed entity calls optional deinit" {
 
 test "destroyed entities recycle ids" {
     const allocator = std.testing.allocator;
-    const io = std.testing.io;
 
     const A = struct { value: u32 };
 
     var store: EntityStore = undefined;
-    try store.init(allocator, io);
+    try store.init(allocator);
     defer store.deinit(allocator);
 
     const ptr = try allocator.create(A);

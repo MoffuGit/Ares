@@ -57,7 +57,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     try self.background_executor.init(gpa, io);
     errdefer self.background_executor.deinit(gpa, io);
 
-    try self.entity_store.init(gpa, io);
+    try self.entity_store.init(gpa);
     errdefer self.entity_store.deinit(gpa);
 
     try self.observers.init(gpa);
@@ -165,9 +165,6 @@ pub fn flush_notifications(self: *App) void {
 }
 
 pub fn destroy_dropped_entities(self: *App) void {
-    self.entity_store.lockRefs();
-    defer self.entity_store.unlockRefs();
-
     while (self.entity_store.popDrop()) |drop| {
         const ptr, const key, const type_info = drop;
 
