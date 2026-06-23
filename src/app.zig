@@ -30,7 +30,7 @@ buffer: []u8,
 alloc: heap.FixedBufferAllocator,
 fixed: Allocator,
 io: Io,
-entity_store: EntityStore,
+entities: EntityStore,
 observers: Observers,
 peding_updates: u16,
 
@@ -47,7 +47,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 
     self.* = .{
         .notifications = undefined,
-        .entity_store = undefined,
+        .entities = undefined,
         .observers = undefined,
         .foreground_executor = undefined,
         .background_executor = undefined,
@@ -67,8 +67,8 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     try self.background_executor.init(self.fixed, io);
     errdefer self.background_executor.deinit(self.fixed, io);
 
-    try self.entity_store.init(self.fixed, 100);
-    errdefer self.entity_store.deinit(self.fixed);
+    try self.entities.init(self.fixed, 100);
+    errdefer self.entities.deinit(self.fixed);
 
     try self.observers.init(self.fixed);
     errdefer self.observers.deinit(self.fixed);
@@ -82,7 +82,7 @@ pub fn deinit(self: *App) void {
     self.foreground_executor.deinit();
     self.notifications.deinit(self.fixed);
     self.observers.deinit(self.fixed);
-    self.entity_store.deinit(self.fixed);
+    self.entities.deinit(self.fixed);
     self.gpa.free(self.buffer);
 }
 
@@ -93,14 +93,14 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     const ptr = try self.fixed.create(T);
     errdefer self.fixed.destroy(ptr);
 
-    const id = self.entity_store.insert(ptr);
-    errdefer self.entity_store.recycle(id);
+    const id = self.entities.insert(ptr);
+    errdefer self.entities.recycle(id);
 
-    const entity: Entity(T) = .init(&self.entity_store, id);
+    const entity: Entity(T) = .init(&self.entities, id);
     const ctx: Context(T) = .new(self, entity);
 
-    self.entity_store.start_update(id);
-    defer self.entity_store.end_update(id);
+    self.entities.start_update(id);
+    defer self.entities.end_update(id);
 
     try @call(.auto, function, .{ ptr, ctx } ++ args);
 
@@ -116,22 +116,22 @@ pub const UpdateFrame = struct {
 
         assert(self.any.type_id == TypeInfo.init(@typeInfo(T).pointer.child));
 
-        self.app.entity_store.end_update(self.any.id);
+        self.app.entities.end_update(self.any.id);
         self.app.end_update();
     }
 };
 
 pub fn update_frame(self: *App, comptime T: type, entity: Entity(T)) struct { *T, UpdateFrame } {
     self.start_update();
-    self.entity_store.start_update(entity.any.id);
+    self.entities.start_update(entity.any.id);
 
-    const ptr = self.entity_store.get(T, entity);
+    const ptr = self.entities.get(T, entity);
 
     return .{ ptr, .{ .any = entity.any, .app = self } };
 }
 
 pub fn read_entity(self: *App, comptime T: type, entity: Entity(T)) *const T {
-    return self.entity_store.get(T, entity);
+    return self.entities.get(T, entity);
 }
 
 pub fn notify(self: *App, entity: anytype) void {
@@ -183,12 +183,12 @@ pub fn flush_notifications(self: *App) void {
 }
 
 pub fn destroy_dropped_entities(self: *App) void {
-    while (self.entity_store.popDrop()) |drop| {
+    while (self.entities.popDrop()) |drop| {
         const ptr, const key, const type_info = drop;
 
         self.observers.remove(key, self.fixed);
         type_info.deinit(ptr);
-        self.entity_store.recycle(key);
+        self.entities.recycle(key);
     }
 }
 
