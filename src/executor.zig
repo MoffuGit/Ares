@@ -471,6 +471,10 @@ pub const Handler = struct {
     pub fn drop(self: *const Handler) void {
         self.cancel();
     }
+
+    pub fn worker(self: *const Handler) *Worker {
+        return self.task.worker;
+    }
 };
 
 pub const Group = struct {

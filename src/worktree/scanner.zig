@@ -5,8 +5,8 @@ const atomic = std.atomic;
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 const builtin = @import("builtin");
-const App = @import("../app.zig");
 
+const App = @import("../app.zig");
 const ch = @import("../channel.zig");
 const Snapshot = @import("snapshot.zig");
 
@@ -42,15 +42,20 @@ const State = struct {
 };
 
 state: State,
-gpa: Allocator,
-arena: Allocator,
-next_entry_id: *atomic.Value(u64),
+group: App.Group,
+workers: []Worker,
 
-pub fn init(self: *Scanner, gpa: Allocator, arena: Allocator, snapshot: *Snapshot, next_entry_id: *atomic.Value(u64)) !void {
+pub fn init(
+    self: *Scanner,
+    gpa: Allocator,
+    snapshot: *const Snapshot,
+) !void {
+    const workers = try gpa.alloc(Worker, try std.Thread.getCpuCount());
+    errdefer gpa.free(workers);
+
     self.* = .{
-        .arena = arena,
-        .gpa = gpa,
-        .next_entry_id = next_entry_id,
+        .workers = workers,
+        .group = .init,
         .state = .{
             .mutex = .init,
             .snapshot = undefined,
@@ -60,21 +65,19 @@ pub fn init(self: *Scanner, gpa: Allocator, arena: Allocator, snapshot: *Snapsho
     try self.state.snapshot.clone(snapshot, gpa);
 }
 
-pub fn deinit(self: *Scanner) void {
-    self.state.snapshot.deinit(self.gpa);
+pub fn deinit(self: *Scanner, gpa: Allocator, io: Io) void {
+    self.state.snapshot.deinit(gpa);
+    self.group.drop(io);
+    gpa.free(self.workers);
 }
 
-pub fn run(self: *Scanner, io: Io, send: Updates.Sender, notifier: App.Notifier, res: anyerror!void) bool {
-    if (res == error.Closed) return false;
-
-    self.runrun(io, send, notifier) catch return false;
+pub fn run(self: *Scanner, io: Io, notifier: App.Notifier) bool {
+    self._run(io, notifier) catch {};
 
     return false;
 }
 
-pub fn runrun(self: *Scanner, io: Io, send: Updates.Sender, notifier: App.Notifier) !void {
-    var sender = send;
-    defer sender.close(io);
+pub fn _run(self: *Scanner, io: Io, notifier: App.Notifier) !void {
     const stat = try Io.Dir.statFile(
         .cwd(),
         io,
@@ -83,10 +86,89 @@ pub fn runrun(self: *Scanner, io: Io, send: Updates.Sender, notifier: App.Notifi
     );
 
     if (stat.kind != .directory) return;
-    try sender.putOne(io, .started);
-
-    try self.initial_scan(io, &sender, notifier);
+    // try self.updates_sender.putOne(io, .started);
+    try notifier.notify();
+    //
+    // try self.initial_scan(io, &sender, notifier);
 }
+//
+//
+// pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender, notifier: App.Notifier) !void {
+//     // const cpu_count = try std.Thread.getCpuCount();
+//     //
+//     // var buffer: [1024]Worker.Job = undefined;
+//     //
+//     // var channel: Worker.Channel = .init(&buffer);
+//     // var group: Io.Group = .init;
+//     // {
+//     //     const snapshot = self.state.snapshot;
+//     //
+//     //     var _sender = channel.sender();
+//     //     errdefer _sender.close(io);
+//     //
+//     //     try _sender.putOneUncancelable(
+//     //         io,
+//     //         .{
+//     //             .abs_path = snapshot.abs_root,
+//     //             .path_name = snapshot.root_name,
+//     //             .sender = _sender,
+//     //         },
+//     //     );
+//     // }
+//     //
+//     // for (0..cpu_count) |_| {
+//     //     const worker = try self.arena.create(Worker);
+//     //     errdefer self.arena.destroy(worker);
+//     //
+//     //     try worker.init(self.gpa, self.arena, self.next_entry_id);
+//     //
+//     //     const receiver = channel.receiver();
+//     //     try group.concurrent(io, Worker.work, .{ worker, &self.state, io, receiver });
+//     // }
+//     //
+//     // const SelectResult = union(enum) {
+//     //     group: Io.Cancelable!void,
+//     //     timeout: Io.Cancelable!void,
+//     // };
+//     // const Select = Io.Select(SelectResult);
+//     //
+//     // var select_buffer: [2]SelectResult = undefined;
+//     //
+//     // var select: Select = .init(io, &select_buffer);
+//     //
+//     // try select.concurrent(.group, Io.Group.await, .{ &group, io });
+//     // try select.concurrent(.timeout, Io.sleep, .{ io, UPDATE_INTERVAL, .real });
+//     try io.sleep(.fromSeconds(1), .real);
+//
+//     try self.send_update(io, false, sender, notifier);
+//     // while (true) {
+//     //     switch (try select.await()) {
+//     //         .group => {
+//     //             select.cancelDiscard();
+//     //             try self.send_update(io, false, sender, notifier);
+//     //             break;
+//     //         },
+//     //         .timeout => {
+//     //             try self.send_update(io, true, sender, notifier);
+//     //             try select.concurrent(.timeout, Io.sleep, .{ io, UPDATE_INTERVAL, .real });
+//     //         },
+//     //     }
+//     // }
+// }
+//
+// pub fn send_update(self: *Scanner, io: Io, scanning: bool, sender: *Updates.Sender, notifier: App.Notifier) !void {
+//     var snapshot: Snapshot = undefined;
+//     {
+//         try self.state.lock(io);
+//         defer self.state.unlock(io);
+//
+//         try snapshot.clone(&self.state.snapshot, self.gpa);
+//     }
+//
+//     try sender.putOne(io, .{ .updated = .{ .snapshot = snapshot, .scanning = scanning } });
+//
+//     try notifier.notify();
+// }
 
 const Worker = struct {
     pub const Channel = ch.Channel(Job);
@@ -116,155 +198,78 @@ const Worker = struct {
         };
     }
 
-    pub fn work(self: *Worker, state: *State, io: Io, receiver: Channel.Receiver) void {
-        var rec = receiver;
-        defer rec.close(io);
-        defer self.queue.deinit(self.gpa);
-        defer self.entries.deinit(self.gpa);
-
-        self._work(state, io, rec) catch |err| {
-            if (err != error.Closed) {
-                std.log.err("worker err: {}", .{err});
-            }
-        };
+    pub fn deinit(self: *Worker) void {
+        self.queue.deinit(self.gpa);
+        self.entries.deinit(self.gpa);
     }
-
-    pub fn _work(self: *Worker, state: *State, io: Io, receiver: Channel.Receiver) !void {
-        var rec = receiver;
-        var path_z: [4096:0]u8 = undefined;
-        while (true) {
-            var job = if (self.queue.pop()) |job| job else try rec.getOne(io);
-            defer job.sender.close(io);
-
-            try self.scanDir(&path_z, job.path_name, job.abs_path, &job.sender);
-
-            {
-                try state.lock(io);
-                defer state.unlock(io);
-
-                for (self.entries.items) |entry| try state.snapshot.insert(self.gpa, entry);
-                self.entries.clearRetainingCapacity();
-            }
-
-            while (self.queue.pop()) |qjob| {
-                if (try @constCast(&job.sender).put(io, &.{qjob}, 0) == 0) {
-                    try self.queue.append(self.gpa, qjob);
-                    break;
-                }
-            }
-        }
-    }
-
-    fn scanDir(self: *Worker, path_z: [:0]u8, path_name: []const u8, abs_path: []const u8, sender: *Channel.Sender) !void {
-        @memcpy(path_z[0..abs_path.len], abs_path);
-        path_z[abs_path.len] = 0;
-
-        const dir = c.opendir(path_z.ptr) orelse return error.OPENDIR;
-        defer _ = c.closedir(dir);
-
-        const point = ".";
-        const pointpoint = "..";
-
-        while (c.readdir(dir)) |entry_raw| {
-            const entry: *const c.dirent = @ptrCast(@alignCast(entry_raw));
-            const name = direntNameFromEntry(entry);
-
-            if (std.mem.eql(u8, name, point) or std.mem.eql(u8, name, pointpoint)) continue;
-
-            const child_path = try std.mem.join(self.arena, "/", &.{ path_name, name });
-            const child_abs_path = try std.mem.join(self.arena, "/", &.{ abs_path, name });
-
-            try self.entries.append(self.gpa, .{ .path = child_path, .id = self.next_entry_id.fetchAdd(1, .monotonic) });
-
-            if (entry.type != c.DT.DIR) continue;
-
-            try self.queue.append(self.gpa, .{
-                .abs_path = child_abs_path,
-                .path_name = child_path,
-                .sender = sender.clone(),
-            });
-        }
-    }
-};
-
-pub fn initial_scan(self: *Scanner, io: Io, sender: *Updates.Sender, notifier: App.Notifier) !void {
-    // const cpu_count = try std.Thread.getCpuCount();
     //
-    // var buffer: [1024]Worker.Job = undefined;
+    // pub fn work(self: *Worker, state: *State, io: Io, receiver: Channel.Receiver) void {
+    //     var rec = receiver;
+    //     defer rec.close(io);
+    //     defer self.queue.deinit(self.gpa);
+    //     defer self.entries.deinit(self.gpa);
     //
-    // var channel: Worker.Channel = .init(&buffer);
-    // var group: Io.Group = .init;
-    // {
-    //     const snapshot = self.state.snapshot;
-    //
-    //     var _sender = channel.sender();
-    //     errdefer _sender.close(io);
-    //
-    //     try _sender.putOneUncancelable(
-    //         io,
-    //         .{
-    //             .abs_path = snapshot.abs_root,
-    //             .path_name = snapshot.root_name,
-    //             .sender = _sender,
-    //         },
-    //     );
+    //     self._work(state, io, rec) catch |err| {
+    //         if (err != error.Closed) {
+    //             std.log.err("worker err: {}", .{err});
+    //         }
+    //     };
     // }
     //
-    // for (0..cpu_count) |_| {
-    //     const worker = try self.arena.create(Worker);
-    //     errdefer self.arena.destroy(worker);
+    // pub fn _work(self: *Worker, state: *State, io: Io, receiver: Channel.Receiver) !void {
+    //     var rec = receiver;
+    //     var path_z: [4096:0]u8 = undefined;
+    //     while (true) {
+    //         var job = if (self.queue.pop()) |job| job else try rec.getOne(io);
+    //         defer job.sender.close(io);
     //
-    //     try worker.init(self.gpa, self.arena, self.next_entry_id);
+    //         try self.scanDir(&path_z, job.path_name, job.abs_path, &job.sender);
     //
-    //     const receiver = channel.receiver();
-    //     try group.concurrent(io, Worker.work, .{ worker, &self.state, io, receiver });
-    // }
+    //         {
+    //             try state.lock(io);
+    //             defer state.unlock(io);
     //
-    // const SelectResult = union(enum) {
-    //     group: Io.Cancelable!void,
-    //     timeout: Io.Cancelable!void,
-    // };
-    // const Select = Io.Select(SelectResult);
+    //             for (self.entries.items) |entry| try state.snapshot.insert(self.gpa, entry);
+    //             self.entries.clearRetainingCapacity();
+    //         }
     //
-    // var select_buffer: [2]SelectResult = undefined;
-    //
-    // var select: Select = .init(io, &select_buffer);
-    //
-    // try select.concurrent(.group, Io.Group.await, .{ &group, io });
-    // try select.concurrent(.timeout, Io.sleep, .{ io, UPDATE_INTERVAL, .real });
-    try io.sleep(.fromSeconds(1), .real);
-
-    try self.send_update(io, false, sender, notifier);
-    // while (true) {
-    //     switch (try select.await()) {
-    //         .group => {
-    //             select.cancelDiscard();
-    //             try self.send_update(io, false, sender, notifier);
-    //             break;
-    //         },
-    //         .timeout => {
-    //             try self.send_update(io, true, sender, notifier);
-    //             try select.concurrent(.timeout, Io.sleep, .{ io, UPDATE_INTERVAL, .real });
-    //         },
+    //         while (self.queue.pop()) |qjob| {
+    //             if (try @constCast(&job.sender).put(io, &.{qjob}, 0) == 0) {
+    //                 try self.queue.append(self.gpa, qjob);
+    //                 break;
+    //             }
+    //         }
     //     }
     // }
-}
-
-pub fn send_update(self: *Scanner, io: Io, scanning: bool, sender: *Updates.Sender, notifier: App.Notifier) !void {
-    var snapshot: Snapshot = undefined;
-    {
-        try self.state.lock(io);
-        defer self.state.unlock(io);
-
-        try snapshot.clone(&self.state.snapshot, self.gpa);
-    }
-
-    try sender.putOne(io, .{ .updated = .{ .snapshot = snapshot, .scanning = scanning } });
-
-    try notifier.notify();
-}
-
-inline fn direntNameFromEntry(entry: *const c.dirent) []const u8 {
-    const namlen: usize = @intCast(entry.namlen);
-    return entry.name[0..namlen];
-}
+    //
+    // fn scanDir(self: *Worker, path_z: [:0]u8, path_name: []const u8, abs_path: []const u8, sender: *Channel.Sender) !void {
+    //     @memcpy(path_z[0..abs_path.len], abs_path);
+    //     path_z[abs_path.len] = 0;
+    //
+    //     const dir = c.opendir(path_z.ptr) orelse return error.OPENDIR;
+    //     defer _ = c.closedir(dir);
+    //
+    //     const point = ".";
+    //     const pointpoint = "..";
+    //
+    //     while (c.readdir(dir)) |entry_raw| {
+    //         const entry: *const c.dirent = @ptrCast(@alignCast(entry_raw));
+    //         const name = direntNameFromEntry(entry);
+    //
+    //         if (std.mem.eql(u8, name, point) or std.mem.eql(u8, name, pointpoint)) continue;
+    //
+    //         const child_path = try std.mem.join(self.arena, "/", &.{ path_name, name });
+    //         const child_abs_path = try std.mem.join(self.arena, "/", &.{ abs_path, name });
+    //
+    //         try self.entries.append(self.gpa, .{ .path = child_path, .id = self.next_entry_id.fetchAdd(1, .monotonic) });
+    //
+    //         if (entry.type != c.DT.DIR) continue;
+    //
+    //         try self.queue.append(self.gpa, .{
+    //             .abs_path = child_abs_path,
+    //             .path_name = child_path,
+    //             .sender = sender.clone(),
+    //         });
+    //     }
+    // }
+};

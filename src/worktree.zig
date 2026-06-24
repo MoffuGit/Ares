@@ -3,9 +3,9 @@ const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Io = std.Io;
+const atomic = std.atomic;
+const path = std.fs.path;
 
-const prof = @import("prof");
-const tripwire = prof.tripwire;
 const test_build = @import("test_build");
 
 const App = @import("app.zig");
@@ -14,6 +14,7 @@ const Context = App.Context;
 const channelpkg = @import("channel.zig");
 const Channel = channelpkg.Channel;
 const Scanner = @import("worktree/scanner.zig");
+const Updates = Scanner.Updates;
 const Snapshot = @import("worktree/snapshot.zig");
 
 pub const Worktree = @This();
@@ -22,84 +23,74 @@ pub const Options = struct {
     abs_path: []const u8,
 };
 
-arena: ArenaAllocator,
+arena: Allocator,
 gpa: Allocator,
 
 scanning: bool,
 snapshot: Snapshot,
 scanner: Scanner,
 
-buffer: [8]Scanner.Updates,
-updates_channel: Scanner.Updates.Channel,
-next_entry_id: std.atomic.Value(u64),
-handlers: [1]App.Handler,
+buffer: [8]Updates,
+channel: Updates.Channel,
+next_entry_id: atomic.Value(u64),
+handler: App.Handler,
+io: Io,
 
-pub fn init(self: *Worktree, ctx: Context(Worktree), gpa: Allocator, opts: Options, io: Io) !void {
+pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, arena: Allocator, opts: Options) !void {
     self.* = .{
+        .io = io,
+        .gpa = ctx.gpa(),
+        .arena = arena,
         .scanning = false,
-        .arena = ArenaAllocator.init(gpa),
-        .gpa = gpa,
         .snapshot = undefined,
         .scanner = undefined,
         .buffer = undefined,
         .next_entry_id = .init(0),
-        .updates_channel = .init(&self.buffer),
-        .handlers = undefined,
+        .channel = .init(&self.buffer),
+        .handler = undefined,
     };
 
-    const arena = self.arena.allocator();
-    errdefer _ = self.arena.deinit();
-
     const abs_root = try arena.dupe(u8, opts.abs_path);
-    const basename = std.fs.path.basename(abs_root);
-    const root_name = try arena.dupe(u8, basename);
+    const root_name = try arena.dupe(u8, path.basename(abs_root));
 
-    try self.snapshot.init(abs_root, root_name, gpa);
-    errdefer self.snapshot.deinit(gpa);
-    try self.snapshot.insert(gpa, .{ .id = self.next_entry_id.fetchAdd(1, .monotonic), .path = root_name });
+    try self.snapshot.init(abs_root, root_name, self.gpa);
+    errdefer self.snapshot.deinit(self.gpa);
 
-    const handler, const notifier = try ctx.async(awaitUpdates, .{ io, self.updates_channel.receiver() });
-    errdefer handler.drop();
+    try self.snapshot.insert(self.gpa, .{ .id = self.next_entry_id.fetchAdd(1, .acq_rel), .path = root_name });
 
-    self.handlers = .{handler};
+    try self.scanner.init(self.gpa, &self.snapshot);
+    errdefer self.scanner.deinit(self.gpa, io);
 
-    try self.scanner.init(gpa, arena, &self.snapshot, &self.next_entry_id);
-    errdefer self.scanner.deinit();
+    self.handler, const notifier = try ctx.await(flushUpdates, .{self.channel.receiver()});
+    errdefer self.handler.drop();
 
-    const bg_handler, const bg_notifier = try ctx.backgroundAsync(
+    ctx.concurrent().@"defer"(
         Scanner.run,
-        .{ &self.scanner, io, self.updates_channel.sender(), notifier },
-    );
-    bg_handler.detach();
-
-    try bg_notifier.notify();
-}
-
-pub fn close(self: *Worktree, io: Io) !void {
-    self.updates_channel.close(io);
+        .{ &self.scanner, io, notifier },
+    ).detach();
 }
 
 pub fn deinit(self: *Worktree) void {
-    for (self.handlers) |handler| {
-        handler.drop();
-    }
-    self.scanner.deinit();
+    self.handler.drop();
+    self.scanner.deinit(self.gpa, self.io);
     self.snapshot.deinit(self.gpa);
-    self.arena.deinit();
 }
 
-fn awaitUpdates(ctx: Context(Worktree), io: Io, receiver: Scanner.Updates.Receiver, res: anyerror!void) bool {
-    if (res == error.Canceled) {
-        return false;
-    }
+fn flushUpdates(ctx: Context(Worktree), receiver: Updates.Receiver, res: anyerror!void) bool {
+    res catch return false;
+    _flushUpdates(ctx, receiver) catch return false;
 
+    return true;
+}
+
+fn _flushUpdates(ctx: Context(Worktree), receiver: Updates.Receiver) !void {
     var rec = receiver;
 
     const self, const update = ctx.update();
     defer update.end(self);
 
-    var buffer: [8]Scanner.Updates = undefined;
-    for (0..rec.get(io, &buffer, 0) catch return false) |idx| {
+    var buffer: [8]Updates = undefined;
+    for (0..try rec.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
             .started => self.scanning = true,
             .updated => |updated| {
@@ -111,6 +102,30 @@ fn awaitUpdates(ctx: Context(Worktree), io: Io, receiver: Scanner.Updates.Receiv
     }
 
     ctx.notify();
+}
 
-    return true;
+test "Worktree Entity" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+
+    var arena = ArenaAllocator.init(gpa);
+    defer arena.deinit();
+
+    var app: App = undefined;
+    try app.init(gpa, io);
+    defer app.deinit();
+
+    const worktree: Entity(Worktree) = try .new(
+        &app,
+        .{
+            io,
+            arena.allocator(),
+            Options{
+                .abs_path = test_build.chromium_path,
+            },
+        },
+    );
+
+    worktree.drop();
+    app.flush();
 }

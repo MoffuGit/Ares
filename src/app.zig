@@ -325,8 +325,8 @@ pub fn Context(comptime T: type) type {
             return try self.app.foreground_executor.await(TypeErased.async, .{ self.entity.any, self.app, args });
         }
 
-        pub fn concurrent(self: *const App) *executor.BackgroundExecutor {
-            return &self.background_executor;
+        pub fn concurrent(self: *const @This()) *executor.BackgroundExecutor {
+            return &self.app.background_executor;
         }
     };
 }

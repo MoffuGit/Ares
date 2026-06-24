@@ -67,7 +67,7 @@ pub fn init(self: *Snapshot, abs_root: []const u8, root_name: []const u8, gpa: A
     try self.entries.init(gpa);
 }
 
-pub fn clone(self: *Snapshot, from: *Snapshot, gpa: Allocator) !void {
+pub fn clone(self: *Snapshot, from: *const Snapshot, gpa: Allocator) !void {
     self.* = from.*;
     self.entries = try from.entries.clone(gpa);
 }
