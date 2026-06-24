@@ -17,6 +17,8 @@ const executor = @import("executor.zig");
 pub const Handler = executor.Handler;
 pub const Notifier = executor.Notifier;
 pub const Group = executor.Group;
+pub const BackgroundExecutor = executor.BackgroundExecutor;
+pub const ForegroundExecutor = executor.ForegroundExecutor;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
@@ -34,8 +36,8 @@ entities: EntityStore,
 observers: Observers,
 peding_updates: u16,
 
-foreground_executor: executor.ForegroundExecutor,
-background_executor: executor.BackgroundExecutor,
+foreground_executor: ForegroundExecutor,
+background_executor: BackgroundExecutor,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 

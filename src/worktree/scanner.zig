@@ -4,9 +4,11 @@ const c = std.c;
 const atomic = std.atomic;
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
+const heap = std.heap;
 const builtin = @import("builtin");
 
 const App = @import("../app.zig");
+const Executor = App.BackgroundExecutor;
 const ch = @import("../channel.zig");
 const Snapshot = @import("snapshot.zig");
 
@@ -43,19 +45,17 @@ const State = struct {
 
 state: State,
 group: App.Group,
-workers: []Worker,
+io: Io,
 
 pub fn init(
     self: *Scanner,
     gpa: Allocator,
     snapshot: *const Snapshot,
+    io: Io,
 ) !void {
-    const workers = try gpa.alloc(Worker, try std.Thread.getCpuCount());
-    errdefer gpa.free(workers);
-
     self.* = .{
-        .workers = workers,
         .group = .init,
+        .io = io,
         .state = .{
             .mutex = .init,
             .snapshot = undefined,
@@ -65,28 +65,39 @@ pub fn init(
     try self.state.snapshot.clone(snapshot, gpa);
 }
 
-pub fn deinit(self: *Scanner, gpa: Allocator, io: Io) void {
+pub fn deinit(self: *Scanner, gpa: Allocator) void {
     self.state.snapshot.deinit(gpa);
-    self.group.drop(io);
-    gpa.free(self.workers);
+    self.group.drop(self.io);
 }
 
-pub fn run(self: *Scanner, io: Io, notifier: App.Notifier) bool {
-    self._run(io, notifier) catch {};
+pub fn run(
+    self: *Scanner,
+    executor: *Executor,
+    sender: Updates.Sender,
+    notifier: App.Notifier,
+    arena: Allocator,
+) bool {
+    self._run(executor, @constCast(&sender), notifier, arena) catch {};
 
     return false;
 }
 
-pub fn _run(self: *Scanner, io: Io, notifier: App.Notifier) !void {
+pub fn _run(
+    self: *Scanner,
+    _: *Executor,
+    sender: *Updates.Sender,
+    notifier: App.Notifier,
+    _: Allocator,
+) !void {
     const stat = try Io.Dir.statFile(
         .cwd(),
-        io,
+        self.io,
         self.state.snapshot.abs_root,
         .{},
     );
 
     if (stat.kind != .directory) return;
-    // try self.updates_sender.putOne(io, .started);
+    try sender.putOne(self.io, .started);
     try notifier.notify();
     //
     // try self.initial_scan(io, &sender, notifier);
@@ -181,26 +192,26 @@ const Worker = struct {
 
     gpa: Allocator,
     arena: Allocator,
-    queue: std.ArrayList(Job),
-    entries: std.ArrayList(Snapshot.Entry),
-    next_entry_id: *atomic.Value(u64),
+    // queue: std.ArrayList(Job),
+    // entries: std.ArrayList(Snapshot.Entry),
+    // next_entry_id: *atomic.Value(u64),
 
-    pub fn init(self: *Worker, gpa: Allocator, arena: Allocator, next_entry_id: *atomic.Value(u64)) !void {
-        const queue: std.ArrayList(Job) = try .initCapacity(gpa, 400);
-        const entries: std.ArrayList(Snapshot.Entry) = try .initCapacity(gpa, 800);
+    pub fn init(self: *Worker, gpa: Allocator, arena: Allocator) !void {
+        // const queue: std.ArrayList(Job) = try .initCapacity(gpa, 400);
+        // const entries: std.ArrayList(Snapshot.Entry) = try .initCapacity(gpa, 800);
 
         self.* = .{
             .arena = arena,
             .gpa = gpa,
-            .queue = queue,
-            .entries = entries,
-            .next_entry_id = next_entry_id,
+            // .queue = queue,
+            // .entries = entries,
+            // .next_entry_id = next_entry_id,
         };
     }
 
-    pub fn deinit(self: *Worker) void {
-        self.queue.deinit(self.gpa);
-        self.entries.deinit(self.gpa);
+    pub fn deinit(_: *Worker) void {
+        // self.queue.deinit(self.gpa);
+        // self.entries.deinit(self.gpa);
     }
     //
     // pub fn work(self: *Worker, state: *State, io: Io, receiver: Channel.Receiver) void {

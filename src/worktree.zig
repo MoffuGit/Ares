@@ -56,23 +56,37 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, arena: Allocator, o
     try self.snapshot.init(abs_root, root_name, self.gpa);
     errdefer self.snapshot.deinit(self.gpa);
 
-    try self.snapshot.insert(self.gpa, .{ .id = self.next_entry_id.fetchAdd(1, .acq_rel), .path = root_name });
+    try self.snapshot.insert(
+        self.gpa,
+        .{
+            .id = self.next_entry_id.fetchAdd(1, .acq_rel),
+            .path = root_name,
+        },
+    );
 
-    try self.scanner.init(self.gpa, &self.snapshot);
-    errdefer self.scanner.deinit(self.gpa, io);
+    try self.scanner.init(self.gpa, &self.snapshot, io);
+    errdefer self.scanner.deinit(self.gpa);
 
     self.handler, const notifier = try ctx.await(flushUpdates, .{self.channel.receiver()});
     errdefer self.handler.drop();
 
-    ctx.concurrent().@"defer"(
+    const executor = ctx.concurrent();
+
+    executor.@"defer"(
         Scanner.run,
-        .{ &self.scanner, io, notifier },
+        .{
+            &self.scanner,
+            executor,
+            self.channel.sender(),
+            notifier,
+            arena,
+        },
     ).detach();
 }
 
 pub fn deinit(self: *Worktree) void {
     self.handler.drop();
-    self.scanner.deinit(self.gpa, self.io);
+    self.scanner.deinit(self.gpa);
     self.snapshot.deinit(self.gpa);
 }
 
