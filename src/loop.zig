@@ -266,14 +266,12 @@ pub fn concurrent(
             _loop.queues.push(.completions, _completion);
         }
 
-        fn complete(loop: *Loop, _completion: *Completion) bool {
+        fn complete(_loop: *Loop, _completion: *Completion) bool {
             const _context: Context = @ptrCast(@alignCast(_completion.context));
 
             if (@call(.auto, callback, .{ _context, _completion, _completion.result.? })) {
-                _completion.state = .concurrent;
-                loop.group.concurrent(loop.io, _concurrent, .{ loop, _completion }) catch |err| {
-                    std.log.err("Can't add concurrent call: {}", .{err});
-                };
+                _completion.state = .submitted;
+                _loop.queues.push(.concurrent, _completion);
             }
 
             return false;
