@@ -70,7 +70,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, arena: Allocator, o
     self.handler, const notifier = try ctx.await(flushUpdates, .{self.channel.receiver()});
     errdefer self.handler.drop();
 
-    const executor = ctx.concurrent();
+    const executor = ctx.executor();
 
     executor.@"defer"(
         Scanner.run,

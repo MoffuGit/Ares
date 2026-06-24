@@ -17,6 +17,7 @@ const datastruct = @import("datastruct.zig");
 const multi_mpsc = datastruct.multi_mpsc;
 
 const Queues = union(enum) {
+    concurrent: Completion,
     cancellations: Completion,
     canceling: Completion,
     completions: Completion,
@@ -78,6 +79,7 @@ pub fn done(self: *Loop) bool {
     return self.stopped or
         (self.queues.empty(.submissions) and
             self.queues.empty(.completions) and
+            self.queues.empty(.concurrent) and
             self.inflight == 0 and
             self.group.token.load(.acquire) == null);
 }
@@ -89,6 +91,15 @@ pub fn stop(self: *Loop) void {
 pub fn flush(self: *Loop, _: bool) !void {
     while (self.queues.pop(.cancellations)) |c| {
         _ = c.callback(self, c);
+    }
+
+    while (self.queues.pop(.concurrent)) |c| {
+        const TypeErased = struct {
+            fn _concurrent(_loop: *Loop, _completion: *Completion) void {
+                _completion.concurrent.?(_loop, _completion);
+            }
+        };
+        try self.group.concurrent(self.io, TypeErased._concurrent, .{ self, c });
     }
 
     var events: [256]Kevent = undefined;
@@ -270,14 +281,15 @@ pub fn concurrent(
     };
 
     completion.* = .{
-        .state = .concurrent,
+        .state = .submitted,
         .operation = @unionInit(Operation, @tagName(op_tag), op_data),
+        .concurrent = TypeErased._concurrent,
         .context = context,
         .callback = TypeErased.complete,
         .next = null,
     };
 
-    try self.group.concurrent(self.io, TypeErased._concurrent, .{ self, completion });
+    self.queues.push(.concurrent, completion);
 }
 
 pub fn @"defer"(
@@ -454,6 +466,7 @@ pub const Completion = struct {
 
     context: ?*anyopaque,
     callback: *const fn (loop: *Loop, completion: *Completion) bool,
+    concurrent: ?*const fn (*Loop, *Completion) void = null,
 
     next: ?*Completion = null,
 

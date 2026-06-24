@@ -13,12 +13,12 @@ pub const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
-const executor = @import("executor.zig");
-pub const Handler = executor.Handler;
-pub const Notifier = executor.Notifier;
-pub const Group = executor.Group;
-pub const BackgroundExecutor = executor.BackgroundExecutor;
-pub const ForegroundExecutor = executor.ForegroundExecutor;
+const exe = @import("executor.zig");
+pub const Handler = exe.Handler;
+pub const Notifier = exe.Notifier;
+pub const Group = exe.Group;
+pub const BackgroundExecutor = exe.BackgroundExecutor;
+pub const ForegroundExecutor = exe.ForegroundExecutor;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
@@ -298,7 +298,7 @@ pub fn Context(comptime T: type) type {
             return try self.app.observe(entity, TypeErased.callback, .{ self.entity.any, args });
         }
 
-        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) executor.Handler {
+        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) exe.Handler {
             const Args = @TypeOf(args);
             const TypeErased = struct {
                 pub fn @"defer"(any: AnyEntity, app: *App, _args: Args) bool {
@@ -312,7 +312,7 @@ pub fn Context(comptime T: type) type {
             return self.app.foreground_executor.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
         }
 
-        pub fn await(self: *const @This(), function: anytype, args: anytype) !executor.Await {
+        pub fn await(self: *const @This(), function: anytype, args: anytype) !exe.Await {
             const Args = @TypeOf(args);
             const TypeErased = struct {
                 pub fn async(any: AnyEntity, app: *App, _args: Args, result: anyerror!void) bool {
@@ -327,7 +327,7 @@ pub fn Context(comptime T: type) type {
             return try self.app.foreground_executor.await(TypeErased.async, .{ self.entity.any, self.app, args });
         }
 
-        pub fn concurrent(self: *const @This()) *executor.BackgroundExecutor {
+        pub fn executor(self: *const @This()) *exe.BackgroundExecutor {
             return &self.app.background_executor;
         }
     };
