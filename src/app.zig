@@ -215,7 +215,8 @@ pub fn observe(
             return @call(.auto, function, .{ app, _entity } ++ _args);
         }
 
-        fn enable(sub: Observers.Subscription) bool {
+        fn enable(sub: Observers.Subscription, res: anyerror!void) bool {
+            res catch return false;
             sub.enable();
             return false;
         }
@@ -300,7 +301,8 @@ pub fn Context(comptime T: type) type {
         pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) exe.Handler {
             const Args = @TypeOf(args);
             const TypeErased = struct {
-                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args) bool {
+                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args, res: anyerror!void) bool {
+                    res catch return false;
                     const _entity = any.into(T) orelse return false;
 
                     const ctx: Context(T) = .new(app, _entity);
@@ -575,7 +577,7 @@ test "Context defer runs on foreground executor with entity context" {
     try testing.expectEqual(1, entity.read(&app).calls);
     try testing.expectEqual(42, entity.read(&app).last_value);
 
-    handler.drop();
+    handler.cancel();
     entity.drop();
     app.flush();
 }
@@ -625,7 +627,7 @@ test "Context async runs on foreground executor with entity context" {
     try testing.expectEqual(1, entity.read(&app).calls);
     try testing.expectEqual(42, entity.read(&app).last_value);
 
-    handler.drop();
+    handler.cancel();
     entity.drop();
     app.flush();
 }
