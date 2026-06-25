@@ -99,6 +99,7 @@ pub fn flush(self: *Loop, _: bool) !void {
                 _completion.concurrent.?(_loop, _completion);
             }
         };
+        c.state = .concurrent;
         try self.group.concurrent(self.io, TypeErased._concurrent, .{ self, c });
     }
 
