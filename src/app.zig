@@ -15,7 +15,8 @@ const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
 const exe = @import("executor.zig");
 pub const Handler = exe.Handler;
-pub const Notifier = exe.Notifier;
+pub const Waker = exe.Waker;
+pub const Await = exe.Await;
 pub const Group = exe.Group;
 pub const BackgroundExecutor = exe.BackgroundExecutor;
 pub const ForegroundExecutor = exe.ForegroundExecutor;
@@ -619,7 +620,7 @@ test "Context async runs on foreground executor with entity context" {
 
     try testing.expectEqual(0, entity.read(&app).calls);
 
-    try notifier.notify();
+    try notifier.wake();
 
     app.flush();
 

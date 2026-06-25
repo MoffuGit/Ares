@@ -106,7 +106,7 @@ pub const BackgroundExecutor = struct {
     pub fn deinit(self: *@This(), fixed: Allocator, io: Io) void {
         for (self.stops) |stop| {
             const notifier = stop.@"1";
-            notifier.notify() catch |err| {
+            notifier.wake() catch |err| {
                 std.log.err("Error while stopping a worker: {}", .{err});
             };
         }
@@ -371,7 +371,7 @@ pub const Task = struct {
 
     state: atomic.Value(State) = .init(.{ .handler = true, .refs = 1 }),
 
-    fn groupNext(self: *Task) *?*Task {
+    fn next(self: *Task) *?*Task {
         return &self.group_next;
     }
 
@@ -418,6 +418,10 @@ pub const Task = struct {
         }
 
         if (old.refs == 0 and !old.handler) self.destroy();
+    }
+
+    fn completed(self: *Task) bool {
+        return self.state.load(.acquire).completed;
     }
 
     fn release(self: *Task) void {
@@ -489,15 +493,15 @@ pub const Group = struct {
         defer self.mutex.unlock(io);
 
         const task = handler.task;
-        task.groupNext().* = self.head;
+        task.next().* = self.head;
         self.head = task;
     }
 
     pub fn cancel(self: *Group, io: Io) void {
         var task = self.takeAll(io);
         while (task) |current| {
-            const next = current.groupNext().*;
-            current.groupNext().* = null;
+            const next = current.next().*;
+            current.next().* = null;
             current.cancel();
             task = next;
         }
@@ -506,8 +510,8 @@ pub const Group = struct {
     pub fn detach(self: *Group, io: Io) void {
         var task = self.takeAll(io);
         while (task) |current| {
-            const next = current.groupNext().*;
-            current.groupNext().* = null;
+            const next = current.next().*;
+            current.next().* = null;
             current.releaseHandler();
             task = next;
         }
@@ -527,12 +531,12 @@ pub const Group = struct {
     }
 };
 
-pub const Await = struct { Handler, Notifier };
+pub const Await = struct { Handler, Waker };
 
-pub const Notifier = struct {
+pub const Waker = struct {
     port: system.mach_port_name_t,
 
-    pub fn notify(self: *const Notifier) !void {
+    pub fn wake(self: *const Waker) !void {
         var msg: posix.system.mach_msg_header_t = .{
             .msgh_bits = @intFromEnum(system.MACH.MSG.TYPE.COPY_SEND),
             .msgh_size = @sizeOf(posix.system.mach_msg_header_t),
@@ -661,13 +665,13 @@ test "Async notifier completes task" {
     worker.run(.no_wait);
     try testing.expectEqual(@as(u32, 0), calls);
 
-    try notifier.notify();
-    try notifier.notify();
-    try notifier.notify();
-    try notifier.notify();
-    try notifier.notify();
-    try notifier.notify();
-    try notifier.notify();
+    try notifier.wake();
+    try notifier.wake();
+    try notifier.wake();
+    try notifier.wake();
+    try notifier.wake();
+    try notifier.wake();
+    try notifier.wake();
     worker.run(.until_done);
 
     try testing.expectEqual(@as(u32, 1), calls);
