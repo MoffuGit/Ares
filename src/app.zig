@@ -17,9 +17,7 @@ const exe = @import("executor.zig");
 pub const Handler = exe.Handler;
 pub const Waker = exe.Waker;
 pub const Await = exe.Await;
-pub const Group = exe.Group;
-pub const BackgroundExecutor = exe.BackgroundExecutor;
-pub const ForegroundExecutor = exe.ForegroundExecutor;
+pub const Executor = exe.Executor;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
@@ -37,8 +35,8 @@ entities: EntityStore,
 observers: Observers,
 peding_updates: u16,
 
-foreground_executor: ForegroundExecutor,
-background_executor: BackgroundExecutor,
+worker: exe.Worker,
+executor: Executor,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
@@ -49,11 +47,11 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     errdefer gpa.free(buffer);
 
     self.* = .{
+        .worker = undefined,
         .notifications = undefined,
         .entities = undefined,
         .observers = undefined,
-        .foreground_executor = undefined,
-        .background_executor = undefined,
+        .executor = undefined,
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
@@ -64,11 +62,11 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     };
     self.fixed = self.alloc.threadSafeAllocator();
 
-    try self.foreground_executor.init(self.fixed, io);
-    errdefer self.foreground_executor.deinit();
+    try self.worker.init(self.fixed, io);
+    errdefer self.worker.deinit();
 
-    try self.background_executor.init(self.fixed, io);
-    errdefer self.background_executor.deinit(self.fixed, io);
+    try self.executor.init(self.fixed, io);
+    errdefer self.executor.deinit(self.fixed, io);
 
     try self.entities.init(self.fixed, 100);
     errdefer self.entities.deinit(self.fixed);
@@ -81,8 +79,8 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 }
 
 pub fn deinit(self: *App) void {
-    self.background_executor.deinit(self.fixed, self.io);
-    self.foreground_executor.deinit();
+    self.executor.deinit(self.fixed, self.io);
+    self.worker.deinit();
     self.notifications.deinit(self.fixed);
     self.observers.deinit(self.fixed);
     self.entities.deinit(self.fixed);
@@ -164,7 +162,7 @@ pub fn end_update(self: *App) void {
 pub fn flush(self: *App) void {
     //WARN:
     //on the future, running the executor will be a separated function
-    self.foreground_executor.run();
+    self.worker.run(.no_wait);
     self.destroy_dropped_entities();
     self.flush_notifications();
     self.log_buffer_usage();
@@ -230,7 +228,7 @@ pub fn observe(
         self.fixed,
     );
 
-    const handler = self.foreground_executor.@"defer"(TypeErased.enable, .{sub});
+    const handler = self.worker.@"defer"(TypeErased.enable, .{sub});
     handler.detach();
 
     return sub;
@@ -310,7 +308,7 @@ pub fn Context(comptime T: type) type {
                     return @call(.auto, function, .{ctx} ++ _args);
                 }
             };
-            return self.app.foreground_executor.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
+            return self.app.worker.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
         }
 
         pub fn await(self: *const @This(), function: anytype, args: anytype) !exe.Await {
@@ -325,11 +323,11 @@ pub fn Context(comptime T: type) type {
                 }
             };
 
-            return try self.app.foreground_executor.await(TypeErased.async, .{ self.entity.any, self.app, args });
+            return try self.app.worker.await(TypeErased.async, .{ self.entity.any, self.app, args });
         }
 
-        pub fn executor(self: *const @This()) *exe.BackgroundExecutor {
-            return &self.app.background_executor;
+        pub fn executor(self: *const @This()) *exe.Executor {
+            return &self.app.executor;
         }
     };
 }
