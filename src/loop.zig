@@ -302,7 +302,8 @@ pub fn @"defer"(
     const TypeErased = struct {
         fn complete(_: *Loop, _completion: *Completion) bool {
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            return @call(.auto, callback, .{ _context, _completion, Result{ .@"defer" = {} } });
+            const result = _completion.result orelse Result{ .@"defer" = {} };
+            return @call(.auto, callback, .{ _context, _completion, result });
         }
     };
 

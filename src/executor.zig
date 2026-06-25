@@ -199,11 +199,11 @@ const Worker = struct {
         const Context = @TypeOf(context);
 
         const TypeErased = struct {
-            fn complete(task: *Task, _: *Completion, _: Loop.Result) bool {
-                if (task.canceled()) {
+            fn complete(task: *Task, _: *Completion, res: Loop.Result) bool {
+                res.@"defer" catch {
                     task.complete();
                     return false;
-                }
+                };
 
                 const _context: *Context = @ptrCast(@alignCast(&task.context));
                 const rearm = @call(.auto, function, _context.*);
