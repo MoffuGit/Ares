@@ -23,8 +23,6 @@ const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 
-pub const APP_BUFFER_SIZE = 16 * 1024 * 1024;
-
 pub const App = @This();
 
 io: Io,

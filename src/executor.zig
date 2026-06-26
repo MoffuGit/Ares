@@ -15,49 +15,50 @@ const Operation = Loop.Operation;
 pub const Read = Loop.Read;
 
 pub const Executor = struct {
-    stops: []Await,
-    workers: []Worker,
-    next_worker: atomic.Value(u8),
+    _await: Await,
+    worker: Worker,
 
     groups: heap.MemoryPool(Group),
     mutex: Io.Mutex,
-    threads: Io.Group,
+    future: Io.Future(void),
     io: Io,
 
     arena: Allocator,
     gpa: Allocator,
 
     pub fn init(self: *@This(), arena: Allocator, gpa: Allocator, io: Io) !void {
-        const cpu_count = try std.Thread.getCpuCount();
-
-        const workers = try arena.alloc(Worker, cpu_count);
-        const stops = try arena.alloc(Await, cpu_count);
-
         self.* = .{
             .gpa = gpa,
-            .workers = workers,
-            .stops = stops,
-            .next_worker = .init(0),
+            .worker = undefined,
+            ._await = undefined,
             .groups = .empty,
             .mutex = .init,
             .arena = arena,
             .io = io,
-            .threads = .init,
+            .future = undefined,
         };
 
-        for (self.workers, self.stops) |*work, *stop| {
-            try work.init(arena, io);
-            stop.* = try work.await(
-                Worker.stop,
-                .{work},
-            );
-            try self.threads.concurrent(io, Worker.run, .{ work, .until_done });
-        }
+        try self.worker.init(arena, io);
+        self._await = try self.worker.await(
+            Worker.stop,
+            .{&self.worker},
+        );
+
+        self.future = try io.concurrent(Worker.run, .{ &self.worker, .until_done });
     }
 
-    fn worker(self: *@This()) *Worker {
-        const index = self.next_worker.fetchAdd(1, .monotonic) % self.workers.len;
-        return &self.workers[index];
+    pub fn deinit(self: *@This()) void {
+        if (builtin.mode == .Debug) self.io.sleep(.fromMilliseconds(50), .real) catch {};
+
+        self._await.@"1".wake() catch |err| {
+            std.log.err("Error while stopping a worker: {}", .{err});
+        };
+
+        _ = self.future.await(self.io);
+
+        self._await.@"0".cancel();
+
+        self.worker.deinit();
     }
 
     pub fn @"defer"(
@@ -112,27 +113,6 @@ pub const Executor = struct {
         defer self.mutex.unlock(self.io);
 
         self.groups.destroy(_group);
-    }
-
-    pub fn deinit(self: *@This()) void {
-        if (builtin.mode == .Debug) self.io.sleep(.fromMilliseconds(50), .real) catch {};
-
-        for (self.stops) |stop| {
-            const notifier = stop.@"1";
-            notifier.wake() catch |err| {
-                std.log.err("Error while stopping a worker: {}", .{err});
-            };
-        }
-
-        self.threads.cancel(self.io);
-
-        for (self.stops) |*stop| {
-            stop.@"0".cancel();
-        }
-
-        for (self.workers) |*work| {
-            work.deinit();
-        }
     }
 };
 
@@ -557,8 +537,7 @@ pub const Group = struct {
 
         _ = self.pending.fetchAdd(1, .monotonic);
 
-        const worker = self.executor.worker();
-        const handler = worker.@"defer"(Wrapper.complete, .{ self, context });
+        const handler = self.executor.worker.@"defer"(Wrapper.complete, .{ self, context });
         self.join(handler);
     }
 
@@ -579,11 +558,9 @@ pub const Group = struct {
             }
         };
 
-        const worker = self.executor.worker();
-
         _ = self.pending.fetchAdd(1, .monotonic);
 
-        const handler, const waker = try worker.await(Wrapper.complete, .{ self, context });
+        const handler, const waker = try self.executor.worker.await(Wrapper.complete, .{ self, context });
         self.join(handler);
         return waker;
     }
@@ -604,8 +581,7 @@ pub const Group = struct {
 
         _ = self.pending.fetchAdd(1, .monotonic);
 
-        const worker = self.executor.worker();
-        const handler = worker.concurrent(
+        const handler = self.executor.worker.concurrent(
             Wrapper.complete,
             .{ self, context },
         );
