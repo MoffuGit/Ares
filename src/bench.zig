@@ -1,3 +1,5 @@
 const worktree = @import("bench/worktree.zig");
 
-test {}
+test {
+    _ = worktree;
+}

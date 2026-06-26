@@ -67,7 +67,6 @@ pub fn deinit(self: *Worktree) void {
     self.scanner.stop();
     self.handler.cancel();
     self.group.cancel();
-    self.snapshot.deinit(self.gpa);
 }
 
 fn handleUpdates(ctx: Context(Worktree), res: anyerror!void) bool {
@@ -87,7 +86,6 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
         switch (buffer[idx]) {
             .started => self.scanning = true,
             .updated => |updated| {
-                self.snapshot.deinit(self.gpa);
                 self.snapshot = updated.snapshot;
                 self.scanning = updated.scanning;
             },

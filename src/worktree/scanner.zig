@@ -61,6 +61,7 @@ jobs_buffer: [1024]Worker.Job,
 jobs: Io.Queue(Worker.Job),
 
 next_entry_id: atomic.Value(u64),
+pending_jobs: atomic.Value(u64),
 
 pub fn init(
     self: *Scanner,
@@ -77,6 +78,7 @@ pub fn init(
         .updates = .init(&self.updates_buffer),
         .jobs = .init(&self.jobs_buffer),
         .next_entry_id = .init(0),
+        .pending_jobs = .init(0),
         .state = .{
             .mutex = .init,
             .snapshot = undefined,
@@ -139,24 +141,27 @@ fn initialScan(
     );
 
     if (stat.kind != .directory) return;
+
     try self.updates.putOne(self.io, .started);
     try waker.wake();
+
+    _ = self.pending_jobs.fetchAdd(1, .monotonic);
+
+    try self.jobs.putOne(self.io, .{
+        .abs_path = self.state.snapshot.abs_root,
+        .path_name = self.state.snapshot.root_name,
+    });
 
     const cpu_count = try std.Thread.getCpuCount();
     for (0..cpu_count) |_| {
         const worker = try group.arena().create(Worker);
-        try worker.init(self, arena, group);
+        try worker.init(self, arena, group, waker);
 
         group.concurrent(
             Worker.work,
             .{worker},
         );
     }
-
-    try self.jobs.putOne(self.io, .{
-        .abs_path = self.state.snapshot.abs_root,
-        .path_name = self.state.snapshot.root_name,
-    });
 }
 
 const Worker = struct {
@@ -172,8 +177,9 @@ const Worker = struct {
     group: *App.Group,
     queue: std.ArrayList(Job),
     entries: std.ArrayList(Snapshot.Entry),
+    waker: App.Waker,
 
-    pub fn init(self: *Worker, scanner: *Scanner, arena: Allocator, group: *App.Group) !void {
+    pub fn init(self: *Worker, scanner: *Scanner, arena: Allocator, group: *App.Group, waker: App.Waker) !void {
         const queue: std.ArrayList(Job) = try .initCapacity(group.arena(), 400);
         const entries: std.ArrayList(Snapshot.Entry) = try .initCapacity(group.arena(), 800);
 
@@ -183,6 +189,7 @@ const Worker = struct {
             .group = group,
             .queue = queue,
             .entries = entries,
+            .waker = waker,
         };
     }
 
@@ -207,11 +214,13 @@ const Worker = struct {
 
         while (true) {
             const job = if (self.queue.pop()) |job| job else try jobs.getOne(io);
+            _ = self.scanner.pending_jobs.fetchSub(1, .acq_rel);
 
             try self.scanDir(&path_z, job.path_name, job.abs_path);
 
             try self.flushEntries();
             try self.flushLocalJobs(jobs);
+            try self.finishJob();
         }
     }
 
@@ -242,6 +251,7 @@ const Worker = struct {
 
             if (entry.type != c.DT.DIR) continue;
 
+            _ = self.scanner.pending_jobs.fetchAdd(1, .monotonic);
             try self.queue.append(self.group.arena(), .{
                 .abs_path = child_abs_path,
                 .path_name = child_path,
@@ -267,6 +277,30 @@ const Worker = struct {
                 break;
             }
         }
+    }
+
+    fn finishJob(self: *Worker) !void {
+        const scanner = self.scanner;
+        const pending = scanner.pending_jobs.fetchSub(1, .acq_rel);
+        assert(pending > 0);
+
+        if (pending != 1) return;
+
+        scanner.jobs.close(scanner.io);
+
+        const io = scanner.io;
+        try scanner.state.lock(io);
+        defer scanner.state.unlock(io);
+
+        var snapshot: Snapshot = undefined;
+        try snapshot.clone(&scanner.state.snapshot, self.arena);
+        errdefer snapshot.deinit(self.arena);
+
+        try scanner.updates.putOne(io, .{ .updated = .{
+            .snapshot = snapshot,
+            .scanning = false,
+        } });
+        try self.waker.wake();
     }
 };
 
