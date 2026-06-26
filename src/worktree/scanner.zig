@@ -50,6 +50,7 @@ const State = struct {
 };
 
 io: Io,
+gpa: Allocator,
 state: State,
 action_buffer: [8]Action,
 actions: Action.Queue,
@@ -67,10 +68,12 @@ pub fn init(
     self: *Scanner,
     arena: Allocator,
     snapshot: *Snapshot,
+    gpa: Allocator,
     io: Io,
 ) !void {
     self.* = .{
         .io = io,
+        .gpa = gpa,
         .action_buffer = undefined,
         .updates_buffer = undefined,
         .jobs_buffer = undefined,
@@ -214,7 +217,6 @@ const Worker = struct {
 
         while (true) {
             const job = if (self.queue.pop()) |job| job else try jobs.getOne(io);
-            _ = self.scanner.pending_jobs.fetchSub(1, .acq_rel);
 
             try self.scanDir(&path_z, job.path_name, job.abs_path);
 
@@ -245,7 +247,7 @@ const Worker = struct {
             const child_abs_path = try std.mem.join(self.arena, "/", &.{ abs_path, name });
 
             try self.entries.append(self.group.arena(), .{
-                .path = child_path,
+                .path = try self.group.arena().dupe(u8, child_path),
                 .id = self.scanner.next_entry_id.fetchAdd(1, .monotonic),
             });
 
@@ -266,7 +268,7 @@ const Worker = struct {
         try self.scanner.state.lock(io);
         defer self.scanner.state.unlock(io);
 
-        for (self.entries.items) |entry| try self.scanner.state.snapshot.insert(self.arena, entry);
+        for (self.entries.items) |entry| try self.scanner.state.snapshot.insert(self.group.arena(), entry);
         self.entries.clearRetainingCapacity();
     }
 
@@ -293,8 +295,8 @@ const Worker = struct {
         defer scanner.state.unlock(io);
 
         var snapshot: Snapshot = undefined;
-        try snapshot.clone(&scanner.state.snapshot, self.arena);
-        errdefer snapshot.deinit(self.arena);
+        try snapshot.clone(&scanner.state.snapshot, self.scanner.gpa);
+        errdefer snapshot.deinit(self.scanner.gpa);
 
         try scanner.updates.putOne(io, .{ .updated = .{
             .snapshot = snapshot,

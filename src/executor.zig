@@ -14,44 +14,40 @@ const Operation = Loop.Operation;
 pub const Read = Loop.Read;
 
 pub const Executor = struct {
-    workers: []Worker,
     stops: []Await,
-    next_worker: atomic.Value(usize),
+    workers: []Worker,
+    next_worker: atomic.Value(u8),
+
     groups: heap.MemoryPool(Group),
     mutex: Io.Mutex,
-    fixed: Allocator,
     threads: Io.Group,
     io: Io,
 
-    pub fn init(self: *@This(), fixed: Allocator, io: Io) !void {
+    arena: Allocator,
+    gpa: Allocator,
+
+    pub fn init(self: *@This(), arena: Allocator, gpa: Allocator, io: Io) !void {
         const cpu_count = try std.Thread.getCpuCount();
 
-        const workers = try fixed.alloc(Worker, cpu_count);
-        errdefer fixed.free(workers);
-
-        const stops = try fixed.alloc(Await, cpu_count);
-        errdefer fixed.free(stops);
+        const workers = try arena.alloc(Worker, cpu_count);
+        const stops = try arena.alloc(Await, cpu_count);
 
         self.* = .{
+            .gpa = gpa,
             .workers = workers,
             .stops = stops,
             .next_worker = .init(0),
             .groups = .empty,
             .mutex = .init,
-            .fixed = fixed,
+            .arena = arena,
             .io = io,
             .threads = .init,
         };
 
         for (self.workers, self.stops) |*work, *stop| {
-            try work.init(fixed, io);
+            try work.init(arena, io);
             stop.* = try work.await(
-                struct {
-                    fn _stop(_worker: *Worker, _: anyerror!void) bool {
-                        _worker.stop();
-                        return false;
-                    }
-                }._stop,
+                Worker.stop,
                 .{work},
             );
             try self.threads.concurrent(io, Worker.run, .{ work, .until_done });
@@ -103,7 +99,7 @@ pub const Executor = struct {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
 
-        const result = self.groups.create(self.fixed) catch {
+        const result = self.groups.create(self.arena) catch {
             @panic("BackgroundExecutor Groups Overflow");
         };
         result.* = Group.init(self);
@@ -117,7 +113,7 @@ pub const Executor = struct {
         self.groups.destroy(_group);
     }
 
-    pub fn deinit(self: *@This(), fixed: Allocator, io: Io) void {
+    pub fn deinit(self: *@This()) void {
         for (self.stops) |stop| {
             const notifier = stop.@"1";
             notifier.wake() catch |err| {
@@ -125,7 +121,7 @@ pub const Executor = struct {
             };
         }
 
-        self.threads.cancel(io);
+        self.threads.cancel(self.io);
 
         for (self.stops) |*stop| {
             stop.@"0".cancel();
@@ -134,24 +130,19 @@ pub const Executor = struct {
         for (self.workers) |*work| {
             work.deinit();
         }
-
-        self.groups.deinit(fixed);
-
-        fixed.free(self.stops);
-        fixed.free(self.workers);
     }
 };
 
 pub const Worker = struct {
     pool: heap.MemoryPool(Task),
     mutex: Io.Mutex,
-    fixed: Allocator,
+    arena: Allocator,
     loop: Loop,
     io: Io,
 
-    pub fn init(self: *Worker, fixed: Allocator, io: Io) !void {
+    pub fn init(self: *Worker, arena: Allocator, io: Io) !void {
         self.* = .{
-            .fixed = fixed,
+            .arena = arena,
             .io = io,
             .loop = undefined,
             .mutex = .init,
@@ -162,7 +153,6 @@ pub const Worker = struct {
 
     pub fn deinit(self: *Worker) void {
         self.loop.deinit();
-        self.pool.deinit(self.fixed);
     }
 
     pub fn new(self: *Worker, context: anytype) *Task {
@@ -175,7 +165,7 @@ pub const Worker = struct {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
 
-        const task = self.pool.create(self.fixed) catch {
+        const task = self.pool.create(self.arena) catch {
             @panic("Worker Tasks Overflow");
         };
 
@@ -203,8 +193,11 @@ pub const Worker = struct {
         };
     }
 
-    fn stop(worker: *Worker) void {
-        worker.loop.stop();
+    fn stop(self: *Worker, _: anyerror!void) bool {
+        self.loop.stop();
+        self.loop.group.cancel(self.io);
+
+        return false;
     }
 
     pub fn @"defer"(
@@ -514,9 +507,6 @@ pub const Handler = struct {
     }
 };
 
-//NOTE:
-//we need to stop new handlers to be created if the state is closing
-//and we need to review the logic of the mutex
 pub const Group = struct {
     const State = enum(u8) { open, closing, drained };
     const Node = struct {
@@ -539,7 +529,9 @@ pub const Group = struct {
             .executor = executor,
             .pending = .init(0),
             .state = .init(.open),
-            .alloc = .init(executor.fixed),
+            //BUG:
+            //this is wrong and acc a lot of memory
+            .alloc = .init(executor.arena),
             .handlers = null,
         };
     }
@@ -668,7 +660,8 @@ pub const Group = struct {
     fn deinit(self: *Group) void {
         if (self.state.swap(.drained, .acq_rel) == .drained) return;
 
-        _ = self.alloc.deinit();
+        self.alloc.deinit();
+
         self.executor.reclaimGroup(self);
     }
 };
@@ -736,8 +729,13 @@ test "task completes and stays alive until handler detaches" {
     const gpa = testing.allocator;
     const io = testing.io;
 
+    var alloc = heap.ArenaAllocator.init(gpa);
+    defer alloc.deinit();
+
+    const arena = alloc.allocator();
+
     var worker: Worker = undefined;
-    try worker.init(gpa, io);
+    try worker.init(arena, io);
     defer worker.deinit();
 
     var calls: u32 = 0;
@@ -759,8 +757,13 @@ test "read task completes and stays alive until handler detaches" {
     const gpa = testing.allocator;
     const io = testing.io;
 
+    var alloc = heap.ArenaAllocator.init(gpa);
+    defer alloc.deinit();
+
+    const arena = alloc.allocator();
+
     var worker: Worker = undefined;
-    try worker.init(gpa, io);
+    try worker.init(arena, io);
     defer worker.deinit();
 
     const contents = "hello from executor";
@@ -801,8 +804,13 @@ test "Async notifier completes task" {
     const gpa = testing.allocator;
     const io = testing.io;
 
+    var alloc = heap.ArenaAllocator.init(gpa);
+    defer alloc.deinit();
+
+    const arena = alloc.allocator();
+
     var worker: Worker = undefined;
-    try worker.init(gpa, io);
+    try worker.init(arena, io);
     defer worker.deinit();
 
     var calls: u32 = 0;
@@ -833,8 +841,13 @@ test "dropping handler cancels pending task" {
     const gpa = testing.allocator;
     const io = testing.io;
 
+    var alloc = heap.ArenaAllocator.init(gpa);
+    defer alloc.deinit();
+
+    const arena = alloc.allocator();
+
     var worker: Worker = undefined;
-    try worker.init(gpa, io);
+    try worker.init(arena, io);
     defer worker.deinit();
 
     var calls: u32 = 0;
@@ -851,8 +864,13 @@ test "task can detach" {
     const gpa = testing.allocator;
     const io = testing.io;
 
+    var alloc = heap.ArenaAllocator.init(gpa);
+    defer alloc.deinit();
+
+    const arena = alloc.allocator();
+
     var worker: Worker = undefined;
-    try worker.init(gpa, io);
+    try worker.init(arena, io);
     defer worker.deinit();
 
     var calls: u32 = 0;
@@ -875,15 +893,22 @@ test "group defer completes" {
     const gpa = testing.allocator;
     const io = testing.io;
 
+    var alloc = heap.ArenaAllocator.init(gpa);
+    defer alloc.deinit();
+
+    const arena = alloc.allocator();
+
     var executor: Executor = undefined;
-    try executor.init(gpa, io);
-    defer executor.deinit(gpa, io);
+    try executor.init(arena, gpa, io);
+    defer executor.deinit();
 
     var calls: u32 = 0;
     const group = executor.group();
 
     group.@"defer"(testDeferTaskGroup, .{&calls});
     group.close();
+
+    try io.sleep(.fromMilliseconds(10), .real);
 
     try testing.expectEqual(@as(u32, 1), calls);
 }
@@ -897,9 +922,14 @@ test "group concurrent completes" {
     const gpa = testing.allocator;
     const io = testing.io;
 
+    var alloc = heap.ArenaAllocator.init(gpa);
+    defer alloc.deinit();
+
+    const arena = alloc.allocator();
+
     var executor: Executor = undefined;
-    try executor.init(gpa, io);
-    defer executor.deinit(gpa, io);
+    try executor.init(arena, gpa, io);
+    defer executor.deinit();
 
     var calls: u32 = 0;
     const group = executor.group();

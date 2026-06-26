@@ -55,45 +55,45 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
                 self.subscriptions.enable(self);
             }
 
-            pub fn unsubscribe(self: *const Subscription, fixed: Allocator) !void {
-                try self.subscriptions.unsubscribe(self, fixed);
+            pub fn unsubscribe(self: *const Subscription, gpa: Allocator) !void {
+                try self.subscriptions.unsubscribe(self, gpa);
             }
 
             pub fn unsubscribeApp(self: *const Subscription) !void {
-                try self.subscriptions.unsubscribe(self, self.subscriptions.fixed);
+                try self.subscriptions.unsubscribe(self, self.subscriptions.gpa);
             }
         };
 
         subscribers: Subscribers,
         dropped: btree.BPlusSet(Dropped, Dropped.order),
-        fixed: Allocator,
+        gpa: Allocator,
         next_id: u32,
 
-        pub fn init(self: *Self, fixed: Allocator) !void {
+        pub fn init(self: *Self, gpa: Allocator) !void {
             self.* = .{
                 .next_id = 0,
-                .fixed = fixed,
+                .gpa = gpa,
                 .subscribers = undefined,
                 .dropped = undefined,
             };
 
-            try self.subscribers.init(fixed);
-            errdefer self.subscribers.deinit(fixed);
+            try self.subscribers.init(gpa);
+            errdefer self.subscribers.deinit(gpa);
 
-            try self.dropped.init(fixed);
-            errdefer self.dropped.deinit(fixed);
+            try self.dropped.init(gpa);
+            errdefer self.dropped.deinit(gpa);
         }
 
-        pub fn deinit(self: *Self, fixed: Allocator) void {
+        pub fn deinit(self: *Self, gpa: Allocator) void {
             var outer = self.subscribers.iter();
             while (outer.next()) |entry| {
                 if (self.subscribers.get_ref(entry.key)) |maybe_subscribers| if (maybe_subscribers.*) |*subscribers| {
-                    subscribers.deinit(fixed);
+                    subscribers.deinit(gpa);
                 };
             }
-            self.subscribers.deinit(fixed);
-            self.clearDrops(fixed);
-            self.dropped.deinit(fixed);
+            self.subscribers.deinit(gpa);
+            self.clearDrops(gpa);
+            self.dropped.deinit(gpa);
         }
 
         pub fn insert(
@@ -101,7 +101,7 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             key: Key,
             callback: anytype,
             context: anytype,
-            fixed: Allocator,
+            gpa: Allocator,
         ) !Subscription {
             const Context = @TypeOf(context);
 
@@ -128,15 +128,15 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             @as(*Context, @ptrCast(@alignCast(&sub.context))).* = context;
 
             if (self.subscribers.get_ref(key)) |subs| {
-                const old = try subs.*.?.insert(fixed, id, sub);
+                const old = try subs.*.?.insert(gpa, id, sub);
                 assert(old == null);
             } else {
                 var subscribers: btree.BPlusTree(u32, Subscriber, Order.order) = undefined;
-                try subscribers.init(fixed);
-                errdefer subscribers.deinit(fixed);
+                try subscribers.init(gpa);
+                errdefer subscribers.deinit(gpa);
 
-                _ = try subscribers.insert(fixed, id, sub);
-                _ = try self.subscribers.insert(fixed, key, subscribers);
+                _ = try subscribers.insert(gpa, id, sub);
+                _ = try self.subscribers.insert(gpa, key, subscribers);
             }
 
             return .{ .subscriptions = self, .key = key, .id = id };
@@ -150,65 +150,65 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             }
         }
 
-        pub fn notify(self: *Self, key: Key, args: Args, fixed: Allocator) void {
+        pub fn notify(self: *Self, key: Key, args: Args, gpa: Allocator) void {
             const maybe_subscribers = self.subscribers.get_ref(key) orelse return;
             var subscribers = maybe_subscribers.* orelse return;
 
             var iter = subscribers.iter();
             while (iter.next()) |entry| {
                 if (entry.value.active and !entry.value.callback(entry.value, args)) {
-                    _ = self.dropped.insert(fixed, .{ .key = key, .id = entry.key }) catch |err| {
+                    _ = self.dropped.insert(gpa, .{ .key = key, .id = entry.key }) catch |err| {
                         debug.panic("Drop subscriber err: {}", .{err});
                     };
                 }
             }
 
-            self.clearDrops(fixed);
+            self.clearDrops(gpa);
         }
 
-        pub fn clearDrops(self: *Self, fixed: Allocator) void {
+        pub fn clearDrops(self: *Self, gpa: Allocator) void {
             var dropped = self.dropped.iter();
             while (dropped.next()) |drop| {
                 const maybe_dropped_subscribers = self.subscribers.get_ref(drop.key) orelse {
-                    _ = self.dropped.remove(fixed, drop);
+                    _ = self.dropped.remove(gpa, drop);
                     continue;
                 };
                 var dropped_subscribers = maybe_dropped_subscribers.* orelse {
-                    _ = self.dropped.remove(fixed, drop);
+                    _ = self.dropped.remove(gpa, drop);
                     continue;
                 };
-                _ = dropped_subscribers.remove(fixed, drop.id);
+                _ = dropped_subscribers.remove(gpa, drop.id);
 
-                _ = self.dropped.remove(fixed, drop);
+                _ = self.dropped.remove(gpa, drop);
 
                 if (dropped_subscribers.is_empty()) {
-                    dropped_subscribers.deinit(fixed);
-                    _ = self.subscribers.remove(fixed, drop.key);
+                    dropped_subscribers.deinit(gpa);
+                    _ = self.subscribers.remove(gpa, drop.key);
                 } else {
                     maybe_dropped_subscribers.* = dropped_subscribers;
                 }
             }
         }
 
-        pub fn remove(self: *Self, key: Key, fixed: Allocator) void {
-            if (self.subscribers.remove(fixed, key)) |subscribers| {
+        pub fn remove(self: *Self, key: Key, _: Allocator) void {
+            if (self.subscribers.remove(self.gpa, key)) |subscribers| {
                 if (subscribers) |subs| {
                     var mutable_subs = subs;
-                    mutable_subs.deinit(fixed);
+                    mutable_subs.deinit(self.gpa);
                 }
             }
         }
 
-        pub fn unsubscribe(self: *Self, sub: *const Subscription, fixed: Allocator) !void {
-            var subscribers = self.subscribers.get(sub.key) orelse return;
-            if (subscribers) |*subs| {
-                _ = subs.remove(fixed, sub.id);
+        pub fn unsubscribe(self: *Self, sub: *const Subscription, gpa: Allocator) !void {
+            const maybe_subscribers = self.subscribers.get_ref(sub.key) orelse return;
+            if (maybe_subscribers.*) |*subs| {
+                _ = subs.remove(gpa, sub.id);
                 if (subs.is_empty()) {
-                    subs.deinit(fixed);
-                    _ = self.subscribers.remove(fixed, sub.key);
+                    subs.deinit(self.gpa);
+                    _ = self.subscribers.remove(self.gpa, sub.key);
                 }
             } else {
-                _ = try self.dropped.insert(fixed, .{ .id = sub.id, .key = sub.key });
+                _ = try self.dropped.insert(gpa, .{ .id = sub.id, .key = sub.key });
             }
         }
     };

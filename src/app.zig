@@ -27,11 +27,10 @@ pub const APP_BUFFER_SIZE = 16 * 1024 * 1024;
 
 pub const App = @This();
 
-gpa: Allocator,
-buffer: []u8,
-alloc: heap.FixedBufferAllocator,
-fixed: Allocator,
 io: Io,
+gpa: Allocator,
+alloc: heap.ArenaAllocator,
+arena: Allocator,
 entities: EntityStore,
 observers: Observers,
 peding_updates: u16,
@@ -44,9 +43,6 @@ notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 flushing: bool,
 
 pub fn init(self: *App, gpa: Allocator, io: Io) !void {
-    const buffer = try gpa.alloc(u8, APP_BUFFER_SIZE);
-    errdefer gpa.free(buffer);
-
     self.* = .{
         .worker = undefined,
         .notifications = undefined,
@@ -56,44 +52,43 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
-        .buffer = buffer,
-        .alloc = .init(buffer),
-        .fixed = undefined,
+        .alloc = .init(gpa),
+        .arena = undefined,
         .io = io,
     };
-    self.fixed = self.alloc.threadSafeAllocator();
+    self.arena = self.alloc.allocator();
 
-    try self.worker.init(self.fixed, io);
+    try self.worker.init(self.arena, io);
     errdefer self.worker.deinit();
 
-    try self.executor.init(self.fixed, io);
-    errdefer self.executor.deinit(self.fixed, io);
+    try self.executor.init(self.arena, gpa, io);
+    errdefer self.executor.deinit();
 
-    try self.entities.init(self.fixed, 100);
-    errdefer self.entities.deinit(self.fixed);
+    try self.entities.init(self.arena, 100);
 
-    try self.observers.init(self.fixed);
-    errdefer self.observers.deinit(self.fixed);
+    try self.observers.init(gpa);
+    errdefer self.observers.deinit(gpa);
 
-    try self.notifications.init(self.fixed);
-    errdefer self.notifications.deinit(self.fixed);
+    try self.notifications.init(gpa);
+    errdefer self.notifications.deinit(gpa);
 }
 
 pub fn deinit(self: *App) void {
-    self.executor.deinit(self.fixed, self.io);
     self.worker.deinit();
-    self.notifications.deinit(self.fixed);
-    self.observers.deinit(self.fixed);
-    self.entities.deinit(self.fixed);
-    self.gpa.free(self.buffer);
+    self.executor.deinit();
+
+    self.notifications.deinit(self.gpa);
+    self.observers.deinit(self.gpa);
+
+    self.alloc.deinit();
 }
 
 pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Entity(T) {
     self.start_update();
     defer self.end_update();
 
-    const ptr = try self.fixed.create(T);
-    errdefer self.fixed.destroy(ptr);
+    const ptr = try self.arena.create(T);
+    errdefer self.arena.destroy(ptr);
 
     const id = self.entities.insert(ptr);
     errdefer self.entities.recycle(id);
@@ -142,7 +137,7 @@ pub fn notify(self: *App, entity: anytype) void {
         @compileError("entity must be an Entity(T)");
     }
 
-    _ = self.notifications.insert(self.fixed, entity.id()) catch |err| {
+    _ = self.notifications.insert(self.gpa, entity.id()) catch |err| {
         std.log.err("We cannot notify, err: {}", .{err});
     };
 }
@@ -170,25 +165,23 @@ pub fn flush(self: *App) void {
 }
 
 fn log_buffer_usage(self: *const App) void {
-    const used = self.alloc.end_index;
-    const percent = @as(f64, @floatFromInt(used)) * 100.0 / @as(f64, @floatFromInt(self.buffer.len));
-    std.log.info("app buffer usage: {d:.2}% ({d}/{d} bytes)", .{ percent, used, self.buffer.len });
+    _ = self;
 }
 
 pub fn flush_notifications(self: *App) void {
     var iter = self.notifications.iter();
     while (iter.next()) |id| {
-        self.observers.notify(id, .{self}, self.fixed);
+        self.observers.notify(id, .{self}, self.gpa);
     }
 
-    self.notifications.clear(self.fixed);
+    self.notifications.clear(self.gpa);
 }
 
 pub fn destroy_dropped_entities(self: *App) void {
     while (self.entities.popDrop()) |drop| {
         const ptr, const key, const type_info = drop;
 
-        self.observers.remove(key, self.fixed);
+        self.observers.remove(key, self.gpa);
         type_info.deinit(ptr);
         self.entities.recycle(key);
     }
@@ -227,7 +220,7 @@ pub fn observe(
         entity.id(),
         TypeErased._callback,
         .{ entity.any, args },
-        self.fixed,
+        self.gpa,
     );
 
     const handler = self.worker.@"defer"(TypeErased.enable, .{sub});
@@ -251,8 +244,8 @@ pub fn Context(comptime T: type) type {
             return self.app.gpa;
         }
 
-        pub fn fixed(self: *const @This()) Allocator {
-            return self.app.fixed;
+        pub fn arena(self: *const @This()) Allocator {
+            return self.app.arena;
         }
 
         pub fn update(self: *const @This()) struct { *T, UpdateFrame } {

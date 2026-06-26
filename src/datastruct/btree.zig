@@ -6,17 +6,8 @@ const panic = std.debug.panic;
 const BASE: usize = 6;
 const CAPACITY: usize = 2 * BASE;
 
-//NOTE:
-//we probably can get some performance while merging two or more btrees together,
-//the way this would work is that we would use a priority queue
-//and we would always have a main btree, this btree would be the one that has the bigger pool of nodes
-//and we would need to add bulk operations, this bulk operations assume that the input is a sorted
-//list, and because of the priority queue we would have them sorted
-
 pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K) std.math.Order) type {
     return union(enum) {
-        pub const Pool = std.heap.MemoryPool(Self);
-
         const Self = @This();
 
         Internal: struct { childs: [CAPACITY]*Self = undefined, keys: [CAPACITY]K = undefined, len: u16 = 0, height: usize = 0 },
@@ -120,13 +111,13 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             return .{ .key = key, .child = child };
         }
 
-        fn clone(self: *const Self, pool: *Pool, alloc: Allocator) Allocator.Error!*Self {
+        fn clone(self: *const Self, alloc: Allocator) Allocator.Error!*Self {
             var last_leaf: ?*Self = null;
-            return try self.clone_recursive(pool, alloc, &last_leaf);
+            return try self.clone_recursive(alloc, &last_leaf);
         }
 
-        fn clone_recursive(self: *const Self, pool: *Pool, alloc: Allocator, last_leaf: *?*Self) Allocator.Error!*Self {
-            const new_node = try pool.create(alloc);
+        fn clone_recursive(self: *const Self, alloc: Allocator, last_leaf: *?*Self) Allocator.Error!*Self {
+            const new_node = try alloc.create(Self);
 
             switch (self.*) {
                 .Leaf => |leaf| {
@@ -149,8 +140,8 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         .childs = undefined,
                     } };
                     for (0..internal.len) |i| {
-                        const child = internal.childs[i].clone_recursive(pool, alloc, last_leaf) catch |err| {
-                            new_node.destroy(pool);
+                        const child = internal.childs[i].clone_recursive(alloc, last_leaf) catch |err| {
+                            new_node.destroy(alloc);
                             return err;
                         };
                         new_node.Internal.childs[i] = child;
@@ -212,32 +203,32 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             return &self.Internal.childs;
         }
 
-        pub fn destroy(self: *Self, pool: *Pool) void {
+        pub fn destroy(self: *Self, alloc: Allocator) void {
             switch (self.*) {
                 .Internal => |*internal| {
                     if (internal.len > 0) {
                         for (0..internal.len) |idx| {
-                            internal.childs[idx].destroy(pool);
+                            internal.childs[idx].destroy(alloc);
                         }
                     }
                 },
                 else => {},
             }
-            pool.destroy(self);
+            alloc.destroy(self);
         }
 
-        pub fn append(self: *Self, other: Self, pool: *Pool, alloc: Allocator) !?V {
+        pub fn append(self: *Self, other: Self, alloc: Allocator) !?V {
             if (self.is_empty()) {
                 self.* = other;
             } else if (!other.is_leaf() or other.items().len != 0) {
                 if (self.height() < other.height()) {
                     for (other.childs()) |node| {
-                        return try self.append(node.*, pool, alloc);
+                        return try self.append(node.*, alloc);
                     }
-                } else if (try self.append_recursive(other, pool, alloc)) |res| {
+                } else if (try self.append_recursive(other, alloc)) |res| {
                     switch (res) {
                         .append => |right| {
-                            const left = try pool.create(alloc);
+                            const left = try alloc.create(Self);
                             left.* = self.*;
                             self.* = try Self.from_child_nodes(left, right);
                         },
@@ -266,7 +257,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             append: *Self,
         };
 
-        pub fn append_recursive(self: *Self, other: Self, pool: *Pool, alloc: Allocator) !?Result {
+        pub fn append_recursive(self: *Self, other: Self, alloc: Allocator) !?Result {
             switch (self.*) {
                 .Internal => |*internal| {
                     const height_delta = internal.height - other.height();
@@ -281,7 +272,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         len_to_append = other.len();
                     } else if (height_delta == 1 and !other.is_underflowing()) {
                         keys_to_append[0] = other.keys()[0];
-                        const new_other_node = try pool.create(alloc);
+                        const new_other_node = try alloc.create(Self);
                         new_other_node.* = other;
                         childs_to_append[0] = new_other_node;
                         len_to_append = 1;
@@ -303,7 +294,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         }
 
                         const node_to_append = bkl: {
-                            const res = try internal.childs[idx - 1].append_recursive(other, pool, alloc);
+                            const res = try internal.childs[idx - 1].append_recursive(other, alloc);
                             if (res == null) break :bkl null;
                             switch (res.?) {
                                 .duplicated => |v| return Result{ .duplicated = v },
@@ -380,7 +371,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         internal.keys = left_keys;
                         internal.len = mid;
 
-                        const right_node = try pool.create(alloc);
+                        const right_node = try alloc.create(Self);
                         right_node.* = .{ .Internal = .{ .childs = right_items, .keys = right_keys, .len = childs_len - mid, .height = internal.height } };
                         return Result{ .append = right_node };
                     } else {
@@ -476,7 +467,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         leaf.keys = left_keys;
                         leaf.len = mid;
 
-                        const right_node = try pool.create(alloc);
+                        const right_node = try alloc.create(Self);
                         right_node.* = .{ .Leaf = .{ .items = right_items, .keys = right_keys, .len = new_len - mid, .next = original_next_leaf } };
 
                         leaf.next = right_node;
@@ -565,7 +556,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             }
         }
 
-        pub fn delete(self: *Self, key: K, pool: *Pool, alloc: Allocator) ?V {
+        pub fn delete(self: *Self, key: K, alloc: Allocator) ?V {
             switch (self.*) {
                 .Leaf => |*leaf| {
                     var i: u16 = 0;
@@ -609,12 +600,12 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
 
                     idx -= 1;
 
-                    const removed = internal.childs[idx].delete(key, pool, alloc);
+                    const removed = internal.childs[idx].delete(key, alloc);
 
                     internal.keys[idx] = internal.childs[idx].keys()[0];
 
                     if (internal.childs[idx].is_underflowing()) {
-                        self.rebalance_child(idx, pool, alloc);
+                        self.rebalance_child(idx, alloc);
                     }
 
                     return removed;
@@ -622,7 +613,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             }
         }
 
-        fn rebalance_child(self: *Self, idx: u16, pool: *Pool, alloc: Allocator) void {
+        fn rebalance_child(self: *Self, idx: u16, alloc: Allocator) void {
             const parent = &self.Internal;
             const child = parent.childs[idx];
 
@@ -681,9 +672,9 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                 const sibling = parent.childs[idx - 1];
 
                 _ = self.remove_children(idx);
-                _ = sibling.append_recursive(child.*, pool, alloc) catch {};
+                _ = sibling.append_recursive(child.*, alloc) catch {};
 
-                pool.destroy(child);
+                alloc.destroy(child);
 
                 parent.keys[idx - 1] = sibling.keys()[0];
             }
@@ -692,9 +683,9 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                 const sibling = parent.childs[idx + 1];
 
                 _ = self.remove_children(idx + 1);
-                _ = child.append_recursive(sibling.*, pool, alloc) catch {};
+                _ = child.append_recursive(sibling.*, alloc) catch {};
 
-                pool.destroy(sibling);
+                alloc.destroy(sibling);
 
                 parent.keys[idx] = child.keys()[0];
             }
@@ -711,34 +702,20 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
         root: *Node,
         count: usize = 0,
 
-        pool: Node.Pool,
-
         pub fn init(self: *Self, alloc: Allocator) !void {
-            self.* = .{ .root = undefined, .pool = .empty };
-
-            const root = try self.pool.create(alloc);
+            const root = try alloc.create(Node);
             root.* = .{ .Leaf = .{} };
 
-            self.root = root;
+            self.* = .{ .root = root };
         }
 
         pub fn deinit(self: *Self, alloc: Allocator) void {
-            self.pool.deinit(alloc);
+            self.root.destroy(alloc);
         }
 
         pub fn clone(self: *const Self, alloc: Allocator) !Self {
-            var node = self.pool.arena_state.used_list;
-            var count: u64 = 0;
-            while (node) |n| {
-                count += 1;
-                node = n.next;
-            }
-
-            var pool = try Node.Pool.initCapacity(alloc, count);
-            errdefer pool.deinit(alloc);
-
-            const root = try self.root.clone(&pool, alloc);
-            return .{ .root = root, .count = self.count, .pool = pool };
+            const root = try self.root.clone(alloc);
+            return .{ .root = root, .count = self.count };
         }
 
         pub fn insert(self: *Self, alloc: Allocator, key: K, value: V) !?V {
@@ -747,7 +724,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
 
             node.add_item(key, value);
 
-            return try self.root.append(node, &self.pool, alloc);
+            return try self.root.append(node, alloc);
         }
 
         pub fn get(self: *Self, key: K) ?V {
@@ -755,11 +732,9 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
         }
 
         pub fn clear(self: *Self, alloc: Allocator) void {
-            _ = self.pool.reset(alloc, .retain_capacity);
+            self.root.destroy(alloc);
 
-            const root = self.pool.create(alloc) catch |err| {
-                panic("Unexpected error while creating root: {}", .{err});
-            };
+            const root = alloc.create(Node) catch @panic("Temporal btree clear panic");
             root.* = .{ .Leaf = .{} };
             self.root = root;
             self.count = 0;
@@ -770,12 +745,12 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
         }
 
         pub fn remove(self: *Self, alloc: Allocator, key: K) ?V {
-            const removed = self.root.delete(key, &self.pool, alloc) orelse return null;
+            const removed = self.root.delete(key, alloc) orelse return null;
 
             if (!self.root.is_leaf() and self.root.len() == 1) {
                 const old_root = self.root;
                 self.root = old_root.Internal.childs[0];
-                self.pool.destroy(old_root);
+                alloc.destroy(old_root);
             }
 
             self.count -= 1;
@@ -1112,7 +1087,7 @@ pub fn BPlusSet(comptime K: type, comptime comp: *const fn (a: K, b: K) std.math
         }
     };
 }
-//
+
 fn test_comp(a: usize, b: usize) std.math.Order {
     return std.math.order(a, b);
 }

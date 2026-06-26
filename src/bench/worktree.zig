@@ -19,7 +19,7 @@ const WorktreeScanObserver = struct {
 };
 
 test "Bench Worktree" {
-    const gpa = testing.allocator;
+    const gpa = std.heap.c_allocator;
     const io = testing.io;
 
     var app: App = undefined;
@@ -27,7 +27,7 @@ test "Bench Worktree" {
     defer app.deinit();
 
     var bench: prof.Benchmark = undefined;
-    bench.init(gpa, .{ .max_iter = 1, .name = "WORKTREE" });
+    bench.init(gpa, .{ .stop_ms = 10000, .name = "WORKTREE" });
     defer bench.deinit();
 
     const res = try bench.run(App, &app, gpa, io, initialWorktreeScan);

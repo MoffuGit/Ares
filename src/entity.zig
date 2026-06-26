@@ -90,24 +90,18 @@ pub const EntityStore = struct {
     updates: Updates,
     dropped: std.ArrayList(AnyEntity),
 
-    pub fn init(self: *@This(), fixed: Allocator, capacity: usize) !void {
-        var entities = try Entities.init(fixed, capacity);
-        errdefer entities.deinit(fixed);
+    pub fn init(self: *@This(), arena: Allocator, capacity: usize) !void {
+        var entities = try Entities.init(arena, capacity);
+        errdefer entities.deinit(arena);
 
-        var updates = try Updates.init(fixed, capacity);
-        errdefer updates.deinit(fixed);
+        var updates = try Updates.init(arena, capacity);
+        errdefer updates.deinit(arena);
 
         self.* = .{
             .entities = entities,
             .updates = updates,
-            .dropped = try .initCapacity(fixed, capacity),
+            .dropped = try .initCapacity(arena, capacity),
         };
-    }
-
-    pub fn deinit(self: *@This(), fixed: Allocator) void {
-        self.entities.deinit(fixed);
-        self.updates.deinit(fixed);
-        self.dropped.deinit(fixed);
     }
 
     pub fn insert(self: *@This(), ptr: *anyopaque) EntityId {
@@ -156,12 +150,15 @@ pub const EntityStore = struct {
 
 test "entity store returns inserted data and rejects wrong type" {
     const allocator = std.testing.allocator;
+    var alloc = std.heap.ArenaAllocator.init(allocator);
+    defer alloc.deinit();
+
+    const arena = alloc.allocator();
 
     const A = struct { value: u32 };
 
     var store: EntityStore = undefined;
-    try store.init(allocator, 10);
-    defer store.deinit(allocator);
+    try store.init(arena, 10);
 
     const ptr = try allocator.create(A);
     defer allocator.destroy(ptr);
@@ -176,12 +173,15 @@ test "entity store returns inserted data and rejects wrong type" {
 
 test "closing entity records id and type when ref count reaches zero" {
     const allocator = std.testing.allocator;
+    var alloc = std.heap.ArenaAllocator.init(allocator);
+    defer alloc.deinit();
+
+    const arena = alloc.allocator();
 
     const A = struct { value: u32 };
 
     var store: EntityStore = undefined;
-    try store.init(allocator, 10);
-    defer store.deinit(allocator);
+    try store.init(arena, 10);
 
     const ptr = try allocator.create(A);
     defer allocator.destroy(ptr);
@@ -216,8 +216,7 @@ test "dropping arena-backed entity calls optional deinit" {
     };
 
     var store: EntityStore = undefined;
-    try store.init(allocator, 10);
-    defer store.deinit(allocator);
+    try store.init(arena.allocator(), 10);
 
     var deinit_called = false;
     const ptr = try arena.allocator().create(A);
@@ -239,12 +238,15 @@ test "dropping arena-backed entity calls optional deinit" {
 
 test "destroyed entities recycle ids" {
     const allocator = std.testing.allocator;
+    var alloc = std.heap.ArenaAllocator.init(allocator);
+    defer alloc.deinit();
+
+    const arena = alloc.allocator();
 
     const A = struct { value: u32 };
 
     var store: EntityStore = undefined;
-    try store.init(allocator, 10);
-    defer store.deinit(allocator);
+    try store.init(arena, 10);
 
     const ptr = try allocator.create(A);
     defer allocator.destroy(ptr);

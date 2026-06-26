@@ -53,7 +53,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, arena: Allocator, o
     errdefer self.snapshot.deinit(self.gpa);
 
     const scanner = try self.group.arena().create(Scanner);
-    try scanner.init(self.group.arena(), &self.snapshot, io);
+    try scanner.init(self.group.arena(), &self.snapshot, self.gpa, io);
     self.scanner = scanner;
 
     self.handler, const waker = try ctx.await(handleUpdates, .{});
@@ -64,6 +64,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, arena: Allocator, o
 }
 
 pub fn deinit(self: *Worktree) void {
+    self.snapshot.deinit(self.gpa);
     self.scanner.stop();
     self.handler.cancel();
     self.group.cancel();
@@ -86,6 +87,7 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
         switch (buffer[idx]) {
             .started => self.scanning = true,
             .updated => |updated| {
+                self.snapshot.deinit(self.gpa);
                 self.snapshot = updated.snapshot;
                 self.scanning = updated.scanning;
             },
