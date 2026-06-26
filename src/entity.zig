@@ -134,14 +134,14 @@ pub const EntityStore = struct {
         self.entities.recycle(id);
     }
 
-    pub fn collect(self: *@This(), fixed: Allocator) !std.ArrayList(struct { *anyopaque, EntityId, TypeId }) {
+    pub fn collect(self: *@This(), gpa: Allocator) !std.ArrayList(struct { *anyopaque, EntityId, TypeId }) {
         var entities: std.ArrayList(struct { *anyopaque, EntityId, TypeId }) = .empty;
-        errdefer entities.deinit(fixed);
+        errdefer entities.deinit(gpa);
 
         while (self.dropped.pop()) |entity| {
             const ptr = self.entities.remove(entity.id) orelse continue;
             _ = self.updates.remove(entity.id);
-            try entities.append(fixed, .{ ptr, entity.id, entity.type_id });
+            try entities.append(gpa, .{ ptr, entity.id, entity.type_id });
         }
 
         return entities;
