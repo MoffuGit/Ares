@@ -6,6 +6,7 @@ const testing = std.testing;
 const debug = std.debug;
 const atomic = std.atomic;
 const posix = std.posix;
+const builtin = @import("builtin");
 const system = posix.system;
 
 const Loop = @import("loop.zig");
@@ -114,6 +115,8 @@ pub const Executor = struct {
     }
 
     pub fn deinit(self: *@This()) void {
+        if (builtin.mode == .Debug) self.io.sleep(.fromMilliseconds(50), .real) catch {};
+
         for (self.stops) |stop| {
             const notifier = stop.@"1";
             notifier.wake() catch |err| {
@@ -529,9 +532,7 @@ pub const Group = struct {
             .executor = executor,
             .pending = .init(0),
             .state = .init(.open),
-            //BUG:
-            //this is wrong and acc a lot of memory
-            .alloc = .init(executor.arena),
+            .alloc = .init(executor.gpa),
             .handlers = null,
         };
     }
