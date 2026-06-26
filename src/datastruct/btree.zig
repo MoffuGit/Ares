@@ -6,6 +6,13 @@ const panic = std.debug.panic;
 const BASE: usize = 6;
 const CAPACITY: usize = 2 * BASE;
 
+//NOTE:
+//we probably can get some performance while merging two or more btrees together,
+//the way this would work is that we would use a priority queue
+//and we would always have a main btree, this btree would be the one that has the bigger pool of nodes
+//and we would need to add bulk operations, this bulk operations assume that the input is a sorted
+//list, and because of the priority queue we would have them sorted
+
 pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K) std.math.Order) type {
     return union(enum) {
         pub const Pool = std.heap.MemoryPool(Self);

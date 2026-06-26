@@ -110,7 +110,7 @@ pub const Executor = struct {
         return result;
     }
 
-    fn releaseGroup(self: *@This(), _group: *Group) void {
+    fn reclaimGroup(self: *@This(), _group: *Group) void {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
 
@@ -236,7 +236,7 @@ pub const Worker = struct {
         function: anytype,
         context: anytype,
         data: Loop.Read,
-    ) !Handler {
+    ) Handler {
         const Context = @TypeOf(context);
 
         const TypeErased = struct {
@@ -255,7 +255,7 @@ pub const Worker = struct {
 
         const task = self.new(context);
 
-        try self.loop.read(&task.completion, TypeErased.complete, task, data);
+        self.loop.read(&task.completion, TypeErased.complete, task, data);
         return .{ .task = task };
     }
 
@@ -263,19 +263,16 @@ pub const Worker = struct {
         self: *Worker,
         function: anytype,
         context: anytype,
-        comptime op_tag: std.meta.Tag(Operation),
-        op_data: @FieldType(Operation, @tagName(op_tag)),
-        resolver: anytype,
-    ) !Handler {
+    ) Handler {
         const Context = @TypeOf(context);
 
         const TypeErased = struct {
-            fn complete(task: *Task, _: *Completion, res: Loop.Result) bool {
+            fn complete(task: *Task, _: *Completion) bool {
                 const _context: *Context = @ptrCast(@alignCast(&task.context));
                 const rearm = @call(
                     .auto,
                     function,
-                    _context.* ++ .{@field(res, @tagName(op_tag))},
+                    _context.*,
                 );
                 if (!rearm) task.complete();
 
@@ -285,13 +282,10 @@ pub const Worker = struct {
 
         const task = self.new(context);
 
-        try self.loop.concurrent(
+        self.loop.concurrent(
             &task.completion,
             TypeErased.complete,
             task,
-            op_tag,
-            op_data,
-            resolver,
         );
         return .{ .task = task };
     }
@@ -421,7 +415,7 @@ pub const Task = struct {
     fn cancel(self: *Task) void {
         var old = self.state.load(.acquire);
         while (true) {
-            if (!old.handler) return;
+            if (old.canceled) return;
 
             var new = old;
             new.handler = false;
@@ -522,6 +516,7 @@ pub const Handler = struct {
 
 //NOTE:
 //we need to stop new handlers to be created if the state is closing
+//and we need to review the logic of the mutex
 pub const Group = struct {
     const State = enum(u8) { open, closing, drained };
     const Node = struct {
@@ -532,7 +527,7 @@ pub const Group = struct {
     executor: *Executor,
     pending: atomic.Value(usize),
     state: atomic.Value(State),
-    arena: heap.ArenaAllocator,
+    alloc: heap.ArenaAllocator,
     handlers: ?*Node,
     io: Io,
     mutex: Io.Mutex,
@@ -544,9 +539,13 @@ pub const Group = struct {
             .executor = executor,
             .pending = .init(0),
             .state = .init(.open),
-            .arena = .init(executor.fixed),
+            .alloc = .init(executor.fixed),
             .handlers = null,
         };
+    }
+
+    pub fn arena(self: *Group) Allocator {
+        return self.alloc.allocator();
     }
 
     pub fn @"defer"(
@@ -600,14 +599,11 @@ pub const Group = struct {
         self: *Group,
         function: anytype,
         context: anytype,
-        comptime op_tag: std.meta.Tag(Operation),
-        op_data: @FieldType(Operation, @tagName(op_tag)),
-        resolver: anytype,
-    ) !void {
+    ) void {
         const Context = @TypeOf(context);
         const Wrapper = struct {
-            fn complete(group: *Group, user_context: Context, result: @FieldType(Loop.Result, @tagName(op_tag))) bool {
-                const rearm = @call(.auto, function, user_context ++ .{ group, result });
+            fn complete(group: *Group, user_context: Context) bool {
+                const rearm = @call(.auto, function, user_context ++ .{group});
                 if (!rearm) group.finishTask();
                 return rearm;
             }
@@ -616,27 +612,22 @@ pub const Group = struct {
         _ = self.pending.fetchAdd(1, .monotonic);
 
         const worker = self.executor.worker();
-        const handler = try worker.concurrent(
+        const handler = worker.concurrent(
             Wrapper.complete,
             .{ self, context },
-            op_tag,
-            op_data,
-            resolver,
         );
         self.join(handler);
     }
 
     pub fn close(self: *Group) void {
-        self.state.store(.closing, .release);
-        if (self.pending.load(.acquire) == 0) self.drain();
-    }
-
-    pub fn detach(self: *Group) void {
         var node = self.handlers;
         self.handlers = null;
         while (node) |current| : (node = current.next) {
             current.handler.detach();
         }
+
+        self.state.store(.closing, .release);
+        if (self.pending.load(.acquire) == 0) self.deinit();
     }
 
     pub fn cancel(self: *Group) void {
@@ -645,13 +636,20 @@ pub const Group = struct {
         while (node) |current| : (node = current.next) {
             current.handler.cancel();
         }
+
+        self.state.store(.closing, .release);
+        if (self.pending.load(.acquire) == 0) self.deinit();
+    }
+
+    pub fn closing(self: *Group) bool {
+        return self.state.load(.acquire) != .open;
     }
 
     fn join(self: *Group, handler: Handler) void {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
 
-        const node = self.arena.allocator().create(Node) catch {
+        const node = self.alloc.allocator().create(Node) catch {
             @panic("BackgroundExecutor Group Handlers Overflow");
         };
         node.* = .{ .handler = handler, .next = self.handlers };
@@ -663,15 +661,15 @@ pub const Group = struct {
         debug.assert(old > 0);
 
         if (old == 1 and self.state.load(.acquire) == .closing) {
-            return self.drain();
+            return self.deinit();
         }
     }
 
-    fn drain(self: *Group) void {
+    fn deinit(self: *Group) void {
         if (self.state.swap(.drained, .acq_rel) == .drained) return;
 
-        _ = self.arena.deinit();
-        self.executor.releaseGroup(self);
+        _ = self.alloc.deinit();
+        self.executor.reclaimGroup(self);
     }
 };
 
@@ -778,7 +776,7 @@ test "read task completes and stays alive until handler detaches" {
     var calls: u32 = 0;
     var bytes_read: usize = 0;
 
-    var handler = try worker.read(
+    var handler = worker.read(
         testReadTask,
         .{ &calls, &bytes_read },
         .{
@@ -867,6 +865,12 @@ test "task can detach" {
     try testing.expectEqual(@as(u32, 1), calls);
 }
 
+fn testDeferTaskGroup(calls: *u32, _: *Group, result: anyerror!void) bool {
+    result catch return false;
+    calls.* += 1;
+    return false;
+}
+
 test "group defer completes" {
     const gpa = testing.allocator;
     const io = testing.io;
@@ -878,10 +882,15 @@ test "group defer completes" {
     var calls: u32 = 0;
     const group = executor.group();
 
-    group.@"defer"(testDeferTask, .{&calls});
+    group.@"defer"(testDeferTaskGroup, .{&calls});
     group.close();
 
     try testing.expectEqual(@as(u32, 1), calls);
+}
+
+fn testConcurrentTaskGroup(calls: *u32, _: *Group) bool {
+    calls.* += 1;
+    return false;
 }
 
 test "group concurrent completes" {
@@ -895,12 +904,9 @@ test "group concurrent completes" {
     var calls: u32 = 0;
     const group = executor.group();
 
-    try group.concurrent(
-        testMachTask,
+    group.concurrent(
+        testConcurrentTaskGroup,
         .{&calls},
-        .@"defer",
-        {},
-        testGroupConcurrentResolve,
     );
     group.close();
 

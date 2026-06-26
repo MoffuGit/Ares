@@ -246,7 +246,38 @@ pub fn submit(
     self.queues.push(.submissions, completion);
 }
 
-pub fn concurrent(
+pub fn concurrent(self: *Loop, completion: *Completion, callback: anytype, context: anytype) void {
+    const Context = @TypeOf(context);
+
+    const TypeErased = struct {
+        fn _concurrent(_loop: *Loop, _completion: *Completion) void {
+            const _context: Context = @ptrCast(@alignCast(_completion.context));
+            const result = @call(.auto, callback, .{ _context, _completion });
+
+            _completion.result = .{ .concurrent = result };
+            _completion.state = .completed;
+
+            _loop.queues.push(.completions, _completion);
+        }
+
+        fn complete(_: *Loop, _completion: *Completion) bool {
+            return _completion.result.?.concurrent catch false;
+        }
+    };
+
+    completion.* = .{
+        .state = .submitted,
+        .operation = .concurrent,
+        .concurrent = TypeErased._concurrent,
+        .context = context,
+        .callback = TypeErased.complete,
+        .next = null,
+    };
+
+    self.queues.push(.concurrent, completion);
+}
+
+pub fn submitConcurrent(
     self: *Loop,
     completion: *Completion,
     callback: anytype,
@@ -254,7 +285,7 @@ pub fn concurrent(
     comptime op_tag: meta.Tag(Operation),
     op_data: @FieldType(Operation, @tagName(op_tag)),
     resolver: anytype,
-) !void {
+) void {
     const Context = @TypeOf(context);
 
     const TypeErased = struct {
@@ -362,8 +393,8 @@ pub fn read(
     function: anytype,
     context: anytype,
     data: Read,
-) !void {
-    try self.concurrent(
+) void {
+    self.submitConcurrent(
         completion,
         function,
         context,
@@ -423,6 +454,7 @@ pub const Operation = union(OperationType) {
     read: Read,
     machport: MachPort,
     cancel: *Completion,
+    concurrent: void,
 };
 
 const OperationType = enum {
@@ -431,6 +463,7 @@ const OperationType = enum {
     read,
     machport,
     cancel,
+    concurrent,
 };
 
 const Canceled = error{Canceled};
@@ -442,6 +475,7 @@ pub const Result = union(OperationType) {
     read: ReadError!usize,
     machport: Canceled!void,
     cancel: void,
+    concurrent: Canceled!bool,
 };
 
 const State = enum {
@@ -483,12 +517,13 @@ pub const Completion = struct {
             .read => self.result = .{ .read = error.Canceled },
             .@"defer" => self.result = .{ .@"defer" = error.Canceled },
             .machport => self.result = .{ .machport = error.Canceled },
+            .concurrent => self.result = .{ .concurrent = error.Canceled },
         }
     }
 
     pub fn kevent(self: *Completion, event: *Kevent) void {
         switch (self.operation) {
-            .read, .cancel, .noop, .@"defer" => panic("{s} operation reached the submissions queueu", .{@tagName(self.operation)}),
+            .read, .cancel, .noop, .concurrent, .@"defer" => panic("{s} operation reached the submissions queueu", .{@tagName(self.operation)}),
             .machport => |m| {
                 const buffer: []u8 = switch (m.buffer) {
                     .slice => |slice| slice,
@@ -555,7 +590,7 @@ test "read" {
     var completion: Completion = .noop;
     var called = false;
 
-    try loop.read(
+    loop.read(
         &completion,
         struct {
             fn read(_called: *bool, _: *Completion, _: Result) bool {
@@ -598,7 +633,7 @@ test "read rearm" {
     var completion: Completion = .noop;
     var calls: usize = 0;
 
-    try loop.read(
+    loop.read(
         &completion,
         struct {
             fn read(_calls: *usize, _: *Completion, res: Result) bool {
