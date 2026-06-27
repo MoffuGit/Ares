@@ -9,7 +9,6 @@ const builtin = @import("builtin");
 
 const App = @import("../app.zig");
 const Executor = App.Executor;
-const ch = @import("../channel.zig");
 const Snapshot = @import("snapshot.zig");
 
 const UPDATE_INTERVAL: Io.Duration = if (builtin.mode == .Debug) .fromSeconds(5) else .fromMilliseconds(100);

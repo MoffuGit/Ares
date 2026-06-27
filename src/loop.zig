@@ -17,7 +17,6 @@ const datastruct = @import("datastruct.zig");
 const multi_mpsc = datastruct.multi_mpsc;
 
 const Queues = union(enum) {
-    concurrent: Completion,
     cancellations: Completion,
     canceling: Completion,
     completions: Completion,
@@ -33,7 +32,6 @@ inflight: usize,
 stopped: bool,
 
 io: Io,
-group: Io.Group,
 
 pub fn init(self: *Loop, io: Io) !void {
     const kq = posix.system.kqueue();
@@ -49,15 +47,12 @@ pub fn init(self: *Loop, io: Io) !void {
         .queues = undefined,
         .inflight = 0,
         .stopped = false,
-        .group = .init,
     };
     self.queues.init();
 }
 
 pub fn deinit(self: *Loop) void {
     assert(self.kq > -1);
-
-    self.group.cancel(self.io);
 
     _ = posix.system.close(self.kq);
     self.kq = -1;
@@ -79,9 +74,7 @@ pub fn done(self: *Loop) bool {
     return self.stopped or
         (self.queues.empty(.submissions) and
             self.queues.empty(.completions) and
-            self.queues.empty(.concurrent) and
-            self.inflight == 0 and
-            self.group.token.load(.acquire) == null);
+            self.inflight == 0);
 }
 
 pub fn stop(self: *Loop) void {
@@ -91,16 +84,6 @@ pub fn stop(self: *Loop) void {
 pub fn flush(self: *Loop, _: bool) !void {
     while (self.queues.pop(.cancellations)) |c| {
         _ = c.callback(self, c);
-    }
-
-    while (self.queues.pop(.concurrent)) |c| {
-        const TypeErased = struct {
-            fn _concurrent(_loop: *Loop, _completion: *Completion) void {
-                _completion.concurrent.?(_loop, _completion);
-            }
-        };
-        c.state = .concurrent;
-        try self.group.concurrent(self.io, TypeErased._concurrent, .{ self, c });
     }
 
     var events: [256]Kevent = undefined;
@@ -246,82 +229,6 @@ pub fn submit(
     self.queues.push(.submissions, completion);
 }
 
-pub fn concurrent(self: *Loop, completion: *Completion, callback: anytype, context: anytype) void {
-    const Context = @TypeOf(context);
-
-    const TypeErased = struct {
-        fn _concurrent(_loop: *Loop, _completion: *Completion) void {
-            const _context: Context = @ptrCast(@alignCast(_completion.context));
-            const result = @call(.auto, callback, .{ _context, _completion });
-
-            _completion.result = .{ .concurrent = result };
-            _completion.state = .completed;
-
-            _loop.queues.push(.completions, _completion);
-        }
-
-        fn complete(_: *Loop, _completion: *Completion) bool {
-            return _completion.result.?.concurrent catch false;
-        }
-    };
-
-    completion.* = .{
-        .state = .submitted,
-        .operation = .concurrent,
-        .concurrent = TypeErased._concurrent,
-        .context = context,
-        .callback = TypeErased.complete,
-        .next = null,
-    };
-
-    self.queues.push(.concurrent, completion);
-}
-
-pub fn submitConcurrent(
-    self: *Loop,
-    completion: *Completion,
-    callback: anytype,
-    context: anytype,
-    comptime op_tag: meta.Tag(Operation),
-    op_data: @FieldType(Operation, @tagName(op_tag)),
-    resolver: anytype,
-) void {
-    const Context = @TypeOf(context);
-
-    const TypeErased = struct {
-        fn _concurrent(_loop: *Loop, _completion: *Completion) void {
-            const result = @call(.auto, resolver, .{@field(_completion.operation, @tagName(op_tag))});
-
-            _completion.result = result;
-            _completion.state = .completed;
-
-            _loop.queues.push(.completions, _completion);
-        }
-
-        fn complete(_loop: *Loop, _completion: *Completion) bool {
-            const _context: Context = @ptrCast(@alignCast(_completion.context));
-
-            if (@call(.auto, callback, .{ _context, _completion, _completion.result.? })) {
-                _completion.state = .submitted;
-                _loop.queues.push(.concurrent, _completion);
-            }
-
-            return false;
-        }
-    };
-
-    completion.* = .{
-        .state = .submitted,
-        .operation = @unionInit(Operation, @tagName(op_tag), op_data),
-        .concurrent = TypeErased._concurrent,
-        .context = context,
-        .callback = TypeErased.complete,
-        .next = null,
-    };
-
-    self.queues.push(.concurrent, completion);
-}
-
 pub fn @"defer"(
     self: *Loop,
     completion: *Completion,
@@ -362,7 +269,7 @@ pub fn cancel(
             const _target = _completion.operation.cancel;
 
             switch (_target.state) {
-                .idle, .canceled, .concurrent => {},
+                .idle, .canceled => {},
                 .completed, .submitted => _target.canceled(),
                 .active => {
                     _target.state = .canceled;
@@ -385,31 +292,6 @@ pub fn cancel(
     };
 
     self.queues.push(.cancellations, completion);
-}
-
-pub fn read(
-    self: *Loop,
-    completion: *Completion,
-    function: anytype,
-    context: anytype,
-    data: Read,
-) void {
-    self.submitConcurrent(
-        completion,
-        function,
-        context,
-        .read,
-        data,
-        struct {
-            fn read(op: Read) Result {
-                const buffer: []u8 = switch (op.buffer) {
-                    .slice => |slice| slice,
-                    .array => |array| @constCast(&array),
-                };
-                return .{ .read = posix.read(op.fd, buffer) };
-            }
-        }.read,
-    );
 }
 
 pub fn mach(
@@ -438,11 +320,6 @@ pub const ReadBuffer = union(enum) {
     array: [32]u8,
 };
 
-pub const Read = struct {
-    fd: posix.fd_t,
-    buffer: ReadBuffer,
-};
-
 pub const MachPort = struct {
     port: posix.system.mach_port_name_t,
     buffer: ReadBuffer,
@@ -451,35 +328,27 @@ pub const MachPort = struct {
 pub const Operation = union(OperationType) {
     noop: void,
     @"defer": void,
-    read: Read,
     machport: MachPort,
     cancel: *Completion,
-    concurrent: void,
 };
 
 const OperationType = enum {
     noop,
     @"defer",
-    read,
     machport,
     cancel,
-    concurrent,
 };
 
 const Canceled = error{Canceled};
-const ReadError = Canceled || posix.ReadError;
 
 pub const Result = union(OperationType) {
     noop: void,
     @"defer": Canceled!void,
-    read: ReadError!usize,
     machport: Canceled!void,
     cancel: void,
-    concurrent: Canceled!bool,
 };
 
 const State = enum {
-    concurrent,
     idle,
     submitted,
     canceled,
@@ -500,7 +369,6 @@ pub const Completion = struct {
 
     context: ?*anyopaque,
     callback: *const fn (loop: *Loop, completion: *Completion) bool,
-    concurrent: ?*const fn (*Loop, *Completion) void = null,
 
     next: ?*Completion = null,
 
@@ -514,16 +382,14 @@ pub const Completion = struct {
         self.state = .completed;
         switch (self.operation) {
             .noop, .cancel => {},
-            .read => self.result = .{ .read = error.Canceled },
             .@"defer" => self.result = .{ .@"defer" = error.Canceled },
             .machport => self.result = .{ .machport = error.Canceled },
-            .concurrent => self.result = .{ .concurrent = error.Canceled },
         }
     }
 
     pub fn kevent(self: *Completion, event: *Kevent) void {
         switch (self.operation) {
-            .read, .cancel, .noop, .concurrent, .@"defer" => panic("{s} operation reached the submissions queueu", .{@tagName(self.operation)}),
+            .cancel, .noop, .@"defer" => panic("{s} operation reached the submissions queueu", .{@tagName(self.operation)}),
             .machport => |m| {
                 const buffer: []u8 = switch (m.buffer) {
                     .slice => |slice| slice,
@@ -568,92 +434,6 @@ test "defer" {
     try loop.run(.no_wait);
 
     try testing.expectEqual(context, 1);
-}
-
-test "read" {
-    const io = testing.io;
-
-    var loop: Loop = undefined;
-    try loop.init(io);
-    defer loop.deinit();
-
-    const contents = "hello from loop";
-    var tmp = testing.tmpDir(.{});
-    defer tmp.cleanup();
-
-    const file = try tmp.dir.createFile(io, "read.txt", .{ .read = true });
-    defer file.close(io);
-    try file.writeStreamingAll(io, contents);
-    try testing.expectEqual(@as(i64, 0), posix.system.lseek(file.handle, 0, posix.SEEK.SET));
-
-    var buffer: [contents.len]u8 = undefined;
-    var completion: Completion = .noop;
-    var called = false;
-
-    loop.read(
-        &completion,
-        struct {
-            fn read(_called: *bool, _: *Completion, _: Result) bool {
-                _called.* = true;
-                return false;
-            }
-        }.read,
-        &called,
-        .{
-            .fd = file.handle,
-            .buffer = .{ .slice = &buffer },
-        },
-    );
-
-    try testing.expect(!called);
-
-    try loop.run(.until_done);
-
-    try testing.expect(called);
-    try testing.expectEqualStrings(contents, &buffer);
-}
-
-test "read rearm" {
-    const io = testing.io;
-
-    var loop: Loop = undefined;
-    try loop.init(io);
-    defer loop.deinit();
-
-    const contents = "hello again";
-    var tmp = testing.tmpDir(.{});
-    defer tmp.cleanup();
-
-    const file = try tmp.dir.createFile(io, "read-rearm.txt", .{ .read = true });
-    defer file.close(io);
-    try file.writeStreamingAll(io, contents ++ contents);
-    try testing.expectEqual(@as(i64, 0), posix.system.lseek(file.handle, 0, posix.SEEK.SET));
-
-    var buffer: [contents.len]u8 = undefined;
-    var completion: Completion = .noop;
-    var calls: usize = 0;
-
-    loop.read(
-        &completion,
-        struct {
-            fn read(_calls: *usize, _: *Completion, res: Result) bool {
-                const read_len = res.read catch @panic("read failed");
-
-                _calls.* += 1;
-                return read_len > 0;
-            }
-        }.read,
-        &calls,
-        .{
-            .fd = file.handle,
-            .buffer = .{ .slice = &buffer },
-        },
-    );
-
-    try loop.run(.until_done);
-
-    try testing.expectEqual(@as(usize, 3), calls);
-    try testing.expectEqualStrings(contents, &buffer);
 }
 
 test "mach port" {

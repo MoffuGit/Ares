@@ -69,32 +69,12 @@ pub const Executor = struct {
         return self.worker().@"defer"(function, context);
     }
 
-    pub fn read(
-        self: *@This(),
-        function: anytype,
-        context: anytype,
-        data: Read,
-    ) !Handler {
-        return try self.worker().read(function, context, data);
-    }
-
-    pub fn concurrent(
-        self: *@This(),
-        function: anytype,
-        context: anytype,
-        comptime op_tag: std.meta.Tag(Operation),
-        op_data: @FieldType(Operation, @tagName(op_tag)),
-        resolver: anytype,
-    ) !Handler {
-        return try self.worker().concurrent(function, context, op_tag, op_data, resolver);
-    }
-
     pub fn await(
         self: *@This(),
         function: anytype,
         context: anytype,
     ) !Await {
-        return try self.worker().await(function, context);
+        return try self.worker.await(function, context);
     }
 
     pub fn group(self: *@This()) *Group {
@@ -178,7 +158,6 @@ pub const Worker = struct {
 
     fn stop(self: *Worker, _: anyerror!void) bool {
         self.loop.stop();
-        self.loop.group.cancel(self.io);
 
         return false;
     }
@@ -204,65 +183,6 @@ pub const Worker = struct {
         const task = self.new(context);
 
         self.loop.@"defer"(&task.completion, TypeErased.complete, task);
-        return .{ .task = task };
-    }
-
-    pub fn read(
-        self: *Worker,
-        function: anytype,
-        context: anytype,
-        data: Loop.Read,
-    ) Handler {
-        const Context = @TypeOf(context);
-
-        const TypeErased = struct {
-            fn complete(task: *Task, _: *Completion, res: Loop.Result) bool {
-                const _context: *Context = @ptrCast(@alignCast(&task.context));
-                const rearm = @call(
-                    .auto,
-                    function,
-                    _context.* ++ .{res.read},
-                );
-                if (!rearm) task.complete();
-
-                return rearm;
-            }
-        };
-
-        const task = self.new(context);
-
-        self.loop.read(&task.completion, TypeErased.complete, task, data);
-        return .{ .task = task };
-    }
-
-    pub fn concurrent(
-        self: *Worker,
-        function: anytype,
-        context: anytype,
-    ) Handler {
-        const Context = @TypeOf(context);
-
-        const TypeErased = struct {
-            fn complete(task: *Task, _: *Completion) bool {
-                const _context: *Context = @ptrCast(@alignCast(&task.context));
-                const rearm = @call(
-                    .auto,
-                    function,
-                    _context.*,
-                );
-                if (!rearm) task.complete();
-
-                return rearm;
-            }
-        };
-
-        const task = self.new(context);
-
-        self.loop.concurrent(
-            &task.completion,
-            TypeErased.complete,
-            task,
-        );
         return .{ .task = task };
     }
 
@@ -565,29 +485,6 @@ pub const Group = struct {
         return waker;
     }
 
-    pub fn concurrent(
-        self: *Group,
-        function: anytype,
-        context: anytype,
-    ) void {
-        const Context = @TypeOf(context);
-        const Wrapper = struct {
-            fn complete(group: *Group, user_context: Context) bool {
-                const rearm = @call(.auto, function, user_context ++ .{group});
-                if (!rearm) group.finishTask();
-                return rearm;
-            }
-        };
-
-        _ = self.pending.fetchAdd(1, .monotonic);
-
-        const handler = self.executor.worker.concurrent(
-            Wrapper.complete,
-            .{ self, context },
-        );
-        self.join(handler);
-    }
-
     pub fn close(self: *Group) void {
         var node = self.handlers;
         self.handlers = null;
@@ -684,12 +581,6 @@ fn testDeferTask(calls: *u32, result: anyerror!void) bool {
     return false;
 }
 
-fn testReadTask(calls: *u32, bytes_read: *usize, result: anyerror!usize) bool {
-    calls.* += 1;
-    bytes_read.* = result catch 0;
-    return false;
-}
-
 fn testMachTask(calls: *u32, result: anyerror!void) bool {
     if (result != error.Canceled) {
         calls.* += 1;
@@ -697,11 +588,6 @@ fn testMachTask(calls: *u32, result: anyerror!void) bool {
 
     return false;
 }
-
-fn testGroupConcurrentResolve(_: void) Loop.Result {
-    return .{ .@"defer" = {} };
-}
-
 test "task completes and stays alive until handler detaches" {
     const gpa = testing.allocator;
     const io = testing.io;
@@ -725,53 +611,6 @@ test "task completes and stays alive until handler detaches" {
 
     handler.cancel();
 
-    worker.run(.until_done);
-
-    try testing.expectEqual(@as(u32, 1), calls);
-}
-
-test "read task completes and stays alive until handler detaches" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-
-    var alloc = heap.ArenaAllocator.init(gpa);
-    defer alloc.deinit();
-
-    const arena = alloc.allocator();
-
-    var worker: Worker = undefined;
-    try worker.init(arena, io);
-    defer worker.deinit();
-
-    const contents = "hello from executor";
-    var tmp = testing.tmpDir(.{});
-    defer tmp.cleanup();
-
-    const file = try tmp.dir.createFile(io, "read.txt", .{ .read = true });
-    defer file.close(io);
-    try file.writeStreamingAll(io, contents);
-    try testing.expectEqual(@as(i64, 0), std.posix.system.lseek(file.handle, 0, std.posix.SEEK.SET));
-
-    var buffer: [contents.len]u8 = undefined;
-    var calls: u32 = 0;
-    var bytes_read: usize = 0;
-
-    var handler = worker.read(
-        testReadTask,
-        .{ &calls, &bytes_read },
-        .{
-            .fd = file.handle,
-            .buffer = .{ .slice = &buffer },
-        },
-    );
-
-    worker.run(.until_done);
-
-    try testing.expectEqual(@as(u32, 1), calls);
-    try testing.expectEqual(contents.len, bytes_read);
-    try testing.expectEqualStrings(contents, &buffer);
-
-    handler.cancel();
     worker.run(.until_done);
 
     try testing.expectEqual(@as(u32, 1), calls);
@@ -883,38 +722,6 @@ test "group defer completes" {
     const group = executor.group();
 
     group.@"defer"(testDeferTaskGroup, .{&calls});
-    group.close();
-
-    try io.sleep(.fromMilliseconds(10), .real);
-
-    try testing.expectEqual(@as(u32, 1), calls);
-}
-
-fn testConcurrentTaskGroup(calls: *u32, _: *Group) bool {
-    calls.* += 1;
-    return false;
-}
-
-test "group concurrent completes" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-
-    var alloc = heap.ArenaAllocator.init(gpa);
-    defer alloc.deinit();
-
-    const arena = alloc.allocator();
-
-    var executor: Executor = undefined;
-    try executor.init(arena, gpa, io);
-    defer executor.deinit();
-
-    var calls: u32 = 0;
-    const group = executor.group();
-
-    group.concurrent(
-        testConcurrentTaskGroup,
-        .{&calls},
-    );
     group.close();
 
     try io.sleep(.fromMilliseconds(10), .real);
