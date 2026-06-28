@@ -46,13 +46,24 @@ pub const TaskPool = struct {
         return task;
     }
 
-    pub fn cancelation(self: *TaskPool, id: TaskId, function: anytype, context: anytype) *Completion {
+    pub fn cancelation(self: *TaskPool, id: TaskId) *Completion {
         self.lock();
         defer self.unlock();
 
         const task = (self.active.get(id) orelse return).*;
         const completion = self.cancelations.create(undefined) catch @panic("Cancel Overflow");
-        completion.cancel(&task.completion, function, context);
+        completion.cancel(
+            &task.completion,
+            struct {
+                fn cancel(t: *Task, c: *Completion) void {
+                    t.pool.lock();
+                    defer t.pool.unlock();
+
+                    t.pool.cancelations.destroy(c);
+                }
+            }.cancel,
+            task,
+        );
         return completion;
     }
 
@@ -81,7 +92,6 @@ pub const Task = struct {
     completion: Completion = .noop,
     context: [MAX_SIZE]u8 align(MAX_ALIGNMENT) = undefined,
     arena: heap.ArenaAllocator,
-    next: ?*Task = null,
 
     pub fn destroy(self: *Task) void {
         self.arena.deinit();
