@@ -13,12 +13,9 @@ pub const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
-const exe = @import("executor.zig");
-pub const Handler = exe.Handler;
-pub const Group = exe.Group;
-pub const Waker = exe.Waker;
-pub const Await = exe.Await;
-pub const Executor = exe.Executor;
+const sch = @import("scheduler.zig");
+pub const Cancelation = sch.Cancelation;
+pub const Waker = sch.Waker;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
@@ -33,8 +30,8 @@ entities: EntityStore,
 observers: Observers,
 peding_updates: u16,
 
-worker: exe.Worker,
-executor: Executor,
+scheduler: sch.Scheduler,
+// executor: Executor,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
@@ -42,11 +39,11 @@ flushing: bool,
 
 pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     self.* = .{
-        .worker = undefined,
+        .scheduler = undefined,
         .notifications = undefined,
         .entities = undefined,
         .observers = undefined,
-        .executor = undefined,
+        // .executor = undefined,
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
@@ -56,11 +53,11 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     };
     self.arena = self.alloc.allocator();
 
-    try self.worker.init(self.arena, io);
-    errdefer self.worker.deinit();
+    try self.scheduler.init(self.arena, io);
+    errdefer self.scheduler.deinit();
 
-    try self.executor.init(self.arena, gpa, io);
-    errdefer self.executor.deinit();
+    // try self.executor.init(self.arena, gpa, io);
+    // errdefer self.executor.deinit();
 
     try self.entities.init(self.arena, 100);
 
@@ -72,8 +69,8 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 }
 
 pub fn deinit(self: *App) void {
-    self.worker.deinit();
-    self.executor.deinit();
+    self.scheduler.deinit();
+    // self.executor.deinit();
 
     self.notifications.deinit(self.gpa);
     self.observers.deinit(self.gpa);
@@ -156,14 +153,17 @@ pub fn end_update(self: *App) void {
 pub fn flush(self: *App) void {
     //WARN:
     //on the future, running the executor will be a separated function
-    self.worker.run(.no_wait);
+    self.scheduler.run(.no_wait);
     self.destroy_dropped_entities();
     self.flush_notifications();
-    self.log_buffer_usage();
 }
 
-fn log_buffer_usage(self: *const App) void {
-    _ = self;
+pub fn @"defer"(self: *App, function: anytype, args: anytype) sch.Cancelation {
+    return self.scheduler.@"defer"(function, args);
+}
+
+pub fn await(self: *App, function: anytype, args: anytype) !sch.Waker {
+    return try self.scheduler.await(function, args);
 }
 
 pub fn flush_notifications(self: *App) void {
@@ -207,8 +207,7 @@ pub fn observe(
             return @call(.auto, function, .{ app, _entity } ++ _args);
         }
 
-        fn enable(sub: Observers.Subscription, res: anyerror!void) bool {
-            res catch return false;
+        fn enable(sub: Observers.Subscription) bool {
             sub.enable();
             return false;
         }
@@ -221,8 +220,7 @@ pub fn observe(
         self.gpa,
     );
 
-    const handler = self.worker.@"defer"(TypeErased.enable, .{sub});
-    handler.detach();
+    _ = self.@"defer"(TypeErased.enable, .{sub});
 
     return sub;
 }
@@ -290,11 +288,10 @@ pub fn Context(comptime T: type) type {
             return try self.app.observe(entity, TypeErased.callback, .{ self.entity.any, args });
         }
 
-        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) exe.Handler {
+        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) sch.Cancelation {
             const Args = @TypeOf(args);
             const TypeErased = struct {
-                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args, res: anyerror!void) bool {
-                    res catch return false;
+                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args) bool {
                     const _entity = any.into(T) orelse return false;
 
                     const ctx: Context(T) = .new(app, _entity);
@@ -302,27 +299,27 @@ pub fn Context(comptime T: type) type {
                     return @call(.auto, function, .{ctx} ++ _args);
                 }
             };
-            return self.app.worker.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
+            return self.app.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
         }
 
-        pub fn await(self: *const @This(), function: anytype, args: anytype) !exe.Await {
+        pub fn await(self: *const @This(), function: anytype, args: anytype) !sch.Waker {
             const Args = @TypeOf(args);
             const TypeErased = struct {
-                pub fn async(any: AnyEntity, app: *App, _args: Args, result: anyerror!void) bool {
+                pub fn async(any: AnyEntity, app: *App, _args: Args) bool {
                     const _entity = any.into(T) orelse return false;
 
                     const ctx: Context(T) = .new(app, _entity);
 
-                    return @call(.auto, function, .{ctx} ++ _args ++ .{result});
+                    return @call(.auto, function, .{ctx} ++ _args);
                 }
             };
 
-            return try self.app.worker.await(TypeErased.async, .{ self.entity.any, self.app, args });
+            return try self.app.await(TypeErased.async, .{ self.entity.any, self.app, args });
         }
 
-        pub fn executor(self: *const @This()) *exe.Executor {
-            return &self.app.executor;
-        }
+        // pub fn executor(self: *const @This()) *exe.Executor {
+        //     return &self.app.executor;
+        // }
     };
 }
 
@@ -587,7 +584,7 @@ test "Context async runs on foreground executor with entity context" {
             self.* = .{ .calls = 0, .last_value = 0 };
         }
 
-        pub fn deferred(ctx: Context(@This()), value: usize, _: anyerror!void) bool {
+        pub fn deferred(ctx: Context(@This()), value: usize) bool {
             const ptr, const update = ctx.update();
             defer update.end(ptr);
 
@@ -608,18 +605,18 @@ test "Context async runs on foreground executor with entity context" {
     const entity = try Entity(State).new(&app, .{});
 
     var context = Context(State).new(&app, entity);
-    const handler, const notifier = try context.await(State.deferred, .{42});
+    const waker = try context.await(State.deferred, .{42});
 
     try testing.expectEqual(0, entity.read(&app).calls);
 
-    try notifier.wake();
+    try waker.wake();
 
     app.flush();
 
     try testing.expectEqual(1, entity.read(&app).calls);
     try testing.expectEqual(42, entity.read(&app).last_value);
 
-    handler.cancel();
+    waker.close();
     entity.drop();
     app.flush();
 }

@@ -160,6 +160,31 @@ pub fn SlotMap(Value: type) type {
             };
         }
 
+        pub fn reserve(self: *@This()) error{Overflow}!Key {
+            const index: Key.Index = if (self.free_count > 0) b: {
+                self.free_count -= 1;
+                break :b self.free[self.free_count];
+            } else b: {
+                if (self.next_index >= self.capacity) return error.Overflow;
+                const index = self.next_index;
+                self.next_index += 1;
+                self.slots[index].generation = .first;
+                break :b @intCast(index);
+            };
+
+            const generation = self.slots[index].generation;
+            assert(generation != .invalid);
+            return .{
+                .index = index,
+                .generation = generation,
+            };
+        }
+
+        pub fn insert(self: *@This(), key: Key, value: Value) void {
+            assert(self.contains(key));
+            self.slots[key.index].value = value;
+        }
+
         /// Returns true if the value associated with the given key still exists in the map,
         /// false otherwise.
         ///

@@ -14,7 +14,7 @@ const Kevent = std.c.kevent64_s;
 const builtin = @import("builtin");
 
 const datastruct = @import("datastruct.zig");
-const multi_mpsc = datastruct.multi_mpsc;
+const multi_queue = datastruct.multi_queue;
 
 const Queues = union(enum) {
     cancellations: Completion,
@@ -27,7 +27,7 @@ pub const Loop = @This();
 
 kq: posix.fd_t,
 
-queues: multi_mpsc.MultiIntrusive(Queues),
+queues: multi_queue.MultiIntrusive(Queues),
 inflight: usize,
 stopped: bool,
 
@@ -116,13 +116,12 @@ pub fn flush(self: *Loop, _: bool) !void {
 
             const c: *Completion = @ptrFromInt(@as(usize, @intCast(ev.udata)));
 
-            c.state = .completed;
-
-            self.queues.push(.completions, c);
+            self.complete(c);
         }
     }
 
     while (self.queues.pop(.completions)) |completion| {
+        assert(completion.state == .completed);
         completion.state = .idle;
         if (completion.callback(self, completion)) {
             completion.state = .submitted;
@@ -139,6 +138,7 @@ pub fn flush_cancellations(self: *Loop, kevents: []Kevent) usize {
         const completion = self.queues.pop(.canceling) orelse break;
         submitted += 1;
 
+        assert(completion.state == .canceled);
         self.inflight -= 1;
 
         completion.kevent(event);
@@ -156,6 +156,7 @@ pub fn flush_submissions(self: *Loop, kevents: []Kevent) usize {
     while (active < kevents.len) {
         const completion = self.queues.pop(.submissions) orelse break;
 
+        assert(completion.state == .submitted or completion.state == .completed);
         if (completion.state == .completed) {
             self.queues.push(.completions, completion);
             continue;
@@ -201,32 +202,17 @@ fn kevent(
 pub fn submit(
     self: *Loop,
     completion: *Completion,
-    callback: anytype,
-    context: anytype,
-    comptime op_tag: meta.Tag(Operation),
-    op_data: @FieldType(Operation, @tagName(op_tag)),
-    resolver: anytype,
 ) void {
-    const Context = @TypeOf(context);
-
-    const TypeErased = struct {
-        fn complete(_: *Loop, _completion: *Completion) bool {
-            if (_completion.result == null) {
-                _completion.result = @call(.auto, resolver, .{@field(_completion.operation, @tagName(op_tag))});
-            }
-
-            const _context: Context = @ptrCast(@alignCast(_completion.context));
-            return @call(.auto, callback, .{ _context, _completion, _completion.result.? });
-        }
-    };
-
-    completion.* = .{
-        .state = .submitted,
-        .operation = @unionInit(Operation, @tagName(op_tag), op_data),
-        .context = context,
-        .callback = TypeErased.complete,
-    };
+    completion.state = .submitted;
     self.queues.push(.submissions, completion);
+}
+
+pub fn complete(
+    self: *Loop,
+    completion: *Completion,
+) void {
+    completion.state = .completed;
+    self.queues.push(.completions, completion);
 }
 
 pub fn @"defer"(
@@ -235,24 +221,8 @@ pub fn @"defer"(
     callback: anytype,
     context: anytype,
 ) void {
-    const Context = @TypeOf(context);
-
-    const TypeErased = struct {
-        fn complete(_: *Loop, _completion: *Completion) bool {
-            const _context: Context = @ptrCast(@alignCast(_completion.context));
-            const result = _completion.result orelse Result{ .@"defer" = {} };
-            return @call(.auto, callback, .{ _context, _completion, result });
-        }
-    };
-
-    completion.* = .{
-        .operation = .@"defer",
-        .context = context,
-        .callback = TypeErased.complete,
-        .state = .completed,
-    };
-
-    self.queues.push(.completions, completion);
+    completion.@"defer"(callback, context);
+    self.complete(completion);
 }
 
 pub fn cancel(
@@ -278,7 +248,7 @@ pub fn cancel(
             }
 
             const _context: Context = @ptrCast(@alignCast(_completion.context));
-            @call(.auto, callback, .{ _context, _completion, Result{ .cancel = {} } });
+            @call(.auto, callback, .{ _context, _completion });
 
             return false;
         }
@@ -301,18 +271,12 @@ pub fn mach(
     context: anytype,
     data: MachPort,
 ) void {
-    self.submit(
-        completion,
+    completion.mach(
         function,
         context,
-        .machport,
         data,
-        struct {
-            fn machport(_: MachPort) Result {
-                return .{ .machport = {} };
-            }
-        }.machport,
     );
+    self.submit(completion);
 }
 
 pub const ReadBuffer = union(enum) {
@@ -359,7 +323,7 @@ const State = enum {
 pub const Completion = struct {
     pub const noop: Completion = .{
         .operation = .noop,
-        .context = null,
+        .context = undefined,
         .callback = noopCallback,
         .state = .idle,
     };
@@ -367,7 +331,7 @@ pub const Completion = struct {
     operation: Operation,
     result: ?Result = null,
 
-    context: ?*anyopaque,
+    context: *anyopaque,
     callback: *const fn (loop: *Loop, completion: *Completion) bool,
 
     next: ?*Completion = null,
@@ -409,6 +373,77 @@ pub const Completion = struct {
                 };
             },
         }
+    }
+
+    pub fn @"defer"(
+        self: *Completion,
+        callback: anytype,
+        context: anytype,
+    ) void {
+        const Context = @TypeOf(context);
+
+        const TypeErased = struct {
+            fn complete(_: *Loop, _completion: *Completion) bool {
+                const _context: Context = @ptrCast(@alignCast(_completion.context));
+                const result = _completion.result orelse Result{ .@"defer" = {} };
+                return @call(.auto, callback, .{ _context, _completion, result });
+            }
+        };
+
+        self.* = .{
+            .operation = .@"defer",
+            .context = context,
+            .callback = TypeErased.complete,
+            .state = .idle,
+        };
+    }
+
+    pub fn set(
+        completion: *Completion,
+        callback: anytype,
+        context: anytype,
+        comptime op_tag: meta.Tag(Operation),
+        op_data: @FieldType(Operation, @tagName(op_tag)),
+        resolver: anytype,
+    ) void {
+        const Context = @TypeOf(context);
+
+        const TypeErased = struct {
+            fn complete(_: *Loop, _completion: *Completion) bool {
+                if (_completion.result == null) {
+                    _completion.result = @call(.auto, resolver, .{@field(_completion.operation, @tagName(op_tag))});
+                }
+
+                const _context: Context = @ptrCast(@alignCast(_completion.context));
+                return @call(.auto, callback, .{ _context, _completion, _completion.result.? });
+            }
+        };
+
+        completion.* = .{
+            .state = .idle,
+            .operation = @unionInit(Operation, @tagName(op_tag), op_data),
+            .context = context,
+            .callback = TypeErased.complete,
+        };
+    }
+
+    pub fn mach(
+        completion: *Completion,
+        function: anytype,
+        context: anytype,
+        data: MachPort,
+    ) void {
+        completion.set(
+            function,
+            context,
+            .machport,
+            data,
+            struct {
+                fn machport(_: MachPort) Result {
+                    return .{ .machport = {} };
+                }
+            }.machport,
+        );
     }
 };
 
@@ -575,7 +610,7 @@ test "cancel mach port" {
     try testing.expect(!called);
 
     const Cancelled = struct {
-        fn cancel(context: *bool, _: *Completion, _: Result) void {
+        fn cancel(context: *bool, _: *Completion) void {
             context.* = true;
         }
     };
