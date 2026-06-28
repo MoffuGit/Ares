@@ -53,6 +53,13 @@ pub const Scheduler = struct {
         self.rwlock.unlock(self.io);
     }
 
+    pub fn lockShared(self: *Self) void {
+        self.rwlock.lockSharedUncancelable(self.io);
+    }
+    pub fn unlockShared(self: *Self) void {
+        self.rwlock.unlockShared(self.io);
+    }
+
     pub fn run(self: *Scheduler, mode: Loop.RunMode) void {
         self.loop.run(mode) catch |err| {
             debug.panic("Worker  err: {}", .{err});
@@ -83,8 +90,8 @@ pub const Scheduler = struct {
     }
 
     fn cancel(self: *Scheduler, id: TaskId) void {
-        self.rwlock.lockSharedUncancelable(self.io);
-        defer self.rwlock.unlockShared(self.io);
+        self.lockShared();
+        defer self.unlockShared();
 
         const task = (self.active.get(id) orelse return).*;
 
