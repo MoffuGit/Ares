@@ -5,31 +5,36 @@ const Io = std.Io;
 const testing = std.testing;
 const debug = std.debug;
 const posix = std.posix;
-const builtin = @import("builtin");
 const system = posix.system;
 const assert = debug.assert;
+const builtin = @import("builtin");
 
+const datastruct = @import("datastruct.zig");
+const slotmap = datastruct.slotmap;
+const multi_mpsc = datastruct.multi_mpsc;
+const TaskId = slotmap.Key;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const Operation = Loop.Operation;
-pub const Read = Loop.Read;
-const datastruct = @import("datastruct.zig");
-const slotmap = datastruct.slotmap;
-
-const TaskId = slotmap.Key;
 
 pub const Scheduler = struct {
-    arena: Allocator,
+    const Self = @This();
+
     loop: Loop,
+    rwlock: Io.RwLock,
+    arena: Allocator,
     pool: std.heap.MemoryPool(Task),
     active: slotmap.SlotMap(*Task),
+    io: Io,
 
-    pub fn init(self: *Scheduler, arena: Allocator, io: Io) !void {
+    pub fn init(self: *Self, arena: Allocator, io: Io) !void {
         self.* = .{
+            .rwlock = .init,
             .arena = arena,
             .loop = undefined,
             .pool = undefined,
             .active = undefined,
+            .io = io,
         };
         self.pool = try .initCapacity(arena, 100);
         self.active = try .init(arena, 100);
@@ -37,53 +42,50 @@ pub const Scheduler = struct {
         try self.loop.init(io);
     }
 
-    pub fn deinit(self: *Scheduler) void {
+    pub fn deinit(self: *Self) void {
         self.loop.deinit();
     }
 
-    pub fn new(self: *Scheduler) *Task {
-        const task = self.pool.create(undefined) catch @panic("Task allocation failed");
-        task.* = .{
-            .id = null,
-            .completion = .noop,
-            .cancelation = .noop,
-            .scheduler = self,
-            .context = undefined,
+    pub fn lock(self: *Self) void {
+        self.rwlock.lockUncancelable(self.io);
+    }
+    pub fn unlock(self: *Self) void {
+        self.rwlock.unlock(self.io);
+    }
+
+    pub fn run(self: *Scheduler, mode: Loop.RunMode) void {
+        self.loop.run(mode) catch |err| {
+            debug.panic("Worker  err: {}", .{err});
         };
+    }
+
+    pub fn create(self: *Self, context: anytype) *Task {
+        const Context = @TypeOf(context);
+
+        if (@sizeOf(Context) > Task.max_context_size or @alignOf(Context) > Task.max_context_alignment) {
+            @compileError("Incorrect size/aligment for task context");
+        }
+
+        const task = self.pool.create(undefined) catch @panic("Task Overflow");
+        const id = self.active.put(task) catch @panic("Task Overflow");
+        task.* = .{ .scheduler = self, .id = id };
+        @as(*Context, @ptrCast(@alignCast(&task.context))).* = context;
 
         return task;
     }
 
     fn destroy(self: *Scheduler, id: TaskId) void {
-        const task = self.active.remove(id) orelse @panic("Destroy call on non-active Task");
+        self.lock();
+        defer self.unlock();
+
+        const task = self.active.remove(id) orelse @panic("Destroy non-active Task");
         self.pool.destroy(task);
     }
 
-    pub fn complete(self: *Scheduler, task: *Task) Cancelation {
-        assert(task.completion.state == .idle);
-        assert(task.id == null);
-
-        const id = self.active.put(task) catch @panic("Task Overflow");
-        task.id = id;
-
-        self.loop.complete(&task.completion);
-
-        return .{ .id = id, .scheduler = self };
-    }
-
-    pub fn submit(self: *Scheduler, task: *Task) Cancelation {
-        assert(task.completion.state == .idle);
-        assert(task.id == null);
-
-        const id = self.active.put(task) catch @panic("Task Overflow");
-        task.id = id;
-
-        self.loop.submit(&task.completion);
-
-        return .{ .id = id, .scheduler = self };
-    }
-
     fn cancel(self: *Scheduler, id: TaskId) void {
+        self.rwlock.lockSharedUncancelable(self.io);
+        defer self.rwlock.unlockShared(self.io);
+
         const task = (self.active.get(id) orelse return).*;
 
         self.loop.cancel(
@@ -96,20 +98,20 @@ pub const Scheduler = struct {
         );
     }
 
-    pub fn run(self: *Scheduler, mode: Loop.RunMode) void {
-        self.loop.run(mode) catch |err| {
-            debug.panic("Worker  err: {}", .{err});
-        };
-    }
-
     pub fn @"defer"(
         self: *Scheduler,
         function: anytype,
         context: anytype,
     ) Cancelation {
-        const task = self.new();
+        self.lock();
+        defer self.unlock();
+
+        const task = self.create(context);
         task.@"defer"(function, context);
-        return self.complete(task);
+
+        self.loop.complete(&task.completion);
+
+        return .{ .id = task.id, .scheduler = self };
     }
 
     pub fn await(
@@ -117,11 +119,15 @@ pub const Scheduler = struct {
         function: anytype,
         context: anytype,
     ) !Waker {
-        const task = self.new();
-        const port = try task.await(function, context);
-        const cancelation = self.submit(task);
+        self.lock();
+        defer self.unlock();
 
-        return .{ .port = port, .cancelation = cancelation };
+        const task = self.create(context);
+        const port = try task.await(function, context);
+
+        self.loop.submit(&task.completion);
+
+        return .{ .port = port, .cancelation = .{ .id = task.id, .scheduler = self } };
     }
 };
 
@@ -129,15 +135,14 @@ pub const Task = struct {
     const max_context_size = 128;
     const max_context_alignment = 16;
 
-    id: ?TaskId,
+    id: TaskId,
     scheduler: *Scheduler,
-    completion: Completion,
-    cancelation: Completion,
-    context: [max_context_size]u8 align(max_context_alignment),
+    completion: Completion = .noop,
+    cancelation: Completion = .noop,
+    context: [max_context_size]u8 align(max_context_alignment) = undefined,
 
     pub fn destroy(self: *Task) void {
-        assert(self.id != null);
-        self.scheduler.destroy(self.id.?);
+        self.scheduler.destroy(self.id);
     }
 
     pub fn @"defer"(
@@ -146,10 +151,6 @@ pub const Task = struct {
         context: anytype,
     ) void {
         const Context = @TypeOf(context);
-
-        if (@sizeOf(Context) > Task.max_context_size or @alignOf(Context) > Task.max_context_alignment) {
-            @compileError("Incorrect size/aligment for task context");
-        }
 
         const TypeErased = struct {
             fn complete(task: *Task, _: *Completion, res: Loop.Result) bool {
@@ -167,7 +168,6 @@ pub const Task = struct {
             }
         };
 
-        @as(*Context, @ptrCast(@alignCast(&self.context))).* = context;
         self.completion.@"defer"(TypeErased.complete, self);
     }
 
@@ -177,10 +177,6 @@ pub const Task = struct {
         context: anytype,
     ) !system.mach_port_name_t {
         const Context = @TypeOf(context);
-
-        if (@sizeOf(Context) > Task.max_context_size or @alignOf(Context) > Task.max_context_alignment) {
-            @compileError("Incorrect size/aligment for task context");
-        }
 
         const TypeErased = struct {
             fn complete(task: *Task, c: *Completion, res: Loop.Result) bool {
@@ -268,8 +264,6 @@ pub const Task = struct {
             &limits,
             @sizeOf(@TypeOf(limits)),
         ) != 0) return error.MachPortAllocFailed;
-
-        @as(*Context, @ptrCast(@alignCast(&self.context))).* = context;
 
         self.completion.mach(
             TypeErased.complete,
