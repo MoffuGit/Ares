@@ -29,6 +29,7 @@ pub const Executor = struct {
     scheduler: Scheduler,
     scheduler_thread: Io.Future(void),
     stop: atomic.Value(bool),
+    stopped: atomic.Value(bool),
 
     mutex: Io.Mutex,
     io: Io,
@@ -46,6 +47,7 @@ pub const Executor = struct {
             .gpa = gpa,
             .arena = arena,
             .stop = .init(false),
+            .stopped = .init(false),
         };
 
         self.tasks.init();
@@ -58,6 +60,10 @@ pub const Executor = struct {
     pub fn deinit(self: *@This()) void {
         // if (builtin.mode == .Debug) self.io.sleep(.fromMilliseconds(50), .real) catch {};
         self.stop.store(true, .release);
+
+        while (!self.stopped.load(.acquire)) {
+            self.io.sleep(.fromNanoseconds(100), .real) catch {};
+        }
 
         _ = self.scheduler_thread.await(self.io);
 
@@ -94,20 +100,26 @@ pub const Executor = struct {
 
     fn run(self: *@This()) void {
         while (!self.stop.load(.acquire)) {
-            while (self.tasks.pop(.cancelations)) |cancelation| {
-                self.scheduler.cancel(cancelation.id);
-                self.cancelations.destroy(cancelation);
-            }
-            while (self.tasks.pop(.completions)) |task| {
-                self.scheduler.complete(task);
-            }
-            while (self.tasks.pop(.submissions)) |task| {
-                self.scheduler.submit(task);
-            }
-
+            self.flush();
             self.scheduler.run(.no_wait);
-
             self.io.sleep(.fromNanoseconds(100), .real) catch {};
+        }
+
+        self.flush();
+        self.scheduler.run(.until_done);
+        self.stopped.store(true, .release);
+    }
+
+    fn flush(self: *@This()) void {
+        while (self.tasks.pop(.cancelations)) |cancelation| {
+            self.scheduler.cancel(cancelation.id);
+            self.cancelations.destroy(cancelation);
+        }
+        while (self.tasks.pop(.completions)) |task| {
+            self.scheduler.complete(task);
+        }
+        while (self.tasks.pop(.submissions)) |task| {
+            self.scheduler.submit(task);
         }
     }
 };

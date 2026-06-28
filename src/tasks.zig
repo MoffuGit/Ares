@@ -17,7 +17,7 @@ pub const TaskPool = struct {
     io: Io,
     mutex: Io.Mutex,
     tasks: heap.MemoryPool(Task),
-    cancelations: heap.MemoryPool(Completion),
+    cancelations: heap.MemoryPool(Cancelation),
     active: slotmap.SlotMap(*Task),
     gpa: Allocator,
 
@@ -46,25 +46,30 @@ pub const TaskPool = struct {
         return task;
     }
 
-    pub fn cancelation(self: *TaskPool, id: TaskId) *Completion {
+    pub fn cancelation(self: *TaskPool, id: TaskId) ?*Cancelation {
         self.lock();
         defer self.unlock();
 
-        const task = (self.active.get(id) orelse return).*;
-        const completion = self.cancelations.create(undefined) catch @panic("Cancel Overflow");
-        completion.cancel(
+        const task = (self.active.get(id) orelse return null).*;
+        const cancel = self.cancelations.create(undefined) catch @panic("Cancel Overflow");
+        cancel.* = .{
+            .id = id,
+            .pool = self,
+        };
+
+        cancel.completion.cancel(
             &task.completion,
             struct {
-                fn cancel(t: *Task, c: *Completion) void {
-                    t.pool.lock();
-                    defer t.pool.unlock();
+                fn _cancel(c: *Cancelation, _: *Completion) void {
+                    c.pool.lock();
+                    defer c.pool.unlock();
 
-                    t.pool.cancelations.destroy(c);
+                    c.pool.cancelations.destroy(c);
                 }
-            }.cancel,
-            task,
+            }._cancel,
+            cancel,
         );
-        return completion;
+        return cancel;
     }
 
     fn destroy(self: *TaskPool, id: TaskId) void {
@@ -81,6 +86,12 @@ pub const TaskPool = struct {
     pub fn unlock(self: *TaskPool) void {
         self.mutex.unlock(self.io);
     }
+};
+
+pub const Cancelation = struct {
+    id: TaskId,
+    completion: Completion = .noop,
+    pool: *TaskPool,
 };
 
 pub const Task = struct {
@@ -308,4 +319,18 @@ test "Task await allocates and copies context" {
     const copied: *const struct { Context } = @ptrCast(@alignCast(&task.context));
     try testing.expectEqual(@as(u64, 0x1234_5678_9abc_def0), copied.@"0".value);
     try testing.expectEqual(@as(u32, 0xfeed_beef), copied.@"0".other);
+}
+
+test "Cancelations" {
+    const gpa = testing.allocator;
+    var arena: heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+
+    var pool: TaskPool = undefined;
+    try pool.init(arena.allocator(), gpa, testing.io);
+
+    const task = pool.create();
+    defer task.destroy();
+
+    try testing.expect(pool.cancelation(task.id) != null);
 }
