@@ -96,7 +96,7 @@ pub const Scheduler = struct {
 
         const task = (self.active.get(id) orelse return).*;
 
-        self.loop.cancel(
+        self.loop.cancelate(
             &task.cancelation,
             &task.completion,
             struct {

@@ -225,42 +225,22 @@ pub fn @"defer"(
     self.complete(completion);
 }
 
-pub fn cancel(
+pub fn cancelate(
     self: *Loop,
     completion: *Completion,
     target: *Completion,
     callback: anytype,
     context: anytype,
 ) void {
-    const Context = @TypeOf(context);
+    completion.cancel(target, callback, context);
+    self.cancel(completion);
+}
 
-    const TypeErased = struct {
-        fn complete(loop: *Loop, _completion: *Completion) bool {
-            const _target = _completion.operation.cancel;
-
-            switch (_target.state) {
-                .idle, .canceled => {},
-                .completed, .submitted => _target.canceled(),
-                .active => {
-                    _target.state = .canceled;
-                    loop.queues.push(.canceling, _target);
-                },
-            }
-
-            const _context: Context = @ptrCast(@alignCast(_completion.context));
-            @call(.auto, callback, .{ _context, _completion });
-
-            return false;
-        }
-    };
-
-    completion.* = .{
-        .operation = .{ .cancel = target },
-        .context = context,
-        .callback = TypeErased.complete,
-        .state = .submitted,
-    };
-
+pub fn cancel(
+    self: *Loop,
+    completion: *Completion,
+) void {
+    completion.state = .submitted;
     self.queues.push(.cancellations, completion);
 }
 
@@ -373,6 +353,42 @@ pub const Completion = struct {
                 };
             },
         }
+    }
+
+    pub fn cancel(
+        self: *Completion,
+        target: *Completion,
+        callback: anytype,
+        context: anytype,
+    ) void {
+        const Context = @TypeOf(context);
+
+        const TypeErased = struct {
+            fn complete(loop: *Loop, _completion: *Completion) bool {
+                const _target = _completion.operation.cancel;
+
+                switch (_target.state) {
+                    .idle, .canceled => {},
+                    .completed, .submitted => _target.canceled(),
+                    .active => {
+                        _target.state = .canceled;
+                        loop.queues.push(.canceling, _target);
+                    },
+                }
+
+                const _context: Context = @ptrCast(@alignCast(_completion.context));
+                @call(.auto, callback, .{ _context, _completion });
+
+                return false;
+            }
+        };
+
+        self.* = .{
+            .operation = .{ .cancel = target },
+            .context = context,
+            .callback = TypeErased.complete,
+            .state = .idle,
+        };
     }
 
     pub fn @"defer"(
@@ -617,7 +633,7 @@ test "cancel mach port" {
     var canceled: bool = false;
     var cancellation: Completion = .noop;
 
-    loop.cancel(&cancellation, &completion, Cancelled.cancel, &canceled);
+    loop.cancelate(&cancellation, &completion, Cancelled.cancel, &canceled);
 
     for (0..10) |_| try loop.run(.no_wait);
 

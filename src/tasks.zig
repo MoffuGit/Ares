@@ -100,7 +100,7 @@ pub const Task = struct {
         self: *Task,
         function: anytype,
         context: anytype,
-    ) !void {
+    ) void {
         assertContext(context);
         const Context = @TypeOf(context);
 
@@ -224,6 +224,14 @@ pub const Task = struct {
 
         return mach_port;
     }
+
+    pub fn complete(self: *Task, loop: *Loop) void {
+        loop.complete(&self.completion);
+    }
+
+    pub fn submit(self: *Task, loop: *Loop) void {
+        loop.submit(&self.completion);
+    }
 };
 
 test "Task defer allocates and copies context" {
@@ -242,7 +250,7 @@ test "Task defer allocates and copies context" {
     var original = Context{ .value = 0x1234_5678_9abc_def0, .other = 0xfeed_beef };
     const task = pool.create();
     defer task.destroy();
-    try task.@"defer"(struct {
+    task.@"defer"(struct {
         fn callback(_: Context, ar: Allocator, res: anyerror!void) bool {
             res catch return false;
             _ = ar.alloc(u8, 1) catch return false;
