@@ -34,7 +34,6 @@ pub const Executor = struct {
     io: Io,
     arena: Allocator,
     gpa: Allocator,
-    workers: Workers,
 
     pub fn init(self: *@This(), arena: Allocator, gpa: Allocator, io: Io) !void {
         self.* = .{
@@ -46,7 +45,6 @@ pub const Executor = struct {
             .io = io,
             .gpa = gpa,
             .arena = arena,
-            .workers = undefined,
             .stop = .init(false),
         };
 
@@ -165,8 +163,4 @@ pub const Waker = struct {
             self.port,
         );
     }
-};
-
-pub const Workers = struct {
-    arena: Allocator,
 };
