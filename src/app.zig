@@ -15,6 +15,8 @@ const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
 const sch = @import("scheduler.zig");
 pub const Cancelation = sch.Cancelation;
+const exe = @import("executor.zig");
+const Executor = exe.Executor;
 pub const Waker = sch.Waker;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
@@ -31,7 +33,7 @@ observers: Observers,
 peding_updates: u16,
 
 scheduler: sch.Scheduler,
-// executor: Executor,
+executor: Executor,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
@@ -43,7 +45,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
         .notifications = undefined,
         .entities = undefined,
         .observers = undefined,
-        // .executor = undefined,
+        .executor = undefined,
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
@@ -56,8 +58,8 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     try self.scheduler.init(self.arena, io);
     errdefer self.scheduler.deinit();
 
-    // try self.executor.init(self.arena, gpa, io);
-    // errdefer self.executor.deinit();
+    try self.executor.init(self.arena, gpa, io);
+    errdefer self.executor.deinit();
 
     try self.entities.init(self.arena, 100);
 
@@ -70,7 +72,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 
 pub fn deinit(self: *App) void {
     self.scheduler.deinit();
-    // self.executor.deinit();
+    self.executor.deinit();
 
     self.notifications.deinit(self.gpa);
     self.observers.deinit(self.gpa);

@@ -12,7 +12,7 @@ const builtin = @import("builtin");
 const datastruct = @import("datastruct.zig");
 const slotmap = datastruct.slotmap;
 const multi_mpsc = datastruct.multi_mpsc;
-const TaskId = slotmap.Key;
+pub const TaskId = slotmap.Key;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const Operation = Loop.Operation;
@@ -66,17 +66,10 @@ pub const Scheduler = struct {
         };
     }
 
-    pub fn create(self: *Self, context: anytype) *Task {
-        const Context = @TypeOf(context);
-
-        if (@sizeOf(Context) > Task.max_context_size or @alignOf(Context) > Task.max_context_alignment) {
-            @compileError("Incorrect size/aligment for task context");
-        }
-
+    pub fn create(self: *Self) *Task {
         const task = self.pool.create(undefined) catch @panic("Task Overflow");
         const id = self.active.put(task) catch @panic("Task Overflow");
         task.* = .{ .scheduler = self, .id = id };
-        @as(*Context, @ptrCast(@alignCast(&task.context))).* = context;
 
         return task;
     }
@@ -113,7 +106,7 @@ pub const Scheduler = struct {
         self.lock();
         defer self.unlock();
 
-        const task = self.create(context);
+        const task = self.create();
         task.@"defer"(function, context);
 
         self.loop.complete(&task.completion);
@@ -129,7 +122,7 @@ pub const Scheduler = struct {
         self.lock();
         defer self.unlock();
 
-        const task = self.create(context);
+        const task = self.create();
         const port = try task.await(function, context);
 
         self.loop.submit(&task.completion);
@@ -147,6 +140,7 @@ pub const Task = struct {
     completion: Completion = .noop,
     cancelation: Completion = .noop,
     context: [max_context_size]u8 align(max_context_alignment) = undefined,
+    next: ?*Task = null,
 
     pub fn destroy(self: *Task) void {
         self.scheduler.destroy(self.id);
@@ -158,6 +152,10 @@ pub const Task = struct {
         context: anytype,
     ) void {
         const Context = @TypeOf(context);
+
+        if (@sizeOf(Context) > Task.max_context_size or @alignOf(Context) > Task.max_context_alignment) {
+            @compileError("Incorrect size/aligment for task context");
+        }
 
         const TypeErased = struct {
             fn complete(task: *Task, _: *Completion, res: Loop.Result) bool {
@@ -175,6 +173,7 @@ pub const Task = struct {
             }
         };
 
+        @as(*Context, @ptrCast(@alignCast(&self.context))).* = context;
         self.completion.@"defer"(TypeErased.complete, self);
     }
 
@@ -184,6 +183,10 @@ pub const Task = struct {
         context: anytype,
     ) !system.mach_port_name_t {
         const Context = @TypeOf(context);
+
+        if (@sizeOf(Context) > Task.max_context_size or @alignOf(Context) > Task.max_context_alignment) {
+            @compileError("Incorrect size/aligment for task context");
+        }
 
         const TypeErased = struct {
             fn complete(task: *Task, c: *Completion, res: Loop.Result) bool {
@@ -272,6 +275,7 @@ pub const Task = struct {
             @sizeOf(@TypeOf(limits)),
         ) != 0) return error.MachPortAllocFailed;
 
+        @as(*Context, @ptrCast(@alignCast(&self.context))).* = context;
         self.completion.mach(
             TypeErased.complete,
             self,
