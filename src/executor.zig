@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
+const atomic = std.atomic;
 const builtin = std.builtin;
 const posix = std.posix;
 const system = posix.system;
@@ -11,35 +12,34 @@ const sch = @import("scheduler.zig");
 const Task = sch.Task;
 const Scheduler = sch.Scheduler;
 
+const CancelationRequest = struct {
+    id: sch.TaskId,
+    next: ?*CancelationRequest = null,
+};
+
 const Queues = union(enum) {
+    cancelations: CancelationRequest,
     completions: Task,
     submissions: Task,
 };
 
-//NOTE:
-//the executor has two works,
-//first, queue the scheduler for work
-//and second, handle our wokrers memory,
-//You can think of a worker as the contra part of an entity,
-//while an entity is can be only mutated on a single thread and is thinked for
-//ui a worker can work on many threads and is thinked for computation,
-//the idea behind having a worker is to be capable of creating tasks that only work
-//if the worker key is valid, once it becomes invalid this tasks pass to return int the
-//memory pool,
 pub const Executor = struct {
     tasks: multi_mpsc.MultiIntrusive(Queues),
+    cancelations: std.heap.MemoryPool(CancelationRequest),
     scheduler: Scheduler,
     scheduler_thread: Io.Future(void),
-    stop: std.atomic.Value(bool),
+    stop: atomic.Value(bool),
 
     mutex: Io.Mutex,
     io: Io,
     arena: Allocator,
     gpa: Allocator,
     workers: Workers,
+
     pub fn init(self: *@This(), arena: Allocator, gpa: Allocator, io: Io) !void {
         self.* = .{
             .tasks = undefined,
+            .cancelations = undefined,
             .scheduler = undefined,
             .scheduler_thread = undefined,
             .mutex = .init,
@@ -51,6 +51,7 @@ pub const Executor = struct {
         };
 
         self.tasks.init();
+        self.cancelations = .empty;
         try self.scheduler.init(arena, io);
 
         self.scheduler_thread = try io.concurrent(Executor.run, .{self});
@@ -95,11 +96,15 @@ pub const Executor = struct {
 
     fn run(self: *@This()) void {
         while (!self.stop.load(.acquire)) {
+            while (self.tasks.pop(.cancelations)) |cancelation| {
+                self.scheduler.cancel(cancelation.id);
+                self.cancelations.destroy(cancelation);
+            }
             while (self.tasks.pop(.completions)) |task| {
-                self.scheduler.loop.complete(&task.completion);
+                self.scheduler.complete(task);
             }
             while (self.tasks.pop(.submissions)) |task| {
-                self.scheduler.loop.submit(&task.completion);
+                self.scheduler.submit(task);
             }
 
             self.scheduler.run(.no_wait);
@@ -112,6 +117,12 @@ pub const Executor = struct {
 pub const Cancelation = struct {
     id: sch.TaskId,
     executor: *Executor,
+
+    pub fn cancel(self: *const Cancelation) void {
+        const request = self.executor.cancelations.create(self.executor.arena) catch @panic("Cancelation Overflow");
+        request.* = .{ .id = self.id };
+        self.executor.tasks.push(.cancelations, request);
+    }
 };
 
 pub const Waker = struct {

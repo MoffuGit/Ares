@@ -66,6 +66,14 @@ pub const Scheduler = struct {
         };
     }
 
+    pub fn complete(self: *Scheduler, task: *Task) void {
+        self.loop.complete(&task.completion);
+    }
+
+    pub fn submit(self: *Scheduler, task: *Task) void {
+        self.loop.submit(&task.completion);
+    }
+
     pub fn create(self: *Self) *Task {
         const task = self.pool.create(undefined) catch @panic("Task Overflow");
         const id = self.active.put(task) catch @panic("Task Overflow");
@@ -82,7 +90,7 @@ pub const Scheduler = struct {
         self.pool.destroy(task);
     }
 
-    fn cancel(self: *Scheduler, id: TaskId) void {
+    pub fn cancel(self: *Scheduler, id: TaskId) void {
         self.lockShared();
         defer self.unlockShared();
 
