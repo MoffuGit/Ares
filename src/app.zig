@@ -318,10 +318,6 @@ pub fn Context(comptime T: type) type {
 
             return try self.app.await(TypeErased.async, .{ self.entity.any, self.app, args });
         }
-
-        // pub fn executor(self: *const @This()) *exe.Executor {
-        //     return &self.app.executor;
-        // }
     };
 }
 
