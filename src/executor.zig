@@ -8,130 +8,122 @@ const system = posix.system;
 
 const datastruct = @import("datastruct.zig");
 const multi_mpsc = datastruct.multi_mpsc;
-const sch = @import("scheduler.zig");
-const Task = sch.Task;
-const Scheduler = sch.Scheduler;
-
-const CancelationRequest = struct {
-    id: sch.TaskId,
-    next: ?*CancelationRequest = null,
-};
+const Loop = @import("loop.zig");
+const Tasks = @import("tasks.zig");
+const Task = Tasks.Task;
+const TaskId = Tasks.TaskId;
 
 const Queues = union(enum) {
-    cancelations: CancelationRequest,
+    cancelations: Tasks.Cancelation,
     completions: Task,
     submissions: Task,
 };
 
-pub const Executor = struct {
-    tasks: multi_mpsc.MultiIntrusive(Queues),
-    cancelations: std.heap.MemoryPool(CancelationRequest),
-    scheduler: Scheduler,
-    scheduler_thread: Io.Future(void),
-    stop: atomic.Value(bool),
-    stopped: atomic.Value(bool),
+pub const Executor = @This();
 
-    mutex: Io.Mutex,
-    io: Io,
-    arena: Allocator,
-    gpa: Allocator,
+tasks: Tasks,
+loop: Loop,
 
-    pub fn init(self: *@This(), arena: Allocator, gpa: Allocator, io: Io) !void {
-        self.* = .{
-            .tasks = undefined,
-            .cancelations = undefined,
-            .scheduler = undefined,
-            .scheduler_thread = undefined,
-            .mutex = .init,
-            .io = io,
-            .gpa = gpa,
-            .arena = arena,
-            .stop = .init(false),
-            .stopped = .init(false),
-        };
+io: Io,
+future: Io.Future(void),
+stop: atomic.Value(bool) = .init(false),
+stopped: atomic.Value(bool) = .init(false),
+arena: Allocator,
+gpa: Allocator,
+queues: multi_mpsc.MultiIntrusive(Queues),
 
-        self.tasks.init();
-        self.cancelations = .empty;
-        try self.scheduler.init(arena, io);
+pub fn init(self: *@This(), arena: Allocator, gpa: Allocator, io: Io) !void {
+    self.* = .{
+        .queues = undefined,
+        .loop = undefined,
+        .tasks = undefined,
+        .io = io,
+        .future = undefined,
+        .arena = arena,
+        .gpa = gpa,
+    };
 
-        self.scheduler_thread = try io.concurrent(Executor.run, .{self});
+    self.queues.init();
+    try self.tasks.init(arena, gpa, io);
+    try self.loop.init(io);
+    errdefer self.loop.deinit();
+
+    self.future = try io.concurrent(Executor.run, .{self});
+}
+
+pub fn deinit(self: *@This()) void {
+    self.stop.store(true, .release);
+
+    while (!self.stopped.load(.acquire)) {
+        self.io.sleep(.fromNanoseconds(100), .real) catch {};
     }
 
-    pub fn deinit(self: *@This()) void {
-        // if (builtin.mode == .Debug) self.io.sleep(.fromMilliseconds(50), .real) catch {};
-        self.stop.store(true, .release);
+    _ = self.future.await(self.io);
+    self.loop.deinit();
+}
 
-        while (!self.stopped.load(.acquire)) {
-            self.io.sleep(.fromNanoseconds(100), .real) catch {};
-        }
-
-        _ = self.scheduler_thread.await(self.io);
-
-        self.scheduler.deinit();
-    }
-
-    pub fn @"defer"(
-        self: *@This(),
-        function: anytype,
-        context: anytype,
-    ) !Cancelation {
-        self.scheduler.lock();
-        defer self.scheduler.unlock();
-
-        const task = self.scheduler.create();
-        task.@"defer"(function, context);
-
-        return .{ .executor = self, .id = task.id };
-    }
-
-    pub fn await(
-        self: *@This(),
-        function: anytype,
-        context: anytype,
-    ) !Waker {
-        self.scheduler.lock();
-        defer self.scheduler.unlock();
-
-        const task = self.create();
-        const port = try task.await(function, context);
-
-        return .{ .port = port, .cancelation = .{ .id = task.id, .executor = self } };
-    }
-
-    fn run(self: *@This()) void {
-        while (!self.stop.load(.acquire)) {
-            self.flush();
-            self.scheduler.run(.no_wait);
-            self.io.sleep(.fromNanoseconds(100), .real) catch {};
-        }
-
+fn run(self: *@This()) void {
+    while (!self.stop.load(.acquire)) {
         self.flush();
-        self.scheduler.run(.until_done);
-        self.stopped.store(true, .release);
+        self.loop.run(.no_wait) catch return;
+        self.io.sleep(.fromNanoseconds(100), .real) catch {};
     }
 
-    fn flush(self: *@This()) void {
-        while (self.tasks.pop(.cancelations)) |cancelation| {
-            self.scheduler.cancel(cancelation.id);
-            self.cancelations.destroy(cancelation);
-        }
-        while (self.tasks.pop(.completions)) |task| {
-            self.scheduler.complete(task);
-        }
-        while (self.tasks.pop(.submissions)) |task| {
-            self.scheduler.submit(task);
+    self.flush();
+    self.loop.run(.until_done) catch return;
+    self.stopped.store(true, .release);
+}
+
+fn flush(self: *@This()) void {
+    while (self.queues.pop(.cancelations)) |cancelation| {
+        if (self.tasks.contains(cancelation.id)) {
+            cancelation.cancel(&self.loop);
+        } else {
+            self.tasks.destroy_cancelation(cancelation);
         }
     }
-};
+    while (self.queues.pop(.completions)) |task| {
+        task.complete(&self.loop);
+    }
+    while (self.queues.pop(.submissions)) |task| {
+        task.submit(&self.loop);
+    }
+}
+
+pub fn @"defer"(
+    self: *@This(),
+    function: anytype,
+    context: anytype,
+) !Cancelation {
+    const task = self.tasks.create();
+
+    task.@"defer"(function, context);
+    self.queues.push(.completions, task);
+
+    return .{ .executor = self, .id = task.id };
+}
+
+pub fn await(
+    self: *@This(),
+    function: anytype,
+    context: anytype,
+) !Waker {
+    const task = self.tasks.create();
+    const port = try task.await(function, context);
+
+    self.queues.push(.submissions, task);
+
+    return .{ .port = port, .cancelation = .{ .id = task.id, .executor = self } };
+}
 
 pub const Cancelation = struct {
-    id: sch.TaskId,
+    id: TaskId,
     executor: *Executor,
 
     pub fn cancel(self: *const Cancelation) void {
-        const request = self.executor.cancelations.create(self.executor.arena) catch @panic("Cancelation Overflow");
-        request.* = .{ .id = self.id };
-        self.executor.tasks.push(.cancelations, request);
+        if (self.executor.tasks.cancelation(self.id)) |can| {
+            self.executor.queues.push(.cancelations, can);
+        }
     }
 };
 
@@ -176,3 +168,85 @@ pub const Waker = struct {
         );
     }
 };
+
+test "Executor runs deferred tasks and frees memory on stop" {
+    const testing = std.testing;
+    const heap = std.heap;
+
+    var arena: heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+
+    var executor: Executor = undefined;
+    try executor.init(arena.allocator(), testing.allocator, testing.io);
+    defer executor.deinit();
+
+    var called = false;
+    _ = try executor.@"defer"(struct {
+        fn callback(_called: *bool, allocator: Allocator, res: anyerror!void) bool {
+            res catch return false;
+            _ = allocator.alloc(u8, 16) catch return false;
+            _called.* = true;
+            return false;
+        }
+    }.callback, .{&called});
+
+    while (!called) {
+        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
+    }
+}
+
+test "Executor runs await tasks and frees memory on close" {
+    const testing = std.testing;
+    const heap = std.heap;
+
+    var arena: heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+
+    var executor: Executor = undefined;
+    try executor.init(arena.allocator(), testing.allocator, testing.io);
+    defer executor.deinit();
+
+    var called = false;
+    const waker = try executor.await(struct {
+        fn callback(_called: *bool, allocator: Allocator, res: anyerror!void) bool {
+            res catch return false;
+            _ = allocator.alloc(u8, 16) catch return false;
+            _called.* = true;
+            return false;
+        }
+    }.callback, .{&called});
+
+    try waker.wake();
+    while (!called) {
+        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
+    }
+    waker.close();
+}
+
+test "Executor cancels await tasks and frees memory on stop" {
+    const testing = std.testing;
+    const heap = std.heap;
+
+    var arena: heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+
+    var executor: Executor = undefined;
+    try executor.init(arena.allocator(), testing.allocator, testing.io);
+    defer executor.deinit();
+
+    var canceled = false;
+    const waker = try executor.await(struct {
+        fn callback(_canceled: *bool, allocator: Allocator, res: anyerror!void) bool {
+            if (res == error.Canceled) {
+                _ = allocator.alloc(u8, 16) catch return false;
+                _canceled.* = true;
+            }
+            return false;
+        }
+    }.callback, .{&canceled});
+
+    waker.close();
+    while (!canceled) {
+        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
+    }
+}

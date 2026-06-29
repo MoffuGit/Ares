@@ -13,85 +13,104 @@ pub const TaskId = slotmap.Key;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 
-pub const TaskPool = struct {
-    io: Io,
-    mutex: Io.Mutex,
-    tasks: heap.MemoryPool(Task),
-    cancelations: heap.MemoryPool(Cancelation),
-    active: slotmap.SlotMap(*Task),
-    gpa: Allocator,
+pub const Tasks = @This();
 
-    pub fn init(self: *TaskPool, arena: Allocator, gpa: Allocator, io: Io) !void {
-        self.* = .{
-            .mutex = .init,
-            .tasks = undefined,
-            .active = undefined,
-            .cancelations = undefined,
-            .gpa = gpa,
-            .io = io,
-        };
-        self.tasks = try .initCapacity(arena, 100);
-        self.cancelations = try .initCapacity(arena, 100);
-        self.active = try .init(arena, 100);
-    }
+io: Io,
+mutex: Io.Mutex,
+pool: heap.MemoryPool(Task),
+cancelations: heap.MemoryPool(Cancelation),
+active: slotmap.SlotMap(*Task),
+gpa: Allocator,
 
-    pub fn create(self: *TaskPool) *Task {
-        self.lock();
-        defer self.unlock();
+pub fn init(self: *Tasks, arena: Allocator, gpa: Allocator, io: Io) !void {
+    self.* = .{
+        .mutex = .init,
+        .pool = undefined,
+        .active = undefined,
+        .cancelations = undefined,
+        .gpa = gpa,
+        .io = io,
+    };
+    self.pool = try .initCapacity(arena, 100);
+    self.cancelations = try .initCapacity(arena, 100);
+    self.active = try .init(arena, 100);
+}
 
-        const task = self.tasks.create(undefined) catch @panic("Task Overflow");
-        const id = self.active.put(task) catch @panic("Task Overflow");
-        task.* = .{ .pool = self, .id = id, .arena = .init(self.gpa) };
+pub fn create(self: *Tasks) *Task {
+    self.lock();
+    defer self.unlock();
 
-        return task;
-    }
+    const task = self.pool.create(undefined) catch @panic("Task Overflow");
+    const id = self.active.put(task) catch @panic("Task Overflow");
+    task.* = .{ .pool = self, .id = id, .arena = .init(self.gpa) };
 
-    pub fn cancelation(self: *TaskPool, id: TaskId) ?*Cancelation {
-        self.lock();
-        defer self.unlock();
+    return task;
+}
 
-        const task = (self.active.get(id) orelse return null).*;
-        const cancel = self.cancelations.create(undefined) catch @panic("Cancel Overflow");
-        cancel.* = .{
-            .id = id,
-            .pool = self,
-        };
+pub fn contains(self: *Tasks, id: TaskId) bool {
+    self.lock();
+    defer self.unlock();
 
-        cancel.completion.cancel(
-            &task.completion,
-            struct {
-                fn _cancel(c: *Cancelation, _: *Completion) void {
-                    c.pool.lock();
-                    defer c.pool.unlock();
+    return self.active.contains(id);
+}
 
-                    c.pool.cancelations.destroy(c);
-                }
-            }._cancel,
-            cancel,
-        );
-        return cancel;
-    }
+pub fn cancelation(self: *Tasks, id: TaskId) ?*Cancelation {
+    self.lock();
+    defer self.unlock();
 
-    fn destroy(self: *TaskPool, id: TaskId) void {
-        self.lock();
-        defer self.unlock();
+    const task = (self.active.get(id) orelse return null).*;
+    const cancel = self.cancelations.create(undefined) catch @panic("Cancel Overflow");
+    cancel.* = .{
+        .id = id,
+        .pool = self,
+    };
 
-        const task = self.active.remove(id) orelse @panic("Destroy non-active Task");
-        self.tasks.destroy(task);
-    }
+    cancel.completion.cancel(
+        &task.completion,
+        struct {
+            fn _cancel(c: *Cancelation, _: *Completion) void {
+                const pool = c.pool;
+                pool.lock();
+                defer pool.unlock();
+                pool.cancelations.destroy(c);
+            }
+        }._cancel,
+        cancel,
+    );
+    return cancel;
+}
 
-    pub fn lock(self: *TaskPool) void {
-        self.mutex.lockUncancelable(self.io);
-    }
-    pub fn unlock(self: *TaskPool) void {
-        self.mutex.unlock(self.io);
-    }
-};
+fn destroy(self: *Tasks, id: TaskId) void {
+    self.lock();
+    defer self.unlock();
+
+    const task = self.active.remove(id) orelse @panic("Destroy non-active Task");
+    self.pool.destroy(task);
+}
+
+pub fn destroy_cancelation(self: *Tasks, cal: *Cancelation) void {
+    self.lock();
+    defer self.unlock();
+
+    self.cancelations.destroy(cal);
+}
+
+pub fn lock(self: *Tasks) void {
+    self.mutex.lockUncancelable(self.io);
+}
+pub fn unlock(self: *Tasks) void {
+    self.mutex.unlock(self.io);
+}
 
 pub const Cancelation = struct {
     id: TaskId,
     completion: Completion = .noop,
-    pool: *TaskPool,
+    pool: *Tasks,
+    next: ?*Cancelation = null,
+
+    pub fn cancel(self: *Cancelation, loop: *Loop) void {
+        loop.cancel(&self.completion);
+    }
 };
 
 pub const Task = struct {
@@ -99,10 +118,11 @@ pub const Task = struct {
     const MAX_ALIGNMENT = 16;
 
     id: TaskId,
-    pool: *TaskPool,
+    pool: *Tasks,
     completion: Completion = .noop,
     context: [MAX_SIZE]u8 align(MAX_ALIGNMENT) = undefined,
     arena: heap.ArenaAllocator,
+    next: ?*Task = null,
 
     pub fn destroy(self: *Task) void {
         self.arena.deinit();
@@ -260,7 +280,7 @@ test "Task defer allocates and copies context" {
     var arena: heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
 
-    var pool: TaskPool = undefined;
+    var pool: Tasks = undefined;
     try pool.init(arena.allocator(), gpa, testing.io);
 
     const Context = struct {
@@ -291,7 +311,7 @@ test "Task await allocates and copies context" {
     var arena: heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
 
-    var pool: TaskPool = undefined;
+    var pool: Tasks = undefined;
     try pool.init(arena.allocator(), gpa, testing.io);
 
     const Context = struct {
@@ -326,7 +346,7 @@ test "Cancelations" {
     var arena: heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
 
-    var pool: TaskPool = undefined;
+    var pool: Tasks = undefined;
     try pool.init(arena.allocator(), gpa, testing.io);
 
     const task = pool.create();

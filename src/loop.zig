@@ -377,7 +377,10 @@ pub const Completion = struct {
                 }
 
                 const _context: Context = @ptrCast(@alignCast(_completion.context));
-                @call(.auto, callback, .{ _context, _completion });
+                const _callback = callback;
+
+                _completion.* = .noop;
+                @call(.auto, _callback, .{ _context, _completion });
 
                 return false;
             }
