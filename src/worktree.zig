@@ -14,6 +14,10 @@ const Context = App.Context;
 const Scanner = @import("worktree/scanner.zig");
 const Updates = Scanner.Updates;
 const Snapshot = @import("worktree/snapshot.zig");
+const sch = @import("scheduler.zig");
+const BackgroundScheduler = sch.BackgroundScheduler;
+const Executor = BackgroundScheduler.Executor;
+const Scheduler = sch.Scheduler;
 
 pub const Worktree = @This();
 
@@ -25,6 +29,8 @@ gpa: Allocator,
 scanning: bool,
 snapshot: Snapshot,
 io: Io,
+scanner: Executor(Scanner),
+waker: Scheduler.Waker,
 
 pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, arena: Allocator, opts: Options) !void {
     self.* = .{
@@ -32,6 +38,8 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, arena: Allocator, o
         .gpa = ctx.gpa(),
         .scanning = false,
         .snapshot = undefined,
+        .scanner = undefined,
+        .waker = undefined,
     };
 
     const abs_root = try arena.dupe(u8, opts.abs_path);
@@ -39,39 +47,50 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, arena: Allocator, o
 
     try self.snapshot.init(abs_root, root_name, self.gpa);
     errdefer self.snapshot.deinit(self.gpa);
+
+    self.waker = try ctx.await(handleUpdates, .{});
+    errdefer self.waker.close();
+
+    self.scanner = try ctx.executor(Scanner, Scanner.handleActions, .{ arena, self.waker });
+    try self.scanner.init(.{
+        &self.snapshot,
+        ctx.gpa(),
+        io,
+    });
 }
 
 pub fn deinit(self: *Worktree) void {
+    self.scanner.stop();
+    self.waker.close();
     self.snapshot.deinit(self.gpa);
 }
 
-// fn handleUpdates(ctx: Context(Worktree), res: anyerror!void) bool {
-//     res catch return false;
-//     _handleUpdates(ctx) catch return false;
-//
-//     return true;
-// }
-//
-// fn _handleUpdates(ctx: Context(Worktree)) !void {
-//     const self, const update = ctx.update();
-//     defer update.end(self);
-//
-//     var buffer: [8]Updates = undefined;
-//     var updates = &self.scanner.updates;
-//     for (0..try updates.get(self.io, &buffer, 0)) |idx| {
-//         switch (buffer[idx]) {
-//             .started => self.scanning = true,
-//             .updated => |updated| {
-//                 self.snapshot.deinit(self.gpa);
-//                 self.snapshot = updated.snapshot;
-//                 self.scanning = updated.scanning;
-//             },
-//         }
-//     }
-//
-//     ctx.notify();
-// }
-//
+fn handleUpdates(ctx: Context(Worktree), _: Allocator) bool {
+    _handleUpdates(ctx) catch return false;
+
+    return true;
+}
+
+fn _handleUpdates(ctx: Context(Worktree)) !void {
+    const self, const update = ctx.update();
+    defer update.end(self);
+
+    var buffer: [8]Updates = undefined;
+    var updates = &self.scanner.ptr.updates;
+    for (0..try updates.get(self.io, &buffer, 0)) |idx| {
+        switch (buffer[idx]) {
+            .started => self.scanning = true,
+            .updated => |updated| {
+                self.snapshot.deinit(self.gpa);
+                self.snapshot = updated.snapshot;
+                self.scanning = updated.scanning;
+            },
+        }
+    }
+
+    ctx.notify();
+}
+
 test "Worktree Entity" {
     const gpa = testing.allocator;
     const io = testing.io;

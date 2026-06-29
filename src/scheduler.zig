@@ -264,6 +264,42 @@ pub const BackgroundScheduler = struct {
             );
         }
     };
+
+    pub fn Executor(T: type) type {
+        return struct {
+            ptr: *T,
+            waker: Waker,
+            arena: Allocator,
+
+            pub fn init(self: *@This(), args: anytype) !void {
+                try @call(.auto, T.init, .{ self.ptr, self.arena } ++ args);
+            }
+
+            pub fn stop(self: *@This()) void {
+                self.waker.close();
+            }
+        };
+    }
+
+    pub fn executor(self: *@This(), T: type, function: anytype, args: anytype) !Executor(T) {
+        const task = self.tasks.create();
+        const arena = task.arena.allocator();
+        const ptr = try arena.create(T);
+        const port = try task.await(function, .{ptr} ++ args);
+        self.queues.push(.submissions, task);
+
+        return .{
+            .ptr = ptr,
+            .waker = .{
+                .cancelation = .{
+                    .id = task.id,
+                    .scheduler = self,
+                },
+                .port = port,
+            },
+            .arena = arena,
+        };
+    }
 };
 
 test "Background Scheduler runs deferred tasks and frees memory on stop" {
@@ -279,9 +315,9 @@ test "Background Scheduler runs deferred tasks and frees memory on stop" {
 
     var called = false;
     _ = try scheduler.@"defer"(struct {
-        fn callback(_called: *bool, allocator: Allocator, res: anyerror!void) bool {
+        fn callback(_called: *bool, _arena: Allocator, res: anyerror!void) bool {
             res catch return false;
-            _ = allocator.alloc(u8, 16) catch return false;
+            _ = _arena.alloc(u8, 16) catch return false;
             _called.* = true;
             return false;
         }
@@ -305,9 +341,9 @@ test "Background Scheduler runs await tasks and frees memory on close" {
 
     var called = false;
     const waker = try scheduler.await(struct {
-        fn callback(_called: *bool, allocator: Allocator, res: anyerror!void) bool {
+        fn callback(_called: *bool, _arena: Allocator, res: anyerror!void) bool {
             res catch return false;
-            _ = allocator.alloc(u8, 16) catch return false;
+            _ = _arena.alloc(u8, 16) catch return false;
             _called.* = true;
             return false;
         }
@@ -346,4 +382,44 @@ test "Executor cancels await tasks and frees memory on stop" {
     while (!canceled) {
         testing.io.sleep(.fromNanoseconds(100), .real) catch {};
     }
+}
+
+test "Background Scheduler comptime Executor initializes and wakes task" {
+    const testing = std.testing;
+    const heap = std.heap;
+
+    var arena: heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+
+    var scheduler: BackgroundScheduler = undefined;
+    try scheduler.init(arena.allocator(), testing.allocator, testing.io);
+    defer scheduler.deinit();
+
+    const State = struct {
+        value: u32,
+
+        fn init(self: *@This(), _: Allocator, value: u32) !void {
+            self.value = value;
+        }
+    };
+
+    var called = false;
+    var value: u32 = 0;
+    var executor = try scheduler.executor(State, struct {
+        fn callback(state: *State, _called: *bool, _value: *u32, alloc: Allocator, res: anyerror!void) bool {
+            res catch return false;
+            _ = alloc.alloc(u8, 16) catch return false;
+            _value.* = state.value;
+            _called.* = true;
+            return false;
+        }
+    }.callback, .{ &called, &value });
+
+    try executor.init(.{42});
+    try executor.waker.wake();
+    while (!called) {
+        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
+    }
+
+    try testing.expectEqual(@as(u32, 42), value);
 }

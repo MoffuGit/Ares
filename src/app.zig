@@ -16,7 +16,8 @@ const EntityStore = ent.EntityStore;
 const sch = @import("scheduler.zig");
 const BackgroundScheduler = sch.BackgroundScheduler;
 const Scheduler = sch.Scheduler;
-pub const Waker = sch.Waker;
+const Waker = Scheduler.Waker;
+const Executor = BackgroundScheduler.Executor;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
@@ -98,6 +99,10 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     try @call(.auto, function, .{ ptr, ctx } ++ args);
 
     return entity;
+}
+
+pub fn executor(self: *App, T: type, function: anytype, args: anytype) !Executor(T) {
+    return try self.background_scheduler.executor(T, function, args);
 }
 
 pub const UpdateFrame = struct {
@@ -317,6 +322,17 @@ pub fn Context(comptime T: type) type {
             };
 
             return try self.app.await(TypeErased.async, .{ self.entity.any, self.app, args });
+        }
+
+        pub fn executor(
+            self: *const @This(),
+            E: type,
+            function: anytype,
+            args: anytype,
+        ) !Executor(E) {
+            return try self
+                .app
+                .executor(E, function, args);
         }
     };
 }
