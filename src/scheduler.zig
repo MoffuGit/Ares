@@ -1,109 +1,33 @@
 const std = @import("std");
-const heap = std.heap;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
-const testing = std.testing;
-const debug = std.debug;
+const atomic = std.atomic;
+const builtin = std.builtin;
 const posix = std.posix;
 const system = posix.system;
-const assert = debug.assert;
-const builtin = @import("builtin");
 
 const datastruct = @import("datastruct.zig");
-const slotmap = datastruct.slotmap;
 const multi_mpsc = datastruct.multi_mpsc;
-pub const TaskId = slotmap.Key;
 const Loop = @import("loop.zig");
-const Completion = Loop.Completion;
-const Operation = Loop.Operation;
+const Tasks = @import("tasks.zig");
+const Task = Tasks.Task;
+const TaskId = Tasks.TaskId;
 
 pub const Scheduler = struct {
-    const Self = @This();
-
+    tasks: Tasks,
     loop: Loop,
-    rwlock: Io.RwLock,
-    arena: Allocator,
-    pool: std.heap.MemoryPool(Task),
-    active: slotmap.SlotMap(*Task),
-    io: Io,
 
-    pub fn init(self: *Self, arena: Allocator, io: Io) !void {
-        self.* = .{
-            .rwlock = .init,
-            .arena = arena,
-            .loop = undefined,
-            .pool = undefined,
-            .active = undefined,
-            .io = io,
-        };
-        self.pool = try .initCapacity(arena, 100);
-        self.active = try .init(arena, 100);
-
+    pub fn init(self: *Scheduler, arena: Allocator, gpa: Allocator, io: Io) !void {
+        try self.tasks.init(arena, gpa, io);
         try self.loop.init(io);
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *Scheduler) void {
         self.loop.deinit();
     }
 
-    pub fn lock(self: *Self) void {
-        self.rwlock.lockUncancelable(self.io);
-    }
-    pub fn unlock(self: *Self) void {
-        self.rwlock.unlock(self.io);
-    }
-
-    pub fn lockShared(self: *Self) void {
-        self.rwlock.lockSharedUncancelable(self.io);
-    }
-    pub fn unlockShared(self: *Self) void {
-        self.rwlock.unlockShared(self.io);
-    }
-
-    pub fn run(self: *Scheduler, mode: Loop.RunMode) void {
-        self.loop.run(mode) catch |err| {
-            debug.panic("Worker  err: {}", .{err});
-        };
-    }
-
-    pub fn complete(self: *Scheduler, task: *Task) void {
-        self.loop.complete(&task.completion);
-    }
-
-    pub fn submit(self: *Scheduler, task: *Task) void {
-        self.loop.submit(&task.completion);
-    }
-
-    pub fn create(self: *Self) *Task {
-        const task = self.pool.create(undefined) catch @panic("Task Overflow");
-        const id = self.active.put(task) catch @panic("Task Overflow");
-        task.* = .{ .scheduler = self, .id = id };
-
-        return task;
-    }
-
-    fn destroy(self: *Scheduler, id: TaskId) void {
-        self.lock();
-        defer self.unlock();
-
-        const task = self.active.remove(id) orelse @panic("Destroy non-active Task");
-        self.pool.destroy(task);
-    }
-
-    pub fn cancel(self: *Scheduler, id: TaskId) void {
-        self.lockShared();
-        defer self.unlockShared();
-
-        const task = (self.active.get(id) orelse return).*;
-
-        self.loop.cancelate(
-            &task.cancelation,
-            &task.completion,
-            struct {
-                fn cancel(_: *Task, _: *Completion) void {}
-            }.cancel,
-            task,
-        );
+    pub fn run(self: *Scheduler) !void {
+        try self.loop.run(.no_wait);
     }
 
     pub fn @"defer"(
@@ -111,13 +35,10 @@ pub const Scheduler = struct {
         function: anytype,
         context: anytype,
     ) Cancelation {
-        self.lock();
-        defer self.unlock();
-
-        const task = self.create();
+        const task = self.tasks.create();
         task.@"defer"(function, context);
 
-        self.loop.complete(&task.completion);
+        task.complete(&self.loop);
 
         return .{ .id = task.id, .scheduler = self };
     }
@@ -127,341 +48,302 @@ pub const Scheduler = struct {
         function: anytype,
         context: anytype,
     ) !Waker {
-        self.lock();
-        defer self.unlock();
-
-        const task = self.create();
+        const task = self.tasks.create();
         const port = try task.await(function, context);
 
-        self.loop.submit(&task.completion);
+        task.submit(&self.loop);
 
         return .{ .port = port, .cancelation = .{ .id = task.id, .scheduler = self } };
     }
+
+    pub const Cancelation = struct {
+        id: TaskId,
+        scheduler: *Scheduler,
+
+        pub fn cancel(self: *const Cancelation) void {
+            if (self.scheduler.tasks.cancelation(self.id)) |can| {
+                self.scheduler.loop.cancel(&can.completion);
+            }
+        }
+    };
+
+    pub const Waker = struct {
+        port: system.mach_port_name_t,
+        cancelation: Cancelation,
+
+        pub fn wake(self: *const Waker) !void {
+            var msg: posix.system.mach_msg_header_t = .{
+                .msgh_bits = @intFromEnum(system.MACH.MSG.TYPE.COPY_SEND),
+                .msgh_size = @sizeOf(posix.system.mach_msg_header_t),
+                .msgh_remote_port = self.port,
+                .msgh_local_port = system.MACH.PORT.NULL,
+                .msgh_voucher_port = undefined,
+                .msgh_id = undefined,
+            };
+
+            switch (system.mach_msg(
+                &msg,
+                .{ .SEND = .{ .TIMEOUT = true, .MSG = true } },
+                msg.msgh_size,
+                0,
+                system.MACH.PORT.NULL,
+                @enumFromInt(0),
+                system.MACH.PORT.NULL,
+            )) {
+                .SUCCESS => {},
+                .SEND_NO_BUFFER => {},
+                .SEND_TIMED_OUT => {},
+                else => |e| {
+                    std.log.warn("mach msg err={}", .{e});
+                    return error.MachMsgFailed;
+                },
+            }
+        }
+
+        pub fn close(self: *const Waker) void {
+            self.cancelation.cancel();
+            _ = system.mach_port_deallocate(
+                posix.system.mach_task_self(),
+                self.port,
+            );
+        }
+    };
 };
 
-pub const Task = struct {
-    const max_context_size = 128;
-    const max_context_alignment = 16;
+const Queues = union(enum) {
+    cancelations: Tasks.Cancelation,
+    completions: Task,
+    submissions: Task,
+};
 
-    id: TaskId,
-    scheduler: *Scheduler,
-    completion: Completion = .noop,
-    cancelation: Completion = .noop,
-    context: [max_context_size]u8 align(max_context_alignment) = undefined,
-    next: ?*Task = null,
+pub const BackgroundScheduler = struct {
+    tasks: Tasks,
+    loop: Loop,
 
-    pub fn destroy(self: *Task) void {
-        self.scheduler.destroy(self.id);
+    io: Io,
+    future: Io.Future(void),
+    stop: atomic.Value(bool) = .init(false),
+    stopped: atomic.Value(bool) = .init(false),
+    arena: Allocator,
+    gpa: Allocator,
+    queues: multi_mpsc.MultiIntrusive(Queues),
+
+    pub fn init(self: *@This(), arena: Allocator, gpa: Allocator, io: Io) !void {
+        self.* = .{
+            .queues = undefined,
+            .loop = undefined,
+            .tasks = undefined,
+            .io = io,
+            .future = undefined,
+            .arena = arena,
+            .gpa = gpa,
+        };
+
+        self.queues.init();
+        try self.tasks.init(arena, gpa, io);
+        try self.loop.init(io);
+        errdefer self.loop.deinit();
+
+        self.future = try io.concurrent(BackgroundScheduler.run, .{self});
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.stop.store(true, .release);
+
+        while (!self.stopped.load(.acquire)) {
+            self.io.sleep(.fromNanoseconds(100), .real) catch {};
+        }
+
+        _ = self.future.await(self.io);
+        self.loop.deinit();
+    }
+
+    fn run(self: *@This()) void {
+        while (!self.stop.load(.acquire)) {
+            self.flush();
+            self.loop.run(.no_wait) catch return;
+            self.io.sleep(.fromNanoseconds(100), .real) catch {};
+        }
+
+        self.flush();
+        self.loop.run(.until_done) catch return;
+        self.stopped.store(true, .release);
+    }
+
+    fn flush(self: *@This()) void {
+        while (self.queues.pop(.cancelations)) |cancelation| {
+            if (self.tasks.contains(cancelation.id)) {
+                cancelation.cancel(&self.loop);
+            } else {
+                self.tasks.destroy_cancelation(cancelation);
+            }
+        }
+        while (self.queues.pop(.completions)) |task| {
+            task.complete(&self.loop);
+        }
+        while (self.queues.pop(.submissions)) |task| {
+            task.submit(&self.loop);
+        }
     }
 
     pub fn @"defer"(
-        self: *Task,
+        self: *@This(),
         function: anytype,
         context: anytype,
-    ) void {
-        const Context = @TypeOf(context);
+    ) !Cancelation {
+        const task = self.tasks.create();
 
-        if (@sizeOf(Context) > Task.max_context_size or @alignOf(Context) > Task.max_context_alignment) {
-            @compileError("Incorrect size/aligment for task context");
-        }
+        task.@"defer"(function, context);
+        self.queues.push(.completions, task);
 
-        const TypeErased = struct {
-            fn complete(task: *Task, _: *Completion, res: Loop.Result) bool {
-                res.@"defer" catch {
-                    task.destroy();
-                    return false;
-                };
-
-                const _context: *Context = @ptrCast(@alignCast(&task.context));
-                const rearm = @call(.auto, function, _context.*);
-
-                if (!rearm) task.destroy();
-
-                return rearm;
-            }
-        };
-
-        @as(*Context, @ptrCast(@alignCast(&self.context))).* = context;
-        self.completion.@"defer"(TypeErased.complete, self);
+        return .{ .scheduler = self, .id = task.id };
     }
 
     pub fn await(
-        self: *Task,
+        self: *@This(),
         function: anytype,
         context: anytype,
-    ) !system.mach_port_name_t {
-        const Context = @TypeOf(context);
+    ) !Waker {
+        const task = self.tasks.create();
+        const port = try task.await(function, context);
 
-        if (@sizeOf(Context) > Task.max_context_size or @alignOf(Context) > Task.max_context_alignment) {
-            @compileError("Incorrect size/aligment for task context");
-        }
+        self.queues.push(.submissions, task);
 
-        const TypeErased = struct {
-            fn complete(task: *Task, c: *Completion, res: Loop.Result) bool {
-                res.machport catch {
-                    task.destroy();
-                    return false;
-                };
+        return .{ .port = port, .cancelation = .{ .id = task.id, .scheduler = self } };
+    }
 
-                drain(c.operation.machport.port);
-                const _context: *Context = @ptrCast(@alignCast(&task.context));
-                const rearm = @call(.auto, function, _context.*);
+    pub const Cancelation = struct {
+        id: TaskId,
+        scheduler: *BackgroundScheduler,
 
-                if (!rearm) {
-                    task.destroy();
-                }
-
-                return rearm;
+        pub fn cancel(self: *const Cancelation) void {
+            if (self.scheduler.tasks.cancelation(self.id)) |can| {
+                self.scheduler.queues.push(.cancelations, can);
             }
-            fn drain(port: posix.system.mach_port_name_t) void {
-                var message: struct {
-                    header: system.mach_msg_header_t,
-                } = undefined;
+        }
+    };
 
-                while (true) {
-                    switch (system.mach_msg(
-                        &message.header,
-                        .{ .RCV = .{ .TIMEOUT = true } },
-                        0,
-                        @sizeOf(@TypeOf(message)),
-                        port,
-                        system.MACH.MSG.TIMEOUT_NONE,
-                        system.MACH.PORT.NULL,
-                    )) {
-                        .RCV_TIMED_OUT => return,
-                        .SUCCESS => {},
-                        .RCV_TOO_LARGE => {},
-                        else => |err| {
-                            std.log.warn("mach msg drain err, may duplicate async wakeups err={}", .{err});
-                            return;
-                        },
-                    }
-                }
+    pub const Waker = struct {
+        port: system.mach_port_name_t,
+        cancelation: Cancelation,
+
+        pub fn wake(self: *const Waker) !void {
+            var msg: posix.system.mach_msg_header_t = .{
+                .msgh_bits = @intFromEnum(system.MACH.MSG.TYPE.COPY_SEND),
+                .msgh_size = @sizeOf(posix.system.mach_msg_header_t),
+                .msgh_remote_port = self.port,
+                .msgh_local_port = system.MACH.PORT.NULL,
+                .msgh_voucher_port = undefined,
+                .msgh_id = undefined,
+            };
+
+            switch (system.mach_msg(
+                &msg,
+                .{ .SEND = .{ .TIMEOUT = true, .MSG = true } },
+                msg.msgh_size,
+                0,
+                system.MACH.PORT.NULL,
+                @enumFromInt(0),
+                system.MACH.PORT.NULL,
+            )) {
+                .SUCCESS => {},
+                .SEND_NO_BUFFER => {},
+                .SEND_TIMED_OUT => {},
+                else => |e| {
+                    std.log.warn("mach msg err={}", .{e});
+                    return error.MachMsgFailed;
+                },
             }
-        };
-
-        const mach_self = system.mach_task_self();
-        var mach_port: system.mach_port_name_t = undefined;
-        if (system.mach_port_allocate(
-            mach_self,
-            system.MACH.PORT.RIGHT.RECEIVE,
-            &mach_port,
-        ) != 0) {
-            return error.MachPortAllocFailed;
-        }
-        errdefer _ = system.mach_port_deallocate(mach_self, mach_port);
-
-        if (system.mach_port_insert_right(
-            mach_self,
-            mach_port,
-            mach_port,
-            system.MACH.MSG.TYPE.MAKE_SEND,
-        ) != 0) {
-            return error.MachPortAllocFailed;
         }
 
-        const mach_port_limits = extern struct { mpl_qlimit: system.natural_t };
-        const MACH_PORT_LIMITS_INFO = 1;
-
-        const mach = struct {
-            const mach_port_flavor_t = c_int;
-
-            extern "c" fn mach_port_set_attributes(
-                task: system.ipc_space_t,
-                name: system.mach_port_name_t,
-                flavor: mach_port_flavor_t,
-                info: *anyopaque,
-                count: system.mach_msg_type_number_t,
-            ) posix.system.kern_return_t;
-        };
-        var limits: mach_port_limits = .{ .mpl_qlimit = 1 };
-        if (mach.mach_port_set_attributes(
-            mach_self,
-            mach_port,
-            MACH_PORT_LIMITS_INFO,
-            &limits,
-            @sizeOf(@TypeOf(limits)),
-        ) != 0) return error.MachPortAllocFailed;
-
-        @as(*Context, @ptrCast(@alignCast(&self.context))).* = context;
-        self.completion.mach(
-            TypeErased.complete,
-            self,
-            .{ .port = mach_port, .buffer = .{ .array = undefined } },
-        );
-
-        return mach_port;
-    }
-};
-
-pub const Cancelation = struct {
-    scheduler: *Scheduler,
-    id: TaskId,
-
-    pub fn cancel(self: *const Cancelation) void {
-        self.scheduler.cancel(self.id);
-    }
-};
-
-pub const Waker = struct {
-    port: system.mach_port_name_t,
-    cancelation: Cancelation,
-
-    pub fn wake(self: *const Waker) !void {
-        var msg: posix.system.mach_msg_header_t = .{
-            .msgh_bits = @intFromEnum(system.MACH.MSG.TYPE.COPY_SEND),
-            .msgh_size = @sizeOf(posix.system.mach_msg_header_t),
-            .msgh_remote_port = self.port,
-            .msgh_local_port = system.MACH.PORT.NULL,
-            .msgh_voucher_port = undefined,
-            .msgh_id = undefined,
-        };
-
-        switch (system.mach_msg(
-            &msg,
-            .{ .SEND = .{ .TIMEOUT = true, .MSG = true } },
-            msg.msgh_size,
-            0,
-            system.MACH.PORT.NULL,
-            @enumFromInt(0),
-            system.MACH.PORT.NULL,
-        )) {
-            .SUCCESS => {},
-            .SEND_NO_BUFFER => {},
-            .SEND_TIMED_OUT => {},
-            else => |e| {
-                std.log.warn("mach msg err={}", .{e});
-                return error.MachMsgFailed;
-            },
+        pub fn close(self: *const Waker) void {
+            self.cancelation.cancel();
+            _ = system.mach_port_deallocate(
+                posix.system.mach_task_self(),
+                self.port,
+            );
         }
-    }
-
-    pub fn close(self: *const Waker) void {
-        self.cancelation.cancel();
-        _ = system.mach_port_deallocate(
-            posix.system.mach_task_self(),
-            self.port,
-        );
-    }
+    };
 };
 
-fn testDeferTask(calls: *u32) bool {
-    calls.* += 1;
-    return false;
-}
+test "Background Scheduler runs deferred tasks and frees memory on stop" {
+    const testing = std.testing;
+    const heap = std.heap;
 
-fn testMachTask(calls: *u32) bool {
-    calls.* += 1;
+    var arena: heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
 
-    return false;
-}
-test "task completes" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-
-    var alloc = heap.ArenaAllocator.init(gpa);
-    defer alloc.deinit();
-
-    const arena = alloc.allocator();
-
-    var scheduler: Scheduler = undefined;
-    try scheduler.init(arena, io);
+    var scheduler: BackgroundScheduler = undefined;
+    try scheduler.init(arena.allocator(), testing.allocator, testing.io);
     defer scheduler.deinit();
 
-    var calls: u32 = 0;
+    var called = false;
+    _ = try scheduler.@"defer"(struct {
+        fn callback(_called: *bool, allocator: Allocator, res: anyerror!void) bool {
+            res catch return false;
+            _ = allocator.alloc(u8, 16) catch return false;
+            _called.* = true;
+            return false;
+        }
+    }.callback, .{&called});
 
-    var handler = scheduler.@"defer"(testDeferTask, .{&calls});
-
-    scheduler.run(.until_done);
-
-    try testing.expectEqual(@as(u32, 1), calls);
-
-    handler.cancel();
-
-    scheduler.run(.until_done);
-
-    try testing.expectEqual(@as(u32, 1), calls);
+    while (!called) {
+        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
+    }
 }
 
-test "Async notifier completes task" {
-    const gpa = testing.allocator;
-    const io = testing.io;
+test "Background Scheduler runs await tasks and frees memory on close" {
+    const testing = std.testing;
+    const heap = std.heap;
 
-    var alloc = heap.ArenaAllocator.init(gpa);
-    defer alloc.deinit();
+    var arena: heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
 
-    const arena = alloc.allocator();
-
-    var scheduler: Scheduler = undefined;
-    try scheduler.init(arena, io);
+    var scheduler: BackgroundScheduler = undefined;
+    try scheduler.init(arena.allocator(), testing.allocator, testing.io);
     defer scheduler.deinit();
 
-    var calls: u32 = 0;
+    var called = false;
+    const waker = try scheduler.await(struct {
+        fn callback(_called: *bool, allocator: Allocator, res: anyerror!void) bool {
+            res catch return false;
+            _ = allocator.alloc(u8, 16) catch return false;
+            _called.* = true;
+            return false;
+        }
+    }.callback, .{&called});
 
-    const waker = try scheduler.await(testMachTask, .{&calls});
+    try waker.wake();
+    while (!called) {
+        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
+    }
+    waker.close();
+}
 
-    scheduler.run(.no_wait);
-    try testing.expectEqual(@as(u32, 0), calls);
+test "Executor cancels await tasks and frees memory on stop" {
+    const testing = std.testing;
+    const heap = std.heap;
 
-    try waker.wake();
-    try waker.wake();
-    try waker.wake();
-    try waker.wake();
-    try waker.wake();
-    try waker.wake();
-    try waker.wake();
-    scheduler.run(.until_done);
+    var arena: heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
 
-    try testing.expectEqual(@as(u32, 1), calls);
+    var executor: BackgroundScheduler = undefined;
+    try executor.init(arena.allocator(), testing.allocator, testing.io);
+    defer executor.deinit();
+
+    var canceled = false;
+    const waker = try executor.await(struct {
+        fn callback(_canceled: *bool, allocator: Allocator, res: anyerror!void) bool {
+            if (res == error.Canceled) {
+                _ = allocator.alloc(u8, 16) catch return false;
+                _canceled.* = true;
+            }
+            return false;
+        }
+    }.callback, .{&canceled});
 
     waker.close();
-    scheduler.run(.until_done);
-
-    try testing.expectEqual(@as(u32, 1), calls);
-}
-
-test "cancels pending task" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-
-    var alloc = heap.ArenaAllocator.init(gpa);
-    defer alloc.deinit();
-
-    const arena = alloc.allocator();
-
-    var scheduler: Scheduler = undefined;
-    try scheduler.init(arena, io);
-    defer scheduler.deinit();
-
-    var calls: u32 = 0;
-
-    var cl = scheduler.@"defer"(testDeferTask, .{&calls});
-
-    cl.cancel();
-
-    scheduler.run(.until_done);
-
-    try testing.expectEqual(@as(u32, 0), calls);
-}
-
-test "task can detach" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-
-    var alloc = heap.ArenaAllocator.init(gpa);
-    defer alloc.deinit();
-
-    const arena = alloc.allocator();
-
-    var scheduler: Scheduler = undefined;
-    try scheduler.init(arena, io);
-    defer scheduler.deinit();
-
-    var calls: u32 = 0;
-
-    _ = scheduler.@"defer"(testDeferTask, .{&calls});
-
-    scheduler.run(.until_done);
-
-    try testing.expectEqual(@as(u32, 1), calls);
+    while (!canceled) {
+        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
+    }
 }

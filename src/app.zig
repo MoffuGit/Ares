@@ -14,9 +14,8 @@ const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
 const sch = @import("scheduler.zig");
-pub const Cancelation = sch.Cancelation;
-const exe = @import("executor.zig");
-const Executor = exe.Executor;
+const BackgroundScheduler = sch.BackgroundScheduler;
+const Scheduler = sch.Scheduler;
 pub const Waker = sch.Waker;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
@@ -33,7 +32,7 @@ observers: Observers,
 peding_updates: u16,
 
 scheduler: sch.Scheduler,
-executor: Executor,
+background_scheduler: BackgroundScheduler,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
@@ -45,7 +44,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
         .notifications = undefined,
         .entities = undefined,
         .observers = undefined,
-        .executor = undefined,
+        .background_scheduler = undefined,
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
@@ -55,11 +54,11 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     };
     self.arena = self.alloc.allocator();
 
-    try self.scheduler.init(self.arena, io);
+    try self.scheduler.init(self.arena, gpa, io);
     errdefer self.scheduler.deinit();
 
-    try self.executor.init(self.arena, gpa, io);
-    errdefer self.executor.deinit();
+    try self.background_scheduler.init(self.arena, gpa, io);
+    errdefer self.background_scheduler.deinit();
 
     try self.entities.init(self.arena, 100);
 
@@ -72,7 +71,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 
 pub fn deinit(self: *App) void {
     self.scheduler.deinit();
-    self.executor.deinit();
+    self.background_scheduler.deinit();
 
     self.notifications.deinit(self.gpa);
     self.observers.deinit(self.gpa);
@@ -153,18 +152,16 @@ pub fn end_update(self: *App) void {
 }
 
 pub fn flush(self: *App) void {
-    //WARN:
-    //on the future, running the executor will be a separated function
-    self.scheduler.run(.no_wait);
+    self.scheduler.run() catch @panic("Scheduler run Error");
     self.destroy_dropped_entities();
     self.flush_notifications();
 }
 
-pub fn @"defer"(self: *App, function: anytype, args: anytype) sch.Cancelation {
+pub fn @"defer"(self: *App, function: anytype, args: anytype) Scheduler.Cancelation {
     return self.scheduler.@"defer"(function, args);
 }
 
-pub fn await(self: *App, function: anytype, args: anytype) !sch.Waker {
+pub fn await(self: *App, function: anytype, args: anytype) !Scheduler.Waker {
     return try self.scheduler.await(function, args);
 }
 
@@ -209,7 +206,8 @@ pub fn observe(
             return @call(.auto, function, .{ app, _entity } ++ _args);
         }
 
-        fn enable(sub: Observers.Subscription) bool {
+        fn enable(sub: Observers.Subscription, _: Allocator, res: anyerror!void) bool {
+            res catch @panic("Deferred Subscription Error");
             sub.enable();
             return false;
         }
@@ -290,10 +288,11 @@ pub fn Context(comptime T: type) type {
             return try self.app.observe(entity, TypeErased.callback, .{ self.entity.any, args });
         }
 
-        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) sch.Cancelation {
+        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) Scheduler.Cancelation {
             const Args = @TypeOf(args);
             const TypeErased = struct {
-                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args) bool {
+                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args, _: Allocator, res: anyerror!void) bool {
+                    res catch return false;
                     const _entity = any.into(T) orelse return false;
 
                     const ctx: Context(T) = .new(app, _entity);
@@ -304,15 +303,16 @@ pub fn Context(comptime T: type) type {
             return self.app.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
         }
 
-        pub fn await(self: *const @This(), function: anytype, args: anytype) !sch.Waker {
+        pub fn await(self: *const @This(), function: anytype, args: anytype) !Scheduler.Waker {
             const Args = @TypeOf(args);
             const TypeErased = struct {
-                pub fn async(any: AnyEntity, app: *App, _args: Args) bool {
+                pub fn async(any: AnyEntity, app: *App, _args: Args, _arena: Allocator, res: anyerror!void) bool {
+                    res catch return false;
                     const _entity = any.into(T) orelse return false;
 
                     const ctx: Context(T) = .new(app, _entity);
 
-                    return @call(.auto, function, .{ctx} ++ _args);
+                    return @call(.auto, function, .{ ctx, _arena } ++ _args);
                 }
             };
 
@@ -586,7 +586,7 @@ test "Context async runs on foreground executor with entity context" {
             self.* = .{ .calls = 0, .last_value = 0 };
         }
 
-        pub fn deferred(ctx: Context(@This()), value: usize) bool {
+        pub fn await(ctx: Context(@This()), _: Allocator, value: usize) bool {
             const ptr, const update = ctx.update();
             defer update.end(ptr);
 
@@ -607,7 +607,7 @@ test "Context async runs on foreground executor with entity context" {
     const entity = try Entity(State).new(&app, .{});
 
     var context = Context(State).new(&app, entity);
-    const waker = try context.await(State.deferred, .{42});
+    const waker = try context.await(State.await, .{42});
 
     try testing.expectEqual(0, entity.read(&app).calls);
 
