@@ -22,7 +22,7 @@ const Chunk = opaque {
     }
 };
 
-const ChunkPool = struct {
+pub const ChunkPool = struct {
     buffer: []u8,
     alignment: mem.Alignment,
     chunk_size: u16,
@@ -88,7 +88,7 @@ const ChunkPool = struct {
     }
 };
 
-const ChunkAllocator = struct {
+pub const ChunkAllocator = struct {
     pools: []ChunkPool,
 
     pub fn init(self: *ChunkAllocator, child_alloc: Allocator, chunks_per_size: u16, comptime sizes: anytype) !void {
@@ -101,7 +101,7 @@ const ChunkAllocator = struct {
         }
 
         inline for (sizes, 0..) |size, index| {
-            try self.pools[index].init(child_alloc, chunks_per_size, size);
+            try self.pools[index].init(child_alloc, chunks_per_size, std.math.ceilPowerOfTwoAssert(u16, size));
             initialized += 1;
         }
     }

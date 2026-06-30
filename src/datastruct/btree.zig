@@ -698,6 +698,8 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
 
     return struct {
         const Self = @This();
+        pub const NODE_SIZE = @sizeOf(Node);
+        pub const NODE_ALIGN = @alignOf(Node);
 
         root: *Node,
         count: usize = 0,
@@ -1005,6 +1007,8 @@ pub fn BPlusSet(comptime K: type, comptime comp: *const fn (a: K, b: K) std.math
     return struct {
         const Self = @This();
         const Tree = BPlusTree(K, void, comp);
+        pub const NODE_SIZE = Tree.NODE_SIZE;
+        pub const NODE_ALIGN = Tree.NODE_ALIGN;
 
         tree: Tree,
 

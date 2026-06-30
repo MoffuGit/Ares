@@ -8,6 +8,8 @@ const heap = std.heap;
 
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
+const chunk_pool = @import("chunk_pool.zig");
+const ChunkAllocator = chunk_pool.ChunkAllocator;
 const ent = @import("entity.zig");
 pub const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
@@ -30,6 +32,7 @@ alloc: heap.ArenaAllocator,
 arena: Allocator,
 entities: EntityStore,
 observers: Observers,
+chunks: ChunkAllocator,
 peding_updates: u16,
 
 scheduler: sch.Scheduler,
@@ -45,6 +48,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
         .notifications = undefined,
         .entities = undefined,
         .observers = undefined,
+        .chunks = undefined,
         .background_scheduler = undefined,
         .peding_updates = 0,
         .flushing = false,
@@ -53,7 +57,12 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
         .arena = undefined,
         .io = io,
     };
+    errdefer self.alloc.deinit();
+
     self.arena = self.alloc.allocator();
+
+    try self.chunks.init(self.arena, 100, .{Observers.CHUNK_SIZE});
+    try self.observers.init(self.chunks.allocator());
 
     try self.scheduler.init(self.arena, gpa, io);
     errdefer self.scheduler.deinit();
@@ -63,9 +72,6 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 
     try self.entities.init(self.arena, 100);
 
-    try self.observers.init(gpa);
-    errdefer self.observers.deinit(gpa);
-
     try self.notifications.init(gpa);
     errdefer self.notifications.deinit(gpa);
 }
@@ -73,10 +79,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 pub fn deinit(self: *App) void {
     self.scheduler.deinit();
     self.notifications.deinit(self.gpa);
-    self.observers.deinit(self.gpa);
-
     self.background_scheduler.deinit();
-
     self.alloc.deinit();
 }
 
@@ -173,7 +176,7 @@ pub fn await(self: *App, function: anytype, args: anytype) !Scheduler.Waker {
 pub fn flush_notifications(self: *App) void {
     var iter = self.notifications.iter();
     while (iter.next()) |id| {
-        self.observers.notify(id, .{self}, self.gpa);
+        self.observers.notify(id, .{self});
     }
 
     self.notifications.clear(self.gpa);
@@ -183,7 +186,7 @@ pub fn destroy_dropped_entities(self: *App) void {
     while (self.entities.popDrop()) |drop| {
         const ptr, const key, const type_info = drop;
 
-        self.observers.remove(key, self.gpa);
+        self.observers.remove(key);
         type_info.deinit(ptr);
         self.entities.recycle(key);
     }
@@ -222,7 +225,6 @@ pub fn observe(
         entity.id(),
         TypeErased._callback,
         .{ entity.any, args },
-        self.gpa,
     );
 
     _ = self.@"defer"(TypeErased.enable, .{sub});

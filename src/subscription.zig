@@ -5,6 +5,7 @@ const assert = debug.assert;
 
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
+const ChunkAllocator = @import("chunk_pool.zig").ChunkAllocator;
 
 pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *const fn (Key, Key) std.math.Order) type {
     return struct {
@@ -27,12 +28,12 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
         );
 
         pub const Subscriber = struct {
-            const max_context_size = 128;
-            const max_context_alignment = 16;
+            const MAX_CONTEXT_SIZE = 128;
+            const MAX_CONTEXT_ALIGN = 16;
 
             active: bool,
             callback: Callback,
-            context: [max_context_size]u8 align(max_context_alignment),
+            context: *anyopaque,
         };
 
         pub const Dropped = struct {
@@ -55,45 +56,49 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
                 self.subscriptions.enable(self);
             }
 
-            pub fn unsubscribe(self: *const Subscription, gpa: Allocator) !void {
-                try self.subscriptions.unsubscribe(self, gpa);
+            pub fn unsubscribe(self: *const Subscription) !void {
+                try self.subscriptions.unsubscribe(self);
             }
 
             pub fn unsubscribeApp(self: *const Subscription) !void {
-                try self.subscriptions.unsubscribe(self, self.subscriptions.gpa);
+                try self.subscriptions.unsubscribe(self);
             }
         };
 
         subscribers: Subscribers,
         dropped: btree.BPlusSet(Dropped, Dropped.order),
-        gpa: Allocator,
+        chunk: Allocator,
         next_id: u32,
 
-        pub fn init(self: *Self, gpa: Allocator) !void {
+        const SubscriberTree = btree.BPlusTree(u32, Subscriber, Order.order);
+        pub const CHUNK_SIZE = @max(Subscriber.MAX_CONTEXT_SIZE, Subscribers.NODE_SIZE, SubscriberTree.NODE_SIZE, btree.BPlusSet(Dropped, Dropped.order).NODE_SIZE);
+
+        pub fn init(self: *Self, chunk: Allocator) !void {
             self.* = .{
                 .next_id = 0,
-                .gpa = gpa,
+                .chunk = chunk,
                 .subscribers = undefined,
                 .dropped = undefined,
             };
 
-            try self.subscribers.init(gpa);
-            errdefer self.subscribers.deinit(gpa);
+            try self.subscribers.init(chunk);
+            errdefer self.subscribers.deinit(chunk);
 
-            try self.dropped.init(gpa);
-            errdefer self.dropped.deinit(gpa);
+            try self.dropped.init(chunk);
+            errdefer self.dropped.deinit(chunk);
         }
 
-        pub fn deinit(self: *Self, gpa: Allocator) void {
+        pub fn deinit(self: *Self) void {
             var outer = self.subscribers.iter();
             while (outer.next()) |entry| {
                 if (self.subscribers.get_ref(entry.key)) |maybe_subscribers| if (maybe_subscribers.*) |*subscribers| {
-                    subscribers.deinit(gpa);
+                    self.destroyContexts(subscribers);
+                    subscribers.deinit(self.chunk);
                 };
             }
-            self.subscribers.deinit(gpa);
-            self.clearDrops(gpa);
-            self.dropped.deinit(gpa);
+            self.subscribers.deinit(self.chunk);
+            self.clearDrops();
+            self.dropped.deinit(self.chunk);
         }
 
         pub fn insert(
@@ -101,17 +106,16 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             key: Key,
             callback: anytype,
             context: anytype,
-            gpa: Allocator,
         ) !Subscription {
             const Context = @TypeOf(context);
 
-            if (@sizeOf(Context) > Subscriber.max_context_size or @alignOf(Context) > Subscriber.max_context_alignment) {
+            if (@sizeOf(Context) > Subscriber.MAX_CONTEXT_SIZE or @alignOf(Context) > Subscriber.MAX_CONTEXT_ALIGN) {
                 @compileError("subscriber context has incorrect size or aligment");
             }
 
             const TypeErased = struct {
                 fn _callback(sub: Subscriber, args: Args) bool {
-                    const _context: *const Context = @ptrCast(@alignCast(&sub.context));
+                    const _context: *const Context = @ptrCast(@alignCast(sub.context));
                     return @call(.always_inline, callback, args ++ _context.*);
                 }
             };
@@ -119,24 +123,26 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             const id = self.next_id;
             self.next_id += 1;
 
-            var sub = Subscriber{
+            const context_ptr = try self.chunk.create(Context);
+            errdefer self.chunk.destroy(context_ptr);
+            context_ptr.* = context;
+
+            const sub = Subscriber{
                 .active = false,
                 .callback = TypeErased._callback,
-                .context = undefined,
+                .context = context_ptr,
             };
 
-            @as(*Context, @ptrCast(@alignCast(&sub.context))).* = context;
-
             if (self.subscribers.get_ref(key)) |subs| {
-                const old = try subs.*.?.insert(gpa, id, sub);
+                const old = try subs.*.?.insert(self.chunk, id, sub);
                 assert(old == null);
             } else {
-                var subscribers: btree.BPlusTree(u32, Subscriber, Order.order) = undefined;
-                try subscribers.init(gpa);
-                errdefer subscribers.deinit(gpa);
+                var subscribers: SubscriberTree = undefined;
+                try subscribers.init(self.chunk);
+                errdefer subscribers.deinit(self.chunk);
 
-                _ = try subscribers.insert(gpa, id, sub);
-                _ = try self.subscribers.insert(gpa, key, subscribers);
+                _ = try subscribers.insert(self.chunk, id, sub);
+                _ = try self.subscribers.insert(self.chunk, key, subscribers);
             }
 
             return .{ .subscriptions = self, .key = key, .id = id };
@@ -150,66 +156,86 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             }
         }
 
-        pub fn notify(self: *Self, key: Key, args: Args, gpa: Allocator) void {
+        pub fn notify(self: *Self, key: Key, args: Args) void {
             const maybe_subscribers = self.subscribers.get_ref(key) orelse return;
             var subscribers = maybe_subscribers.* orelse return;
 
             var iter = subscribers.iter();
             while (iter.next()) |entry| {
                 if (entry.value.active and !entry.value.callback(entry.value, args)) {
-                    _ = self.dropped.insert(gpa, .{ .key = key, .id = entry.key }) catch |err| {
+                    _ = self.dropped.insert(self.chunk, .{ .key = key, .id = entry.key }) catch |err| {
                         debug.panic("Drop subscriber err: {}", .{err});
                     };
                 }
             }
 
-            self.clearDrops(gpa);
+            self.clearDrops();
         }
 
-        pub fn clearDrops(self: *Self, gpa: Allocator) void {
+        pub fn clearDrops(self: *Self) void {
             var dropped = self.dropped.iter();
             while (dropped.next()) |drop| {
                 const maybe_dropped_subscribers = self.subscribers.get_ref(drop.key) orelse {
-                    _ = self.dropped.remove(gpa, drop);
+                    _ = self.dropped.remove(self.chunk, drop);
                     continue;
                 };
                 var dropped_subscribers = maybe_dropped_subscribers.* orelse {
-                    _ = self.dropped.remove(gpa, drop);
+                    _ = self.dropped.remove(self.chunk, drop);
                     continue;
                 };
-                _ = dropped_subscribers.remove(gpa, drop.id);
+                if (dropped_subscribers.remove(self.chunk, drop.id)) |sub| {
+                    self.destroyContext(sub);
+                }
 
-                _ = self.dropped.remove(gpa, drop);
+                _ = self.dropped.remove(self.chunk, drop);
 
                 if (dropped_subscribers.is_empty()) {
-                    dropped_subscribers.deinit(gpa);
-                    _ = self.subscribers.remove(gpa, drop.key);
+                    dropped_subscribers.deinit(self.chunk);
+                    _ = self.subscribers.remove(self.chunk, drop.key);
                 } else {
                     maybe_dropped_subscribers.* = dropped_subscribers;
                 }
             }
         }
 
-        pub fn remove(self: *Self, key: Key, _: Allocator) void {
-            if (self.subscribers.remove(self.gpa, key)) |subscribers| {
+        pub fn remove(self: *Self, key: Key) void {
+            if (self.subscribers.remove(self.chunk, key)) |subscribers| {
                 if (subscribers) |subs| {
                     var mutable_subs = subs;
-                    mutable_subs.deinit(self.gpa);
+                    self.destroyContexts(&mutable_subs);
+                    mutable_subs.deinit(self.chunk);
                 }
             }
         }
 
-        pub fn unsubscribe(self: *Self, sub: *const Subscription, gpa: Allocator) !void {
+        pub fn unsubscribe(self: *Self, sub: *const Subscription) !void {
             const maybe_subscribers = self.subscribers.get_ref(sub.key) orelse return;
             if (maybe_subscribers.*) |*subs| {
-                _ = subs.remove(gpa, sub.id);
+                if (subs.remove(self.chunk, sub.id)) |removed| {
+                    self.destroyContext(removed);
+                }
                 if (subs.is_empty()) {
-                    subs.deinit(self.gpa);
-                    _ = self.subscribers.remove(self.gpa, sub.key);
+                    subs.deinit(self.chunk);
+                    _ = self.subscribers.remove(self.chunk, sub.key);
                 }
             } else {
-                _ = try self.dropped.insert(gpa, .{ .id = sub.id, .key = sub.key });
+                _ = try self.dropped.insert(self.chunk, .{ .id = sub.id, .key = sub.key });
             }
+        }
+
+        fn destroyContexts(self: *Self, subscribers: *SubscriberTree) void {
+            var iter = subscribers.iter();
+            while (iter.next()) |entry| {
+                self.destroyContext(entry.value);
+            }
+        }
+
+        fn destroyContext(self: *Self, sub: Subscriber) void {
+            self.chunk.rawFree(
+                @as([*]u8, @ptrCast(sub.context))[0..Subscriber.MAX_CONTEXT_SIZE],
+                .fromByteUnits(Subscriber.MAX_CONTEXT_ALIGN),
+                @returnAddress(),
+            );
         }
     };
 }
@@ -231,13 +257,17 @@ test "Subscriptions" {
 
     const Subs = Subscriptions(Key, &.{ bool, bool }, Order.order);
 
+    var chunks: ChunkAllocator = undefined;
+    try chunks.init(std.testing.allocator, 100, .{Subs.CHUNK_SIZE});
+    defer chunks.deinit(std.testing.allocator);
+
     var subscriptions: Subs = undefined;
-    try subscriptions.init(std.testing.allocator);
-    defer subscriptions.deinit(std.testing.allocator);
+    try subscriptions.init(chunks.allocator());
+    defer subscriptions.deinit();
 
     const key = 42;
     var context = false;
-    var sub = try subscriptions.insert(key, Callback.notify, .{&context}, std.testing.allocator);
+    var sub = try subscriptions.insert(key, Callback.notify, .{&context});
 
     try std.testing.expectEqual(&subscriptions, sub.subscriptions);
     try std.testing.expectEqual(@as(Key, 42), sub.key);
@@ -248,15 +278,15 @@ test "Subscriptions" {
     const subscriber = subscribers.*.?.get(0).?;
     try std.testing.expect(!subscriber.active);
 
-    subscriptions.notify(42, .{ true, true }, std.testing.allocator);
+    subscriptions.notify(42, .{ true, true });
     try std.testing.expect(!context);
 
     sub.enable();
 
-    subscriptions.notify(42, .{ true, true }, std.testing.allocator);
-    subscriptions.notify(24, .{ false, false }, std.testing.allocator);
+    subscriptions.notify(42, .{ true, true });
+    subscriptions.notify(24, .{ false, false });
     try std.testing.expect(context);
 
-    subscriptions.notify(42, .{ false, false }, std.testing.allocator);
+    subscriptions.notify(42, .{ false, false });
     try std.testing.expect(subscriptions.subscribers.get_ref(42) == null);
 }
