@@ -59,22 +59,19 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
         .arena = undefined,
         .io = io,
     };
-    errdefer self.alloc.deinit();
-
     self.arena = self.alloc.allocator();
+    errdefer self.alloc.deinit();
 
     try self.chunks.init(self.arena, 100, .{ MAX_SIZE, Observers.NODE_SIZE });
     try self.observers.init(self.chunks.allocator());
-
-    try self.scheduler.init(self.arena, self.chunks.allocator(), gpa, io);
-    errdefer self.scheduler.deinit();
+    try self.entities.init(self.arena, 100);
+    try self.notifications.init(self.chunks.allocator());
 
     try self.background_scheduler.init(self.arena, gpa, io);
     errdefer self.background_scheduler.deinit();
 
-    try self.entities.init(self.arena, 100);
-
-    try self.notifications.init(self.chunks.allocator());
+    try self.scheduler.init(self.arena, self.chunks.allocator(), gpa, io);
+    errdefer self.scheduler.deinit();
 }
 
 pub fn deinit(self: *App) void {
