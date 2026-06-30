@@ -201,8 +201,8 @@ const Worker = struct {
     waker: Scheduler.Waker,
 
     pub fn init(self: *Worker, scanner: *Scanner, arena: Allocator, waker: Scheduler.Waker) !void {
-        const queue: std.ArrayList(Job) = try .initCapacity(arena, 400);
-        const entries: std.ArrayList(Snapshot.Entry) = try .initCapacity(arena, 800);
+        const queue: std.ArrayList(Job) = .empty;
+        const entries: std.ArrayList(Snapshot.Entry) = .empty;
 
         self.* = .{
             .arena = arena,

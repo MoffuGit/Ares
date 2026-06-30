@@ -96,7 +96,7 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     self.entities.start_update(id);
     defer self.entities.end_update(id);
 
-    try @call(.auto, function, .{ ptr, ctx } ++ args);
+    try @call(.always_inline, function, .{ ptr, ctx } ++ args);
 
     return entity;
 }
@@ -208,7 +208,7 @@ pub fn observe(
     const TypeErased = struct {
         fn _callback(app: *App, observed: AnyEntity, _args: Args) bool {
             const _entity = observed.into(T) orelse return false;
-            return @call(.auto, function, .{ app, _entity } ++ _args);
+            return @call(.always_inline, function, .{ app, _entity } ++ _args);
         }
 
         fn enable(sub: Observers.Subscription, _: Allocator, res: anyerror!void) bool {
@@ -284,7 +284,7 @@ pub fn Context(comptime T: type) type {
                     const ptr, const _update = _entity.update(app);
                     defer _update.end(ptr);
 
-                    @call(.auto, function, .{ ptr, observed, ctx } ++ _args);
+                    @call(.always_inline, function, .{ ptr, observed, ctx } ++ _args);
 
                     return true;
                 }
@@ -302,7 +302,7 @@ pub fn Context(comptime T: type) type {
 
                     const ctx: Context(T) = .new(app, _entity);
 
-                    return @call(.auto, function, .{ctx} ++ _args);
+                    return @call(.always_inline, function, .{ctx} ++ _args);
                 }
             };
             return self.app.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
@@ -317,7 +317,7 @@ pub fn Context(comptime T: type) type {
 
                     const ctx: Context(T) = .new(app, _entity);
 
-                    return @call(.auto, function, .{ ctx, _arena } ++ _args);
+                    return @call(.always_inline, function, .{ ctx, _arena } ++ _args);
                 }
             };
 

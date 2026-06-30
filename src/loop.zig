@@ -380,7 +380,7 @@ pub const Completion = struct {
                 const _callback = callback;
 
                 _completion.* = .noop;
-                @call(.auto, _callback, .{ _context, _completion });
+                @call(.always_inline, _callback, .{ _context, _completion });
 
                 return false;
             }
@@ -405,7 +405,7 @@ pub const Completion = struct {
             fn complete(_: *Loop, _completion: *Completion) bool {
                 const _context: Context = @ptrCast(@alignCast(_completion.context));
                 const result = _completion.result orelse Result{ .@"defer" = {} };
-                return @call(.auto, callback, .{ _context, _completion, result });
+                return @call(.always_inline, callback, .{ _context, _completion, result });
             }
         };
 
@@ -430,11 +430,11 @@ pub const Completion = struct {
         const TypeErased = struct {
             fn complete(_: *Loop, _completion: *Completion) bool {
                 if (_completion.result == null) {
-                    _completion.result = @call(.auto, resolver, .{@field(_completion.operation, @tagName(op_tag))});
+                    _completion.result = @call(.always_inline, resolver, .{@field(_completion.operation, @tagName(op_tag))});
                 }
 
                 const _context: Context = @ptrCast(@alignCast(_completion.context));
-                return @call(.auto, callback, .{ _context, _completion, _completion.result.? });
+                return @call(.always_inline, callback, .{ _context, _completion, _completion.result.? });
             }
         };
 

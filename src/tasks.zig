@@ -150,7 +150,7 @@ pub const Task = struct {
                 const _context: *Context = @ptrCast(@alignCast(&task.context));
 
                 const rearm = @call(
-                    .auto,
+                    .always_inline,
                     function,
                     _context.* ++
                         .{ task.arena.allocator(), res.@"defer" },
@@ -178,7 +178,7 @@ pub const Task = struct {
             fn complete(task: *Task, c: *Completion, res: Loop.Result) bool {
                 drain(c.operation.machport.port);
                 const _context: *Context = @ptrCast(@alignCast(&task.context));
-                const rearm = @call(.auto, function, _context.* ++ .{ task.arena.allocator(), res.machport });
+                const rearm = @call(.always_inline, function, _context.* ++ .{ task.arena.allocator(), res.machport });
 
                 if (!rearm) {
                     task.destroy();

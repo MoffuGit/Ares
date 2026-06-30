@@ -272,7 +272,7 @@ pub const BackgroundScheduler = struct {
             arena: Allocator,
 
             pub fn init(self: *@This(), args: anytype) !void {
-                try @call(.auto, T.init, .{ self.ptr, self.arena, self.waker } ++ args);
+                try @call(.always_inline, T.init, .{ self.ptr, self.arena, self.waker } ++ args);
             }
 
             pub fn stop(self: *@This()) void {

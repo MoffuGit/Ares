@@ -112,7 +112,7 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             const TypeErased = struct {
                 fn _callback(sub: Subscriber, args: Args) bool {
                     const _context: *const Context = @ptrCast(@alignCast(&sub.context));
-                    return @call(.auto, callback, args ++ _context.*);
+                    return @call(.always_inline, callback, args ++ _context.*);
                 }
             };
 
