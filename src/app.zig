@@ -74,13 +74,11 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 
     try self.entities.init(self.arena, 100);
 
-    try self.notifications.init(gpa);
-    errdefer self.notifications.deinit(gpa);
+    try self.notifications.init(self.chunks.allocator());
 }
 
 pub fn deinit(self: *App) void {
     self.scheduler.deinit();
-    self.notifications.deinit(self.gpa);
     self.background_scheduler.deinit();
     self.alloc.deinit();
 }
@@ -143,7 +141,7 @@ pub fn notify(self: *App, entity: anytype) void {
         @compileError("entity must be an Entity(T)");
     }
 
-    _ = self.notifications.insert(self.gpa, entity.id()) catch |err| {
+    _ = self.notifications.insert(self.chunks.allocator(), entity.id()) catch |err| {
         std.log.err("We cannot notify, err: {}", .{err});
     };
 }
@@ -181,7 +179,7 @@ pub fn flush_notifications(self: *App) void {
         self.observers.notify(id, .{self});
     }
 
-    self.notifications.clear(self.gpa);
+    self.notifications.clear(self.chunks.allocator());
 }
 
 pub fn destroy_dropped_entities(self: *App) void {
