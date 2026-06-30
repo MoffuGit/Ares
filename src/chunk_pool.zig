@@ -5,7 +5,8 @@ const assert = debug.assert;
 const Allocator = mem.Allocator;
 const testing = std.testing;
 
-const MAX_ALIGN: mem.Alignment = .@"16";
+const constans = @import("contants.zig");
+const MAX_ALIGN = constans.MAX_ALIGN;
 
 const Chunk = opaque {
     pub const Index = enum(u16) {
@@ -91,7 +92,7 @@ pub const ChunkPool = struct {
 pub const ChunkAllocator = struct {
     pools: []ChunkPool,
 
-    pub fn init(self: *ChunkAllocator, child_alloc: Allocator, chunks_per_size: u16, comptime sizes: anytype) !void {
+    pub fn init(self: *ChunkAllocator, child_alloc: Allocator, capacity: u16, comptime sizes: anytype) !void {
         self.pools = try child_alloc.alloc(ChunkPool, sizes.len);
         errdefer child_alloc.free(self.pools);
 
@@ -101,7 +102,7 @@ pub const ChunkAllocator = struct {
         }
 
         inline for (sizes, 0..) |size, index| {
-            try self.pools[index].init(child_alloc, chunks_per_size, std.math.ceilPowerOfTwoAssert(u16, size));
+            try self.pools[index].init(child_alloc, capacity, std.math.ceilPowerOfTwoAssert(u16, size));
             initialized += 1;
         }
     }

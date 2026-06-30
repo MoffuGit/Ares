@@ -6,10 +6,12 @@ const Io = std.Io;
 const assert = std.debug.assert;
 const heap = std.heap;
 
-const datastruct = @import("datastruct.zig");
-const btree = datastruct.btree;
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
+const constants = @import("contants.zig");
+const MAX_SIZE = constants.MAX_SIZE;
+const datastruct = @import("datastruct.zig");
+const btree = datastruct.btree;
 const ent = @import("entity.zig");
 pub const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
@@ -61,7 +63,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 
     self.arena = self.alloc.allocator();
 
-    try self.chunks.init(self.arena, 100, .{Observers.CHUNK_SIZE});
+    try self.chunks.init(self.arena, 100, .{ MAX_SIZE, Observers.NODE_SIZE });
     try self.observers.init(self.chunks.allocator());
 
     try self.scheduler.init(self.arena, gpa, io);

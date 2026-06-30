@@ -2,10 +2,14 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const debug = std.debug;
 const assert = debug.assert;
+const panic = debug.panic;
 
+const ChunkAllocator = @import("chunk_pool.zig").ChunkAllocator;
+const constants = @import("contants.zig");
+const MAX_ALIGN = constants.MAX_ALIGN;
+const MAX_SIZE = constants.MAX_SIZE;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
-const ChunkAllocator = @import("chunk_pool.zig").ChunkAllocator;
 
 pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *const fn (Key, Key) std.math.Order) type {
     return struct {
@@ -28,9 +32,6 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
         );
 
         pub const Subscriber = struct {
-            const MAX_CONTEXT_SIZE = 128;
-            const MAX_CONTEXT_ALIGN = 16;
-
             active: bool,
             callback: Callback,
             context: *anyopaque,
@@ -71,7 +72,7 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
         next_id: u32,
 
         const SubscriberTree = btree.BPlusTree(u32, Subscriber, Order.order);
-        pub const CHUNK_SIZE = @max(Subscriber.MAX_CONTEXT_SIZE, Subscribers.NODE_SIZE, SubscriberTree.NODE_SIZE, btree.BPlusSet(Dropped, Dropped.order).NODE_SIZE);
+        pub const NODE_SIZE = @max(Subscribers.NODE_SIZE, SubscriberTree.NODE_SIZE, btree.BPlusSet(Dropped, Dropped.order).NODE_SIZE);
 
         pub fn init(self: *Self, chunk: Allocator) !void {
             self.* = .{
@@ -108,9 +109,13 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             context: anytype,
         ) !Subscription {
             const Context = @TypeOf(context);
+            const SIZE = @sizeOf(Context);
+            const ALIGN = @alignOf(Context);
 
-            if (@sizeOf(Context) > Subscriber.MAX_CONTEXT_SIZE or @alignOf(Context) > Subscriber.MAX_CONTEXT_ALIGN) {
-                @compileError("subscriber context has incorrect size or aligment");
+            if (SIZE > MAX_SIZE or
+                ALIGN > MAX_ALIGN.toByteUnits())
+            {
+                panic("Wrong Context: size: {}, align: {}", .{ SIZE, ALIGN });
             }
 
             const TypeErased = struct {
@@ -123,8 +128,14 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
             const id = self.next_id;
             self.next_id += 1;
 
-            const context_ptr = try self.chunk.create(Context);
-            errdefer self.chunk.destroy(context_ptr);
+            const context_buffer = (self.chunk.rawAlloc(
+                MAX_SIZE,
+                MAX_ALIGN,
+                @returnAddress(),
+            ) orelse return error.OutOfMemory)[0..MAX_SIZE];
+            errdefer self.chunk.rawFree(context_buffer, MAX_ALIGN, @returnAddress());
+
+            const context_ptr: *Context = @ptrCast(@alignCast(context_buffer.ptr));
             context_ptr.* = context;
 
             const sub = Subscriber{
@@ -232,8 +243,8 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
 
         fn destroyContext(self: *Self, sub: Subscriber) void {
             self.chunk.rawFree(
-                @as([*]u8, @ptrCast(sub.context))[0..Subscriber.MAX_CONTEXT_SIZE],
-                .fromByteUnits(Subscriber.MAX_CONTEXT_ALIGN),
+                @as([*]u8, @ptrCast(sub.context))[0..MAX_SIZE],
+                MAX_ALIGN,
                 @returnAddress(),
             );
         }
@@ -258,7 +269,7 @@ test "Subscriptions" {
     const Subs = Subscriptions(Key, &.{ bool, bool }, Order.order);
 
     var chunks: ChunkAllocator = undefined;
-    try chunks.init(std.testing.allocator, 100, .{Subs.CHUNK_SIZE});
+    try chunks.init(std.testing.allocator, 100, .{Subs.NODE_SIZE});
     defer chunks.deinit(std.testing.allocator);
 
     var subscriptions: Subs = undefined;
