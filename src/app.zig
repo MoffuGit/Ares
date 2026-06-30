@@ -66,7 +66,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     try self.chunks.init(self.arena, 100, .{ MAX_SIZE, Observers.NODE_SIZE });
     try self.observers.init(self.chunks.allocator());
 
-    try self.scheduler.init(self.arena, gpa, io);
+    try self.scheduler.init(self.arena, self.chunks.allocator(), gpa, io);
     errdefer self.scheduler.deinit();
 
     try self.background_scheduler.init(self.arena, gpa, io);

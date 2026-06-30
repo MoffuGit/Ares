@@ -5,7 +5,14 @@ const posix = std.posix;
 const system = posix.system;
 const testing = std.testing;
 const heap = std.heap;
+const debug = std.debug;
+const panic = debug.panic;
 
+const chunk_pool = @import("chunk_pool.zig");
+const ChunkAllocator = chunk_pool.ChunkAllocator;
+const constants = @import("contants.zig");
+const MAX_SIZE = constants.MAX_SIZE;
+const MAX_ALIGN = constants.MAX_ALIGN;
 const datastruct = @import("datastruct.zig");
 const slotmap = datastruct.slotmap;
 const multi_mpsc = datastruct.multi_mpsc;
@@ -21,9 +28,11 @@ pool: heap.MemoryPool(Task),
 cancelations: heap.MemoryPool(Cancelation),
 active: slotmap.SlotMap(*Task),
 gpa: Allocator,
+chunks: Allocator,
 
-pub fn init(self: *Tasks, arena: Allocator, gpa: Allocator, io: Io) !void {
+pub fn init(self: *Tasks, arena: Allocator, chunks: Allocator, gpa: Allocator, io: Io) !void {
     self.* = .{
+        .chunks = chunks,
         .mutex = .init,
         .pool = undefined,
         .active = undefined,
@@ -40,9 +49,15 @@ pub fn create(self: *Tasks) *Task {
     self.lock();
     defer self.unlock();
 
+    const context = self.chunks.rawAlloc(
+        MAX_SIZE,
+        MAX_ALIGN,
+        @returnAddress(),
+    ) orelse @panic("Task Context Overflow");
+
     const task = self.pool.create(undefined) catch @panic("Task Overflow");
     const id = self.active.put(task) catch @panic("Task Overflow");
-    task.* = .{ .pool = self, .id = id, .arena = .init(self.gpa) };
+    task.* = .{ .pool = self, .id = id, .arena = .init(self.gpa), .context = context };
 
     return task;
 }
@@ -85,6 +100,13 @@ fn destroy(self: *Tasks, id: TaskId) void {
     defer self.unlock();
 
     const task = self.active.remove(id) orelse @panic("Destroy non-active Task");
+
+    self.chunks.rawFree(
+        @as([*]u8, @ptrCast(task.context))[0..MAX_SIZE],
+        MAX_ALIGN,
+        @returnAddress(),
+    );
+
     self.pool.destroy(task);
 }
 
@@ -114,13 +136,10 @@ pub const Cancelation = struct {
 };
 
 pub const Task = struct {
-    const MAX_SIZE = 128;
-    const MAX_ALIGNMENT = 16;
-
     id: TaskId,
     pool: *Tasks,
     completion: Completion = .noop,
-    context: [MAX_SIZE]u8 align(MAX_ALIGNMENT) = undefined,
+    context: *anyopaque,
     arena: heap.ArenaAllocator,
     next: ?*Task = null,
 
@@ -131,9 +150,13 @@ pub const Task = struct {
 
     pub fn assertContext(context: anytype) void {
         const Context = @TypeOf(context);
+        const SIZE = @sizeOf(Context);
+        const ALIGN = @alignOf(Context);
 
-        if (@sizeOf(Context) > Task.MAX_SIZE or @alignOf(Context) > Task.MAX_ALIGNMENT) {
-            @compileError("Incorrect size/alignment for task context");
+        if (SIZE > MAX_SIZE or
+            ALIGN > MAX_ALIGN.toByteUnits())
+        {
+            panic("Wrong Context: size: {}, align: {}", .{ SIZE, ALIGN });
         }
     }
 
@@ -147,7 +170,7 @@ pub const Task = struct {
 
         const TypeErased = struct {
             fn complete(task: *Task, _: *Completion, res: Loop.Result) bool {
-                const _context: *Context = @ptrCast(@alignCast(&task.context));
+                const _context: *Context = @ptrCast(@alignCast(task.context));
 
                 const rearm = @call(
                     .always_inline,
@@ -162,7 +185,9 @@ pub const Task = struct {
             }
         };
 
-        @as(*Context, @ptrCast(@alignCast(&self.context))).* = context;
+        const context_ptr: *Context = @ptrCast(@alignCast(self.context));
+        context_ptr.* = context;
+
         self.completion.@"defer"(TypeErased.complete, self);
     }
 
@@ -177,7 +202,7 @@ pub const Task = struct {
         const TypeErased = struct {
             fn complete(task: *Task, c: *Completion, res: Loop.Result) bool {
                 drain(c.operation.machport.port);
-                const _context: *Context = @ptrCast(@alignCast(&task.context));
+                const _context: *Context = @ptrCast(@alignCast(task.context));
                 const rearm = @call(.always_inline, function, _context.* ++ .{ task.arena.allocator(), res.machport });
 
                 if (!rearm) {
@@ -256,7 +281,9 @@ pub const Task = struct {
             @sizeOf(@TypeOf(limits)),
         ) != 0) return error.MachPortAllocFailed;
 
-        @as(*Context, @ptrCast(@alignCast(&self.context))).* = context;
+        const context_ptr: *Context = @ptrCast(@alignCast(self.context));
+        context_ptr.* = context;
+
         self.completion.mach(
             TypeErased.complete,
             self,
@@ -280,8 +307,12 @@ test "Task defer allocates and copies context" {
     var arena: heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
 
+    var chunks: ChunkAllocator = undefined;
+    try chunks.init(std.testing.allocator, 100, .{MAX_SIZE});
+    defer chunks.deinit(std.testing.allocator);
+
     var pool: Tasks = undefined;
-    try pool.init(arena.allocator(), gpa, testing.io);
+    try pool.init(arena.allocator(), chunks.allocator(), gpa, testing.io);
 
     const Context = struct {
         value: u64,
@@ -301,7 +332,7 @@ test "Task defer allocates and copies context" {
 
     original = .{ .value = 0, .other = 0 };
 
-    const copied: *const struct { Context } = @ptrCast(@alignCast(&task.context));
+    const copied: *const struct { Context } = @ptrCast(@alignCast(task.context));
     try testing.expectEqual(@as(u64, 0x1234_5678_9abc_def0), copied.@"0".value);
     try testing.expectEqual(@as(u32, 0xfeed_beef), copied.@"0".other);
 }
@@ -311,8 +342,12 @@ test "Task await allocates and copies context" {
     var arena: heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
 
+    var chunks: ChunkAllocator = undefined;
+    try chunks.init(std.testing.allocator, 100, .{MAX_SIZE});
+    defer chunks.deinit(std.testing.allocator);
+
     var pool: Tasks = undefined;
-    try pool.init(arena.allocator(), gpa, testing.io);
+    try pool.init(arena.allocator(), chunks.allocator(), gpa, testing.io);
 
     const Context = struct {
         value: u64,
@@ -336,7 +371,7 @@ test "Task await allocates and copies context" {
 
     original = .{ .value = 0, .other = 0 };
 
-    const copied: *const struct { Context } = @ptrCast(@alignCast(&task.context));
+    const copied: *const struct { Context } = @ptrCast(@alignCast(task.context));
     try testing.expectEqual(@as(u64, 0x1234_5678_9abc_def0), copied.@"0".value);
     try testing.expectEqual(@as(u32, 0xfeed_beef), copied.@"0".other);
 }
@@ -346,8 +381,12 @@ test "Cancelations" {
     var arena: heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
 
+    var chunks: ChunkAllocator = undefined;
+    try chunks.init(std.testing.allocator, 100, .{MAX_SIZE});
+    defer chunks.deinit(std.testing.allocator);
+
     var pool: Tasks = undefined;
-    try pool.init(arena.allocator(), gpa, testing.io);
+    try pool.init(arena.allocator(), chunks.allocator(), gpa, testing.io);
 
     const task = pool.create();
     defer task.destroy();

@@ -5,7 +5,11 @@ const atomic = std.atomic;
 const builtin = std.builtin;
 const posix = std.posix;
 const system = posix.system;
+const constants = @import("contants.zig");
+const MAX_SIZE = constants.MAX_SIZE;
 
+const chunks_pool = @import("chunk_pool.zig");
+const ChunkAllocator = chunks_pool.ChunkAllocator;
 const datastruct = @import("datastruct.zig");
 const multi_mpsc = datastruct.multi_mpsc;
 const Loop = @import("loop.zig");
@@ -17,8 +21,8 @@ pub const Scheduler = struct {
     tasks: Tasks,
     loop: Loop,
 
-    pub fn init(self: *Scheduler, arena: Allocator, gpa: Allocator, io: Io) !void {
-        try self.tasks.init(arena, gpa, io);
+    pub fn init(self: *Scheduler, arena: Allocator, chunks: Allocator, gpa: Allocator, io: Io) !void {
+        try self.tasks.init(arena, chunks, gpa, io);
         try self.loop.init(io);
     }
 
@@ -127,6 +131,7 @@ pub const BackgroundScheduler = struct {
     arena: Allocator,
     gpa: Allocator,
     queues: multi_mpsc.MultiIntrusive(Queues),
+    chunks: ChunkAllocator,
 
     pub fn init(self: *@This(), arena: Allocator, gpa: Allocator, io: Io) !void {
         self.* = .{
@@ -137,10 +142,12 @@ pub const BackgroundScheduler = struct {
             .future = undefined,
             .arena = arena,
             .gpa = gpa,
+            .chunks = undefined,
         };
 
         self.queues.init();
-        try self.tasks.init(arena, gpa, io);
+        try self.chunks.init(self.arena, 100, .{MAX_SIZE});
+        try self.tasks.init(arena, self.chunks.allocator(), gpa, io);
         try self.loop.init(io);
         errdefer self.loop.deinit();
 
