@@ -27,7 +27,7 @@ test "Bench Worktree" {
     defer app.deinit();
 
     var bench: prof.Benchmark = undefined;
-    bench.init(gpa, .{ .max_iter = 1, .name = "WORKTREE" });
+    bench.init(gpa, .{ .stop_ms = 20000, .name = "WORKTREE" });
     defer bench.deinit();
 
     const res = try bench.run(App, &app, gpa, io, initialWorktreeScan);
@@ -60,6 +60,4 @@ pub fn initialWorktreeScan(app: *App, gpa: std.mem.Allocator, io: std.Io, _: *pr
     while (observer.read(app).scanning) {
         app.flush();
     }
-
-    std.log.debug("entries: {}", .{worktree.read(app).snapshot.entries.count});
 }

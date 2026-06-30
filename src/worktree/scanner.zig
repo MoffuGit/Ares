@@ -68,23 +68,27 @@ pending_jobs: atomic.Value(u64),
 
 group: Io.Group,
 
+waker: BackgroundScheduler.Waker,
+
 pub fn init(
     self: *Scanner,
     arena: Allocator,
+    waker: BackgroundScheduler.Waker,
     snapshot: *Snapshot,
     gpa: Allocator,
     io: Io,
 ) !void {
     self.* = .{
+        .waker = waker,
         .group = .init,
         .io = io,
         .gpa = gpa,
         .action_buffer = undefined,
         .updates_buffer = undefined,
         .jobs_buffer = undefined,
-        .actions = .init(&self.action_buffer),
-        .updates = .init(&self.updates_buffer),
-        .jobs = .init(&self.jobs_buffer),
+        .actions = undefined,
+        .updates = undefined,
+        .jobs = undefined,
         .next_entry_id = .init(0),
         .pending_jobs = .init(0),
         .state = .{
@@ -92,6 +96,10 @@ pub fn init(
             .snapshot = undefined,
         },
     };
+
+    self.actions = .init(&self.action_buffer);
+    self.updates = .init(&self.updates_buffer);
+    self.jobs = .init(&self.jobs_buffer);
 
     try self.state.snapshot.clone(snapshot, arena);
 
@@ -101,6 +109,7 @@ pub fn init(
     });
 
     try self.actions.putOne(self.io, .initial_scan);
+    try self.waker.wake();
 }
 
 pub fn handleActions(
@@ -116,7 +125,7 @@ pub fn handleActions(
     };
     self._handleActions(path_allocator, waker, arena) catch return false;
 
-    return false;
+    return true;
 }
 
 pub fn stop(self: *Scanner) void {

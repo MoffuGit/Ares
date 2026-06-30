@@ -60,8 +60,8 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, arena: Allocator, o
 }
 
 pub fn deinit(self: *Worktree) void {
-    self.scanner.stop();
     self.waker.close();
+    self.scanner.stop();
     self.snapshot.deinit(self.gpa);
 }
 
@@ -76,7 +76,7 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
     defer update.end(self);
 
     var buffer: [8]Updates = undefined;
-    var updates = &self.scanner.ptr.updates;
+    const updates = &self.scanner.ptr.updates;
     for (0..try updates.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
             .started => self.scanning = true,

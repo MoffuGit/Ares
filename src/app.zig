@@ -72,10 +72,10 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 
 pub fn deinit(self: *App) void {
     self.scheduler.deinit();
-    self.background_scheduler.deinit();
-
     self.notifications.deinit(self.gpa);
     self.observers.deinit(self.gpa);
+
+    self.background_scheduler.deinit();
 
     self.alloc.deinit();
 }

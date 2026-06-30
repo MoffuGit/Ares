@@ -272,7 +272,7 @@ pub const BackgroundScheduler = struct {
             arena: Allocator,
 
             pub fn init(self: *@This(), args: anytype) !void {
-                try @call(.auto, T.init, .{ self.ptr, self.arena } ++ args);
+                try @call(.auto, T.init, .{ self.ptr, self.arena, self.waker } ++ args);
             }
 
             pub fn stop(self: *@This()) void {
@@ -398,7 +398,7 @@ test "Background Scheduler comptime Executor initializes and wakes task" {
     const State = struct {
         value: u32,
 
-        fn init(self: *@This(), _: Allocator, value: u32) !void {
+        fn init(self: *@This(), _: Allocator, _: BackgroundScheduler.Waker, value: u32) !void {
             self.value = value;
         }
     };
