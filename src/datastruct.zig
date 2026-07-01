@@ -4,8 +4,10 @@ pub const multi_mpsc = @import("datastruct/multi_mpsc.zig");
 pub const multi_queue = @import("datastruct/multi_queue.zig");
 pub const queue = @import("datastruct/queue.zig");
 pub const slotmap = @import("datastruct/slotmap.zig");
+pub const heap = @import("datastruct/heap.zig");
 
 test {
+    _ = heap;
     _ = multi_mpsc;
     _ = multi_queue;
     _ = mpsc;
