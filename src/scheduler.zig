@@ -45,7 +45,7 @@ pub const Scheduler = struct {
         const task = self.tasks.create();
         task.@"defer"(function, context);
 
-        task.complete(&self.loop);
+        self.loop.complete(&task.completion);
 
         return .{ .id = task.id, .scheduler = self };
     }
@@ -58,7 +58,7 @@ pub const Scheduler = struct {
         const task = self.tasks.create();
         const port = try task.await(function, context);
 
-        task.submit(&self.loop);
+        self.loop.submit(&task.completion);
 
         return .{ .port = port, .cancelation = .{ .id = task.id, .scheduler = self } };
     }
@@ -126,6 +126,7 @@ pub const Scheduler = struct {
 const Queues = union(enum) {
     cancelations: Tasks.Cancelation,
     completions: Task,
+    timers: Task,
     submissions: Task,
 };
 
@@ -197,10 +198,13 @@ pub const BackgroundScheduler = struct {
             }
         }
         while (self.queues.pop(.completions)) |task| {
-            task.complete(&self.loop);
+            self.loop.complete(&task.completion);
+        }
+        while (self.queues.pop(.timers)) |task| {
+            self.loop.timer_submit(&task.completion);
         }
         while (self.queues.pop(.submissions)) |task| {
-            task.submit(&self.loop);
+            self.loop.submit(&task.completion);
         }
     }
 
@@ -228,6 +232,20 @@ pub const BackgroundScheduler = struct {
         self.queues.push(.submissions, task);
 
         return .{ .port = port, .cancelation = .{ .id = task.id, .scheduler = self } };
+    }
+
+    pub fn timer(
+        self: *@This(),
+        function: anytype,
+        context: anytype,
+        next_ms: u64,
+    ) !Cancelation {
+        const task = self.tasks.create();
+
+        task.timer(function, context, next_ms, &self.loop);
+        self.queues.push(.timers, task);
+
+        return .{ .scheduler = self, .id = task.id };
     }
 
     pub const Cancelation = struct {
@@ -372,6 +390,61 @@ test "Background Scheduler runs await tasks and frees memory on close" {
         testing.io.sleep(.fromNanoseconds(100), .real) catch {};
     }
     waker.close();
+}
+
+test "Background Scheduler runs timer tasks" {
+    const testing = std.testing;
+    const heap = std.heap;
+
+    var arena: heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+
+    var scheduler: BackgroundScheduler = undefined;
+    try scheduler.init(.{}, arena.allocator(), testing.allocator, testing.io);
+    defer scheduler.deinit();
+
+    var called = false;
+    _ = try scheduler.timer(struct {
+        fn callback(_called: *bool, _arena: Allocator, res: anyerror!void) bool {
+            res catch return false;
+            _ = _arena.alloc(u8, 16) catch return false;
+            _called.* = true;
+            return false;
+        }
+    }.callback, .{&called}, 0);
+
+    while (!called) {
+        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
+    }
+}
+
+test "Background Scheduler cancels timer tasks" {
+    const testing = std.testing;
+    const heap = std.heap;
+
+    var arena: heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+
+    var scheduler: BackgroundScheduler = undefined;
+    try scheduler.init(.{}, arena.allocator(), testing.allocator, testing.io);
+    defer scheduler.deinit();
+
+    var canceled = false;
+    const cancelation = try scheduler.timer(struct {
+        fn callback(_canceled: *bool, _arena: Allocator, res: anyerror!void) bool {
+            if (res == error.Canceled) {
+                _ = _arena.alloc(u8, 16) catch return false;
+                _canceled.* = true;
+            }
+            return false;
+        }
+    }.callback, .{&canceled}, std.time.ms_per_s);
+
+    cancelation.cancel();
+
+    while (!canceled) {
+        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
+    }
 }
 
 test "Executor cancels await tasks and frees memory on stop" {

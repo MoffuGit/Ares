@@ -15,19 +15,25 @@ const builtin = @import("builtin");
 
 const datastruct = @import("datastruct.zig");
 const multi_queue = datastruct.multi_queue;
+const heap = datastruct.heap;
+const queue = datastruct.queue;
 
 const Queues = union(enum) {
+    timers: Completion,
     cancellations: Completion,
     canceling: Completion,
-    completions: Completion,
     submissions: Completion,
+    completions: Completion,
 };
 
 pub const Loop = @This();
 
 kq: posix.fd_t,
 
+now: posix.timespec,
+
 queues: multi_queue.MultiIntrusive(Queues),
+timers: heap.Intrusive(Timer, void, Timer.less),
 inflight: usize,
 stopped: bool,
 
@@ -47,6 +53,8 @@ pub fn init(self: *Loop, io: Io) !void {
         .queues = undefined,
         .inflight = 0,
         .stopped = false,
+        .timers = .{ .context = {} },
+        .now = undefined,
     };
     self.queues.init();
 }
@@ -74,6 +82,8 @@ pub fn done(self: *Loop) bool {
     return self.stopped or
         (self.queues.empty(.submissions) and
             self.queues.empty(.completions) and
+            self.queues.empty(.timers) and
+            self.timers.peek() == null and
             self.inflight == 0);
 }
 
@@ -83,6 +93,7 @@ pub fn stop(self: *Loop) void {
 
 pub fn flush(self: *Loop, _: bool) !void {
     self.flush_cancellations();
+    self.flush_timers();
 
     var events: [256]Kevent = undefined;
 
@@ -121,16 +132,58 @@ pub fn flush(self: *Loop, _: bool) !void {
     self.flush_completions();
 }
 
+pub fn flush_timers(self: *Loop) void {
+    while (self.queues.pop(.timers)) |completion| {
+        if (completion.state == .completed) {
+            continue;
+        }
+
+        assert(completion.state == .submitted);
+        completion.state = .active;
+        self.timers.insert(&completion.operation.timer);
+    }
+
+    self.update_timer();
+
+    const now_timer: Timer = .{ .next = self.now, .completion = undefined };
+    while (self.timers.peek()) |t| {
+        if (!Timer.less({}, t, &now_timer)) break;
+
+        assert(self.timers.deleteMin().? == t);
+
+        const completion = t.completion;
+        assert(completion.state == .active);
+
+        completion.state = .completed;
+        completion.result = .{ .timer = {} };
+
+        self.queues.push(.completions, completion);
+    }
+}
+
 pub fn flush_completions(self: *Loop) void {
+    var defered: queue.Intrusive(Completion) = .{};
+
     while (self.queues.pop(.completions)) |completion| {
         assert(completion.state == .completed);
         completion.state = .idle;
+
         if (completion.callback(self, completion)) {
             switch (completion.operation) {
-                .@"defer" => self.complete(completion),
+                .@"defer" => {
+                    defered.push(completion);
+                },
+                .timer => {
+                    completion.state = .submitted;
+                    self.queues.push(.timers, completion);
+                },
                 else => self.submit(completion),
             }
         }
+    }
+
+    while (defered.pop()) |c| {
+        self.queues.push(.completions, c);
     }
 }
 
@@ -213,6 +266,7 @@ pub fn submit(
     self: *Loop,
     completion: *Completion,
 ) void {
+    assert(completion.operation != .timer);
     completion.state = .submitted;
     self.queues.push(.submissions, completion);
 }
@@ -273,6 +327,7 @@ pub const Operation = union(OperationType) {
     @"defer": void,
     machport: MachPort,
     cancel: *Completion,
+    timer: Timer,
 };
 
 const OperationType = enum {
@@ -280,6 +335,7 @@ const OperationType = enum {
     @"defer",
     machport,
     cancel,
+    timer,
 };
 
 const Canceled = error{Canceled};
@@ -289,6 +345,7 @@ pub const Result = union(OperationType) {
     @"defer": Canceled!void,
     machport: Canceled!void,
     cancel: void,
+    timer: Canceled!void,
 };
 
 const State = enum {
@@ -327,12 +384,13 @@ pub const Completion = struct {
             .noop, .cancel => {},
             .@"defer" => self.result = .{ .@"defer" = error.Canceled },
             .machport => self.result = .{ .machport = error.Canceled },
+            .timer => self.result = .{ .timer = error.Canceled },
         }
     }
 
     pub fn kevent(self: *Completion, event: *Kevent) void {
         switch (self.operation) {
-            .cancel, .noop, .@"defer" => panic("{s} operation reached the submissions queueu", .{@tagName(self.operation)}),
+            .cancel, .noop, .@"defer", .timer => panic("{s} operation reached the submissions queueu", .{@tagName(self.operation)}),
             .machport => |m| {
                 const buffer: []u8 = switch (m.buffer) {
                     .slice => |slice| slice,
@@ -367,11 +425,31 @@ pub const Completion = struct {
                 const _target = _completion.operation.cancel;
 
                 switch (_target.state) {
-                    .idle, .canceled => {},
-                    .completed, .submitted => _target.canceled(),
+                    .canceled => {},
+                    .idle => {
+                        if (_target.operation == .timer) {
+                            _target.canceled();
+                        }
+                    },
+                    .completed => _target.canceled(),
+                    .submitted => {
+                        _target.canceled();
+                        if (_target.operation == .timer) {
+                            loop.queues.push(.completions, _target);
+                        }
+                    },
                     .active => {
-                        _target.state = .canceled;
-                        loop.queues.push(.canceling, _target);
+                        switch (_target.operation) {
+                            .timer => |*timer_op| {
+                                loop.timers.remove(timer_op);
+                                _target.canceled();
+                                loop.queues.push(.completions, _target);
+                            },
+                            else => {
+                                _target.state = .canceled;
+                                loop.queues.push(.canceling, _target);
+                            },
+                        }
                     },
                 }
 
@@ -463,7 +541,104 @@ pub const Completion = struct {
             }.machport,
         );
     }
+
+    pub fn timer(
+        completion: *Completion,
+        callback: anytype,
+        context: anytype,
+        next: posix.timespec,
+    ) void {
+        completion.set(
+            callback,
+            context,
+            .timer,
+            .{
+                .next = next,
+                .completion = completion,
+            },
+            struct {
+                fn timer(_: Timer) Result {
+                    return .{ .timer = {} };
+                }
+            }.timer,
+        );
+    }
 };
+
+const Timer = struct {
+    next: posix.timespec,
+    completion: *Completion,
+
+    heap: heap.IntrusiveField(Timer) = .{},
+
+    fn less(_: void, a: *const Timer, b: *const Timer) bool {
+        return a.ns() < b.ns();
+    }
+
+    fn ns(self: *const Timer) u64 {
+        return ns_from_timespec(self.next);
+    }
+
+    fn ns_from_timespec(ts: posix.timespec) u64 {
+        assert(ts.sec >= 0);
+        assert(ts.nsec >= 0);
+
+        const max = std.math.maxInt(u64);
+        const s_ns = std.math.mul(
+            u64,
+            @as(u64, @intCast(ts.sec)),
+            std.time.ns_per_s,
+        ) catch return max;
+        return std.math.add(u64, s_ns, @as(u64, @intCast(ts.nsec))) catch
+            return max;
+    }
+};
+
+pub fn timer(
+    self: *Loop,
+    completion: *Completion,
+    callback: anytype,
+    context: anytype,
+    next_ms: u64,
+) void {
+    completion.timer(callback, context, self.next_tick(next_ms));
+    self.timer_submit(completion);
+}
+
+pub fn timer_submit(self: *Loop, completion: *Completion) void {
+    completion.state = .submitted;
+    self.queues.push(.timers, completion);
+}
+
+pub fn next_tick(self: *Loop, next_ms: u64) posix.timespec {
+    const max: posix.timespec = .{
+        .sec = std.math.maxInt(isize),
+        .nsec = std.math.maxInt(isize),
+    };
+
+    const next_s = std.math.cast(isize, next_ms / std.time.ms_per_s) orelse
+        return max;
+    const next_ns = std.math.cast(
+        isize,
+        (next_ms % std.time.ms_per_s) * std.time.ns_per_ms,
+    ) orelse return max;
+
+    self.update_timer();
+
+    return .{
+        .sec = std.math.add(isize, self.now.sec, next_s) catch
+            return max,
+        .nsec = std.math.add(isize, self.now.nsec, next_ns) catch
+            return max,
+    };
+}
+
+pub fn update_timer(self: *Loop) void {
+    switch (posix.errno(posix.system.clock_gettime(posix.CLOCK.MONOTONIC, &self.now))) {
+        .SUCCESS => {},
+        else => {},
+    }
+}
 
 test "defer" {
     const io = testing.io;
@@ -668,4 +843,107 @@ test "cancel mach port" {
     // We should receive now!
     for (0..10) |_| try loop.run(.no_wait);
     try testing.expect(!called);
+}
+
+test "timer completes" {
+    const io = testing.io;
+
+    var loop: Loop = undefined;
+    try loop.init(io);
+    defer loop.deinit();
+
+    var called = false;
+    var completion: Completion = .noop;
+
+    loop.timer(
+        &completion,
+        struct {
+            fn timer(_called: *bool, _: *Completion, res: Result) bool {
+                res.timer catch return false;
+                _called.* = true;
+                return false;
+            }
+        }.timer,
+        &called,
+        0,
+    );
+
+    try loop.run(.until_done);
+
+    try testing.expect(called);
+}
+
+test "timer rearms when callback returns true" {
+    const io = testing.io;
+
+    var loop: Loop = undefined;
+    try loop.init(io);
+    defer loop.deinit();
+
+    var calls: u8 = 0;
+    var completion: Completion = .noop;
+
+    loop.timer(
+        &completion,
+        struct {
+            fn timer(_calls: *u8, _: *Completion, res: Result) bool {
+                res.timer catch return false;
+                _calls.* += 1;
+                return _calls.* < 2;
+            }
+        }.timer,
+        &calls,
+        0,
+    );
+
+    try loop.run(.until_done);
+
+    try testing.expectEqual(@as(u8, 2), calls);
+}
+
+test "cancel timer" {
+    const io = testing.io;
+
+    var loop: Loop = undefined;
+    try loop.init(io);
+    defer loop.deinit();
+
+    var timer_called = false;
+    var timer_completion: Completion = .noop;
+
+    loop.timer(
+        &timer_completion,
+        struct {
+            fn timer(_called: *bool, _: *Completion, res: Result) bool {
+                if (res.timer == error.Canceled) {
+                    return false;
+                }
+
+                _called.* = true;
+                return false;
+            }
+        }.timer,
+        &timer_called,
+        std.time.ms_per_s,
+    );
+
+    try loop.run(.no_wait);
+
+    var cancel_called = false;
+    var cancel_completion: Completion = .noop;
+    cancel_completion.cancel(
+        &timer_completion,
+        struct {
+            fn cancel(_called: *bool, _: *Completion) void {
+                _called.* = true;
+            }
+        }.cancel,
+        &cancel_called,
+    );
+    loop.cancel(&cancel_completion);
+
+    try loop.run(.until_done);
+
+    try testing.expect(cancel_called);
+    try testing.expect(!timer_called);
 }

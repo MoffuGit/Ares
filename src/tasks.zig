@@ -293,12 +293,33 @@ pub const Task = struct {
         return mach_port;
     }
 
-    pub fn complete(self: *Task, loop: *Loop) void {
-        loop.complete(&self.completion);
-    }
+    pub fn timer(
+        self: *Task,
+        function: anytype,
+        context: anytype,
+        next_ms: u64,
+        loop: *Loop,
+    ) void {
+        assertContext(context);
+        const Context = @TypeOf(context);
 
-    pub fn submit(self: *Task, loop: *Loop) void {
-        loop.submit(&self.completion);
+        const TypeErased = struct {
+            fn complete(task: *Task, _: *Completion, res: Loop.Result) bool {
+                const _context: *Context = @ptrCast(@alignCast(task.context));
+                const rearm = @call(.always_inline, function, _context.* ++ .{ task.arena.allocator(), res.timer });
+
+                if (!rearm) {
+                    task.destroy();
+                }
+
+                return rearm;
+            }
+        };
+
+        const context_ptr: *Context = @ptrCast(@alignCast(self.context));
+        context_ptr.* = context;
+
+        self.completion.timer(TypeErased.complete, self, loop.next_tick(next_ms));
     }
 };
 
