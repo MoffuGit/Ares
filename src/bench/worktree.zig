@@ -23,7 +23,7 @@ test "Bench Worktree" {
     const io = testing.io;
 
     var app: App = undefined;
-    try app.init(gpa, io);
+    try app.init(.{}, gpa, io);
     defer app.deinit();
 
     var bench: prof.Benchmark = undefined;
