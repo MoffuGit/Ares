@@ -119,7 +119,7 @@ pub const ChunkAllocator = struct {
                 .alloc = alloc,
                 .resize = Allocator.noResize,
                 .remap = Allocator.noRemap,
-                .free = allocatorFree,
+                .free = free,
             },
         };
     }
@@ -138,7 +138,7 @@ pub const ChunkAllocator = struct {
         return null;
     }
 
-    fn allocatorFree(ctx: *anyopaque, memory: []u8, _: mem.Alignment, _: usize) void {
+    fn free(ctx: *anyopaque, memory: []u8, _: mem.Alignment, _: usize) void {
         const self: *ChunkAllocator = @ptrCast(@alignCast(ctx));
 
         for (self.pools) |*pool| {

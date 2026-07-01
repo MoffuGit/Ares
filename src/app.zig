@@ -62,7 +62,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     self.arena = self.alloc.allocator();
     errdefer self.alloc.deinit();
 
-    try self.chunks.init(self.arena, 100, .{ MAX_SIZE, Observers.NODE_SIZE });
+    try self.chunks.init(self.arena, 50, .{ MAX_SIZE, Observers.NODE_SIZE });
     try self.observers.init(self.chunks.allocator());
     try self.entities.init(self.arena, 100);
     try self.notifications.init(self.chunks.allocator());
@@ -84,8 +84,9 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     self.start_update();
     defer self.end_update();
 
-    const ptr = try self.arena.create(T);
-    errdefer self.arena.destroy(ptr);
+    const alloc = self.chunks.allocator();
+    const ptr = try alloc.create(T);
+    errdefer alloc.destroy(ptr);
 
     const id = self.entities.insert(ptr);
     errdefer self.entities.recycle(id);
@@ -180,11 +181,13 @@ pub fn flush_notifications(self: *App) void {
 }
 
 pub fn destroy_dropped_entities(self: *App) void {
+    const alloc = self.chunks.allocator();
+
     while (self.entities.popDrop()) |drop| {
         const ptr, const key, const type_info = drop;
 
         self.observers.remove(key);
-        type_info.deinit(ptr);
+        type_info.destroy(ptr, alloc);
         self.entities.recycle(key);
     }
 }

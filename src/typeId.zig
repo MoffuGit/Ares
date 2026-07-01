@@ -1,17 +1,24 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
+const constants = @import("contants.zig");
+const MAX_ALIGN = constants.MAX_ALIGN;
 
 pub const TypeInfo = struct {
     deinit_fn: ?*const fn (*anyopaque) void,
+    size: usize,
+    alignment: u8,
 
     pub inline fn init(comptime T: type) *@This() {
+        comptime assert(@alignOf(T) <= MAX_ALIGN.toByteUnits());
         return &struct {
             fn deinit(ptr: *anyopaque) void {
                 @as(*T, @ptrCast(@alignCast(ptr))).deinit();
             }
 
             var info: TypeInfo = .{
+                .size = @sizeOf(T),
+                .alignment = @alignOf(T),
                 .deinit_fn = if (@hasDecl(T, "deinit")) @This().deinit else null,
             };
         }.info;
@@ -19,6 +26,13 @@ pub const TypeInfo = struct {
 
     pub fn deinit(self: *const @This(), ptr: *anyopaque) void {
         if (self.deinit_fn) |deinit_fn| deinit_fn(ptr);
+    }
+
+    pub fn destroy(self: *const @This(), ptr: *anyopaque, alloc: Allocator) void {
+        self.deinit(ptr);
+        if (self.size == 0) return;
+        const non_const_ptr = @as([*]u8, @ptrCast(ptr));
+        alloc.rawFree(non_const_ptr[0..self.size], .fromByteUnits(self.alignment), @returnAddress());
     }
 };
 
