@@ -27,17 +27,15 @@ mutex: Io.Mutex,
 pool: heap.MemoryPool(Task),
 cancelations: heap.MemoryPool(Cancelation),
 active: slotmap.SlotMap(*Task),
-gpa: Allocator,
 chunks: Allocator,
 
-pub fn init(self: *Tasks, arena: Allocator, chunks: Allocator, gpa: Allocator, io: Io) !void {
+pub fn init(self: *Tasks, arena: Allocator, chunks: Allocator, io: Io) !void {
     self.* = .{
         .chunks = chunks,
         .mutex = .init,
         .pool = undefined,
         .active = undefined,
         .cancelations = undefined,
-        .gpa = gpa,
         .io = io,
     };
     self.pool = try .initCapacity(arena, 100);
@@ -57,7 +55,7 @@ pub fn create(self: *Tasks) *Task {
 
     const task = self.pool.create(undefined) catch @panic("Task Overflow");
     const id = self.active.put(task) catch @panic("Task Overflow");
-    task.* = .{ .pool = self, .id = id, .arena = .init(self.gpa), .context = context };
+    task.* = .{ .pool = self, .id = id, .context = context };
 
     return task;
 }
@@ -140,11 +138,9 @@ pub const Task = struct {
     pool: *Tasks,
     completion: Completion = .noop,
     context: *anyopaque,
-    arena: heap.ArenaAllocator,
     next: ?*Task = null,
 
     pub fn destroy(self: *Task) void {
-        self.arena.deinit();
         self.pool.destroy(self.id);
     }
 
@@ -176,7 +172,7 @@ pub const Task = struct {
                     .always_inline,
                     function,
                     _context.* ++
-                        .{ task.arena.allocator(), res.@"defer" },
+                        .{res.@"defer"},
                 );
 
                 if (!rearm) task.destroy();
@@ -195,7 +191,7 @@ pub const Task = struct {
         self: *Task,
         function: anytype,
         context: anytype,
-    ) !system.mach_port_name_t {
+    ) !Waker {
         assertContext(context);
         const Context = @TypeOf(context);
 
@@ -203,7 +199,7 @@ pub const Task = struct {
             fn complete(task: *Task, c: *Completion, res: Loop.Result) bool {
                 drain(c.operation.machport.port);
                 const _context: *Context = @ptrCast(@alignCast(task.context));
-                const rearm = @call(.always_inline, function, _context.* ++ .{ task.arena.allocator(), res.machport });
+                const rearm = @call(.always_inline, function, _context.* ++ .{res.machport});
 
                 if (!rearm) {
                     task.destroy();
@@ -290,7 +286,7 @@ pub const Task = struct {
             .{ .port = mach_port, .buffer = .{ .array = undefined } },
         );
 
-        return mach_port;
+        return .{ .port = mach_port };
     }
 
     pub fn timer(
@@ -306,7 +302,7 @@ pub const Task = struct {
         const TypeErased = struct {
             fn complete(task: *Task, _: *Completion, res: Loop.Result) bool {
                 const _context: *Context = @ptrCast(@alignCast(task.context));
-                const rearm = @call(.always_inline, function, _context.* ++ .{ task.arena.allocator(), res.timer });
+                const rearm = @call(.always_inline, function, _context.* ++ .{res.timer});
 
                 if (!rearm) {
                     task.destroy();
@@ -323,17 +319,57 @@ pub const Task = struct {
     }
 };
 
+pub const Waker = struct {
+    port: system.mach_port_name_t,
+
+    pub fn wake(self: *const Waker) !void {
+        var msg: posix.system.mach_msg_header_t = .{
+            .msgh_bits = @intFromEnum(system.MACH.MSG.TYPE.COPY_SEND),
+            .msgh_size = @sizeOf(posix.system.mach_msg_header_t),
+            .msgh_remote_port = self.port,
+            .msgh_local_port = system.MACH.PORT.NULL,
+            .msgh_voucher_port = undefined,
+            .msgh_id = undefined,
+        };
+
+        switch (system.mach_msg(
+            &msg,
+            .{ .SEND = .{ .TIMEOUT = true, .MSG = true } },
+            msg.msgh_size,
+            0,
+            system.MACH.PORT.NULL,
+            @enumFromInt(0),
+            system.MACH.PORT.NULL,
+        )) {
+            .SUCCESS => {},
+            .SEND_NO_BUFFER => {},
+            .SEND_TIMED_OUT => {},
+            else => |e| {
+                std.log.warn("mach msg err={}", .{e});
+                return error.MachMsgFailed;
+            },
+        }
+    }
+
+    pub fn close(self: *const Waker) void {
+        _ = system.mach_port_deallocate(
+            posix.system.mach_task_self(),
+            self.port,
+        );
+    }
+};
+
 test "Task defer allocates and copies context" {
     const gpa = testing.allocator;
     var arena: heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
 
     var chunks: ChunkAllocator = undefined;
-    try chunks.init(std.testing.allocator, 100, .{MAX_SIZE});
+    try chunks.init(std.testing.allocator, .{.{ 100, MAX_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
     var pool: Tasks = undefined;
-    try pool.init(arena.allocator(), chunks.allocator(), gpa, testing.io);
+    try pool.init(arena.allocator(), chunks.allocator(), testing.io);
 
     const Context = struct {
         value: u64,
@@ -344,9 +380,8 @@ test "Task defer allocates and copies context" {
     const task = pool.create();
     defer task.destroy();
     task.@"defer"(struct {
-        fn callback(_: Context, ar: Allocator, res: anyerror!void) bool {
+        fn callback(_: Context, res: anyerror!void) bool {
             res catch return false;
-            _ = ar.alloc(u8, 1) catch return false;
             return true;
         }
     }.callback, .{original});
@@ -364,11 +399,11 @@ test "Task await allocates and copies context" {
     defer arena.deinit();
 
     var chunks: ChunkAllocator = undefined;
-    try chunks.init(std.testing.allocator, 100, .{MAX_SIZE});
+    try chunks.init(std.testing.allocator, .{.{ 100, MAX_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
     var pool: Tasks = undefined;
-    try pool.init(arena.allocator(), chunks.allocator(), gpa, testing.io);
+    try pool.init(arena.allocator(), chunks.allocator(), testing.io);
 
     const Context = struct {
         value: u64,
@@ -379,16 +414,12 @@ test "Task await allocates and copies context" {
     const task = pool.create();
     defer task.destroy();
     const port = try task.await(struct {
-        fn callback(_: Context, ar: Allocator, res: anyerror!void) bool {
+        fn callback(_: Context, res: anyerror!void) bool {
             res catch return false;
-            _ = ar.alloc(u8, 1) catch return false;
             return true;
         }
     }.callback, .{original});
-    _ = system.mach_port_deallocate(
-        posix.system.mach_task_self(),
-        port,
-    );
+    port.close();
 
     original = .{ .value = 0, .other = 0 };
 
@@ -403,11 +434,11 @@ test "Cancelations" {
     defer arena.deinit();
 
     var chunks: ChunkAllocator = undefined;
-    try chunks.init(std.testing.allocator, 100, .{MAX_SIZE});
+    try chunks.init(std.testing.allocator, .{.{ 100, MAX_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
     var pool: Tasks = undefined;
-    try pool.init(arena.allocator(), chunks.allocator(), gpa, testing.io);
+    try pool.init(arena.allocator(), chunks.allocator(), testing.io);
 
     const task = pool.create();
     defer task.destroy();

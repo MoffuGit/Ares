@@ -30,7 +30,7 @@ scanning: bool,
 snapshot: Snapshot,
 io: Io,
 scanner: Executor(Scanner),
-waker: Scheduler.Waker,
+waker: sch.Waker,
 
 pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, arena: Allocator, opts: Options) !void {
     self.* = .{
@@ -65,7 +65,7 @@ pub fn deinit(self: *Worktree) void {
     self.snapshot.deinit(self.gpa);
 }
 
-fn handleUpdates(ctx: Context(Worktree), _: Allocator) bool {
+fn handleUpdates(ctx: Context(Worktree)) bool {
     _handleUpdates(ctx) catch return false;
 
     return true;

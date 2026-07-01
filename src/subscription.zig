@@ -269,7 +269,7 @@ test "Subscriptions" {
     const Subs = Subscriptions(Key, &.{ bool, bool }, Order.order);
 
     var chunks: ChunkAllocator = undefined;
-    try chunks.init(std.testing.allocator, 100, .{Subs.NODE_SIZE});
+    try chunks.init(std.testing.allocator, &.{.{ 100, Subs.NODE_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
     var subscriptions: Subs = undefined;

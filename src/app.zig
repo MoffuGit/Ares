@@ -20,7 +20,7 @@ const EntityStore = ent.EntityStore;
 const sch = @import("scheduler.zig");
 const BackgroundScheduler = sch.BackgroundScheduler;
 const Scheduler = sch.Scheduler;
-const Waker = Scheduler.Waker;
+const Waker = sch.Waker;
 const Executor = BackgroundScheduler.Executor;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
@@ -72,15 +72,18 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     self.arena = self.alloc.allocator();
     errdefer self.alloc.deinit();
 
-    try self.chunks.init(self.arena, 50, .{ MAX_SIZE, Observers.NODE_SIZE });
+    try self.chunks.init(self.arena, .{
+        .{ 50, MAX_SIZE },
+        .{ 50, Observers.NODE_SIZE },
+    });
     try self.observers.init(self.chunks.allocator());
     try self.entities.init(self.arena, 100);
     try self.notifications.init(self.chunks.allocator());
 
-    try self.background_scheduler.init(options, self.arena, gpa, io);
+    try self.background_scheduler.init(options, self.arena, io);
     errdefer self.background_scheduler.deinit();
 
-    try self.scheduler.init(options, self.arena, self.chunks.allocator(), gpa, io);
+    try self.scheduler.init(options, self.arena, self.chunks.allocator(), io);
     errdefer self.scheduler.deinit();
 }
 
@@ -177,7 +180,7 @@ pub fn @"defer"(self: *App, function: anytype, args: anytype) Scheduler.Cancelat
     return self.scheduler.@"defer"(function, args);
 }
 
-pub fn await(self: *App, function: anytype, args: anytype) !Scheduler.Waker {
+pub fn await(self: *App, function: anytype, args: anytype) !Waker {
     return try self.scheduler.await(function, args);
 }
 
@@ -224,7 +227,7 @@ pub fn observe(
             return @call(.always_inline, function, .{ app, _entity } ++ _args);
         }
 
-        fn enable(sub: Observers.Subscription, _: Allocator, res: anyerror!void) bool {
+        fn enable(sub: Observers.Subscription, res: anyerror!void) bool {
             res catch @panic("Deferred Subscription Error");
             sub.enable();
             return false;
@@ -308,7 +311,7 @@ pub fn Context(comptime T: type) type {
         pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) Scheduler.Cancelation {
             const Args = @TypeOf(args);
             const TypeErased = struct {
-                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args, _: Allocator, res: anyerror!void) bool {
+                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args, res: anyerror!void) bool {
                     res catch return false;
                     const _entity = any.into(T) orelse return false;
 
@@ -320,16 +323,16 @@ pub fn Context(comptime T: type) type {
             return self.app.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
         }
 
-        pub fn await(self: *const @This(), function: anytype, args: anytype) !Scheduler.Waker {
+        pub fn await(self: *const @This(), function: anytype, args: anytype) !Waker {
             const Args = @TypeOf(args);
             const TypeErased = struct {
-                pub fn async(any: AnyEntity, app: *App, _args: Args, _arena: Allocator, res: anyerror!void) bool {
+                pub fn async(any: AnyEntity, app: *App, _args: Args, res: anyerror!void) bool {
                     res catch return false;
                     const _entity = any.into(T) orelse return false;
 
                     const ctx: Context(T) = .new(app, _entity);
 
-                    return @call(.always_inline, function, .{ ctx, _arena } ++ _args);
+                    return @call(.always_inline, function, .{ctx} ++ _args);
                 }
             };
 
@@ -610,7 +613,7 @@ test "Context async runs on foreground executor with entity context" {
             self.* = .{ .calls = 0, .last_value = 0 };
         }
 
-        pub fn await(ctx: Context(@This()), _: Allocator, value: usize) bool {
+        pub fn await(ctx: Context(@This()), value: usize) bool {
             const ptr, const update = ctx.update();
             defer update.end(ptr);
 

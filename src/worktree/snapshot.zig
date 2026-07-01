@@ -67,7 +67,7 @@ pub fn init(self: *Snapshot, abs_root: []const u8, root_name: []const u8, alloc:
         .entries = undefined,
         .chunks = undefined,
     };
-    try self.chunks.init(alloc, 1024 * 1024, .{Entries.NODE_SIZE});
+    try self.chunks.init(alloc, .{.{ 1024 * 1024, Entries.NODE_SIZE }});
 
     try self.entries.init(self.chunks.allocator());
 }
@@ -79,7 +79,7 @@ pub fn clone(self: *const Snapshot, alloc: Allocator) !Snapshot {
         .entries = undefined,
         .chunks = undefined,
     };
-    try copy.chunks.init(alloc, @intCast(self.entries.count), .{Entries.NODE_SIZE});
+    try copy.chunks.init(alloc, .{.{ @as(u32, @intCast(self.entries.count)), Entries.NODE_SIZE }});
     copy.entries = try self.entries.clone(copy.chunks.allocator());
 
     return copy;

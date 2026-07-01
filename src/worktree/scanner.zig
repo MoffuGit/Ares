@@ -11,8 +11,10 @@ const App = @import("../app.zig");
 const sch = @import("../scheduler.zig");
 const BackgroundScheduler = sch.BackgroundScheduler;
 const Executor = BackgroundScheduler.Executor;
+const Context = BackgroundScheduler.Context;
 const Scheduler = sch.Scheduler;
 const Snapshot = @import("snapshot.zig");
+const tsk = @import("../tasks.zig");
 
 const UPDATE_INTERVAL: Io.Duration = if (builtin.mode == .Debug) .fromSeconds(5) else .fromMilliseconds(100);
 
@@ -52,6 +54,7 @@ const State = struct {
 };
 
 io: Io,
+arena: heap.ArenaAllocator,
 gpa: Allocator,
 state: State,
 action_buffer: [8]Action,
@@ -60,7 +63,7 @@ actions: Action.Queue,
 updates_buffer: [8]Updates,
 updates: Updates.Queue,
 
-jobs_buffer: [1024]Worker.Job,
+jobs_buffer: []Worker.Job,
 jobs: Io.Queue(Worker.Job),
 
 next_entry_id: atomic.Value(u64),
@@ -68,12 +71,11 @@ pending_jobs: atomic.Value(u64),
 
 group: Io.Group,
 
-waker: BackgroundScheduler.Waker,
+waker: tsk.Waker,
 
 pub fn init(
     self: *Scanner,
-    arena: Allocator,
-    waker: BackgroundScheduler.Waker,
+    waker: tsk.Waker,
     snapshot: *Snapshot,
     gpa: Allocator,
     io: Io,
@@ -83,6 +85,7 @@ pub fn init(
         .group = .init,
         .io = io,
         .gpa = gpa,
+        .arena = .init(gpa),
         .action_buffer = undefined,
         .updates_buffer = undefined,
         .jobs_buffer = undefined,
@@ -96,10 +99,14 @@ pub fn init(
             .snapshot = undefined,
         },
     };
+    const arena = self.arena.allocator();
+    errdefer self.arena.deinit();
+
+    self.jobs_buffer = try arena.alloc(Worker.Job, 1024);
 
     self.actions = .init(&self.action_buffer);
     self.updates = .init(&self.updates_buffer);
-    self.jobs = .init(&self.jobs_buffer);
+    self.jobs = .init(self.jobs_buffer);
 
     try self.state.snapshot.init(snapshot.abs_root, snapshot.root_name, arena);
 
@@ -112,39 +119,40 @@ pub fn init(
     try self.waker.wake();
 }
 
-pub fn handleActions(
-    self: *Scanner,
-    path_allocator: Allocator,
-    waker: Scheduler.Waker,
-    arena: Allocator,
-    res: anyerror!void,
-) bool {
-    res catch {
-        self.stop();
-        return false;
-    };
-    self._handleActions(path_allocator, waker, arena) catch return false;
-
-    return true;
-}
-
-pub fn stop(self: *Scanner) void {
+pub fn deinit(self: *Scanner) void {
     self.updates.close(self.io);
     self.jobs.close(self.io);
     self.actions.close(self.io);
     self.group.cancel(self.io);
+    self.arena.deinit();
+}
+
+pub fn handleActions(
+    self: *Scanner,
+    ctx: Context,
+    path_allocator: Allocator,
+    waker: sch.Waker,
+    res: anyerror!void,
+) bool {
+    res catch {
+        self.deinit();
+        return false;
+    };
+    self._handleActions(ctx, path_allocator, waker) catch return false;
+
+    return true;
 }
 
 fn _handleActions(
     self: *Scanner,
+    ctx: Context,
     path_allocator: Allocator,
-    waker: Scheduler.Waker,
-    arena: Allocator,
+    waker: sch.Waker,
 ) !void {
     var buffer: [8]Action = undefined;
     for (0..try self.actions.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
-            .initial_scan => try self.initialScan(path_allocator, waker, arena),
+            .initial_scan => try self.initialScan(ctx, path_allocator, waker),
             else => {},
         }
     }
@@ -152,9 +160,9 @@ fn _handleActions(
 
 fn initialScan(
     self: *Scanner,
+    _: Context,
     path_allocator: Allocator,
-    waker: Scheduler.Waker,
-    arena: Allocator,
+    waker: sch.Waker,
 ) !void {
     const stat = try Io.Dir.statFile(
         .cwd(),
@@ -177,6 +185,8 @@ fn initialScan(
 
     const cpu_count = try std.Thread.getCpuCount();
     for (0..cpu_count) |_| {
+        const arena = self.arena.allocator();
+
         const worker = try arena.create(Worker);
         try worker.init(self, arena, waker);
 
@@ -198,9 +208,9 @@ const Worker = struct {
     arena: Allocator,
     queue: std.ArrayList(Job),
     entries: std.ArrayList(Snapshot.Entry),
-    waker: Scheduler.Waker,
+    waker: sch.Waker,
 
-    pub fn init(self: *Worker, scanner: *Scanner, arena: Allocator, waker: Scheduler.Waker) !void {
+    pub fn init(self: *Worker, scanner: *Scanner, arena: Allocator, waker: sch.Waker) !void {
         const queue: std.ArrayList(Job) = .empty;
         const entries: std.ArrayList(Snapshot.Entry) = .empty;
 

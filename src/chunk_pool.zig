@@ -4,6 +4,8 @@ const debug = std.debug;
 const assert = debug.assert;
 const Allocator = mem.Allocator;
 const testing = std.testing;
+const Io = std.Io;
+const panic = debug.panic;
 
 const constans = @import("contants.zig");
 const MAX_ALIGN = constans.MAX_ALIGN;
@@ -91,9 +93,39 @@ pub const ChunkPool = struct {
 
 pub const ChunkAllocator = struct {
     pools: []ChunkPool,
+    mutex: Io.Mutex,
+    io: Io,
 
-    pub fn init(self: *ChunkAllocator, child_alloc: Allocator, capacity: u32, comptime sizes: anytype) !void {
-        self.pools = try child_alloc.alloc(ChunkPool, sizes.len);
+    const PoolConfig = struct {
+        capacity: u32,
+        size: u32,
+
+        fn lessThan(_: void, lhs: PoolConfig, rhs: PoolConfig) bool {
+            return lhs.size < rhs.size;
+        }
+    };
+
+    fn orderPools(comptime pool_configs: anytype) [pool_configs.len]PoolConfig {
+        var ordered: [pool_configs.len]PoolConfig = undefined;
+        inline for (pool_configs, 0..) |config, index| {
+            ordered[index] = .{
+                .capacity = config[0],
+                .size = std.math.ceilPowerOfTwoAssert(u32, config[1]),
+            };
+        }
+
+        std.mem.sortUnstable(PoolConfig, &ordered, {}, PoolConfig.lessThan);
+        return ordered;
+    }
+
+    pub fn init(self: *ChunkAllocator, child_alloc: Allocator, comptime pool_configs: anytype) !void {
+        self.* = .{
+            .pools = undefined,
+            .mutex = undefined,
+            .io = undefined,
+        };
+
+        self.pools = try child_alloc.alloc(ChunkPool, pool_configs.len);
         errdefer child_alloc.free(self.pools);
 
         var initialized: usize = 0;
@@ -101,8 +133,31 @@ pub const ChunkAllocator = struct {
             for (self.pools[0..initialized]) |*pool| pool.deinit(child_alloc);
         }
 
-        inline for (sizes, 0..) |size, index| {
-            try self.pools[index].init(child_alloc, capacity, std.math.ceilPowerOfTwoAssert(u32, size));
+        const ordered_pools = comptime orderPools(pool_configs);
+        inline for (ordered_pools, 0..) |config, index| {
+            try self.pools[index].init(child_alloc, config.capacity, config.size);
+            initialized += 1;
+        }
+    }
+
+    pub fn initThreadSafe(self: *ChunkAllocator, io: Io, child_alloc: Allocator, comptime pool_configs: anytype) !void {
+        self.* = .{
+            .pools = undefined,
+            .mutex = .init,
+            .io = io,
+        };
+
+        self.pools = try child_alloc.alloc(ChunkPool, pool_configs.len);
+        errdefer child_alloc.free(self.pools);
+
+        var initialized: usize = 0;
+        errdefer {
+            for (self.pools[0..initialized]) |*pool| pool.deinit(child_alloc);
+        }
+
+        const ordered_pools = comptime orderPools(pool_configs);
+        inline for (ordered_pools, 0..) |config, index| {
+            try self.pools[index].init(child_alloc, config.capacity, config.size);
             initialized += 1;
         }
     }
@@ -124,8 +179,22 @@ pub const ChunkAllocator = struct {
         };
     }
 
+    pub fn threadSafeAllocator(self: *ChunkAllocator) Allocator {
+        return .{
+            .ptr = self,
+            .vtable = &.{
+                .alloc = threadSafeAlloc,
+                .resize = Allocator.noResize,
+                .remap = Allocator.noRemap,
+                .free = threadSafeFree,
+            },
+        };
+    }
+
     fn alloc(ctx: *anyopaque, len: usize, alignment: mem.Alignment, _: usize) ?[*]u8 {
         const self: *ChunkAllocator = @ptrCast(@alignCast(ctx));
+        const max_size = self.pools[self.pools.len - 1].chunk_size;
+        if (len > max_size) panic("Chunk of {} bytes exceeds max chunk size {}", .{ len, max_size });
 
         for (self.pools) |*pool| {
             if (len > pool.chunk_size) continue;
@@ -138,8 +207,42 @@ pub const ChunkAllocator = struct {
         return null;
     }
 
+    fn threadSafeAlloc(ctx: *anyopaque, len: usize, alignment: mem.Alignment, _: usize) ?[*]u8 {
+        const self: *ChunkAllocator = @ptrCast(@alignCast(ctx));
+        const max_size = self.pools[self.pools.len - 1].chunk_size;
+        if (len > max_size) panic("Chunk of {} bytes exceeds max chunk size {}", .{ len, max_size });
+
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
+
+        for (self.pools) |*pool| {
+            if (len > pool.chunk_size) continue;
+            if (alignment.toByteUnits() > pool.alignment.toByteUnits()) continue;
+            const buffer = pool.alloc() orelse return null;
+            return buffer.ptr;
+        }
+
+        return null;
+    }
+
     fn free(ctx: *anyopaque, memory: []u8, _: mem.Alignment, _: usize) void {
         const self: *ChunkAllocator = @ptrCast(@alignCast(ctx));
+
+        for (self.pools) |*pool| {
+            if (@intFromPtr(memory.ptr) < @intFromPtr(pool.buffer.ptr)) continue;
+            if (@intFromPtr(memory.ptr) >= @intFromPtr(pool.buffer.ptr) + pool.buffer.len) continue;
+            pool.free(memory.ptr[0..pool.chunk_size]);
+            return;
+        }
+
+        std.debug.assert(false);
+    }
+
+    fn threadSafeFree(ctx: *anyopaque, memory: []u8, _: mem.Alignment, _: usize) void {
+        const self: *ChunkAllocator = @ptrCast(@alignCast(ctx));
+
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
 
         for (self.pools) |*pool| {
             if (@intFromPtr(memory.ptr) < @intFromPtr(pool.buffer.ptr)) continue;
@@ -202,7 +305,7 @@ test "Chunk Allocator" {
     };
 
     var chunk_allocator: ChunkAllocator = undefined;
-    try chunk_allocator.init(gpa, 1, .{ 64, 128 });
+    try chunk_allocator.init(gpa, .{ .{ 1, 64 }, .{ 1, 128 } });
     defer chunk_allocator.deinit(gpa);
 
     const alloc = chunk_allocator.allocator();
@@ -220,4 +323,16 @@ test "Chunk Allocator" {
     try testing.expectEqual(small, reused);
     alloc.destroy(reused);
     alloc.destroy(medium);
+}
+
+test "Chunk Allocator orders chunk sizes from smallest to biggest" {
+    const gpa = testing.allocator;
+
+    var chunk_allocator: ChunkAllocator = undefined;
+    try chunk_allocator.init(gpa, .{ .{ 1, 128 }, .{ 1, 64 }, .{ 1, 256 } });
+    defer chunk_allocator.deinit(gpa);
+
+    try testing.expectEqual(@as(u32, 64), chunk_allocator.pools[0].chunk_size);
+    try testing.expectEqual(@as(u32, 128), chunk_allocator.pools[1].chunk_size);
+    try testing.expectEqual(@as(u32, 256), chunk_allocator.pools[2].chunk_size);
 }

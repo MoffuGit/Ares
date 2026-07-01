@@ -18,14 +18,30 @@ const Task = Tasks.Task;
 const TaskId = Tasks.TaskId;
 const App = @import("app.zig");
 
+pub const Waker = struct {
+    waker: Tasks.Waker,
+    options: App.Options,
+    cancelation: Scheduler.Cancelation,
+
+    pub fn wake(self: *const Waker) !void {
+        try self.waker.wake();
+        self.options.wakeup_cb(self.options.userdata);
+    }
+
+    pub fn close(self: *const Waker) void {
+        self.waker.close();
+        self.cancelation.cancel();
+    }
+};
+
 pub const Scheduler = struct {
     tasks: Tasks,
     loop: Loop,
     options: App.Options,
 
-    pub fn init(self: *Scheduler, options: App.Options, arena: Allocator, chunks: Allocator, gpa: Allocator, io: Io) !void {
+    pub fn init(self: *Scheduler, options: App.Options, arena: Allocator, chunks: Allocator, io: Io) !void {
         self.options = options;
-        try self.tasks.init(arena, chunks, gpa, io);
+        try self.tasks.init(arena, chunks, io);
         try self.loop.init(io);
     }
 
@@ -56,11 +72,18 @@ pub const Scheduler = struct {
         context: anytype,
     ) !Waker {
         const task = self.tasks.create();
-        const port = try task.await(function, context);
+        const waker = try task.await(function, context);
 
         self.loop.submit(&task.completion);
 
-        return .{ .port = port, .cancelation = .{ .id = task.id, .scheduler = self } };
+        return .{
+            .waker = waker,
+            .options = self.options,
+            .cancelation = .{
+                .id = task.id,
+                .scheduler = self,
+            },
+        };
     }
 
     pub const Cancelation = struct {
@@ -71,50 +94,6 @@ pub const Scheduler = struct {
             if (self.scheduler.tasks.cancelation(self.id)) |can| {
                 self.scheduler.loop.cancel(&can.completion);
             }
-        }
-    };
-
-    pub const Waker = struct {
-        port: system.mach_port_name_t,
-        cancelation: Cancelation,
-
-        pub fn wake(self: *const Waker) !void {
-            var msg: posix.system.mach_msg_header_t = .{
-                .msgh_bits = @intFromEnum(system.MACH.MSG.TYPE.COPY_SEND),
-                .msgh_size = @sizeOf(posix.system.mach_msg_header_t),
-                .msgh_remote_port = self.port,
-                .msgh_local_port = system.MACH.PORT.NULL,
-                .msgh_voucher_port = undefined,
-                .msgh_id = undefined,
-            };
-
-            switch (system.mach_msg(
-                &msg,
-                .{ .SEND = .{ .TIMEOUT = true, .MSG = true } },
-                msg.msgh_size,
-                0,
-                system.MACH.PORT.NULL,
-                @enumFromInt(0),
-                system.MACH.PORT.NULL,
-            )) {
-                .SUCCESS => {},
-                .SEND_NO_BUFFER => {},
-                .SEND_TIMED_OUT => {},
-                else => |e| {
-                    std.log.warn("mach msg err={}", .{e});
-                    return error.MachMsgFailed;
-                },
-            }
-
-            self.cancelation.scheduler.wakeup();
-        }
-
-        pub fn close(self: *const Waker) void {
-            self.cancelation.cancel();
-            _ = system.mach_port_deallocate(
-                posix.system.mach_task_self(),
-                self.port,
-            );
         }
     };
 
@@ -139,12 +118,11 @@ pub const BackgroundScheduler = struct {
     stop: atomic.Value(bool) = .init(false),
     stopped: atomic.Value(bool) = .init(false),
     arena: Allocator,
-    gpa: Allocator,
     queues: multi_mpsc.MultiIntrusive(Queues),
     chunks: ChunkAllocator,
     options: App.Options,
 
-    pub fn init(self: *@This(), options: App.Options, arena: Allocator, gpa: Allocator, io: Io) !void {
+    pub fn init(self: *@This(), options: App.Options, arena: Allocator, io: Io) !void {
         self.* = .{
             .options = options,
             .queues = undefined,
@@ -153,13 +131,12 @@ pub const BackgroundScheduler = struct {
             .io = io,
             .future = undefined,
             .arena = arena,
-            .gpa = gpa,
             .chunks = undefined,
         };
 
         self.queues.init();
-        try self.chunks.init(self.arena, 100, .{MAX_SIZE});
-        try self.tasks.init(arena, self.chunks.allocator(), gpa, io);
+        try self.chunks.initThreadSafe(io, self.arena, &.{ .{ 10, MAX_SIZE }, .{ 10, 1280 } });
+        try self.tasks.init(arena, self.chunks.threadSafeAllocator(), io);
         try self.loop.init(io);
         errdefer self.loop.deinit();
 
@@ -225,13 +202,16 @@ pub const BackgroundScheduler = struct {
         self: *@This(),
         function: anytype,
         context: anytype,
-    ) !Waker {
+    ) !struct { Cancelation, Tasks.Waker } {
         const task = self.tasks.create();
-        const port = try task.await(function, context);
+        const waker = try task.await(function, context);
 
         self.queues.push(.submissions, task);
 
-        return .{ .port = port, .cancelation = .{ .id = task.id, .scheduler = self } };
+        return .{
+            Cancelation{ .id = task.id, .scheduler = self },
+            waker,
+        };
     }
 
     pub fn timer(
@@ -259,85 +239,65 @@ pub const BackgroundScheduler = struct {
         }
     };
 
-    pub const Waker = struct {
-        port: system.mach_port_name_t,
-        cancelation: Cancelation,
-
-        pub fn wake(self: *const Waker) !void {
-            var msg: posix.system.mach_msg_header_t = .{
-                .msgh_bits = @intFromEnum(system.MACH.MSG.TYPE.COPY_SEND),
-                .msgh_size = @sizeOf(posix.system.mach_msg_header_t),
-                .msgh_remote_port = self.port,
-                .msgh_local_port = system.MACH.PORT.NULL,
-                .msgh_voucher_port = undefined,
-                .msgh_id = undefined,
-            };
-
-            switch (system.mach_msg(
-                &msg,
-                .{ .SEND = .{ .TIMEOUT = true, .MSG = true } },
-                msg.msgh_size,
-                0,
-                system.MACH.PORT.NULL,
-                @enumFromInt(0),
-                system.MACH.PORT.NULL,
-            )) {
-                .SUCCESS => {},
-                .SEND_NO_BUFFER => {},
-                .SEND_TIMED_OUT => {},
-                else => |e| {
-                    std.log.warn("mach msg err={}", .{e});
-                    return error.MachMsgFailed;
-                },
-            }
-        }
-
-        pub fn close(self: *const Waker) void {
-            self.cancelation.cancel();
-            _ = system.mach_port_deallocate(
-                posix.system.mach_task_self(),
-                self.port,
-            );
-        }
-    };
-
     pub fn Executor(T: type) type {
         return struct {
             ptr: *T,
-            waker: Waker,
-            arena: Allocator,
+            waker: Tasks.Waker,
+            cancelation: Cancelation,
 
             pub fn init(self: *@This(), args: anytype) !void {
-                try @call(.always_inline, T.init, .{ self.ptr, self.arena, self.waker } ++ args);
+                try @call(.always_inline, T.init, .{ self.ptr, self.waker } ++ args);
             }
 
             pub fn stop(self: *@This()) void {
                 self.waker.close();
+                self.cancelation.cancel();
             }
         };
     }
 
+    pub const Context = struct {
+        waker: Tasks.Waker,
+        scheduler: *BackgroundScheduler,
+    };
+
     pub fn executor(self: *@This(), T: type, function: anytype, args: anytype) !Executor(T) {
+        const Args = @TypeOf(args);
+
+        const alloc = self.chunks.threadSafeAllocator();
+
+        const ptr = try alloc.create(T);
+        errdefer alloc.destroy(ptr);
+
         const task = self.tasks.create();
-        const arena = task.arena.allocator();
-        const ptr = try arena.create(T);
-        const port = try task.await(function, .{ptr} ++ args);
+
+        const TypeErased = struct {
+            fn callback(scheduler: *BackgroundScheduler, _ptr: *T, _task: *Task, _args: Args, res: anyerror!void) bool {
+                const port = _task.completion.operation.machport.port;
+
+                const rearm = @call(.always_inline, function, .{ _ptr, Context{ .scheduler = scheduler, .waker = .{ .port = port } } } ++ _args ++ .{res});
+                if (!rearm) {
+                    const _alloc = scheduler.chunks.threadSafeAllocator();
+                    _alloc.destroy(_ptr);
+                }
+
+                return rearm;
+            }
+        };
+        const waker = try task.await(TypeErased.callback, .{ self, ptr, task, args });
         self.queues.push(.submissions, task);
 
         return .{
             .ptr = ptr,
-            .waker = .{
-                .cancelation = .{
-                    .id = task.id,
-                    .scheduler = self,
-                },
-                .port = port,
+            .waker = waker,
+            .cancelation = .{
+                .scheduler = self,
+                .id = task.id,
             },
-            .arena = arena,
         };
     }
 };
-
+//
 test "Background Scheduler runs deferred tasks and frees memory on stop" {
     const testing = std.testing;
     const heap = std.heap;
@@ -346,14 +306,13 @@ test "Background Scheduler runs deferred tasks and frees memory on stop" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(.{}, arena.allocator(), testing.allocator, testing.io);
+    try scheduler.init(.{}, arena.allocator(), testing.io);
     defer scheduler.deinit();
 
     var called = false;
     _ = try scheduler.@"defer"(struct {
-        fn callback(_called: *bool, _arena: Allocator, res: anyerror!void) bool {
+        fn callback(_called: *bool, res: anyerror!void) bool {
             res catch return false;
-            _ = _arena.alloc(u8, 16) catch return false;
             _called.* = true;
             return false;
         }
@@ -372,14 +331,13 @@ test "Background Scheduler runs await tasks and frees memory on close" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(.{}, arena.allocator(), testing.allocator, testing.io);
+    try scheduler.init(.{}, arena.allocator(), testing.io);
     defer scheduler.deinit();
 
     var called = false;
-    const waker = try scheduler.await(struct {
-        fn callback(_called: *bool, _arena: Allocator, res: anyerror!void) bool {
+    _, const waker = try scheduler.await(struct {
+        fn callback(_called: *bool, res: anyerror!void) bool {
             res catch return false;
-            _ = _arena.alloc(u8, 16) catch return false;
             _called.* = true;
             return false;
         }
@@ -400,14 +358,13 @@ test "Background Scheduler runs timer tasks" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(.{}, arena.allocator(), testing.allocator, testing.io);
+    try scheduler.init(.{}, arena.allocator(), testing.io);
     defer scheduler.deinit();
 
     var called = false;
     _ = try scheduler.timer(struct {
-        fn callback(_called: *bool, _arena: Allocator, res: anyerror!void) bool {
+        fn callback(_called: *bool, res: anyerror!void) bool {
             res catch return false;
-            _ = _arena.alloc(u8, 16) catch return false;
             _called.* = true;
             return false;
         }
@@ -426,14 +383,13 @@ test "Background Scheduler cancels timer tasks" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(.{}, arena.allocator(), testing.allocator, testing.io);
+    try scheduler.init(.{}, arena.allocator(), testing.io);
     defer scheduler.deinit();
 
     var canceled = false;
     const cancelation = try scheduler.timer(struct {
-        fn callback(_canceled: *bool, _arena: Allocator, res: anyerror!void) bool {
+        fn callback(_canceled: *bool, res: anyerror!void) bool {
             if (res == error.Canceled) {
-                _ = _arena.alloc(u8, 16) catch return false;
                 _canceled.* = true;
             }
             return false;
@@ -447,22 +403,21 @@ test "Background Scheduler cancels timer tasks" {
     }
 }
 
-test "Executor cancels await tasks and frees memory on stop" {
+test "Scheduler cancels await tasks and frees memory on stop" {
     const testing = std.testing;
     const heap = std.heap;
 
     var arena: heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
 
-    var executor: BackgroundScheduler = undefined;
-    try executor.init(.{}, arena.allocator(), testing.allocator, testing.io);
-    defer executor.deinit();
+    var scheduler: BackgroundScheduler = undefined;
+    try scheduler.init(.{}, arena.allocator(), testing.io);
+    defer scheduler.deinit();
 
     var canceled = false;
-    const waker = try executor.await(struct {
-        fn callback(_canceled: *bool, allocator: Allocator, res: anyerror!void) bool {
+    const cancel, const waker = try scheduler.await(struct {
+        fn callback(_canceled: *bool, res: anyerror!void) bool {
             if (res == error.Canceled) {
-                _ = allocator.alloc(u8, 16) catch return false;
                 _canceled.* = true;
             }
             return false;
@@ -470,6 +425,7 @@ test "Executor cancels await tasks and frees memory on stop" {
     }.callback, .{&canceled});
 
     waker.close();
+    cancel.cancel();
     while (!canceled) {
         testing.io.sleep(.fromNanoseconds(100), .real) catch {};
     }
@@ -483,13 +439,13 @@ test "Background Scheduler comptime Executor initializes and wakes task" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(.{}, arena.allocator(), testing.allocator, testing.io);
+    try scheduler.init(.{}, arena.allocator(), testing.io);
     defer scheduler.deinit();
 
     const State = struct {
         value: u32,
 
-        fn init(self: *@This(), _: Allocator, _: BackgroundScheduler.Waker, value: u32) !void {
+        fn init(self: *@This(), _: Tasks.Waker, value: u32) !void {
             self.value = value;
         }
     };
@@ -497,9 +453,8 @@ test "Background Scheduler comptime Executor initializes and wakes task" {
     var called = false;
     var value: u32 = 0;
     var executor = try scheduler.executor(State, struct {
-        fn callback(state: *State, _called: *bool, _value: *u32, alloc: Allocator, res: anyerror!void) bool {
+        fn callback(state: *State, _: BackgroundScheduler.Context, _called: *bool, _value: *u32, res: anyerror!void) bool {
             res catch return false;
-            _ = alloc.alloc(u8, 16) catch return false;
             _value.* = state.value;
             _called.* = true;
             return false;
@@ -524,7 +479,7 @@ test "Scheduler waker calls wakeup callback" {
 
     var wakeups: usize = 0;
     var chunks: ChunkAllocator = undefined;
-    try chunks.init(arena.allocator(), 100, .{MAX_SIZE});
+    try chunks.init(arena.allocator(), &.{.{ 100, MAX_SIZE }});
 
     var scheduler: Scheduler = undefined;
     try scheduler.init(.{
@@ -535,11 +490,11 @@ test "Scheduler waker calls wakeup callback" {
                 count.* += 1;
             }
         }.callback,
-    }, arena.allocator(), chunks.allocator(), testing.allocator, testing.io);
+    }, arena.allocator(), chunks.allocator(), testing.io);
     defer scheduler.deinit();
 
     const waker = try scheduler.await(struct {
-        fn callback(_: Allocator, res: anyerror!void) bool {
+        fn callback(res: anyerror!void) bool {
             res catch return false;
             return false;
         }
