@@ -341,7 +341,7 @@ pub const Completion = struct {
                 event.* = .{
                     .ident = @intCast(m.port),
                     .filter = std.c.EVFILT.MACHPORT,
-                    .flags = std.c.EV.ADD | std.c.EV.ENABLE,
+                    .flags = posix.system.EV.ADD | posix.system.EV.ENABLE | posix.system.EV.ONESHOT,
                     .fflags = @bitCast(std.c.MACH.RCV{ .MSG = true }),
                     .data = 0,
                     .udata = @intFromPtr(self),
