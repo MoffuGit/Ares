@@ -82,13 +82,11 @@ pub fn stop(self: *Loop) void {
 }
 
 pub fn flush(self: *Loop, _: bool) !void {
-    while (self.queues.pop(.cancellations)) |c| {
-        _ = c.callback(self, c);
-    }
+    self.flush_cancellations();
 
     var events: [256]Kevent = undefined;
 
-    const canceled = self.flush_cancellations(&events);
+    const canceled = self.flush_canceled(&events);
     const active = if (canceled < events.len)
         self.flush_submissions(events[canceled..])
     else
@@ -120,17 +118,29 @@ pub fn flush(self: *Loop, _: bool) !void {
         }
     }
 
+    self.flush_completions();
+}
+
+pub fn flush_completions(self: *Loop) void {
     while (self.queues.pop(.completions)) |completion| {
         assert(completion.state == .completed);
         completion.state = .idle;
         if (completion.callback(self, completion)) {
-            completion.state = .submitted;
-            self.queues.push(.submissions, completion);
+            switch (completion.operation) {
+                .@"defer" => self.complete(completion),
+                else => self.submit(completion),
+            }
         }
     }
 }
 
-pub fn flush_cancellations(self: *Loop, kevents: []Kevent) usize {
+pub fn flush_cancellations(self: *Loop) void {
+    while (self.queues.pop(.cancellations)) |c| {
+        _ = c.callback(self, c);
+    }
+}
+
+pub fn flush_canceled(self: *Loop, kevents: []Kevent) usize {
     var submitted: usize = 0;
 
     while (submitted < kevents.len) {
