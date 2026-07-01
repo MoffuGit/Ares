@@ -101,9 +101,9 @@ pub fn init(
     self.updates = .init(&self.updates_buffer);
     self.jobs = .init(&self.jobs_buffer);
 
-    try self.state.snapshot.clone(snapshot, arena);
+    try self.state.snapshot.init(snapshot.abs_root, snapshot.root_name, arena);
 
-    try self.state.snapshot.insert(arena, .{
+    try self.state.snapshot.insert(.{
         .id = self.next_entry_id.fetchAdd(1, .monotonic),
         .path = snapshot.root_name,
     });
@@ -292,7 +292,7 @@ const Worker = struct {
         try self.scanner.state.lock(io);
         defer self.scanner.state.unlock(io);
 
-        for (self.entries.items) |entry| try self.scanner.state.snapshot.insert(self.arena, entry);
+        for (self.entries.items) |entry| try self.scanner.state.snapshot.insert(entry);
         self.entries.clearRetainingCapacity();
     }
 
@@ -318,12 +318,11 @@ const Worker = struct {
         try scanner.state.lock(io);
         defer scanner.state.unlock(io);
 
-        var snapshot: Snapshot = undefined;
-        try snapshot.clone(&scanner.state.snapshot, self.scanner.gpa);
-        errdefer snapshot.deinit(self.scanner.gpa);
+        var copy = try self.scanner.state.snapshot.clone(self.scanner.gpa);
+        errdefer copy.deinit(self.scanner.gpa);
 
         try scanner.updates.putOne(io, .{ .updated = .{
-            .snapshot = snapshot,
+            .snapshot = copy,
             .scanning = false,
         } });
         try self.waker.wake();

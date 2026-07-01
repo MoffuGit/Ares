@@ -9,8 +9,8 @@ const constans = @import("contants.zig");
 const MAX_ALIGN = constans.MAX_ALIGN;
 
 const Chunk = opaque {
-    pub const Index = enum(u16) {
-        none = std.math.maxInt(u16),
+    pub const Index = enum(u32) {
+        none = std.math.maxInt(u32),
         _,
     };
 
@@ -26,12 +26,12 @@ const Chunk = opaque {
 pub const ChunkPool = struct {
     buffer: []u8,
     alignment: mem.Alignment,
-    chunk_size: u16,
-    reserved: u16 = 0,
+    chunk_size: u32,
+    reserved: u32 = 0,
     free_list: Chunk.Index = .none,
 
-    pub fn init(self: *ChunkPool, allocator: Allocator, capacity: u16, size: u16) !void {
-        assert(capacity < std.math.maxInt(u16));
+    pub fn init(self: *ChunkPool, allocator: Allocator, capacity: u32, size: u32) !void {
+        assert(capacity < std.math.maxInt(u32));
         assert(size >= MAX_ALIGN.toByteUnits());
 
         const alignment: mem.Alignment = .fromByteUnits(size);
@@ -92,7 +92,7 @@ pub const ChunkPool = struct {
 pub const ChunkAllocator = struct {
     pools: []ChunkPool,
 
-    pub fn init(self: *ChunkAllocator, child_alloc: Allocator, capacity: u16, comptime sizes: anytype) !void {
+    pub fn init(self: *ChunkAllocator, child_alloc: Allocator, capacity: u32, comptime sizes: anytype) !void {
         self.pools = try child_alloc.alloc(ChunkPool, sizes.len);
         errdefer child_alloc.free(self.pools);
 
@@ -102,7 +102,7 @@ pub const ChunkAllocator = struct {
         }
 
         inline for (sizes, 0..) |size, index| {
-            try self.pools[index].init(child_alloc, capacity, std.math.ceilPowerOfTwoAssert(u16, size));
+            try self.pools[index].init(child_alloc, capacity, std.math.ceilPowerOfTwoAssert(u32, size));
             initialized += 1;
         }
     }
