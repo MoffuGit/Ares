@@ -225,17 +225,6 @@ pub fn @"defer"(
     self.complete(completion);
 }
 
-pub fn cancelate(
-    self: *Loop,
-    completion: *Completion,
-    target: *Completion,
-    callback: anytype,
-    context: anytype,
-) void {
-    completion.cancel(target, callback, context);
-    self.cancel(completion);
-}
-
 pub fn cancel(
     self: *Loop,
     completion: *Completion,
@@ -636,7 +625,8 @@ test "cancel mach port" {
     var canceled: bool = false;
     var cancellation: Completion = .noop;
 
-    loop.cancelate(&cancellation, &completion, Cancelled.cancel, &canceled);
+    cancellation.cancel(&completion, Cancelled.cancel, &canceled);
+    loop.cancel(&cancellation);
 
     for (0..10) |_| try loop.run(.no_wait);
 
