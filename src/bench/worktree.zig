@@ -60,4 +60,6 @@ pub fn initialWorktreeScan(app: *App, gpa: std.mem.Allocator, io: std.Io, _: *pr
     while (observer.read(app).scanning) {
         app.flush();
     }
+
+    try testing.expectEqual(544836, worktree.read(app).snapshot.entries.count);
 }

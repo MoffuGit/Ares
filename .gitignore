@@ -1,5 +1,6 @@
 .zig-cache/
 .idea/
+.DS_STORE
 zig-out/
 test/*
 !test/build.zig

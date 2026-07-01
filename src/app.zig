@@ -26,6 +26,11 @@ const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 
+pub const Options = extern struct {
+    userdata: *anyopaque,
+    wakeup_cb: *const fn (*anyopaque) callconv(.c) void,
+};
+
 pub const App = @This();
 
 io: Io,
@@ -44,8 +49,11 @@ notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
 flushing: bool,
 
-pub fn init(self: *App, gpa: Allocator, io: Io) !void {
+options: Options,
+
+pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     self.* = .{
+        .options = options,
         .scheduler = undefined,
         .notifications = undefined,
         .entities = undefined,

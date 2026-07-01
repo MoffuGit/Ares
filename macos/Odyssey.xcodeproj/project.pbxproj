@@ -9,14 +9,14 @@
 /* Begin PBXBuildFile section */
 		F499BB592FCDDDF90032DFC3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F499BB552FCDDDF90032DFC3 /* Assets.xcassets */; };
 		F499BB5A2FCDDDF90032DFC3 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = F499BB562FCDDDF90032DFC3 /* MainMenu.xib */; };
-		F499BB682FCDE8500032DFC3 /* OdysseyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = F499BB5C2FCDDE0A0032DFC3 /* OdysseyKit.xcframework */; };
+		F4DD22122FF4CF5E003D8176 /* OdysseyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = F4DD22112FF4CF5E003D8176 /* OdysseyKit.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		F499BB552FCDDDF90032DFC3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F499BB572FCDDDF90032DFC3 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
-		F499BB5C2FCDDE0A0032DFC3 /* OdysseyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = OdysseyKit.xcframework; sourceTree = "<group>"; };
 		F4AA0A7F2FCDDCA700FADA1F /* Odyssey.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Odyssey.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F4DD22112FF4CF5E003D8176 /* OdysseyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = OdysseyKit.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -32,7 +32,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F499BB682FCDE8500032DFC3 /* OdysseyKit.xcframework in Frameworks */,
+				F4DD22122FF4CF5E003D8176 /* OdysseyKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -42,7 +42,7 @@
 		F499BB5B2FCDDE0A0032DFC3 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				F499BB5C2FCDDE0A0032DFC3 /* OdysseyKit.xcframework */,
+				F4DD22112FF4CF5E003D8176 /* OdysseyKit.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

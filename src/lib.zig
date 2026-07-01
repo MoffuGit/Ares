@@ -3,6 +3,7 @@ const assert = std.debug.assert;
 const builtin = @import("builtin");
 
 const App = @import("app.zig");
+const Options = App.Options;
 const global = @import("global.zig");
 
 const state = &@import("global.zig").state;
@@ -25,18 +26,18 @@ pub export fn odyssey_deinit() void {
     global.state.deinit();
 }
 
-pub export fn odyssey_app_new() ?*App {
-    return app_new() catch |err| {
+pub export fn odyssey_app_new(options: *const Options) ?*App {
+    return app_new(options) catch |err| {
         std.log.err("error initializing app: {}", .{err});
         return null;
     };
 }
 
-fn app_new() !*App {
+fn app_new(options: *Options) !*App {
     var app = try state.gpa.create(App);
     errdefer state.gpa.destroy(app);
 
-    try app.init(state.gpa, state.threaded.io());
+    try app.init(options, state.gpa, state.threaded.io());
 
     return app;
 }
@@ -44,4 +45,8 @@ fn app_new() !*App {
 pub export fn odyssey_app_free(app: *App) void {
     app.deinit();
     state.gpa.destroy(app);
+}
+
+pub export fn odyssey_app_flush(app: *App) void {
+    app.flush();
 }
