@@ -27,9 +27,11 @@ const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 
 pub const Options = extern struct {
-    userdata: *anyopaque,
-    wakeup_cb: *const fn (*anyopaque) callconv(.c) void,
+    userdata: *anyopaque = undefined,
+    wakeup_cb: *const fn (*anyopaque) callconv(.c) void = noop,
 };
+
+fn noop(_: *anyopaque) callconv(.c) void {}
 
 pub const App = @This();
 
@@ -75,10 +77,10 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     try self.entities.init(self.arena, 100);
     try self.notifications.init(self.chunks.allocator());
 
-    try self.background_scheduler.init(self.arena, gpa, io);
+    try self.background_scheduler.init(options, self.arena, gpa, io);
     errdefer self.background_scheduler.deinit();
 
-    try self.scheduler.init(self.arena, self.chunks.allocator(), gpa, io);
+    try self.scheduler.init(options, self.arena, self.chunks.allocator(), gpa, io);
     errdefer self.scheduler.deinit();
 }
 
@@ -372,7 +374,7 @@ test "creates/drops entities" {
     const TestEntity = Entity(TestStruct);
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(.{}, allocator, io);
     defer app.deinit();
 
     var entities: [entity_count]TestEntity = undefined;
@@ -422,7 +424,7 @@ test "Observe entities" {
     const TestEntity = Entity(TestStruct);
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(.{}, allocator, io);
     defer app.deinit();
 
     var entities: [entity_count]TestEntity = undefined;
@@ -516,7 +518,7 @@ test "Context observes entities" {
     };
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(.{}, allocator, io);
     defer app.deinit();
 
     const observer = try Entity(ObserverState).new(&app, .{});
@@ -575,7 +577,7 @@ test "Context defer runs on foreground executor with entity context" {
     };
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(.{}, allocator, io);
     defer app.deinit();
 
     const entity = try Entity(State).new(&app, .{});
@@ -623,7 +625,7 @@ test "Context async runs on foreground executor with entity context" {
     };
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(.{}, allocator, io);
     defer app.deinit();
 
     const entity = try Entity(State).new(&app, .{});
@@ -661,7 +663,7 @@ test "Context observe removes subscription when observer is dropped" {
     };
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(.{}, allocator, io);
     defer app.deinit();
 
     const observer = try Entity(ObserverState).new(&app, .{});
@@ -700,7 +702,7 @@ test "Context observe removes subscription when observed is dropped" {
     };
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(.{}, allocator, io);
     defer app.deinit();
 
     const observer = try Entity(ObserverState).new(&app, .{});
@@ -744,7 +746,7 @@ test "Observe entities drop before enable" {
     const TestEntity = Entity(TestStruct);
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(.{}, allocator, io);
     defer app.deinit();
 
     var entities: [entity_count]TestEntity = undefined;

@@ -33,11 +33,11 @@ pub export fn odyssey_app_new(options: *const Options) ?*App {
     };
 }
 
-fn app_new(options: *Options) !*App {
+fn app_new(options: *const Options) !*App {
     var app = try state.gpa.create(App);
     errdefer state.gpa.destroy(app);
 
-    try app.init(options, state.gpa, state.threaded.io());
+    try app.init(options.*, state.gpa, state.threaded.io());
 
     return app;
 }

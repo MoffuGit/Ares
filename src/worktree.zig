@@ -99,7 +99,7 @@ test "Worktree Entity" {
     defer arena.deinit();
 
     var app: App = undefined;
-    try app.init(gpa, io);
+    try app.init(.{}, gpa, io);
     defer app.deinit();
 
     const worktree: Entity(Worktree) = try .new(

@@ -16,12 +16,15 @@ const Loop = @import("loop.zig");
 const Tasks = @import("tasks.zig");
 const Task = Tasks.Task;
 const TaskId = Tasks.TaskId;
+const App = @import("app.zig");
 
 pub const Scheduler = struct {
     tasks: Tasks,
     loop: Loop,
+    options: App.Options,
 
-    pub fn init(self: *Scheduler, arena: Allocator, chunks: Allocator, gpa: Allocator, io: Io) !void {
+    pub fn init(self: *Scheduler, options: App.Options, arena: Allocator, chunks: Allocator, gpa: Allocator, io: Io) !void {
+        self.options = options;
         try self.tasks.init(arena, chunks, gpa, io);
         try self.loop.init(io);
     }
@@ -102,6 +105,8 @@ pub const Scheduler = struct {
                     return error.MachMsgFailed;
                 },
             }
+
+            self.cancelation.scheduler.wakeup();
         }
 
         pub fn close(self: *const Waker) void {
@@ -112,6 +117,10 @@ pub const Scheduler = struct {
             );
         }
     };
+
+    fn wakeup(self: *@This()) void {
+        self.options.wakeup_cb(self.options.userdata);
+    }
 };
 
 const Queues = union(enum) {
@@ -132,9 +141,11 @@ pub const BackgroundScheduler = struct {
     gpa: Allocator,
     queues: multi_mpsc.MultiIntrusive(Queues),
     chunks: ChunkAllocator,
+    options: App.Options,
 
-    pub fn init(self: *@This(), arena: Allocator, gpa: Allocator, io: Io) !void {
+    pub fn init(self: *@This(), options: App.Options, arena: Allocator, gpa: Allocator, io: Io) !void {
         self.* = .{
+            .options = options,
             .queues = undefined,
             .loop = undefined,
             .tasks = undefined,
@@ -317,7 +328,7 @@ test "Background Scheduler runs deferred tasks and frees memory on stop" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(arena.allocator(), testing.allocator, testing.io);
+    try scheduler.init(.{}, arena.allocator(), testing.allocator, testing.io);
     defer scheduler.deinit();
 
     var called = false;
@@ -343,7 +354,7 @@ test "Background Scheduler runs await tasks and frees memory on close" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(arena.allocator(), testing.allocator, testing.io);
+    try scheduler.init(.{}, arena.allocator(), testing.allocator, testing.io);
     defer scheduler.deinit();
 
     var called = false;
@@ -371,7 +382,7 @@ test "Executor cancels await tasks and frees memory on stop" {
     defer arena.deinit();
 
     var executor: BackgroundScheduler = undefined;
-    try executor.init(arena.allocator(), testing.allocator, testing.io);
+    try executor.init(.{}, arena.allocator(), testing.allocator, testing.io);
     defer executor.deinit();
 
     var canceled = false;
@@ -399,7 +410,7 @@ test "Background Scheduler comptime Executor initializes and wakes task" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(arena.allocator(), testing.allocator, testing.io);
+    try scheduler.init(.{}, arena.allocator(), testing.allocator, testing.io);
     defer scheduler.deinit();
 
     const State = struct {
@@ -429,4 +440,40 @@ test "Background Scheduler comptime Executor initializes and wakes task" {
     }
 
     try testing.expectEqual(@as(u32, 42), value);
+}
+
+test "Scheduler waker calls wakeup callback" {
+    const testing = std.testing;
+    const heap = std.heap;
+
+    var arena: heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+
+    var wakeups: usize = 0;
+    var chunks: ChunkAllocator = undefined;
+    try chunks.init(arena.allocator(), 100, .{MAX_SIZE});
+
+    var scheduler: Scheduler = undefined;
+    try scheduler.init(.{
+        .userdata = &wakeups,
+        .wakeup_cb = struct {
+            fn callback(userdata: *anyopaque) callconv(.c) void {
+                const count: *usize = @ptrCast(@alignCast(userdata));
+                count.* += 1;
+            }
+        }.callback,
+    }, arena.allocator(), chunks.allocator(), testing.allocator, testing.io);
+    defer scheduler.deinit();
+
+    const waker = try scheduler.await(struct {
+        fn callback(_: Allocator, res: anyerror!void) bool {
+            res catch return false;
+            return false;
+        }
+    }.callback, .{});
+    defer waker.close();
+
+    try waker.wake();
+
+    try testing.expectEqual(@as(usize, 1), wakeups);
 }
