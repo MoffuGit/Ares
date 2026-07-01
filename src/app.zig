@@ -72,10 +72,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     self.arena = self.alloc.allocator();
     errdefer self.alloc.deinit();
 
-    try self.chunks.init(self.arena, .{
-        .{ 50, MAX_SIZE },
-        .{ 50, Observers.NODE_SIZE },
-    });
+    try self.chunks.init(self.arena, &.{ .{ 50, MAX_SIZE }, .{ 50, Observers.NODE_SIZE } });
     try self.observers.init(self.chunks.allocator());
     try self.entities.init(self.arena, 100);
     try self.notifications.init(self.chunks.allocator());

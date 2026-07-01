@@ -96,29 +96,13 @@ pub const ChunkAllocator = struct {
     mutex: Io.Mutex,
     io: Io,
 
-    const PoolConfig = struct {
-        capacity: u32,
-        size: u32,
+    const PoolConfig = struct { u32, u32 };
 
-        fn lessThan(_: void, lhs: PoolConfig, rhs: PoolConfig) bool {
-            return lhs.size < rhs.size;
-        }
-    };
-
-    fn orderPools(comptime pool_configs: anytype) [pool_configs.len]PoolConfig {
-        var ordered: [pool_configs.len]PoolConfig = undefined;
-        inline for (pool_configs, 0..) |config, index| {
-            ordered[index] = .{
-                .capacity = config[0],
-                .size = std.math.ceilPowerOfTwoAssert(u32, config[1]),
-            };
-        }
-
-        std.mem.sortUnstable(PoolConfig, &ordered, {}, PoolConfig.lessThan);
-        return ordered;
+    fn lessThan(_: void, lhs: PoolConfig, rhs: PoolConfig) bool {
+        return lhs.@"1" < rhs.@"1";
     }
 
-    pub fn init(self: *ChunkAllocator, child_alloc: Allocator, comptime pool_configs: anytype) !void {
+    pub fn init(self: *ChunkAllocator, child_alloc: Allocator, pool_configs: []const PoolConfig) !void {
         self.* = .{
             .pools = undefined,
             .mutex = undefined,
@@ -133,14 +117,21 @@ pub const ChunkAllocator = struct {
             for (self.pools[0..initialized]) |*pool| pool.deinit(child_alloc);
         }
 
-        const ordered_pools = comptime orderPools(pool_configs);
-        inline for (ordered_pools, 0..) |config, index| {
-            try self.pools[index].init(child_alloc, config.capacity, config.size);
+        var buffer: [100]PoolConfig = undefined;
+        for (pool_configs, 0..) |config, index| {
+            buffer[index] = .{ config.@"0", std.math.ceilPowerOfTwoAssert(u32, config.@"1") };
+        }
+
+        const ordered_pools = buffer[0..pool_configs.len];
+        std.mem.sortUnstable(PoolConfig, buffer[0..pool_configs.len], {}, lessThan);
+
+        for (ordered_pools, 0..) |config, index| {
+            try self.pools[index].init(child_alloc, config.@"0", config.@"1");
             initialized += 1;
         }
     }
 
-    pub fn initThreadSafe(self: *ChunkAllocator, io: Io, child_alloc: Allocator, comptime pool_configs: anytype) !void {
+    pub fn initThreadSafe(self: *ChunkAllocator, io: Io, child_alloc: Allocator, pool_configs: []const PoolConfig) !void {
         self.* = .{
             .pools = undefined,
             .mutex = .init,
@@ -155,9 +146,16 @@ pub const ChunkAllocator = struct {
             for (self.pools[0..initialized]) |*pool| pool.deinit(child_alloc);
         }
 
-        const ordered_pools = comptime orderPools(pool_configs);
-        inline for (ordered_pools, 0..) |config, index| {
-            try self.pools[index].init(child_alloc, config.capacity, config.size);
+        var buffer: [100]PoolConfig = undefined;
+        for (pool_configs, 0..) |config, index| {
+            buffer[index] = .{ config.@"0", std.math.ceilPowerOfTwoAssert(u32, config.@"1") };
+        }
+
+        const ordered_pools = buffer[0..pool_configs.len];
+        std.mem.sortUnstable(PoolConfig, buffer[0..pool_configs.len], {}, lessThan);
+
+        for (ordered_pools, 0..) |config, index| {
+            try self.pools[index].init(child_alloc, config.@"0", config.@"1");
             initialized += 1;
         }
     }
@@ -305,7 +303,7 @@ test "Chunk Allocator" {
     };
 
     var chunk_allocator: ChunkAllocator = undefined;
-    try chunk_allocator.init(gpa, .{ .{ 1, 64 }, .{ 1, 128 } });
+    try chunk_allocator.init(gpa, &.{ .{ 1, 64 }, .{ 1, 128 } });
     defer chunk_allocator.deinit(gpa);
 
     const alloc = chunk_allocator.allocator();
@@ -329,7 +327,7 @@ test "Chunk Allocator orders chunk sizes from smallest to biggest" {
     const gpa = testing.allocator;
 
     var chunk_allocator: ChunkAllocator = undefined;
-    try chunk_allocator.init(gpa, .{ .{ 1, 128 }, .{ 1, 64 }, .{ 1, 256 } });
+    try chunk_allocator.init(gpa, &.{ .{ 1, 128 }, .{ 1, 64 }, .{ 1, 256 } });
     defer chunk_allocator.deinit(gpa);
 
     try testing.expectEqual(@as(u32, 64), chunk_allocator.pools[0].chunk_size);

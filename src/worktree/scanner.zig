@@ -138,7 +138,10 @@ pub fn handleActions(
         self.deinit();
         return false;
     };
-    self._handleActions(ctx, path_allocator, waker) catch return false;
+    self._handleActions(ctx, path_allocator, waker) catch {
+        self.deinit();
+        return false;
+    };
 
     return true;
 }

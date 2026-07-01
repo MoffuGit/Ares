@@ -365,7 +365,7 @@ test "Task defer allocates and copies context" {
     defer arena.deinit();
 
     var chunks: ChunkAllocator = undefined;
-    try chunks.init(std.testing.allocator, .{.{ 100, MAX_SIZE }});
+    try chunks.init(std.testing.allocator, &.{.{ 100, MAX_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
     var pool: Tasks = undefined;
@@ -399,7 +399,7 @@ test "Task await allocates and copies context" {
     defer arena.deinit();
 
     var chunks: ChunkAllocator = undefined;
-    try chunks.init(std.testing.allocator, .{.{ 100, MAX_SIZE }});
+    try chunks.init(std.testing.allocator, &.{.{ 100, MAX_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
     var pool: Tasks = undefined;
@@ -434,7 +434,7 @@ test "Cancelations" {
     defer arena.deinit();
 
     var chunks: ChunkAllocator = undefined;
-    try chunks.init(std.testing.allocator, .{.{ 100, MAX_SIZE }});
+    try chunks.init(std.testing.allocator, &.{.{ 100, MAX_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
     var pool: Tasks = undefined;
