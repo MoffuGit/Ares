@@ -344,6 +344,9 @@ pub const Waker = struct {
             .SUCCESS => {},
             .SEND_NO_BUFFER => {},
             .SEND_TIMED_OUT => {},
+            .SEND_INVALID_DEST => |e| {
+                std.log.debug("mach msg err={}", .{e});
+            },
             else => |e| {
                 std.log.warn("mach msg err={}", .{e});
                 return error.MachMsgFailed;
