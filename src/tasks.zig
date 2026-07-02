@@ -293,8 +293,7 @@ pub const Task = struct {
         self: *Task,
         function: anytype,
         context: anytype,
-        next_ms: u64,
-        time: *Loop.Time,
+        ms: u64,
     ) void {
         assertContext(context);
         const Context = @TypeOf(context);
@@ -315,7 +314,7 @@ pub const Task = struct {
         const context_ptr: *Context = @ptrCast(@alignCast(self.context));
         context_ptr.* = context;
 
-        self.completion.timer(TypeErased.complete, self, time.next_tick(next_ms));
+        self.completion.timer(TypeErased.complete, self, ms);
     }
 };
 

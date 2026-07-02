@@ -145,7 +145,7 @@ pub fn flush_timers(self: *Loop) void {
 
     self.time.update();
 
-    const now_timer: Timer = .{ .next = self.time.now, .completion = undefined };
+    const now_timer: Timer = .{ .next = self.time.now, .ms = 0, .completion = undefined };
     while (self.timers.peek()) |t| {
         if (!Timer.less({}, t, &now_timer)) break;
 
@@ -173,7 +173,8 @@ pub fn flush_completions(self: *Loop) void {
                 .@"defer" => {
                     defered.push(completion);
                 },
-                .timer => {
+                .timer => |*time| {
+                    time.next = self.time.next_tick(time.ms);
                     completion.state = .submitted;
                     self.queues.push(.timers, completion);
                 },
@@ -546,15 +547,16 @@ pub const Completion = struct {
         completion: *Completion,
         callback: anytype,
         context: anytype,
-        next: posix.timespec,
+        ms: u64,
     ) void {
         completion.set(
             callback,
             context,
             .timer,
             .{
-                .next = next,
+                .next = undefined,
                 .completion = completion,
+                .ms = ms,
             },
             struct {
                 fn timer(_: Timer) Result {
@@ -570,6 +572,7 @@ const Timer = struct {
     completion: *Completion,
 
     heap: heap.IntrusiveField(Timer) = .{},
+    ms: u64,
 
     fn less(_: void, a: *const Timer, b: *const Timer) bool {
         return a.ns() < b.ns();
@@ -599,14 +602,16 @@ pub fn timer(
     completion: *Completion,
     callback: anytype,
     context: anytype,
-    next_ms: u64,
+    ms: u64,
 ) void {
-    completion.timer(callback, context, self.time.next_tick(next_ms));
-    self.timer_submit(completion);
+    completion.timer(callback, context, ms);
+    self.submit_timer(completion);
 }
 
-pub fn timer_submit(self: *Loop, completion: *Completion) void {
+pub fn submit_timer(self: *Loop, completion: *Completion) void {
     completion.state = .submitted;
+    const c_timer = completion.operation.timer;
+    completion.operation.timer.next = self.time.next_tick(c_timer.ms);
     self.queues.push(.timers, completion);
 }
 

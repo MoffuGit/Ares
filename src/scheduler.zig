@@ -121,7 +121,6 @@ pub const BackgroundScheduler = struct {
     queues: multi_mpsc.MultiIntrusive(Queues),
     chunks: ChunkAllocator,
     options: App.Options,
-    time: Loop.Time,
 
     pub fn init(self: *@This(), options: App.Options, arena: Allocator, io: Io) !void {
         self.* = .{
@@ -133,7 +132,6 @@ pub const BackgroundScheduler = struct {
             .future = undefined,
             .arena = arena,
             .chunks = undefined,
-            .time = undefined,
         };
 
         self.queues.init();
@@ -180,7 +178,7 @@ pub const BackgroundScheduler = struct {
             self.loop.complete(&task.completion);
         }
         while (self.queues.pop(.timers)) |task| {
-            self.loop.timer_submit(&task.completion);
+            self.loop.submit_timer(&task.completion);
         }
         while (self.queues.pop(.submissions)) |task| {
             self.loop.submit(&task.completion);
@@ -220,11 +218,11 @@ pub const BackgroundScheduler = struct {
         self: *@This(),
         function: anytype,
         context: anytype,
-        next_ms: u64,
+        ms: u64,
     ) !Cancelation {
         const task = self.tasks.create();
 
-        task.timer(function, context, next_ms, &self.time);
+        task.timer(function, context, ms);
         self.queues.push(.timers, task);
 
         return .{ .scheduler = self, .id = task.id };
