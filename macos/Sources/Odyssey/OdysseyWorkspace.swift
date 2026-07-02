@@ -10,12 +10,15 @@ import os
 extension Odyssey {
     class Workspace {
         var app: Odyssey.App
-        var workspace: odyssey_workspace_t? {
+        var onChange: ((UInt) -> Void)?
+        private(set) var count: UInt = 0
+        var workspace: odyssey_entity_s? {
             didSet {
                 guard let old = oldValue else { return }
                 odyssey_drop_entity(old)
             }
         }
+        private var subscription: odyssey_observer_s?
 
         init(app: Odyssey.App) {
             self.app = app
@@ -32,9 +35,31 @@ extension Odyssey {
             }
 
             self.workspace = creation.entity
+            let subscription = odyssey_workspace_observe(
+                app,
+                creation.entity,
+                { userdata, data in
+                    guard let userdata else { return false }
+                    let workspace = Unmanaged<Odyssey.Workspace>
+                        .fromOpaque(userdata)
+                        .takeUnretainedValue()
+                    workspace.count = UInt(data.count)
+                    workspace.onChange?(workspace.count)
+                    return true
+                },
+                Unmanaged.passUnretained(self).toOpaque()
+            )
+            guard subscription.valid else {
+                logger.critical("odyssey_workspace_observe failed")
+                return
+            }
+            self.subscription = subscription.observer
         }
 
         deinit {
+            if let subscription {
+                odyssey_workspace_unobserve(subscription)
+            }
             self.workspace = nil
         }
     }

@@ -30,7 +30,7 @@ pub const Loop = @This();
 
 kq: posix.fd_t,
 
-now: posix.timespec,
+time: Time,
 
 queues: multi_queue.MultiIntrusive(Queues),
 timers: heap.Intrusive(Timer, void, Timer.less),
@@ -54,7 +54,7 @@ pub fn init(self: *Loop, io: Io) !void {
         .inflight = 0,
         .stopped = false,
         .timers = .{ .context = {} },
-        .now = undefined,
+        .time = undefined,
     };
     self.queues.init();
 }
@@ -143,9 +143,9 @@ pub fn flush_timers(self: *Loop) void {
         self.timers.insert(&completion.operation.timer);
     }
 
-    self.update_timer();
+    self.time.update();
 
-    const now_timer: Timer = .{ .next = self.now, .completion = undefined };
+    const now_timer: Timer = .{ .next = self.time.now, .completion = undefined };
     while (self.timers.peek()) |t| {
         if (!Timer.less({}, t, &now_timer)) break;
 
@@ -601,7 +601,7 @@ pub fn timer(
     context: anytype,
     next_ms: u64,
 ) void {
-    completion.timer(callback, context, self.next_tick(next_ms));
+    completion.timer(callback, context, self.time.next_tick(next_ms));
     self.timer_submit(completion);
 }
 
@@ -610,35 +610,38 @@ pub fn timer_submit(self: *Loop, completion: *Completion) void {
     self.queues.push(.timers, completion);
 }
 
-pub fn next_tick(self: *Loop, next_ms: u64) posix.timespec {
-    const max: posix.timespec = .{
-        .sec = std.math.maxInt(isize),
-        .nsec = std.math.maxInt(isize),
-    };
+pub const Time = struct {
+    now: posix.timespec,
 
-    const next_s = std.math.cast(isize, next_ms / std.time.ms_per_s) orelse
-        return max;
-    const next_ns = std.math.cast(
-        isize,
-        (next_ms % std.time.ms_per_s) * std.time.ns_per_ms,
-    ) orelse return max;
-
-    self.update_timer();
-
-    return .{
-        .sec = std.math.add(isize, self.now.sec, next_s) catch
-            return max,
-        .nsec = std.math.add(isize, self.now.nsec, next_ns) catch
-            return max,
-    };
-}
-
-pub fn update_timer(self: *Loop) void {
-    switch (posix.errno(posix.system.clock_gettime(posix.CLOCK.MONOTONIC, &self.now))) {
-        .SUCCESS => {},
-        else => {},
+    pub fn update(self: *Time) void {
+        switch (posix.errno(posix.system.clock_gettime(posix.CLOCK.MONOTONIC, &self.now))) {
+            .SUCCESS => {},
+            else => {},
+        }
     }
-}
+
+    pub fn next_tick(self: *Time, next_ms: u64) posix.timespec {
+        const max: posix.timespec = .{
+            .sec = std.math.maxInt(isize),
+            .nsec = std.math.maxInt(isize),
+        };
+
+        const next_s = std.math.cast(isize, next_ms / std.time.ms_per_s) orelse
+            return max;
+        const next_ns = std.math.cast(
+            isize,
+            (next_ms % std.time.ms_per_s) * std.time.ns_per_ms,
+        ) orelse return max;
+
+        self.update();
+
+        return .{
+            .sec = std.math.add(isize, self.now.sec, next_s) catch
+                return max,
+            .nsec = self.now.nsec + next_ns,
+        };
+    }
+};
 
 test "defer" {
     const io = testing.io;

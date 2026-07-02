@@ -265,7 +265,7 @@ pub fn Context(comptime T: type) type {
             return self.entity.update(self.app);
         }
 
-        pub fn read(self: *const @This()) *T {
+        pub fn read(self: *const @This()) *const T {
             return self.entity.read(self.app);
         }
 
@@ -345,6 +345,10 @@ pub fn Context(comptime T: type) type {
             return try self
                 .app
                 .executor(E, function, args);
+        }
+
+        pub fn scheduler(self: *const @This()) *BackgroundScheduler {
+            return &self.app.background_scheduler;
         }
     };
 }

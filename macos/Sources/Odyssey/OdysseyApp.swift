@@ -8,35 +8,38 @@ import OdysseyKit
 import os
 
 extension Odyssey {
-    class App  {
+    class App {
         var app: odyssey_app_t? {
             didSet {
                 guard let old = oldValue else { return }
                 odyssey_app_free(old)
             }
         }
-        private var options: odyssey_options_s
-        
+
         init() {
-            self.options = odyssey_options_s(
-                userdata: nil,
-                wakeup_cb: { userdata in
-                    DispatchQueue.main.async {
-                        guard let userdata else { return }
-                        odyssey_app_flush(userdata)
-                    }
+            var options = odyssey_options_s(
+                userdata: Unmanaged.passUnretained(self).toOpaque(),
+                wakeup_cb: { userdata in App.wakeup(userdata)
                 }
             )
-            guard let app = odyssey_app_new(&self.options) else {
+            guard let app = odyssey_app_new(&options) else {
                 logger.critical("odyssey_app_new failed")
                 return
             }
             self.app = app
-            self.options.userdata = app
         }
-        
+
         deinit {
-            self.app = nil;
+            self.app = nil
+        }
+
+        static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
+            let state = Unmanaged<App>.fromOpaque(userdata!)
+                .takeUnretainedValue()
+
+            DispatchQueue.main.async {
+                odyssey_app_flush(state.app)
+            }
         }
     }
 }
