@@ -13,6 +13,96 @@ const state = &@import("global.zig").state;
 
 const WorkspaceCallback = *const fn (*anyopaque, ExternWorkspace) callconv(.c) bool;
 
+pub export fn odyssey_init(c_argc: c_int, c_argv: [*][*:0]c_char) c_int {
+    assert(builtin.link_libc);
+    const argv = @as([*][*:0]u8, @ptrCast(c_argv))[0..@intCast(c_argc)];
+    const environ: std.process.Environ.Block = if (@hasField(std.process.Environ.Block, "slice")) environ: {
+        const c_environ = std.c.environ;
+        var env_count: usize = 0;
+        while (c_environ[env_count] != null) : (env_count += 1) {}
+        break :environ .{ .slice = c_environ[0..env_count :null] };
+    } else .global;
+
+    global.state.init(argv, environ) catch return 1;
+    return 0;
+}
+
+pub export fn odyssey_deinit() void {
+    global.state.deinit();
+}
+
+pub export fn odyssey_app_new(options: *const Options) ?*App {
+    return app_new(options) catch |err| {
+        std.log.err("error initializing app: {}", .{err});
+        return null;
+    };
+}
+
+fn app_new(options: *const Options) !*App {
+    var app = try state.gpa.create(App);
+    errdefer state.gpa.destroy(app);
+
+    try app.init(options.*, state.gpa, state.threaded.io());
+
+    return app;
+}
+
+pub export fn odyssey_app_free(app: *App) void {
+    app.deinit();
+    state.gpa.destroy(app);
+}
+
+pub export fn odyssey_app_flush(app: *App) void {
+    app.flush();
+}
+
+pub export fn odyssey_drop_entity(entity: ExternEntity) void {
+    entity.any().drop();
+}
+
+pub export fn odyssey_workspace_new(app: *App) Entity {
+    const workspace = workspace_new(app) catch |err| {
+        std.log.err("error creating workspace={}", .{err});
+        return .err;
+    };
+
+    return .ok(workspace.any);
+}
+
+fn workspace_new(app: *App) !ent.Entity(Workspace) {
+    const workspace: ent.Entity(Workspace) = try .new(app, .{});
+    errdefer workspace.drop();
+
+    return workspace;
+}
+
+pub export fn odyssey_workspace_observe(
+    app: *App,
+    workspace: ExternEntity,
+    function: WorkspaceCallback,
+    userdata: *anyopaque,
+) Observer {
+    const entity = workspace.any().into(Workspace) orelse return .err;
+    const TypeErased = struct {
+        fn callback(_app: *App, _workspace: ent.Entity(Workspace), _userdata: *anyopaque, _function: WorkspaceCallback) bool {
+            return _function(_userdata, .from(_workspace.read(_app)));
+        }
+    };
+    const subscription = app.observe(entity, TypeErased.callback, .{ userdata, function }) catch |err| {
+        std.log.err("error observing workspace={}", .{err});
+        return .err;
+    };
+
+    return .ok(&subscription);
+}
+
+pub export fn odyssey_workspace_unobserve(observer: ExternObserver) void {
+    const sub = observer.subscription();
+    sub.unsubscribe() catch |err| {
+        std.log.err("unsubscribe err={}", .{err});
+    };
+}
+
 const Entity = extern struct {
     entity: ExternEntity,
     valid: bool,
@@ -91,99 +181,9 @@ const Observer = extern struct {
 const ExternWorkspace = extern struct {
     count: usize,
 
-    pub fn init(w: *const Workspace) @This() {
+    pub fn from(w: *const Workspace) @This() {
         return .{
             .count = w.count,
         };
     }
 };
-
-pub export fn odyssey_init(c_argc: c_int, c_argv: [*][*:0]c_char) c_int {
-    assert(builtin.link_libc);
-    const argv = @as([*][*:0]u8, @ptrCast(c_argv))[0..@intCast(c_argc)];
-    const environ: std.process.Environ.Block = if (@hasField(std.process.Environ.Block, "slice")) environ: {
-        const c_environ = std.c.environ;
-        var env_count: usize = 0;
-        while (c_environ[env_count] != null) : (env_count += 1) {}
-        break :environ .{ .slice = c_environ[0..env_count :null] };
-    } else .global;
-
-    global.state.init(argv, environ) catch return 1;
-    return 0;
-}
-
-pub export fn odyssey_deinit() void {
-    global.state.deinit();
-}
-
-pub export fn odyssey_app_new(options: *const Options) ?*App {
-    return app_new(options) catch |err| {
-        std.log.err("error initializing app: {}", .{err});
-        return null;
-    };
-}
-
-fn app_new(options: *const Options) !*App {
-    var app = try state.gpa.create(App);
-    errdefer state.gpa.destroy(app);
-
-    try app.init(options.*, state.gpa, state.threaded.io());
-
-    return app;
-}
-
-pub export fn odyssey_app_free(app: *App) void {
-    app.deinit();
-    state.gpa.destroy(app);
-}
-
-pub export fn odyssey_app_flush(app: *App) void {
-    app.flush();
-}
-
-pub export fn odyssey_drop_entity(entity: ExternEntity) void {
-    entity.any().drop();
-}
-
-pub export fn odyssey_workspace_new(app: *App) Entity {
-    const workspace = workspace_new(app) catch |err| {
-        std.log.err("error creating workspace={}", .{err});
-        return .err;
-    };
-
-    return .ok(workspace.any);
-}
-
-fn workspace_new(app: *App) !ent.Entity(Workspace) {
-    const workspace: ent.Entity(Workspace) = try .new(app, .{});
-    errdefer workspace.drop();
-
-    return workspace;
-}
-
-pub export fn odyssey_workspace_observe(
-    app: *App,
-    workspace: ExternEntity,
-    function: WorkspaceCallback,
-    userdata: *anyopaque,
-) Observer {
-    const entity = workspace.any().into(Workspace) orelse return .err;
-    const TypeErased = struct {
-        fn callback(_app: *App, _workspace: ent.Entity(Workspace), _userdata: *anyopaque, _function: WorkspaceCallback) bool {
-            return _function(_userdata, .init(_workspace.read(_app)));
-        }
-    };
-    const subscription = app.observe(entity, TypeErased.callback, .{ userdata, function }) catch |err| {
-        std.log.err("error observing workspace={}", .{err});
-        return .err;
-    };
-
-    return .ok(&subscription);
-}
-
-pub export fn odyssey_workspace_unobserve(observer: ExternObserver) void {
-    const sub = observer.subscription();
-    sub.unsubscribe() catch |err| {
-        std.log.err("unsubscribe err={}", .{err});
-    };
-}
