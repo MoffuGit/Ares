@@ -7,9 +7,9 @@ const BackgroundScheduler = sch.BackgroundScheduler;
 
 pub const Workspace = @This();
 
-count: usize,
-waker: Waker,
 timer: BackgroundScheduler.Cancelation,
+waker: Waker,
+count: usize,
 
 pub fn init(self: *Workspace, ctx: Context(Workspace)) !void {
     self.* = .{

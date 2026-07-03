@@ -11,11 +11,14 @@ import OdysseyKit
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var app: Odyssey.App!
+    private var workspace: Odyssey.Workspace!
 
     @IBOutlet var window: NSWindow!
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // Insert code here to initialize your application
+        app = Odyssey.App()
+        workspace = Odyssey.Workspace(app: app)
+        window.contentViewController = WorkspaceViewController(workspace: workspace)
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
