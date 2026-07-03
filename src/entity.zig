@@ -79,6 +79,10 @@ pub fn Entity(comptime T: type) type {
         pub fn drop(self: @This()) void {
             self.any.drop();
         }
+
+        pub fn ctx(self: *const @This(), app: *App) App.Context(T) {
+            return .new(app, self.*);
+        }
     };
 }
 
