@@ -11,8 +11,6 @@ const Workspace = @import("workspace.zig");
 
 const state = &@import("global.zig").state;
 
-const WorkspaceCallback = *const fn (*anyopaque, ExternWorkspace) callconv(.c) bool;
-
 pub export fn odyssey_init(c_argc: c_int, c_argv: [*][*:0]c_char) c_int {
     assert(builtin.link_libc);
     const argv = @as([*][*:0]u8, @ptrCast(c_argv))[0..@intCast(c_argc)];
@@ -56,11 +54,11 @@ pub export fn odyssey_app_flush(app: *App) void {
     app.flush();
 }
 
-pub export fn odyssey_drop_entity(entity: ExternEntity) void {
+pub export fn odyssey_drop_entity(entity: AnyEntity) void {
     entity.any().drop();
 }
 
-pub export fn odyssey_workspace_new(app: *App) Entity {
+pub export fn odyssey_workspace_new(app: *App) MaybeEntity {
     const workspace = workspace_new(app) catch |err| {
         std.log.err("error creating workspace={}", .{err});
         return .err;
@@ -76,40 +74,15 @@ fn workspace_new(app: *App) !ent.Entity(Workspace) {
     return workspace;
 }
 
-pub export fn odyssey_workspace_read(app: *App, workspace: ExternEntity) ExternWorkspace {
-    const entity = workspace.any().into(Workspace) orelse return .{ .count = 0 };
-    return .from(entity.read(app));
-}
-
-pub export fn odyssey_workspace_observe(
-    app: *App,
-    workspace: ExternEntity,
-    function: WorkspaceCallback,
-    userdata: *anyopaque,
-) Observer {
-    const entity = workspace.any().into(Workspace) orelse return .err;
-    const TypeErased = struct {
-        fn callback(_app: *App, _workspace: ent.Entity(Workspace), _userdata: *anyopaque, _function: WorkspaceCallback) bool {
-            return _function(_userdata, .from(_workspace.read(_app)));
-        }
-    };
-    const subscription = app.observe(entity, TypeErased.callback, .{ userdata, function }) catch |err| {
-        std.log.err("error observing workspace={}", .{err});
-        return .err;
-    };
-
-    return .ok(&subscription);
-}
-
-pub export fn odyssey_workspace_unobserve(observer: ExternObserver) void {
+pub export fn odyssey_remove_observer(observer: Observer) void {
     const sub = observer.subscription();
     sub.unsubscribe() catch |err| {
         std.log.err("unsubscribe err={}", .{err});
     };
 }
 
-const Entity = extern struct {
-    entity: ExternEntity,
+const MaybeEntity = extern struct {
+    entity: AnyEntity,
     valid: bool,
 
     const err: @This() = .{
@@ -122,7 +95,7 @@ const Entity = extern struct {
     }
 };
 
-pub const ExternEntity = extern struct {
+pub const AnyEntity = extern struct {
     store: *anyopaque,
     type_id: *anyopaque,
     id: u64,
@@ -144,7 +117,7 @@ pub const ExternEntity = extern struct {
     }
 };
 
-const ExternObserver = extern struct {
+const Observer = extern struct {
     ptr: *anyopaque,
     key: u64,
     id: u32,
@@ -166,8 +139,8 @@ const ExternObserver = extern struct {
     }
 };
 
-const Observer = extern struct {
-    observer: ExternObserver,
+const MaybeObserver = extern struct {
+    observer: Observer,
     valid: bool,
 
     const err: @This() = .{
@@ -179,16 +152,6 @@ const Observer = extern struct {
         return .{
             .valid = true,
             .observer = .init(observer),
-        };
-    }
-};
-
-const ExternWorkspace = extern struct {
-    count: usize,
-
-    pub fn from(w: *const Workspace) @This() {
-        return .{
-            .count = w.count,
         };
     }
 };

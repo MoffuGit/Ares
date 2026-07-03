@@ -10,15 +10,13 @@ import OdysseyKit
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
-    private var app: Odyssey.App!
-    private var workspace: Odyssey.Workspace!
-
-    @IBOutlet var window: NSWindow!
+    var app: Odyssey.App!
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         app = Odyssey.App()
-        workspace = Odyssey.Workspace(app: app)
-        window.contentViewController = WorkspaceViewController(workspace: workspace)
+        let controller = WorkspaceController(delegate: self)
+        controller.showWindow(nil)
+        controller.window?.center()
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
@@ -26,6 +24,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
+        return true
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return true
     }
 }

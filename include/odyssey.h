@@ -39,7 +39,12 @@ typedef struct {
 typedef struct {
     odyssey_entity_s entity;
     bool valid;
-} odyssey_entity_creation_s;
+} odyssey_maybe_entity_s;
+
+void odyssey_drop_entity(odyssey_entity_s entity);
+
+///////////////////
+//~ Observers Types
 
 typedef struct {
     void* ptr;
@@ -47,38 +52,18 @@ typedef struct {
     uint32_t id;
 } odyssey_observer_s;
 
-typedef odyssey_entity_creation_s odyssey_workspace_creation_t;
-void odyssey_drop_entity(odyssey_entity_s entity);
-
-///////////////////
-//~ Observers Types
-
 typedef struct {
     odyssey_observer_s observer;
     bool valid;
-} odyssey_observer_creation_s;
+} odyssey_maybe_observer_s;
+
+void odyssey_remove_observer(odyssey_observer_s observer);
 
 ///////////////////
 //~ Workspace Types
 
-typedef struct {
-    size_t count;
-} odyssey_workspace_s;
-
-typedef odyssey_observer_creation_s odyssey_workspace_observer_creation_t;
-
-typedef bool (*odyssey_workspace_observe_cb)(void*, odyssey_workspace_s);
-
+typedef odyssey_maybe_entity_s odyssey_workspace_creation_t;
 odyssey_workspace_creation_t odyssey_workspace_new(odyssey_app_t app);
-odyssey_workspace_s odyssey_workspace_read(odyssey_app_t app, odyssey_entity_s workspace);
-
-odyssey_workspace_observer_creation_t odyssey_workspace_observe(
-    odyssey_app_t app,
-    odyssey_entity_s workspace,
-    odyssey_workspace_observe_cb callback,
-    void* userdata
-);
-void odyssey_workspace_unobserve(odyssey_observer_s observer);
 
 #ifdef __cplusplus
 }
