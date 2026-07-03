@@ -6,12 +6,13 @@
 //
 
 import Cocoa
+import OdysseyKit
 
-@main
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
+    private var app: Odyssey.App!
 
     @IBOutlet var window: NSWindow!
-
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // Insert code here to initialize your application
@@ -24,7 +25,4 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         return true
     }
-
-
 }
-

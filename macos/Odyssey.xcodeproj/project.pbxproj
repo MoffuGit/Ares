@@ -6,14 +6,23 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F4DA3B012FF7756400EC8DFF /* OdysseyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = F4F2608F2FF761020075DD6B /* OdysseyKit.xcframework */; };
+		F4F260822FF760810075DD6B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F4F260802FF760810075DD6B /* Assets.xcassets */; };
+		F4F260852FF760840075DD6B /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = F4F260832FF760830075DD6B /* MainMenu.xib */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		F44098FA2FF75F0F0049D1B4 /* Odyssey.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Odyssey.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F4F260802FF760810075DD6B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F4F260842FF760830075DD6B /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
+		F4F2608F2FF761020075DD6B /* OdysseyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = OdysseyKit.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		F44098FC2FF75F0F0049D1B4 /* Odyssey */ = {
+		F44098FC2FF75F0F0049D1B4 /* Sources */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Odyssey;
+			path = Sources;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -23,6 +32,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F4DA3B012FF7756400EC8DFF /* OdysseyKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -32,7 +42,10 @@
 		F44098F12FF75F0F0049D1B4 = {
 			isa = PBXGroup;
 			children = (
-				F44098FC2FF75F0F0049D1B4 /* Odyssey */,
+				F4F260802FF760810075DD6B /* Assets.xcassets */,
+				F4F260832FF760830075DD6B /* MainMenu.xib */,
+				F44098FC2FF75F0F0049D1B4 /* Sources */,
+				F4F2608E2FF761020075DD6B /* Frameworks */,
 				F44098FB2FF75F0F0049D1B4 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -43,6 +56,14 @@
 				F44098FA2FF75F0F0049D1B4 /* Odyssey.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		F4F2608E2FF761020075DD6B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F4F2608F2FF761020075DD6B /* OdysseyKit.xcframework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -61,7 +82,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				F44098FC2FF75F0F0049D1B4 /* Odyssey */,
+				F44098FC2FF75F0F0049D1B4 /* Sources */,
 			);
 			name = Odyssey;
 			packageProductDependencies = (
@@ -109,6 +130,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F4F260822FF760810075DD6B /* Assets.xcassets in Resources */,
+				F4F260852FF760840075DD6B /* MainMenu.xib in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -123,6 +146,17 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		F4F260832FF760830075DD6B /* MainMenu.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F4F260842FF760830075DD6B /* Base */,
+			);
+			name = MainMenu.xib;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		F44099042FF75F0F0049D1B4 /* Debug */ = {
@@ -261,6 +295,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = Hss.Odyssey;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -292,6 +327,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = Hss.Odyssey;
 				PRODUCT_NAME = "$(TARGET_NAME)";

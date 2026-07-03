@@ -76,6 +76,14 @@ fn workspace_new(app: *App) !ent.Entity(Workspace) {
     return workspace;
 }
 
+export fn odyssey_workspace_set(app: *App, extern_entity: ExternEntity, extern_workspace: *ExternWorkspace) void {
+    const entity = extern_entity.any().into(Workspace) orelse return;
+    const workspace = entity.read(app);
+    extern_workspace.* = .{
+        .count = workspace.count,
+    };
+}
+
 pub export fn odyssey_workspace_observe(
     app: *App,
     workspace: ExternEntity,
