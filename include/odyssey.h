@@ -71,8 +71,6 @@ typedef bool (*odyssey_workspace_observe_cb)(void*, odyssey_workspace_s);
 
 odyssey_workspace_creation_t odyssey_workspace_new(odyssey_app_t app);
 
-void odyssey_workspace_set(odyssey_app_t app, odyssey_entity_s entity, odyssey_workspace_s* workspace);
-
 odyssey_workspace_observer_creation_t odyssey_workspace_observe(
     odyssey_app_t app,
     odyssey_entity_s workspace,

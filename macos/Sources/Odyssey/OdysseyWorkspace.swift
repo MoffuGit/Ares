@@ -13,7 +13,6 @@ extension Odyssey {
     @MainActor
     class Workspace: NSObject, ObservableObject {
         private var app: Odyssey.App
-        @Published var workspace: odyssey_workspace_s
         var entity: odyssey_entity_s? {
             didSet {
                 guard let old = oldValue else { return }
@@ -24,7 +23,6 @@ extension Odyssey {
         init(app: Odyssey.App) {
             self.app = app
             self.entity = nil
-            self.workspace = odyssey_workspace_s(count: 0)
 
             super.init()
 
@@ -40,11 +38,6 @@ extension Odyssey {
             }
 
             self.entity = maybe_entity.entity
-
-            withUnsafeMutablePointer(to: &self.workspace) { ptr in
-                odyssey_workspace_set(app, self.entity!, ptr)
-            }
-
         }
 
         deinit {
