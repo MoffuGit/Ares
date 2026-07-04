@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const zqlite = @import("zqlite");
+const process = std.process;
 
 pub var state: GlobalState = undefined;
 
@@ -15,16 +15,13 @@ const GlobalState = struct {
     const Self = @This();
 
     gpa: std.mem.Allocator,
-    pool: *zqlite.Pool,
     threaded: std.Io.Threaded,
 
-    pub fn init(self: *Self, args: std.process.Args.Vector, environ: std.process.Environ.Block) !void {
+    pub fn init(self: *Self, args: process.Args.Vector, environ: process.Environ.Block) !void {
         const gpa = if (use_safe_allocator)
             safe_allocator.allocator()
         else if (builtin.link_libc)
             std.heap.c_allocator
-        else if (!builtin.single_threaded)
-            std.heap.smp_allocator
         else
             comptime unreachable;
 
@@ -33,26 +30,16 @@ const GlobalState = struct {
             .environ = .{ .block = environ },
         });
 
-        // const pool = zqlite.Pool.init(gpa, .{
-        //     .path = "/db/odyssey.sqlite",
-        //     .flags = zqlite.OpenFlags.Create | zqlite.OpenFlags.EXResCode,
-        // }) catch |err| {
-        //     std.log.err("sqlite err={}", .{err});
-        //     return err;
-        // };
-
         std.log.info("odyssey zig version={}", .{builtin.zig_version});
         std.log.info("odyssey build optimize={}", .{builtin.mode});
 
         self.* = .{
             .gpa = gpa,
             .threaded = threaded,
-            .pool = undefined,
         };
     }
 
     pub fn deinit(self: *Self) void {
-        // self.pool.deinit();
         if (use_safe_allocator) {
             _ = safe_allocator.deinit(); // Leaks do not affect return code.
         }
