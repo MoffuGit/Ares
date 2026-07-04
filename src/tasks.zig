@@ -24,8 +24,6 @@ pub const Tasks = @This();
 
 io: Io,
 mutex: Io.Mutex,
-pool: heap.MemoryPool(Task),
-cancelations: heap.MemoryPool(Cancelation),
 active: slotmap.SlotMap(*Task),
 chunks: Allocator,
 
@@ -33,13 +31,9 @@ pub fn init(self: *Tasks, arena: Allocator, chunks: Allocator, io: Io) !void {
     self.* = .{
         .chunks = chunks,
         .mutex = .init,
-        .pool = undefined,
         .active = undefined,
-        .cancelations = undefined,
         .io = io,
     };
-    self.pool = try .initCapacity(arena, 100);
-    self.cancelations = try .initCapacity(arena, 100);
     self.active = try .init(arena, 100);
 }
 
@@ -53,7 +47,7 @@ pub fn create(self: *Tasks) *Task {
         @returnAddress(),
     ) orelse @panic("Task Context Overflow");
 
-    const task = self.pool.create(undefined) catch @panic("Task Overflow");
+    const task = self.chunks.create(Task) catch @panic("Task Overflow");
     const id = self.active.put(task) catch @panic("Task Overflow");
     task.* = .{ .pool = self, .id = id, .context = context };
 
@@ -72,7 +66,7 @@ pub fn cancelation(self: *Tasks, id: TaskId) ?*Cancelation {
     defer self.unlock();
 
     const task = (self.active.get(id) orelse return null).*;
-    const cancel = self.cancelations.create(undefined) catch @panic("Cancel Overflow");
+    const cancel = self.chunks.create(Cancelation) catch @panic("Cancel Overflow");
     cancel.* = .{
         .id = id,
         .pool = self,
@@ -83,9 +77,7 @@ pub fn cancelation(self: *Tasks, id: TaskId) ?*Cancelation {
         struct {
             fn _cancel(c: *Cancelation, _: *Completion) void {
                 const pool = c.pool;
-                pool.lock();
-                defer pool.unlock();
-                pool.cancelations.destroy(c);
+                pool.chunks.destroy(c);
             }
         }._cancel,
         cancel,
@@ -105,14 +97,11 @@ fn destroy(self: *Tasks, id: TaskId) void {
         @returnAddress(),
     );
 
-    self.pool.destroy(task);
+    self.chunks.destroy(task);
 }
 
-pub fn destroy_cancelation(self: *Tasks, cal: *Cancelation) void {
-    self.lock();
-    defer self.unlock();
-
-    self.cancelations.destroy(cal);
+pub fn destroy_cancelation(self: *Tasks, cancel: *Cancelation) void {
+    self.chunks.destroy(cancel);
 }
 
 pub fn lock(self: *Tasks) void {

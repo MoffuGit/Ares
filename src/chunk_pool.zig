@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const mem = std.mem;
 const debug = std.debug;
 const assert = debug.assert;
@@ -38,14 +39,16 @@ pub const ChunkPool = struct {
 
         const alignment: mem.Alignment = .fromByteUnits(size);
         const len = @as(usize, size) * @as(usize, capacity);
-        const buffe = (allocator.rawAlloc(
+        const buffer = (allocator.rawAlloc(
             len,
             alignment,
             @returnAddress(),
         ) orelse return error.OutOfMemory)[0..len];
 
+        std.log.debug("ChunkPool size={} capacity={} | Chunk size={}", .{ buffer.len, capacity, size });
+
         self.* = .{
-            .buffer = buffe,
+            .buffer = buffer,
             .alignment = alignment,
             .chunk_size = size,
         };
@@ -198,6 +201,11 @@ pub const ChunkAllocator = struct {
             if (len > pool.chunk_size) continue;
             if (alignment.toByteUnits() > pool.alignment.toByteUnits()) continue;
             const buffer = pool.alloc() orelse return null;
+            if (builtin.mode == .Debug and !builtin.is_test) {
+                if (len < buffer.len >> 1) {
+                    std.log.warn("Mostly unused chunk size={} used={}", .{ buffer.len, len });
+                }
+            }
             return buffer.ptr;
         }
 
