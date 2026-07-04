@@ -1,10 +1,13 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+
 const zqlite = @import("zqlite");
-const os = @import("os.zig");
+
 const constanst = @import("contants.zig");
-const global = @import("global.zig");
 const DB_NAME = constanst.DB_NAME;
+const global = @import("global.zig");
+const os = @import("os.zig");
+
 const schema_sql = @embedFile("persistence/schema.sql");
 
 pub var pool: *zqlite.Pool = undefined;
