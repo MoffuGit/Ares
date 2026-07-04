@@ -5,8 +5,13 @@ const os = @import("os.zig");
 const constanst = @import("contants.zig");
 const global = @import("global.zig");
 const DB_NAME = constanst.DB_NAME;
+const schema_sql = @embedFile("persistence/schema.sql");
 
 pub var pool: *zqlite.Pool = undefined;
+
+fn onFirstConnection(conn: zqlite.Conn, _: ?*anyopaque) !void {
+    try conn.execNoArgs(schema_sql);
+}
 
 pub fn init(gpa: Allocator) !void {
     const path = os.appSupportPath(gpa, DB_NAME) catch |err| {
@@ -23,8 +28,11 @@ pub fn init(gpa: Allocator) !void {
     std.log.debug("DB PATH={s}", .{slice});
 
     pool = try zqlite.Pool.init(gpa, .{
-        .flags = zqlite.OpenFlags.Create | zqlite.OpenFlags.ReadWrite | zqlite.OpenFlags.EXResCode,
+        .flags = zqlite.OpenFlags.Create |
+            zqlite.OpenFlags.ReadWrite |
+            zqlite.OpenFlags.EXResCode,
         .path = slice,
+        .on_first_connection = &onFirstConnection,
     });
 }
 
