@@ -134,6 +134,11 @@ fn rootModule(
         .optimize = optimize,
     });
 
+    const objc = b.dependency("zig_objc", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const mod = b.createModule(.{
         .root_source_file = b.path(root_source),
         .target = target,
@@ -143,6 +148,7 @@ fn rootModule(
         .imports = &.{
             .{ .name = "prof", .module = prof_mod },
             .{ .name = "zqlite", .module = zqlite.module("zqlite") },
+            .{ .name = "objc", .module = objc.module("objc") },
         },
     });
     const default_sqlite3_build = [_][]const u8{"-std=c99"};
