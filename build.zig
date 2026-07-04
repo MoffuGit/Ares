@@ -139,12 +139,19 @@ fn rootModule(
         .target = target,
         .optimize = optimize,
         .link_libc = true,
+        .sanitize_c = .off,
         .imports = &.{
             .{ .name = "prof", .module = prof_mod },
             .{ .name = "zqlite", .module = zqlite.module("zqlite") },
         },
     });
-    mod.linkSystemLibrary("sqlite3", .{});
+    const default_sqlite3_build = [_][]const u8{"-std=c99"};
+
+    mod.addCSourceFile(.{
+        .file = b.path("lib/sqlite3.c"),
+        .flags = &default_sqlite3_build,
+    });
+    mod.addIncludePath(b.path("lib"));
 
     if (test_opts) |opts| @"test".addOptions(mod, b, opts);
     return mod;
