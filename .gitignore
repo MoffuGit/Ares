@@ -4,4 +4,3 @@
 zig-out/
 test/*
 !test/build.zig
-zig-pkg/
