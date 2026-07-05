@@ -114,6 +114,15 @@ pub fn get(conn: zqlite.Conn, allocator: Allocator, id: i64) !?SerializedWorkspa
     };
 }
 
+//NOTE:
+//i need two functions
+//one that get me the workspaces that have a session == to x
+//and another that returns all saved workspaces
+//the process will be as follows:
+//try to get prev session workspaces,
+//if we have none, we open a window with our list of
+//all prev saved workspaces
+
 test "insert and get workspace paths using delimiter" {
     const alloc = testing.allocator;
     const io = testing.io;
