@@ -1,6 +1,7 @@
 const std = @import("std");
 const mem = std.mem;
 const Allocator = mem.Allocator;
+const testing = std.testing;
 
 const zqlite = @import("zqlite");
 
@@ -106,20 +107,23 @@ pub fn get(conn: zqlite.Conn, allocator: Allocator, id: i64) !?SerializedWorkspa
 }
 
 test "insert and get workspace paths using delimiter" {
-    var pool = try db.testingPool(std.testing.allocator);
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var pool = try db.testingPool(alloc);
     defer pool.deinit();
 
-    const conn = try pool.acquire(std.testing.io);
-    defer conn.release(std.testing.io);
+    const conn = try pool.acquire(io);
+    defer conn.release(io);
 
-    try insert(conn, std.testing.allocator, .{
+    try insert(conn, alloc, .{
         .id = 42,
         .paths = &.{ "/tmp/project", "/Users/me/workspace" },
         .window = .{ .x = 1, .y = 2, .width = 800, .height = 600 },
     });
 
-    const workspace = (try get(conn, std.testing.allocator, 42)).?;
-    defer workspace.deinit(std.testing.allocator);
+    const workspace = (try get(conn, alloc, 42)).?;
+    defer workspace.deinit(alloc);
 
     try std.testing.expectEqual(@as(usize, 2), workspace.paths.len);
     try std.testing.expectEqualStrings("/tmp/project", workspace.paths[0]);
