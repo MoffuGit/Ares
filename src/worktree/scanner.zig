@@ -7,6 +7,8 @@ const assert = std.debug.assert;
 const heap = std.heap;
 const builtin = @import("builtin");
 
+const contants = @import("../contants.zig");
+const MAX_PATH_LEN = contants.MAX_PATH_LEN;
 const App = @import("../app.zig");
 const sch = @import("../scheduler.zig");
 const BackgroundScheduler = sch.BackgroundScheduler;
@@ -19,7 +21,6 @@ const tsk = @import("../tasks.zig");
 const UPDATE_INTERVAL: Io.Duration = if (builtin.mode == .Debug) .fromSeconds(5) else .fromMilliseconds(100);
 
 const Scanner = @This();
-const max_path_len = 4096;
 
 pub const Updates = union(enum) {
     pub const Queue = Io.Queue(Updates);
@@ -244,7 +245,7 @@ const Worker = struct {
         var jobs = &self.scanner.jobs;
         const io = self.scanner.io;
 
-        var path_z: [max_path_len:0]u8 = undefined;
+        var path_z: [MAX_PATH_LEN:0]u8 = undefined;
 
         while (true) {
             const job = if (self.queue.pop()) |job| job else try jobs.getOne(io);

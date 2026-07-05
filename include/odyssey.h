@@ -11,8 +11,8 @@ extern "C" {
 
 int odyssey_init(int argc, char **argv);
 void odyssey_deinit(void);
-int odyssey_pool_start(void);
-void odyssey_pool_stop(void);
+int odyssey_db_start(void);
+void odyssey_db_stop(void);
 
 /////////////
 //~ App Types

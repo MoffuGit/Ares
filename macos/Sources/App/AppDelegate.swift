@@ -20,7 +20,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
-        odyssey_pool_stop()
+        odyssey_db_stop()
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {

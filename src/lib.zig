@@ -8,7 +8,7 @@ const Observers = App.Observers;
 const ent = @import("entity.zig");
 const global = @import("global.zig");
 const Workspace = @import("workspace.zig");
-const persistence = @import("persistence.zig");
+const db = @import("db.zig");
 
 const state = &@import("global.zig").state;
 
@@ -34,20 +34,20 @@ pub export fn odyssey_deinit() void {
     global.state.deinit();
 }
 
-pub export fn odyssey_pool_start() c_int {
-    pool_start() catch |err| {
+pub export fn odyssey_db_start() c_int {
+    db_start() catch |err| {
         std.log.err("error starting zqlite pool: {}", .{err});
         return 1;
     };
     return 0;
 }
 
-pub export fn odyssey_pool_stop() void {
-    persistence.deinit();
+pub export fn odyssey_db_stop() void {
+    db.deinit();
 }
 
-fn pool_start() !void {
-    try persistence.init(global.state.gpa);
+fn db_start() !void {
+    try db.init(global.state.gpa);
 }
 
 pub export fn odyssey_app_new(options: *const Options) ?*App {

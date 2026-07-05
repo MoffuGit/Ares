@@ -8,12 +8,12 @@ const DB_NAME = constanst.DB_NAME;
 const global = @import("global.zig");
 const os = @import("os.zig");
 
-const schema_sql = @embedFile("persistence/schema.sql");
+const WORKSPACE_SCHEMA = @embedFile("db/workspace.sql");
 
 pub var pool: *zqlite.Pool = undefined;
 
 fn onFirstConnection(conn: zqlite.Conn, _: ?*anyopaque) !void {
-    try conn.execNoArgs(schema_sql);
+    try conn.execNoArgs(WORKSPACE_SCHEMA);
 }
 
 pub fn init(gpa: Allocator) !void {
@@ -41,4 +41,15 @@ pub fn init(gpa: Allocator) !void {
 
 pub fn deinit() void {
     pool.deinit();
+}
+
+pub fn testingPool(allocator: Allocator) !*zqlite.Pool {
+    return try zqlite.Pool.init(allocator, .{
+        .size = 1,
+        .flags = zqlite.OpenFlags.Create |
+            zqlite.OpenFlags.ReadWrite |
+            zqlite.OpenFlags.EXResCode,
+        .path = ":memory:",
+        .on_first_connection = &onFirstConnection,
+    });
 }
