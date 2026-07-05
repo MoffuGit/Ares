@@ -9,10 +9,12 @@ const global = @import("global.zig");
 const os = @import("os.zig");
 
 const WORKSPACE_SCHEMA = @embedFile("db/workspace.sql");
+const KEY_VALUE_STORE = @embedFile("db/key_value_store.sql");
 
 pub var pool: *zqlite.Pool = undefined;
 
 fn onFirstConnection(conn: zqlite.Conn, _: ?*anyopaque) !void {
+    try conn.execNoArgs(KEY_VALUE_STORE);
     try conn.execNoArgs(WORKSPACE_SCHEMA);
 }
 
@@ -52,4 +54,58 @@ pub fn testingPool(allocator: Allocator) !*zqlite.Pool {
         .path = ":memory:",
         .on_first_connection = &onFirstConnection,
     });
+}
+
+pub const KVS = struct {
+    pub fn read(conn: zqlite.Conn, allocator: Allocator, key: []const u8) !?[]const u8 {
+        const row = (try conn.row(
+            \\SELECT value
+            \\FROM key_value_store
+            \\WHERE key = ?
+        , .{key})) orelse return null;
+        defer row.deinit();
+
+        return try allocator.dupe(u8, row.text(0));
+    }
+
+    pub fn write(conn: zqlite.Conn, key: []const u8, value: []const u8) !void {
+        try conn.exec(
+            \\INSERT INTO key_value_store (key, value)
+            \\VALUES (?, ?)
+            \\ON CONFLICT(key) DO UPDATE SET
+            \\    value = excluded.value
+        , .{ key, value });
+    }
+
+    pub fn delete(conn: zqlite.Conn, key: []const u8) !void {
+        try conn.exec(
+            \\DELETE FROM key_value_store
+            \\WHERE key = ?
+        , .{key});
+    }
+};
+
+test "KVS read write and delete" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+
+    var test_pool = try testingPool(allocator);
+    defer test_pool.deinit();
+
+    const conn = try test_pool.acquire(io);
+    defer conn.release(io);
+
+    try KVS.write(conn, "theme", "dark");
+    const first = (try KVS.read(conn, allocator, "theme")).?;
+    defer allocator.free(first);
+    try testing.expectEqualStrings("dark", first);
+
+    try KVS.write(conn, "theme", "light");
+    const updated = (try KVS.read(conn, allocator, "theme")).?;
+    defer allocator.free(updated);
+    try testing.expectEqualStrings("light", updated);
+
+    try KVS.delete(conn, "theme");
+    try testing.expect(try KVS.read(conn, allocator, "theme") == null);
 }

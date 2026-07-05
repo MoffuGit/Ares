@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS key_value_store (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+) STRICT;
