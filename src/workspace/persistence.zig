@@ -75,53 +75,145 @@ pub fn insert(conn: zqlite.Conn, allocator: Allocator, workspace: SerializedWork
 
 pub fn get(conn: zqlite.Conn, allocator: Allocator, id: i64) !?SerializedWorkspace {
     const row = (try conn.row(
-        \\SELECT paths, session, window_x, window_y, window_width, window_height, timestamp
+        \\SELECT id, paths, session, window_x, window_y, window_width, window_height, timestamp
         \\FROM workspace
         \\WHERE id = ?
     , .{id})) orelse return null;
     defer row.deinit();
 
-    const paths_text = row.text(0);
-    const session = if (row.nullableText(1)) |text| try allocator.dupe(u8, text) else null;
+    return try deserialize(allocator, row);
+}
+
+fn deleteById(conn: zqlite.Conn, id: i64) !void {
+    try conn.exec(
+        \\DELETE FROM workspace
+        \\WHERE id = ?
+    , .{id});
+}
+
+pub fn getBySession(conn: zqlite.Conn, allocator: Allocator, session: []const u8) ![]SerializedWorkspace {
+    var rows = try conn.rows(
+        \\SELECT id, paths, session, window_x, window_y, window_width, window_height, timestamp
+        \\FROM workspace
+        \\WHERE session = ?
+    , .{session});
+    defer rows.deinit();
+
+    var workspaces: std.ArrayList(SerializedWorkspace) = .empty;
+    errdefer {
+        for (workspaces.items) |workspace| workspace.deinit(allocator);
+        workspaces.deinit(allocator);
+    }
+
+    while (rows.next()) |row| {
+        try workspaces.append(allocator, try deserialize(allocator, row));
+    }
+    if (rows.err) |err| return err;
+
+    return try workspaces.toOwnedSlice(allocator);
+}
+
+pub fn getAllMetadata(conn: zqlite.Conn, allocator: Allocator) ![]SerializedWorkspace {
+    var rows = try conn.rows(
+        \\SELECT id, paths, timestamp
+        \\FROM workspace
+    , .{});
+    defer rows.deinit();
+
+    var workspaces: std.ArrayList(SerializedWorkspace) = .empty;
+    errdefer {
+        for (workspaces.items) |workspace| workspace.deinit(allocator);
+        workspaces.deinit(allocator);
+    }
+
+    while (rows.next()) |row| {
+        const paths_text = row.text(1);
+        const path_count: usize = if (paths_text.len == 0) 0 else mem.count(u8, paths_text, &.{PATH_DELIMITER}) + 1;
+        const paths = try allocator.alloc([]const u8, path_count);
+        var path_index: usize = 0;
+        errdefer {
+            for (paths[0..path_index]) |path| allocator.free(path);
+            allocator.free(paths);
+        }
+
+        var iter = mem.splitScalar(u8, paths_text, PATH_DELIMITER);
+        while (iter.next()) |path| : (path_index += 1) {
+            paths[path_index] = try allocator.dupe(u8, path);
+        }
+
+        try workspaces.append(allocator, .{
+            .id = row.int(0),
+            .paths = paths,
+            .timestamp = row.nullableInt(2),
+        });
+    }
+    if (rows.err) |err| return err;
+
+    return try workspaces.toOwnedSlice(allocator);
+}
+
+fn workspaceExists(workspace: SerializedWorkspace) bool {
+    for (workspace.paths) |path| {
+        std.Io.Dir.access(.cwd(), testing.io, path, .{}) catch return false;
+    }
+
+    return true;
+}
+
+pub fn getAllMetadataAndValidate(conn: zqlite.Conn, allocator: Allocator) ![]SerializedWorkspace {
+    const workspaces = try getAllMetadata(conn, allocator);
+    errdefer {
+        for (workspaces) |workspace| workspace.deinit(allocator);
+        allocator.free(workspaces);
+    }
+
+    var valid_count: usize = 0;
+    for (workspaces) |workspace| {
+        if (workspaceExists(workspace)) {
+            if (valid_count != 0) workspaces[valid_count] = workspace;
+            valid_count += 1;
+        } else {
+            try deleteById(conn, workspace.id);
+            workspace.deinit(allocator);
+        }
+    }
+
+    return try allocator.realloc(workspaces, valid_count);
+}
+
+fn deserialize(allocator: Allocator, row: zqlite.Row) !SerializedWorkspace {
+    const paths_text = row.text(1);
+    const session = if (row.nullableText(2)) |text| try allocator.dupe(u8, text) else null;
     errdefer if (session) |text| allocator.free(text);
 
     const path_count: usize = if (paths_text.len == 0) 0 else mem.count(u8, paths_text, &.{PATH_DELIMITER}) + 1;
     const paths = try allocator.alloc([]const u8, path_count);
+    var path_index: usize = 0;
     errdefer {
-        for (paths) |path| allocator.free(path);
+        for (paths[0..path_index]) |path| allocator.free(path);
         allocator.free(paths);
     }
 
-    var path_index: usize = 0;
     var iter = mem.splitScalar(u8, paths_text, PATH_DELIMITER);
     while (iter.next()) |path| : (path_index += 1) {
         paths[path_index] = try allocator.dupe(u8, path);
     }
 
-    const window_bounds = if (row.nullableFloat(2)) |x| SerializedWindowBounds{
+    const window_bounds = if (row.nullableFloat(3)) |x| SerializedWindowBounds{
         .x = x,
-        .y = row.float(3),
-        .width = row.float(4),
-        .height = row.float(5),
+        .y = row.float(4),
+        .width = row.float(5),
+        .height = row.float(6),
     } else null;
 
     return .{
-        .id = id,
+        .id = row.int(0),
         .paths = paths,
         .session = session,
         .window = window_bounds,
-        .timestamp = row.nullableInt(6),
+        .timestamp = row.nullableInt(7),
     };
 }
-
-//NOTE:
-//i need two functions
-//one that get me the workspaces that have a session == to x
-//and another that returns all saved workspaces
-//the process will be as follows:
-//try to get prev session workspaces,
-//if we have none, we open a window with our list of
-//all prev saved workspaces
 
 test "insert and get workspace paths using delimiter" {
     const alloc = testing.allocator;
@@ -149,4 +241,69 @@ test "insert and get workspace paths using delimiter" {
     try std.testing.expect(workspace.window != null);
     try std.testing.expectEqual(@as(f64, 1), workspace.window.?.x);
     try std.testing.expect(workspace.timestamp != null);
+}
+
+test "getAllValidMetadata returns existing workspaces" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var pool = try db.testingPool(alloc);
+    defer pool.deinit();
+
+    const conn = try pool.acquire(io);
+    defer conn.release(io);
+
+    const path = "zig-cache-test-valid-workspace";
+    try std.Io.Dir.createDir(.cwd(), io, path, .default_dir);
+    defer std.Io.Dir.deleteDir(.cwd(), io, path) catch {};
+
+    try insert(conn, alloc, .{
+        .id = 1,
+        .paths = &.{path},
+    });
+
+    const workspaces = try getAllMetadataAndValidate(conn, alloc);
+    defer {
+        for (workspaces) |workspace| workspace.deinit(alloc);
+        alloc.free(workspaces);
+    }
+
+    try testing.expectEqual(@as(usize, 1), workspaces.len);
+    try testing.expectEqual(@as(i64, 1), workspaces[0].id);
+    try testing.expectEqualStrings(path, workspaces[0].paths[0]);
+}
+
+test "getAllValidMetadata removes missing workspaces" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var pool = try db.testingPool(alloc);
+    defer pool.deinit();
+
+    const conn = try pool.acquire(io);
+    defer conn.release(io);
+
+    const existing_path = "zig-cache-test-existing-workspace";
+    const missing_path = "zig-cache-test-missing-workspace";
+    try std.Io.Dir.createDir(.cwd(), io, existing_path, .default_dir);
+    defer std.Io.Dir.deleteDir(.cwd(), io, existing_path) catch {};
+
+    try insert(conn, alloc, .{
+        .id = 1,
+        .paths = &.{existing_path},
+    });
+    try insert(conn, alloc, .{
+        .id = 2,
+        .paths = &.{missing_path},
+    });
+
+    const workspaces = try getAllMetadataAndValidate(conn, alloc);
+    defer {
+        for (workspaces) |workspace| workspace.deinit(alloc);
+        alloc.free(workspaces);
+    }
+
+    try testing.expectEqual(@as(usize, 1), workspaces.len);
+    try testing.expectEqual(@as(i64, 1), workspaces[0].id);
+    try testing.expect((try get(conn, alloc, 2)) == null);
 }
