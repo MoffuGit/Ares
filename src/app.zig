@@ -35,7 +35,6 @@ fn noop(_: *anyopaque) callconv(.c) void {}
 
 pub const App = @This();
 
-io: Io,
 gpa: Allocator,
 alloc: heap.ArenaAllocator,
 arena: Allocator,
@@ -67,7 +66,6 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .gpa = gpa,
         .alloc = .init(gpa),
         .arena = undefined,
-        .io = io,
     };
     self.arena = self.alloc.allocator();
     errdefer self.alloc.deinit();

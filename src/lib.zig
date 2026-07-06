@@ -5,6 +5,7 @@ const builtin = @import("builtin");
 const App = @import("app.zig");
 const Options = App.Options;
 const Observers = App.Observers;
+const Session = @import("session.zig");
 const ent = @import("entity.zig");
 const global = @import("global.zig");
 const Workspace = @import("workspace.zig");
@@ -100,6 +101,30 @@ pub export fn odyssey_remove_observer(observer: Observer) void {
     sub.unsubscribe() catch |err| {
         std.log.err("unsubscribe err={}", .{err});
     };
+}
+
+pub export fn odyssey_session_new(app: *App) MaybeEntity {
+    const session = session_new(app) catch |err| {
+        std.log.err("error creating session={}", .{err});
+        return .err;
+    };
+
+    return .ok(session.any);
+}
+
+fn session_new(app: *App) !ent.Entity(Session) {
+    const io = state.threaded.io();
+    const gpa = state.gpa;
+    const conn = try db.acquire(io);
+    defer db.release(io, conn);
+
+    const session: ent.Entity(Session) = try .new(app, .{
+        gpa,
+        &conn,
+        io,
+    });
+
+    return session;
 }
 
 const MaybeEntity = extern struct {

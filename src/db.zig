@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 
 const zqlite = @import("zqlite");
 
@@ -13,9 +14,9 @@ const KEY_VALUE_STORE = @embedFile("db/key_value_store.sql");
 
 pub var pool: *zqlite.Pool = undefined;
 
-fn onFirstConnection(conn: zqlite.Conn, _: ?*anyopaque) !void {
-    try conn.execNoArgs(KEY_VALUE_STORE);
-    try conn.execNoArgs(WORKSPACE_SCHEMA);
+fn onFirstConnection(_conn: zqlite.Conn, _: ?*anyopaque) !void {
+    try _conn.execNoArgs(KEY_VALUE_STORE);
+    try _conn.execNoArgs(WORKSPACE_SCHEMA);
 }
 
 pub fn init(gpa: Allocator) !void {
@@ -45,6 +46,14 @@ pub fn deinit() void {
     pool.deinit();
 }
 
+pub fn acquire(io: Io) !zqlite.Conn {
+    return try pool.acquire(io);
+}
+
+pub fn release(io: Io, conn: zqlite.Conn) void {
+    pool.release(io, conn);
+}
+
 pub fn testingPool(allocator: Allocator) !*zqlite.Pool {
     return try zqlite.Pool.init(allocator, .{
         .size = 1,
@@ -57,7 +66,7 @@ pub fn testingPool(allocator: Allocator) !*zqlite.Pool {
 }
 
 pub const KVS = struct {
-    pub fn read(conn: zqlite.Conn, allocator: Allocator, key: []const u8) !?[]const u8 {
+    pub fn read(conn: *const zqlite.Conn, allocator: Allocator, key: []const u8) !?[]const u8 {
         const row = (try conn.row(
             \\SELECT value
             \\FROM key_value_store
@@ -65,10 +74,11 @@ pub const KVS = struct {
         , .{key})) orelse return null;
         defer row.deinit();
 
-        return try allocator.dupe(u8, row.text(0));
+        const value = row.text(0);
+        return try allocator.dupe(u8, value);
     }
 
-    pub fn write(conn: zqlite.Conn, key: []const u8, value: []const u8) !void {
+    pub fn write(conn: *const zqlite.Conn, key: []const u8, value: []const u8) !void {
         try conn.exec(
             \\INSERT INTO key_value_store (key, value)
             \\VALUES (?, ?)
@@ -77,7 +87,7 @@ pub const KVS = struct {
         , .{ key, value });
     }
 
-    pub fn delete(conn: zqlite.Conn, key: []const u8) !void {
+    pub fn delete(conn: *const zqlite.Conn, key: []const u8) !void {
         try conn.exec(
             \\DELETE FROM key_value_store
             \\WHERE key = ?
@@ -96,16 +106,16 @@ test "KVS read write and delete" {
     const conn = try test_pool.acquire(io);
     defer conn.release(io);
 
-    try KVS.write(conn, "theme", "dark");
-    const first = (try KVS.read(conn, allocator, "theme")).?;
+    try KVS.write(&conn, "theme", "dark");
+    const first = (try KVS.read(&conn, allocator, "theme")).?;
     defer allocator.free(first);
     try testing.expectEqualStrings("dark", first);
 
-    try KVS.write(conn, "theme", "light");
-    const updated = (try KVS.read(conn, allocator, "theme")).?;
+    try KVS.write(&conn, "theme", "light");
+    const updated = (try KVS.read(&conn, allocator, "theme")).?;
     defer allocator.free(updated);
     try testing.expectEqualStrings("light", updated);
 
-    try KVS.delete(conn, "theme");
-    try testing.expect(try KVS.read(conn, allocator, "theme") == null);
+    try KVS.delete(&conn, "theme");
+    try testing.expect(try KVS.read(&conn, allocator, "theme") == null);
 }

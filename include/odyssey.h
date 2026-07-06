@@ -9,8 +9,12 @@
 extern "C" {
 #endif
 
+/////////////////
+//~ General Types
+
 int odyssey_init(int argc, char **argv);
 void odyssey_deinit(void);
+
 int odyssey_db_start(void);
 void odyssey_db_stop(void);
 
@@ -66,6 +70,13 @@ void odyssey_remove_observer(odyssey_observer_s observer);
 
 typedef odyssey_maybe_entity_s odyssey_workspace_creation_t;
 odyssey_workspace_creation_t odyssey_workspace_new(odyssey_app_t app);
+
+/////////////////
+//~ Session Types
+
+typedef odyssey_maybe_entity_s odyssey_session_creation_t;
+odyssey_session_creation_t odyssey_session_new(odyssey_app_t app);
+
 
 #ifdef __cplusplus
 }

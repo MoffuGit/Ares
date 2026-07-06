@@ -1,25 +1,26 @@
 //
-//  OdysseyWorkspace.swift
+//  OdysseySession.swift
 //  Odyssey
 //
-//  Created by Adrian Hess on 02/06/26.
+//  Created by Adrian Hess on 05/07/26.
+//
 
 import OdysseyKit
 import os
 
 extension Odyssey {
     @MainActor
-    final class Workspace: Entity {
+    final class Session: Entity {
         init(app: Odyssey.App) {
             guard let odysseyApp = app.app else {
-                logger.critical("odyssey_workspace_new failed: app is nil")
+                logger.critical("odyssey_session_new failed: app is nil")
                 super.init(app: app, entity: nil)
                 return
             }
 
-            let maybe_entity = odyssey_workspace_new(odysseyApp)
+            let maybe_entity = odyssey_session_new(odysseyApp)
             guard maybe_entity.valid else {
-                logger.critical("odyssey_workspace_new failed")
+                logger.critical("odyssey_session_new failed")
                 super.init(app: app, entity: nil)
                 return
             }

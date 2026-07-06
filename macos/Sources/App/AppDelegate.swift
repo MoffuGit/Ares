@@ -10,10 +10,17 @@ import OdysseyKit
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
-    var app: Odyssey.App!
+    var app: Odyssey.App
+    private var session: Odyssey.Session
+
+    override init() {
+        app = Odyssey.App()
+        session = Odyssey.Session(app: app)
+        
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        app = Odyssey.App()
         let controller = WorkspaceController(delegate: self)
         controller.showWindow(nil)
         controller.window?.center()
