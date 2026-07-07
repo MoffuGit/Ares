@@ -14,8 +14,8 @@ private final class WorkspaceWindow: NSWindow {
 final class WorkspaceController: NSWindowController, NSWindowDelegate {
     private let workspace: Odyssey.Workspace
 
-    init(delegate: AppDelegate, path: String) {
-        self.workspace = Odyssey.Workspace(app: delegate.app, path: path)
+    init(delegate: AppDelegate, session: Odyssey.Session, path: String) {
+        self.workspace = Odyssey.Workspace(app: delegate.app, session: session, path: path)
 
         let window = WorkspaceWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
@@ -32,8 +32,9 @@ final class WorkspaceController: NSWindowController, NSWindowDelegate {
         window.delegate = self
     }
 
-    init(delegate: AppDelegate, paths: [String]) {
-        self.workspace = Odyssey.Workspace(app: delegate.app, paths: paths)
+    
+    init(delegate: AppDelegate, session: Odyssey.Session, paths: [String]) {
+        self.workspace = Odyssey.Workspace(app: delegate.app, session: session, paths: paths)
 
         let window = WorkspaceWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),

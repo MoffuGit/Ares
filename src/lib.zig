@@ -262,8 +262,10 @@ pub export fn odyssey_drop_entity(entity: ExternEntity) void {
     entity.any().drop();
 }
 
-pub export fn odyssey_workspace_new(app: *App, paths: Slice(String)) MaybeEntity {
-    const workspace = workspace_new(app, paths) catch |err| {
+pub export fn odyssey_workspace_new(app: *App, extern_entity: ExternEntity, paths: Slice(String)) MaybeEntity {
+    const session = extern_entity.any().into(Session) orelse @panic("Missing Session Entity");
+
+    const workspace = workspace_new(app, session, paths) catch |err| {
         std.log.err("error creating workspace={}", .{err});
         return .none;
     };
@@ -271,7 +273,9 @@ pub export fn odyssey_workspace_new(app: *App, paths: Slice(String)) MaybeEntity
     return .some(.init(workspace.any));
 }
 
-fn workspace_new(app: *App, extern_paths: Slice(String)) !ent.Entity(Workspace) {
+fn workspace_new(app: *App, session: ent.Entity(Session), extern_paths: Slice(String)) !ent.Entity(Workspace) {
+    const id = session.read(app).id;
+
     var buffer: [1024][]const u8 = undefined;
 
     const string_slices = extern_paths.slice() orelse
@@ -292,6 +296,7 @@ fn workspace_new(app: *App, extern_paths: Slice(String)) !ent.Entity(Workspace) 
         .{
             Workspace.Options{
                 .paths = paths,
+                .session = id,
             },
             state.threaded.io(),
         },

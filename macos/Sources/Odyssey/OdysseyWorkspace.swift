@@ -73,11 +73,11 @@ extension Odyssey {
     }
 
     final class Workspace: Entity {
-        convenience init(app: Odyssey.App, path: String) {
-            self.init(app: app, paths: [path])
+        convenience init(app: Odyssey.App, session: Odyssey.Session, path: String) {
+            self.init(app: app, session: session, paths: [path])
         }
 
-        init(app: Odyssey.App, paths: [String]) {
+        init(app: Odyssey.App, session: Odyssey.Session, paths: [String]) {
             guard let odysseyApp = app.app else {
                 logger.critical("odyssey_workspace_new failed: app is nil")
                 super.init(app: app, entity: nil)
@@ -92,7 +92,7 @@ extension Odyssey {
                 return
             }
 
-            var pathStorage = paths.map { Array($0.utf8) }
+            let pathStorage = paths.map { Array($0.utf8) }
             var pathStrings = pathStorage.indices.map { index in
                 pathStorage[index].withUnsafeBufferPointer { buffer in
                     odyssey_string_s(ptr: buffer.baseAddress, len: buffer.count)
@@ -102,6 +102,7 @@ extension Odyssey {
             let maybe_entity = pathStrings.withUnsafeMutableBufferPointer { buffer in
                 odyssey_workspace_new(
                     odysseyApp,
+                    session.entity!,
                     odyssey_workspace_paths_s(ptr: buffer.baseAddress, len: buffer.count)
                 )
             }

@@ -33,11 +33,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func createWorkspaceController(path: String) -> WorkspaceController {
-        WorkspaceController(delegate: self, path: path)
+        WorkspaceController(delegate: self, session:session, path: path)
     }
 
     func createWorkspaceController(paths: [String]) -> WorkspaceController {
-        WorkspaceController(delegate: self, paths: paths)
+        WorkspaceController(delegate: self, session:session, paths: paths)
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {

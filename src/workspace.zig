@@ -18,6 +18,7 @@ pub const Workspace = @This();
 
 pub const Options = struct {
     paths: []const []const u8,
+    session: uuid.Uuid,
 };
 
 io: Io,
