@@ -2,31 +2,30 @@ const std = @import("std");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const testing = std.testing;
+const Io = std.Io;
 
 const zqlite = @import("zqlite");
 
 const db = @import("../db.zig");
+const global = @import("../global.zig");
 
-pub const WindowBounds = struct {
+pub const SerializedWindowBounds = struct {
     x: f64,
     y: f64,
     width: f64,
     height: f64,
 };
 
-pub const SerializedWindowBounds = WindowBounds;
-
 pub const SerializedWorkspace = struct {
-    id: i64,
     paths: []const []const u8,
-    session: ?[]const u8 = null,
+    session: ?u128 = null,
     window: ?SerializedWindowBounds = null,
     timestamp: ?i64 = null,
+    id: i64,
 
     pub fn deinit(self: SerializedWorkspace, allocator: Allocator) void {
         for (self.paths) |path| allocator.free(path);
         allocator.free(self.paths);
-        if (self.session) |session| allocator.free(session);
     }
 };
 
@@ -50,6 +49,9 @@ pub fn insert(conn: zqlite.Conn, allocator: Allocator, workspace: SerializedWork
         len += path.len;
     }
 
+    const session = if (workspace.session) |id| try std.fmt.allocPrint(allocator, "{}", .{id}) else null;
+    defer if (session) |text| allocator.free(text);
+
     const bounds = workspace.window;
     try conn.exec(
         \\INSERT INTO workspace (id, paths, session, window_x, window_y, window_width, window_height, timestamp)
@@ -65,7 +67,7 @@ pub fn insert(conn: zqlite.Conn, allocator: Allocator, workspace: SerializedWork
     , .{
         workspace.id,
         buffer,
-        workspace.session,
+        session,
         if (bounds) |b| b.x else null,
         if (bounds) |b| b.y else null,
         if (bounds) |b| b.width else null,
@@ -91,7 +93,7 @@ fn deleteById(conn: zqlite.Conn, id: i64) !void {
     , .{id});
 }
 
-pub fn getBySession(conn: zqlite.Conn, allocator: Allocator, session: []const u8) ![]SerializedWorkspace {
+pub fn getBySession(conn: zqlite.Conn, allocator: Allocator, session: u128) ![]SerializedWorkspace {
     var rows = try conn.rows(
         \\SELECT id, paths, session, window_x, window_y, window_width, window_height, timestamp
         \\FROM workspace
@@ -152,15 +154,15 @@ pub fn getAllMetadata(conn: zqlite.Conn, allocator: Allocator) ![]SerializedWork
     return try workspaces.toOwnedSlice(allocator);
 }
 
-fn workspaceExists(workspace: SerializedWorkspace) bool {
+fn workspaceExists(workspace: SerializedWorkspace, io: Io) bool {
     for (workspace.paths) |path| {
-        std.Io.Dir.access(.cwd(), testing.io, path, .{}) catch return false;
+        std.Io.Dir.access(.cwd(), io, path, .{}) catch return false;
     }
 
     return true;
 }
 
-pub fn getAllMetadataAndValidate(conn: zqlite.Conn, allocator: Allocator) ![]SerializedWorkspace {
+pub fn getAllMetadataAndValidate(conn: zqlite.Conn, allocator: Allocator, io: Io) ![]SerializedWorkspace {
     const workspaces = try getAllMetadata(conn, allocator);
     errdefer {
         for (workspaces) |workspace| workspace.deinit(allocator);
@@ -169,7 +171,7 @@ pub fn getAllMetadataAndValidate(conn: zqlite.Conn, allocator: Allocator) ![]Ser
 
     var valid_count: usize = 0;
     for (workspaces) |workspace| {
-        if (workspaceExists(workspace)) {
+        if (workspaceExists(workspace, io)) {
             if (valid_count != 0) workspaces[valid_count] = workspace;
             valid_count += 1;
         } else {
@@ -183,8 +185,7 @@ pub fn getAllMetadataAndValidate(conn: zqlite.Conn, allocator: Allocator) ![]Ser
 
 fn deserialize(allocator: Allocator, row: zqlite.Row) !SerializedWorkspace {
     const paths_text = row.text(1);
-    const session = if (row.nullableText(2)) |text| try allocator.dupe(u8, text) else null;
-    errdefer if (session) |text| allocator.free(text);
+    const session = if (row.nullableText(2)) |text| try std.fmt.parseInt(u128, text, 10) else null;
 
     const path_count: usize = if (paths_text.len == 0) 0 else mem.count(u8, paths_text, &.{PATH_DELIMITER}) + 1;
     const paths = try allocator.alloc([]const u8, path_count);
@@ -262,7 +263,7 @@ test "getAllValidMetadata returns existing workspaces" {
         .paths = &.{path},
     });
 
-    const workspaces = try getAllMetadataAndValidate(conn, alloc);
+    const workspaces = try getAllMetadataAndValidate(conn, alloc, io);
     defer {
         for (workspaces) |workspace| workspace.deinit(alloc);
         alloc.free(workspaces);
@@ -297,7 +298,7 @@ test "getAllValidMetadata removes missing workspaces" {
         .paths = &.{missing_path},
     });
 
-    const workspaces = try getAllMetadataAndValidate(conn, alloc);
+    const workspaces = try getAllMetadataAndValidate(conn, alloc, io);
     defer {
         for (workspaces) |workspace| workspace.deinit(alloc);
         alloc.free(workspaces);

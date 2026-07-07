@@ -1,10 +1,12 @@
 const std = @import("std");
+const heap = std.heap;
+
 const App = @import("app.zig");
 const Context = App.Context;
 const Entity = App.Entity;
 const Project = @import("project.zig");
-const heap = std.heap;
-const persistence = @import("workspace/persistence.zig");
+pub const persistence = @import("workspace/persistence.zig");
+pub const SerializedWorkspace = persistence.SerializedWorkspace;
 
 pub const Workspace = @This();
 

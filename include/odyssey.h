@@ -12,6 +12,16 @@ extern "C" {
 /////////////////
 //~ General Types
 
+typedef struct {
+    const uint8_t* ptr;
+    size_t len;
+} odyssey_string_s;
+
+typedef struct {
+    __uint128_t value;
+    bool valid;
+} odyssey_maybe_u128_s;
+
 int odyssey_init(int argc, char **argv);
 void odyssey_deinit(void);
 
@@ -67,9 +77,48 @@ void odyssey_remove_observer(odyssey_observer_s observer);
 
 ///////////////////
 //~ Workspace Types
+//
+typedef struct {
+    odyssey_string_s* ptr;
+    size_t len;
+} odyssey_workspace_paths_s;
+
+typedef struct {
+    double x;
+    double y;
+    double width;
+    double height;
+} odyssey_workspace_window_bounds_s;
+
+typedef struct {
+    odyssey_workspace_window_bounds_s value;
+    bool valid;
+} odyssey_maybe_workspace_window_bounds_s;
 
 typedef odyssey_maybe_entity_s odyssey_workspace_creation_t;
 odyssey_workspace_creation_t odyssey_workspace_new(odyssey_app_t app);
+
+////////////////////////
+//~ SerializedWorkspaces
+
+typedef struct {
+    odyssey_workspace_paths_s paths;
+    odyssey_maybe_u128_s session;
+    odyssey_maybe_workspace_window_bounds_s window;
+    bool has_window;
+    int64_t timestamp;
+    bool has_timestamp;
+    int64_t id;
+} odyssey_serialized_workspace_s;
+
+typedef struct {
+    odyssey_serialized_workspace_s* ptr;
+    size_t len;
+} odyssey_workspace_list_s;
+
+odyssey_workspace_list_s odyssey_workspace_get_all_metadata_and_validate(void);
+odyssey_workspace_list_s odyssey_workspace_get_by_session(odyssey_app_t app, odyssey_entity_s session);
+void odyssey_workspace_list_free(odyssey_workspace_list_s list);
 
 /////////////////
 //~ Session Types
