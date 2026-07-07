@@ -485,7 +485,7 @@ test "Scheduler waker calls wakeup callback" {
     try scheduler.init(.{
         .userdata = &wakeups,
         .wakeup_cb = struct {
-            fn callback(userdata: *anyopaque) callconv(.c) void {
+            fn callback(userdata: *anyopaque) void {
                 const count: *usize = @ptrCast(@alignCast(userdata));
                 count.* += 1;
             }

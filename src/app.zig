@@ -26,12 +26,12 @@ const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 
-pub const Options = extern struct {
-    userdata: *anyopaque = undefined,
-    wakeup_cb: *const fn (*anyopaque) callconv(.c) void = noop,
-};
+pub const Options = struct {
+    fn noop(_: *anyopaque) void {}
 
-fn noop(_: *anyopaque) callconv(.c) void {}
+    userdata: *anyopaque = undefined,
+    wakeup_cb: *const fn (*anyopaque) void = noop,
+};
 
 pub const App = @This();
 
