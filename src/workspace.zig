@@ -1,28 +1,77 @@
 const std = @import("std");
 const heap = std.heap;
+const Io = std.Io;
+const Allocator = std.mem.Allocator;
+
+const zqlite = @import("zqlite");
 
 const App = @import("app.zig");
 const Context = App.Context;
 const Entity = App.Entity;
+const db = @import("db.zig");
 const Project = @import("project.zig");
+const uuid = @import("uuid.zig");
 pub const persistence = @import("workspace/persistence.zig");
 pub const SerializedWorkspace = persistence.SerializedWorkspace;
 
 pub const Workspace = @This();
 
+pub const Options = struct {
+    paths: []const []const u8,
+    session: uuid.Uuid,
+};
+
+io: Io,
+gpa: Allocator,
+conn: zqlite.Conn,
 arena: heap.ArenaAllocator,
 project: Entity(Project),
+paths: std.ArrayList([]u8),
 
-pub fn init(self: *Workspace, ctx: Context(Workspace)) !void {
+pub fn init(
+    self: *Workspace,
+    ctx: Context(Workspace),
+    options: Options,
+    io: Io,
+) !void {
+    const conn = try db.acquire(io);
+    errdefer db.release(io, conn);
+
     self.* = .{
+        .io = io,
+        .gpa = ctx.gpa(),
+        .conn = conn,
         .arena = .init(ctx.gpa()),
+        .paths = undefined,
         .project = try .new(ctx.app, .{self.arena.allocator()}),
     };
+    errdefer self.arena.deinit();
+
+    self.paths = try .initCapacity(self.arena.allocator(), options.paths.len);
+
+    for (options.paths) |path| {
+        const copy = try self.arena.allocator().dupe(u8, path);
+        self.paths.appendAssumeCapacity(copy);
+    }
 }
 
+// const id = if (try Workspace.persistence.getByPaths(conn, gpa, paths)) |serialized| id: {
+//     defer serialized.deinit(gpa);
+//     break :id serialized.id;
+// } else id: {
+//     const new_id = try Workspace.persistence.insertDefault(conn);
+//     try Workspace.persistence.insert(conn, gpa, .{ .id = new_id, .paths = paths });
+//     break :id new_id;
+// };
+//
+
+//NOTE:
+//there's a detail around the project.drop function call
+//that thing should happne before we try to deinit(),
 pub fn deinit(self: *Workspace) void {
-    self.arena.deinit();
+    db.release(self.io, self.conn);
     self.project.drop();
+    self.arena.deinit();
 }
 
 test {

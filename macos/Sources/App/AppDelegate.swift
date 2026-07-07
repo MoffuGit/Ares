@@ -12,18 +12,32 @@ import OdysseyKit
 class AppDelegate: NSObject, NSApplicationDelegate {
     var app: Odyssey.App
     private var session: Odyssey.Session
+    private var workspaceStoreWorkspaces: Odyssey.SerializedWorkspaces
+    private var workspaceStoreController: WorkspaceStoreController?
 
     override init() {
         app = Odyssey.App()
         session = Odyssey.Session(app: app)
-        
+        workspaceStoreWorkspaces = Odyssey.SerializedWorkspaces.getAllMetadataAndValidate()
+
         super.init()
     }
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        let controller = WorkspaceController(delegate: self)
-        controller.showWindow(nil)
-        controller.window?.center()
+        workspaceStoreController = WorkspaceStoreController(
+            app: self,
+            workspaces: workspaceStoreWorkspaces
+        )
+        workspaceStoreController?.showWindow(nil)
+        workspaceStoreController?.window?.center()
+    }
+
+    func createWorkspaceController(path: String) -> WorkspaceController {
+        WorkspaceController(delegate: self, path: path)
+    }
+
+    func createWorkspaceController(paths: [String]) -> WorkspaceController {
+        WorkspaceController(delegate: self, paths: paths)
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {

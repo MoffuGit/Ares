@@ -10,7 +10,7 @@ extern "C" {
 #endif
 
 /////////////////
-//~ General Types
+//~ Common Types
 
 typedef struct {
     const uint8_t* ptr;
@@ -21,6 +21,9 @@ typedef struct {
     __uint128_t value;
     bool valid;
 } odyssey_maybe_u128_s;
+
+/////////////////
+//~ General Types
 
 int odyssey_init(int argc, char **argv);
 void odyssey_deinit(void);
@@ -41,6 +44,7 @@ typedef struct {
 
 odyssey_app_t odyssey_app_new(const odyssey_options_s* options);
 void odyssey_app_free(odyssey_app_t);
+
 void odyssey_app_flush(odyssey_app_t);
 
 //////////////////
@@ -96,7 +100,7 @@ typedef struct {
 } odyssey_maybe_workspace_window_bounds_s;
 
 typedef odyssey_maybe_entity_s odyssey_workspace_creation_t;
-odyssey_workspace_creation_t odyssey_workspace_new(odyssey_app_t app);
+odyssey_workspace_creation_t odyssey_workspace_new(odyssey_app_t app, odyssey_workspace_paths_s paths);
 
 ////////////////////////
 //~ SerializedWorkspaces

@@ -1,10 +1,10 @@
 const std = @import("std");
 const assert = std.debug.assert;
+const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 
 const App = @import("app.zig");
-const Options = App.Options;
-const Observers = App.Observers;
+const heap = std.heap;
 const db = @import("db.zig");
 const ent = @import("entity.zig");
 const global = @import("global.zig");
@@ -13,6 +13,21 @@ const uuid = @import("uuid.zig");
 const Workspace = @import("workspace.zig");
 
 const state = &@import("global.zig").state;
+
+const ExternAppOptions = extern struct {
+    userdata: *anyopaque = undefined,
+    wakeup_cb: *const fn (*anyopaque) callconv(.c) void,
+};
+
+const ExternAppCallback = struct {
+    userdata: *anyopaque,
+    wakeup_cb: *const fn (*anyopaque) callconv(.c) void,
+
+    fn wakeup(userdata: *anyopaque) void {
+        const callback: *ExternAppCallback = @ptrCast(@alignCast(userdata));
+        callback.wakeup_cb(callback.userdata);
+    }
+};
 
 fn Slice(T: type) type {
     return extern struct {
@@ -24,10 +39,15 @@ fn Slice(T: type) type {
         fn init(bytes: []const T) @This() {
             return .{ .ptr = bytes.ptr, .len = bytes.len };
         }
+
+        pub fn slice(self: @This()) ?[]const T {
+            const ptr = self.ptr orelse return null;
+            return ptr[0..self.len];
+        }
     };
 }
 
-fn Option(T: type) type {
+pub fn Option(T: type) type {
     return extern struct {
         value: T,
         valid: bool,
@@ -45,123 +65,9 @@ fn Option(T: type) type {
 
 const String = Slice(u8);
 
-pub export fn odyssey_init(c_argc: c_int, c_argv: [*][*:0]c_char) c_int {
-    assert(builtin.link_libc);
-    const argv = @as([*][*:0]u8, @ptrCast(c_argv))[0..@intCast(c_argc)];
-    const environ: std.process.Environ.Block = if (@hasField(std.process.Environ.Block, "slice")) environ: {
-        const c_environ = std.c.environ;
-        var env_count: usize = 0;
-        while (c_environ[env_count] != null) : (env_count += 1) {}
-        break :environ .{ .slice = c_environ[0..env_count :null] };
-    } else .global;
-
-    global.state.init(argv, environ) catch |err| {
-        std.log.err("Global state err={}", .{err});
-        return 1;
-    };
-
-    return 0;
-}
-
-pub export fn odyssey_deinit() void {
-    global.state.deinit();
-}
-
-pub export fn odyssey_db_start() c_int {
-    db_start() catch |err| {
-        std.log.err("error starting zqlite pool: {}", .{err});
-        return 1;
-    };
-    return 0;
-}
-
-pub export fn odyssey_db_stop() void {
-    db.deinit();
-}
-
-fn db_start() !void {
-    try db.init(global.state.gpa);
-}
-
-pub export fn odyssey_app_new(options: *const Options) ?*App {
-    return app_new(options) catch |err| {
-        std.log.err("error initializing app: {}", .{err});
-        return null;
-    };
-}
-
-fn app_new(options: *const Options) !*App {
-    var app = try state.gpa.create(App);
-    errdefer state.gpa.destroy(app);
-
-    try app.init(options.*, state.gpa, state.threaded.io());
-
-    return app;
-}
-
-pub export fn odyssey_app_free(app: *App) void {
-    app.deinit();
-    state.gpa.destroy(app);
-}
-
-pub export fn odyssey_app_flush(app: *App) void {
-    app.flush();
-}
-
-pub export fn odyssey_drop_entity(entity: ExternEntity) void {
-    entity.any().drop();
-}
-
-pub export fn odyssey_workspace_new(app: *App) MaybeEntity {
-    const workspace = workspace_new(app) catch |err| {
-        std.log.err("error creating workspace={}", .{err});
-        return .none;
-    };
-
-    return .some(.init(workspace.any));
-}
-
-fn workspace_new(app: *App) !ent.Entity(Workspace) {
-    const workspace: ent.Entity(Workspace) = try .new(app, .{});
-    errdefer workspace.drop();
-
-    return workspace;
-}
-
-pub export fn odyssey_remove_observer(observer: ExternObserver) void {
-    const sub = observer.subscription();
-    sub.unsubscribe() catch |err| {
-        std.log.err("unsubscribe err={}", .{err});
-    };
-}
-
-pub export fn odyssey_session_new(app: *App) MaybeEntity {
-    const session = session_new(app) catch |err| {
-        std.log.err("error creating session={}", .{err});
-        return .none;
-    };
-
-    return .some(.init(session.any));
-}
-
-fn session_new(app: *App) !ent.Entity(Session) {
-    const io = state.threaded.io();
-    const gpa = state.gpa;
-    const conn = try db.acquire(io);
-    defer db.release(io, conn);
-
-    const session: ent.Entity(Session) = try .new(app, .{
-        gpa,
-        &conn,
-        io,
-    });
-
-    return session;
-}
-
 const MaybeEntity = Option(ExternEntity);
 
-pub const ExternEntity = extern struct {
+const ExternEntity = extern struct {
     store: *anyopaque,
     type_id: *anyopaque,
     id: u64,
@@ -184,6 +90,8 @@ pub const ExternEntity = extern struct {
 };
 
 const ExternObserver = extern struct {
+    const Observers = App.Observers;
+
     ptr: *anyopaque,
     key: u64,
     id: u32,
@@ -230,7 +138,14 @@ const ExternSerializedWorkspace = extern struct {
     timestamp: i64,
     id: i64,
 
-    fn init(workspace: Workspace.SerializedWorkspace, paths: []String) @This() {
+    fn init(workspace: Workspace.SerializedWorkspace, gpa: Allocator) !@This() {
+        const paths = try gpa.alloc(String, workspace.paths.len);
+        errdefer gpa.free(paths);
+
+        for (workspace.paths, paths) |path, *out_path| {
+            out_path.* = .init(path);
+        }
+
         return .{
             .paths = .init(paths),
             .session = if (workspace.session) |session| .some(session) else .none,
@@ -247,26 +162,19 @@ const ExternSerializedWorkspaces = extern struct {
 
     const empty: @This() = .{ .ptr = null, .len = 0 };
 
-    fn init(workspaces: []Workspace.SerializedWorkspace) !@This() {
-        const serialized = try state.gpa.alloc(ExternSerializedWorkspace, workspaces.len);
-        errdefer state.gpa.free(serialized);
+    fn init(workspaces: []Workspace.SerializedWorkspace, gpa: Allocator) !@This() {
+        const serialized = try gpa.alloc(ExternSerializedWorkspace, workspaces.len);
+        errdefer gpa.free(serialized);
 
         var workspace_index: usize = 0;
         errdefer {
             for (serialized[0..workspace_index]) |workspace| {
-                if (workspace.paths.ptr) |paths| state.gpa.free(paths[0..workspace.paths.len]);
+                if (workspace.paths.ptr) |paths| gpa.free(paths[0..workspace.paths.len]);
             }
         }
 
         for (workspaces, serialized) |workspace, *out| {
-            const paths = try state.gpa.alloc(String, workspace.paths.len);
-            errdefer state.gpa.free(paths);
-
-            for (workspace.paths, paths) |path, *out_path| {
-                out_path.* = .init(path);
-            }
-
-            out.* = .init(workspace, paths);
+            out.* = try .init(workspace, gpa);
             workspace_index += 1;
         }
 
@@ -274,9 +182,155 @@ const ExternSerializedWorkspaces = extern struct {
     }
 };
 
-fn free_workspace_slice(workspaces: []Workspace.SerializedWorkspace) void {
-    for (workspaces) |workspace| workspace.deinit(state.gpa);
-    state.gpa.free(workspaces);
+pub export fn odyssey_init(c_argc: c_int, c_argv: [*][*:0]c_char) c_int {
+    assert(builtin.link_libc);
+    const argv = @as([*][*:0]u8, @ptrCast(c_argv))[0..@intCast(c_argc)];
+    const environ: std.process.Environ.Block = if (@hasField(std.process.Environ.Block, "slice")) environ: {
+        const c_environ = std.c.environ;
+        var env_count: usize = 0;
+        while (c_environ[env_count] != null) : (env_count += 1) {}
+        break :environ .{ .slice = c_environ[0..env_count :null] };
+    } else .global;
+
+    global.state.init(argv, environ) catch |err| {
+        std.log.err("Global state err={}", .{err});
+        return 1;
+    };
+
+    return 0;
+}
+
+pub export fn odyssey_deinit() void {
+    global.state.deinit();
+}
+
+pub export fn odyssey_db_start() c_int {
+    db.init(global.state.gpa) catch |err| {
+        std.log.err("error starting zqlite pool: {}", .{err});
+        return 1;
+    };
+    return 0;
+}
+
+pub export fn odyssey_db_stop() void {
+    db.deinit();
+}
+
+pub export fn odyssey_app_new(options: *const ExternAppOptions) ?*App {
+    return app_new(options) catch |err| {
+        std.log.err("error initializing app: {}", .{err});
+        return null;
+    };
+}
+
+fn app_new(options: *const ExternAppOptions) !*App {
+    var app = try state.gpa.create(App);
+    errdefer state.gpa.destroy(app);
+
+    const callback = try state.gpa.create(ExternAppCallback);
+    errdefer state.gpa.destroy(callback);
+
+    callback.* = .{
+        .userdata = options.userdata,
+        .wakeup_cb = options.wakeup_cb,
+    };
+
+    try app.init(
+        .{
+            .userdata = callback,
+            .wakeup_cb = ExternAppCallback.wakeup,
+        },
+        state.gpa,
+        state.threaded.io(),
+    );
+
+    return app;
+}
+
+pub export fn odyssey_app_free(app: *App) void {
+    const callback: *ExternAppCallback = @ptrCast(@alignCast(app.options.userdata));
+    app.deinit();
+    state.gpa.destroy(callback);
+    state.gpa.destroy(app);
+}
+
+pub export fn odyssey_app_flush(app: *App) void {
+    app.flush();
+}
+
+pub export fn odyssey_drop_entity(entity: ExternEntity) void {
+    entity.any().drop();
+}
+
+pub export fn odyssey_workspace_new(app: *App, paths: Slice(String)) MaybeEntity {
+    const workspace = workspace_new(app, paths) catch |err| {
+        std.log.err("error creating workspace={}", .{err});
+        return .none;
+    };
+
+    return .some(.init(workspace.any));
+}
+
+fn workspace_new(app: *App, extern_paths: Slice(String)) !ent.Entity(Workspace) {
+    var buffer: [1024][]const u8 = undefined;
+
+    const string_slices = extern_paths.slice() orelse
+        return error.PathsAreRequired;
+
+    for (
+        string_slices,
+        0..,
+    ) |slice, idx| {
+        if (idx == buffer.len) break;
+        buffer[idx] = slice.slice() orelse return error.EmptyPath;
+    }
+
+    const paths = buffer[0..string_slices.len];
+
+    const workspace: ent.Entity(Workspace) = try .new(
+        app,
+        .{
+            Workspace.Options{
+                .paths = paths,
+                .session = 0,
+            },
+            state.threaded.io(),
+        },
+    );
+    errdefer workspace.drop();
+
+    return workspace;
+}
+
+pub export fn odyssey_remove_observer(observer: ExternObserver) void {
+    const sub = observer.subscription();
+    sub.unsubscribe() catch |err| {
+        std.log.err("unsubscribe err={}", .{err});
+    };
+}
+
+pub export fn odyssey_session_new(app: *App) MaybeEntity {
+    const session = session_new(app) catch |err| {
+        std.log.err("error creating session={}", .{err});
+        return .none;
+    };
+
+    return .some(.init(session.any));
+}
+
+fn session_new(app: *App) !ent.Entity(Session) {
+    const io = state.threaded.io();
+    const gpa = state.gpa;
+    const conn = try db.acquire(io);
+    defer db.release(io, conn);
+
+    const session: ent.Entity(Session) = try .new(app, .{
+        gpa,
+        &conn,
+        io,
+    });
+
+    return session;
 }
 
 pub export fn odyssey_workspace_get_all_metadata_and_validate() ExternSerializedWorkspaces {
@@ -293,9 +347,9 @@ fn workspace_get_all_metadata_and_validate() !ExternSerializedWorkspaces {
     defer db.release(io, conn);
 
     const workspaces = try Workspace.persistence.getAllMetadataAndValidate(conn, gpa, io);
-    defer free_workspace_slice(workspaces);
+    defer gpa.free(workspaces);
 
-    return try ExternSerializedWorkspaces.init(workspaces);
+    return try ExternSerializedWorkspaces.init(workspaces, gpa);
 }
 
 pub export fn odyssey_workspace_get_by_session(app: *App, session_entity: ExternEntity) ExternSerializedWorkspaces {
@@ -315,15 +369,16 @@ fn workspace_get_by_session(app: *App, session_entity: ExternEntity) !ExternSeri
     defer db.release(io, conn);
 
     const workspaces = try Workspace.persistence.getBySession(conn, gpa, old_id);
-    defer free_workspace_slice(workspaces);
+    defer gpa.free(workspaces);
 
-    return try ExternSerializedWorkspaces.init(workspaces);
+    return try ExternSerializedWorkspaces.init(workspaces, gpa);
 }
 
 pub export fn odyssey_workspace_list_free(list: ExternSerializedWorkspaces) void {
     const list_ptr = list.ptr orelse return;
-    for (list_ptr[0..list.len]) |workspace| {
+    const workspaces = list_ptr[0..list.len];
+    for (workspaces) |workspace| {
         if (workspace.paths.ptr) |paths| state.gpa.free(paths[0..workspace.paths.len]);
     }
-    state.gpa.free(list_ptr[0..list.len]);
+    state.gpa.free(workspaces);
 }

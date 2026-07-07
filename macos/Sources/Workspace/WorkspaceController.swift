@@ -14,8 +14,26 @@ private final class WorkspaceWindow: NSWindow {
 final class WorkspaceController: NSWindowController, NSWindowDelegate {
     private let workspace: Odyssey.Workspace
 
-    init(delegate: AppDelegate) {
-        self.workspace = Odyssey.Workspace(app: delegate.app)
+    init(delegate: AppDelegate, path: String) {
+        self.workspace = Odyssey.Workspace(app: delegate.app, path: path)
+
+        let window = WorkspaceWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+
+        window.isReleasedWhenClosed = false
+        window.isRestorable = false
+        window.titlebarAppearsTransparent = true
+
+        super.init(window: window)
+        window.delegate = self
+    }
+
+    init(delegate: AppDelegate, paths: [String]) {
+        self.workspace = Odyssey.Workspace(app: delegate.app, paths: paths)
 
         let window = WorkspaceWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),

@@ -31,6 +31,27 @@ pub const SerializedWorkspace = struct {
 
 const PATH_DELIMITER: u8 = ',';
 
+fn serializePaths(allocator: Allocator, paths: []const []const u8) ![]u8 {
+    if (paths.len == 0) return try allocator.alloc(u8, 0);
+
+    var len: usize = 0;
+    for (paths) |path| len += path.len + 1;
+    len -= 1;
+
+    const buffer = try allocator.alloc(u8, len);
+    len = 0;
+    for (paths, 0..) |path, i| {
+        if (i > 0) {
+            buffer[len] = PATH_DELIMITER;
+            len += 1;
+        }
+        @memcpy(buffer[len .. len + path.len], path);
+        len += path.len;
+    }
+
+    return buffer;
+}
+
 pub fn insertDefault(conn: zqlite.Conn) !i64 {
     const row = (try conn.row(
         \\INSERT INTO workspace DEFAULT VALUES
@@ -42,22 +63,8 @@ pub fn insertDefault(conn: zqlite.Conn) !i64 {
 }
 
 pub fn insert(conn: zqlite.Conn, allocator: Allocator, workspace: SerializedWorkspace) !void {
-    var len: usize = 0;
-    for (workspace.paths) |path| len += path.len + 1;
-    len -= 1;
-
-    const buffer = try allocator.alloc(u8, len);
+    const buffer = try serializePaths(allocator, workspace.paths);
     defer allocator.free(buffer);
-
-    len = 0;
-    for (workspace.paths, 0..) |path, i| {
-        if (i > 0) {
-            buffer[len] = ',';
-            len += 1;
-        }
-        @memcpy(buffer[len .. len + path.len], path);
-        len += path.len;
-    }
 
     const session = if (workspace.session) |id| try std.fmt.allocPrint(allocator, "{}", .{id}) else null;
     defer if (session) |text| allocator.free(text);
@@ -91,6 +98,20 @@ pub fn get(conn: zqlite.Conn, allocator: Allocator, id: i64) !?SerializedWorkspa
         \\FROM workspace
         \\WHERE id = ?
     , .{id})) orelse return null;
+    defer row.deinit();
+
+    return try deserialize(allocator, row);
+}
+
+pub fn getByPaths(conn: zqlite.Conn, allocator: Allocator, paths: []const []const u8) !?SerializedWorkspace {
+    const paths_text = try serializePaths(allocator, paths);
+    defer allocator.free(paths_text);
+
+    const row = (try conn.row(
+        \\SELECT id, paths, session, window_x, window_y, window_width, window_height, timestamp
+        \\FROM workspace
+        \\WHERE paths = ?
+    , .{paths_text})) orelse return null;
     defer row.deinit();
 
     return try deserialize(allocator, row);
@@ -253,6 +274,36 @@ test "insert and get workspace paths using delimiter" {
     try std.testing.expect(workspace.window != null);
     try std.testing.expectEqual(@as(f64, 1), workspace.window.?.x);
     try std.testing.expect(workspace.timestamp > 0);
+}
+
+test "getByPaths returns workspace matching ordered paths" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var pool = try db.testingPool(alloc);
+    defer pool.deinit();
+
+    const conn = try pool.acquire(io);
+    defer conn.release(io);
+
+    try insert(conn, alloc, .{
+        .id = 1,
+        .paths = &.{ "/a/project", "/b/project" },
+    });
+    try insert(conn, alloc, .{
+        .id = 2,
+        .paths = &.{ "/a/project", "/c/project" },
+    });
+
+    const workspace = (try getByPaths(conn, alloc, &.{ "/a/project", "/b/project" })).?;
+    defer workspace.deinit(alloc);
+
+    try testing.expectEqual(@as(i64, 1), workspace.id);
+    try testing.expectEqual(@as(usize, 2), workspace.paths.len);
+    try testing.expectEqualStrings("/a/project", workspace.paths[0]);
+    try testing.expectEqualStrings("/b/project", workspace.paths[1]);
+
+    try testing.expect((try getByPaths(conn, alloc, &.{"/missing/project"})) == null);
 }
 
 test "insertDefault returns unique SQLite rowid workspace ids" {
