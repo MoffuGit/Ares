@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS workspace (
     id INTEGER PRIMARY KEY,
-    paths TEXT NOT NULL,
+    paths TEXT NOT NULL DEFAULT '',
     session TEXT,
     window_x REAL,
     window_y REAL,

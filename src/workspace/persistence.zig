@@ -20,7 +20,7 @@ pub const SerializedWorkspace = struct {
     paths: []const []const u8,
     session: ?u128 = null,
     window: ?SerializedWindowBounds = null,
-    timestamp: ?i64 = null,
+    timestamp: i64 = 0,
     id: i64,
 
     pub fn deinit(self: SerializedWorkspace, allocator: Allocator) void {
@@ -30,6 +30,16 @@ pub const SerializedWorkspace = struct {
 };
 
 const PATH_DELIMITER: u8 = ',';
+
+pub fn insertDefault(conn: zqlite.Conn) !i64 {
+    const row = (try conn.row(
+        \\INSERT INTO workspace DEFAULT VALUES
+        \\RETURNING id
+    , .{})) orelse return error.MissingInsertedWorkspaceId;
+    defer row.deinit();
+
+    return row.int(0);
+}
 
 pub fn insert(conn: zqlite.Conn, allocator: Allocator, workspace: SerializedWorkspace) !void {
     var len: usize = 0;
@@ -146,7 +156,7 @@ pub fn getAllMetadata(conn: zqlite.Conn, allocator: Allocator) ![]SerializedWork
         try workspaces.append(allocator, .{
             .id = row.int(0),
             .paths = paths,
-            .timestamp = row.nullableInt(2),
+            .timestamp = row.int(2),
         });
     }
     if (rows.err) |err| return err;
@@ -197,6 +207,7 @@ fn deserialize(allocator: Allocator, row: zqlite.Row) !SerializedWorkspace {
 
     var iter = mem.splitScalar(u8, paths_text, PATH_DELIMITER);
     while (iter.next()) |path| : (path_index += 1) {
+        if (path_count == 0) break;
         paths[path_index] = try allocator.dupe(u8, path);
     }
 
@@ -212,7 +223,7 @@ fn deserialize(allocator: Allocator, row: zqlite.Row) !SerializedWorkspace {
         .paths = paths,
         .session = session,
         .window = window_bounds,
-        .timestamp = row.nullableInt(7),
+        .timestamp = row.int(7),
     };
 }
 
@@ -241,7 +252,33 @@ test "insert and get workspace paths using delimiter" {
     try std.testing.expect(workspace.session == null);
     try std.testing.expect(workspace.window != null);
     try std.testing.expectEqual(@as(f64, 1), workspace.window.?.x);
-    try std.testing.expect(workspace.timestamp != null);
+    try std.testing.expect(workspace.timestamp > 0);
+}
+
+test "insertDefault returns unique SQLite rowid workspace ids" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var pool = try db.testingPool(alloc);
+    defer pool.deinit();
+
+    const conn = try pool.acquire(io);
+    defer conn.release(io);
+
+    const first_id = try insertDefault(conn);
+    const second_id = try insertDefault(conn);
+
+    try testing.expect(first_id > 0);
+    try testing.expect(second_id > 0);
+    try testing.expect(first_id != second_id);
+
+    const first = (try get(conn, alloc, first_id)).?;
+    defer first.deinit(alloc);
+    const second = (try get(conn, alloc, second_id)).?;
+    defer second.deinit(alloc);
+
+    try testing.expectEqual(@as(usize, 0), first.paths.len);
+    try testing.expectEqual(@as(usize, 0), second.paths.len);
 }
 
 test "getAllValidMetadata returns existing workspaces" {

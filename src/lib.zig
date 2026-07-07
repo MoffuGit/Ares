@@ -227,9 +227,7 @@ const ExternSerializedWorkspace = extern struct {
     paths: Slice(String),
     session: Option(u128),
     window: Option(ExternSerializedWindowBounds),
-    has_window: bool,
     timestamp: i64,
-    has_timestamp: bool,
     id: i64,
 
     fn init(workspace: Workspace.SerializedWorkspace, paths: []String) @This() {
@@ -237,9 +235,7 @@ const ExternSerializedWorkspace = extern struct {
             .paths = .init(paths),
             .session = if (workspace.session) |session| .some(session) else .none,
             .window = if (workspace.window) |window| .some(.init(window)) else .none,
-            .has_window = workspace.window != null,
-            .timestamp = workspace.timestamp orelse 0,
-            .has_timestamp = workspace.timestamp != null,
+            .timestamp = workspace.timestamp,
             .id = workspace.id,
         };
     }

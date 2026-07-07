@@ -105,9 +105,7 @@ typedef struct {
     odyssey_workspace_paths_s paths;
     odyssey_maybe_u128_s session;
     odyssey_maybe_workspace_window_bounds_s window;
-    bool has_window;
     int64_t timestamp;
-    bool has_timestamp;
     int64_t id;
 } odyssey_serialized_workspace_s;
 
