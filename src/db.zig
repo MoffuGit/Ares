@@ -38,7 +38,7 @@ pub fn init(gpa: Allocator) !void {
             zqlite.OpenFlags.ReadWrite |
             zqlite.OpenFlags.EXResCode,
         .path = slice,
-        .on_first_connection = &onFirstConnection,
+        .on_first_connection = onFirstConnection,
     });
 }
 
