@@ -17,6 +17,10 @@ pub const TypeInfo = struct {
                 @as(*T, @ptrCast(@alignCast(ptr))).deinit();
             }
 
+            fn drop(ptr: *anyopaque) void {
+                @as(*T, @ptrCast(@alignCast(ptr))).drop();
+            }
+
             var info: TypeInfo = .{
                 .size = @sizeOf(T),
                 .alignment = @alignOf(T),

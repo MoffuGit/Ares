@@ -27,6 +27,7 @@ conn: zqlite.Conn,
 arena: heap.ArenaAllocator,
 project: Entity(Project),
 paths: std.ArrayList([]u8),
+id: i64,
 
 pub fn init(
     self: *Workspace,
@@ -38,6 +39,7 @@ pub fn init(
     errdefer db.release(io, conn);
 
     self.* = .{
+        .id = undefined,
         .io = io,
         .gpa = ctx.gpa(),
         .conn = conn,
@@ -53,17 +55,16 @@ pub fn init(
         const copy = try self.arena.allocator().dupe(u8, path);
         self.paths.appendAssumeCapacity(copy);
     }
-}
 
-// const id = if (try Workspace.persistence.getByPaths(conn, gpa, paths)) |serialized| id: {
-//     defer serialized.deinit(gpa);
-//     break :id serialized.id;
-// } else id: {
-//     const new_id = try Workspace.persistence.insertDefault(conn);
-//     try Workspace.persistence.insert(conn, gpa, .{ .id = new_id, .paths = paths });
-//     break :id new_id;
-// };
-//
+    self.id = if (try Workspace.persistence.getByPaths(conn, self.gpa, self.paths.items)) |serialized| id: {
+        defer serialized.deinit(self.gpa);
+        break :id serialized.id;
+    } else id: {
+        const new_id = try Workspace.persistence.insertDefault(conn);
+        try Workspace.persistence.insert(conn, self.gpa, .{ .id = new_id, .paths = self.paths.items });
+        break :id new_id;
+    };
+}
 
 pub fn drop(self: *Workspace) void {
     self.project.drop();
