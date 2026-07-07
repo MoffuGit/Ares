@@ -8,7 +8,6 @@
 import OdysseyKit
 
 extension Odyssey {
-    @MainActor
     class Entity {
         let app: Odyssey.App
         var entity: odyssey_entity_s?

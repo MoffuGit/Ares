@@ -8,6 +8,7 @@
 import Foundation
 import os
 
+@MainActor
 enum Odyssey {
     static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier!,

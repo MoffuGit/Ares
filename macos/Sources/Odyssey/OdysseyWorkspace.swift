@@ -8,7 +8,6 @@ import OdysseyKit
 import os
 
 extension Odyssey {
-    @MainActor
     final class SerializedWorkspaces {
         let list: odyssey_workspace_list_s
 
@@ -35,7 +34,6 @@ extension Odyssey {
         }
     }
 
-    @MainActor
     final class Workspace: Entity {
         init(app: Odyssey.App) {
             guard let odysseyApp = app.app else {
