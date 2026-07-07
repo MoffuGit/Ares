@@ -292,7 +292,6 @@ fn workspace_new(app: *App, extern_paths: Slice(String)) !ent.Entity(Workspace) 
         .{
             Workspace.Options{
                 .paths = paths,
-                .session = 0,
             },
             state.threaded.io(),
         },
