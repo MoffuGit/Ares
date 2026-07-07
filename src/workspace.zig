@@ -65,12 +65,12 @@ pub fn init(
 // };
 //
 
-//NOTE:
-//there's a detail around the project.drop function call
-//that thing should happne before we try to deinit(),
+pub fn drop(self: *Workspace) void {
+    self.project.drop();
+}
+
 pub fn deinit(self: *Workspace) void {
     db.release(self.io, self.conn);
-    self.project.drop();
     self.arena.deinit();
 }
 

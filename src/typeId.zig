@@ -6,6 +6,7 @@ const MAX_ALIGN = constants.MAX_ALIGN;
 
 pub const TypeInfo = struct {
     deinit_fn: ?*const fn (*anyopaque) void,
+    drop_fn: ?*const fn (*anyopaque) void,
     size: usize,
     alignment: u8,
 
@@ -20,6 +21,7 @@ pub const TypeInfo = struct {
                 .size = @sizeOf(T),
                 .alignment = @alignOf(T),
                 .deinit_fn = if (@hasDecl(T, "deinit")) @This().deinit else null,
+                .drop_fn = if (@hasDecl(T, "drop")) @This().drop else null,
             };
         }.info;
     }
@@ -28,8 +30,11 @@ pub const TypeInfo = struct {
         if (self.deinit_fn) |deinit_fn| deinit_fn(ptr);
     }
 
+    pub fn drop(self: *const @This(), ptr: *anyopaque) void {
+        if (self.drop_fn) |drop_fn| drop_fn(ptr);
+    }
+
     pub fn destroy(self: *const @This(), ptr: *anyopaque, alloc: Allocator) void {
-        self.deinit(ptr);
         if (self.size == 0) return;
         const non_const_ptr = @as([*]u8, @ptrCast(ptr));
         alloc.rawFree(non_const_ptr[0..self.size], .fromByteUnits(self.alignment), @returnAddress());

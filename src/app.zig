@@ -195,6 +195,7 @@ pub fn destroy_dropped_entities(self: *App) void {
         const ptr, const key, const type_info = drop;
 
         self.observers.remove(key);
+        type_info.deinit(ptr);
         type_info.destroy(ptr, alloc);
         self.entities.recycle(key);
     }

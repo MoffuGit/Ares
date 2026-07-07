@@ -17,6 +17,6 @@ pub fn init(self: *Project, ctx: Context(Project), arena: Allocator) !void {
     };
 }
 
-pub fn deinit(self: *Project) void {
+pub fn drop(self: *Project) void {
     self.worktree_store.drop();
 }
