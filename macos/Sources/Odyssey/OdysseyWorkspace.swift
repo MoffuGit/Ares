@@ -9,6 +9,33 @@ import os
 
 extension Odyssey {
     @MainActor
+    final class SerializedWorkspaces {
+        let list: odyssey_workspace_list_s
+
+        init(_ list: odyssey_workspace_list_s) {
+            self.list = list
+        }
+
+        static func getAllMetadataAndValidate() -> SerializedWorkspaces {
+            SerializedWorkspaces(odyssey_workspace_get_all_metadata_and_validate())
+        }
+
+        static func getBySession(app: Odyssey.App, session: Odyssey.Session) -> SerializedWorkspaces
+        {
+            guard let odysseyApp = app.app, let sessionEntity = session.entity else {
+                logger.critical("odyssey_workspace_get_by_session failed: app or session is nil")
+                return SerializedWorkspaces(odyssey_workspace_list_s(ptr: nil, len: 0))
+            }
+
+            return SerializedWorkspaces(odyssey_workspace_get_by_session(odysseyApp, sessionEntity))
+        }
+
+        deinit {
+            odyssey_workspace_list_free(list)
+        }
+    }
+
+    @MainActor
     final class Workspace: Entity {
         init(app: Odyssey.App) {
             guard let odysseyApp = app.app else {
