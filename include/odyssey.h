@@ -101,6 +101,7 @@ typedef struct {
 
 typedef odyssey_maybe_entity_s odyssey_workspace_creation_t;
 odyssey_workspace_creation_t odyssey_workspace_new(odyssey_app_t app, odyssey_entity_s session, odyssey_workspace_paths_s paths);
+void odyssey_workspace_mark_for_restoration(odyssey_app_t app, odyssey_entity_s workspace);
 
 ////////////////////////
 //~ SerializedWorkspaces
