@@ -32,7 +32,6 @@ final class WorkspaceController: NSWindowController, NSWindowDelegate {
         window.delegate = self
     }
 
-    
     init(delegate: AppDelegate, session: Odyssey.Session, paths: [String]) {
         self.workspace = Odyssey.Workspace(app: delegate.app, session: session, paths: paths)
 
