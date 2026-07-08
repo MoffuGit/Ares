@@ -3,6 +3,7 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 const testing = std.testing;
 const Io = std.Io;
+const uuid = @import("../uuid.zig");
 
 const zqlite = @import("zqlite");
 
@@ -18,7 +19,7 @@ pub const SerializedWindowBounds = struct {
 
 pub const SerializedWorkspace = struct {
     paths: []const []const u8,
-    session: ?u128 = null,
+    session: ?uuid.Uuid = null,
     window: ?SerializedWindowBounds = null,
     timestamp: i64 = 0,
     id: i64,
@@ -62,6 +63,20 @@ pub fn insertDefault(conn: zqlite.Conn) !i64 {
     return row.int(0);
 }
 
+pub fn setPaths(conn: zqlite.Conn, id: i64, paths: []const []const u8, allocator: Allocator) !void {
+    const buffer = try serializePaths(allocator, paths);
+    defer allocator.free(buffer);
+
+    try conn.exec(
+        \\UPDATE workspace
+        \\SET paths = ?
+        \\WHERE id = ?
+    , .{
+        buffer,
+        id,
+    });
+}
+
 pub fn insert(conn: zqlite.Conn, allocator: Allocator, workspace: SerializedWorkspace) !void {
     const buffer = try serializePaths(allocator, workspace.paths);
     defer allocator.free(buffer);
@@ -89,6 +104,20 @@ pub fn insert(conn: zqlite.Conn, allocator: Allocator, workspace: SerializedWork
         if (bounds) |b| b.y else null,
         if (bounds) |b| b.width else null,
         if (bounds) |b| b.height else null,
+    });
+}
+
+pub fn setSession(conn: zqlite.Conn, id: i64, session: uuid.Uuid, allocator: Allocator) !void {
+    const fmt = try uuid.fmt(session, allocator);
+    defer allocator.free(fmt);
+
+    try conn.exec(
+        \\UPDATE workspace
+        \\SET session = ?
+        \\WHERE id = ?
+    , .{
+        fmt,
+        id,
     });
 }
 
@@ -124,7 +153,7 @@ fn deleteById(conn: zqlite.Conn, id: i64) !void {
     , .{id});
 }
 
-pub fn getBySession(conn: zqlite.Conn, allocator: Allocator, session: u128) ![]SerializedWorkspace {
+pub fn getBySession(conn: zqlite.Conn, allocator: Allocator, session: uuid.Uuid) ![]SerializedWorkspace {
     var rows = try conn.rows(
         \\SELECT id, paths, session, window_x, window_y, window_width, window_height, timestamp
         \\FROM workspace
@@ -216,7 +245,7 @@ pub fn getAllMetadataAndValidate(conn: zqlite.Conn, allocator: Allocator, io: Io
 
 fn deserialize(allocator: Allocator, row: zqlite.Row) !SerializedWorkspace {
     const paths_text = row.text(1);
-    const session = if (row.nullableText(2)) |text| try std.fmt.parseInt(u128, text, 10) else null;
+    const session = if (row.nullableText(2)) |text| uuid.parse(text) else null;
 
     const path_count: usize = if (paths_text.len == 0) 0 else mem.count(u8, paths_text, &.{PATH_DELIMITER}) + 1;
     const paths = try allocator.alloc([]const u8, path_count);
@@ -330,6 +359,55 @@ test "insertDefault returns unique SQLite rowid workspace ids" {
 
     try testing.expectEqual(@as(usize, 0), first.paths.len);
     try testing.expectEqual(@as(usize, 0), second.paths.len);
+}
+
+test "setSession updates workspace session and getBySession returns matching workspaces" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var pool = try db.testingPool(alloc);
+    defer pool.deinit();
+
+    const conn = try pool.acquire(io);
+    defer conn.release(io);
+
+    const session: uuid.Uuid = 123456789;
+    const other_session: uuid.Uuid = 987654321;
+
+    try insert(conn, alloc, .{
+        .id = 1,
+        .paths = &.{"/shared/one"},
+    });
+    try insert(conn, alloc, .{
+        .id = 2,
+        .paths = &.{"/shared/two"},
+    });
+    try insert(conn, alloc, .{
+        .id = 3,
+        .paths = &.{"/other/session"},
+        .session = other_session,
+    });
+
+    try setSession(conn, 1, session, alloc);
+    try setSession(conn, 2, session, alloc);
+
+    const first = (try get(conn, alloc, 1)).?;
+    defer first.deinit(alloc);
+    try testing.expectEqual(session, first.session.?);
+
+    const workspaces = try getBySession(conn, alloc, session);
+    defer {
+        for (workspaces) |workspace| workspace.deinit(alloc);
+        alloc.free(workspaces);
+    }
+
+    try testing.expectEqual(@as(usize, 2), workspaces.len);
+    try testing.expectEqual(@as(i64, 1), workspaces[0].id);
+    try testing.expectEqual(session, workspaces[0].session.?);
+    try testing.expectEqualStrings("/shared/one", workspaces[0].paths[0]);
+    try testing.expectEqual(@as(i64, 2), workspaces[1].id);
+    try testing.expectEqual(session, workspaces[1].session.?);
+    try testing.expectEqualStrings("/shared/two", workspaces[1].paths[0]);
 }
 
 test "getAllValidMetadata returns existing workspaces" {

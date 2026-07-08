@@ -22,12 +22,13 @@ pub const Options = struct {
 };
 
 io: Io,
+id: i64,
 gpa: Allocator,
 conn: zqlite.Conn,
+session: uuid.Uuid,
 arena: heap.ArenaAllocator,
 project: Entity(Project),
 paths: std.ArrayList([]u8),
-id: i64,
 
 pub fn init(
     self: *Workspace,
@@ -39,6 +40,7 @@ pub fn init(
     errdefer db.release(io, conn);
 
     self.* = .{
+        .session = options.session,
         .id = undefined,
         .io = io,
         .gpa = ctx.gpa(),
@@ -56,14 +58,18 @@ pub fn init(
         self.paths.appendAssumeCapacity(copy);
     }
 
-    self.id = if (try Workspace.persistence.getByPaths(conn, self.gpa, self.paths.items)) |serialized| id: {
+    self.id = if (try persistence.getByPaths(conn, self.gpa, self.paths.items)) |serialized| id: {
         defer serialized.deinit(self.gpa);
         break :id serialized.id;
     } else id: {
-        const new_id = try Workspace.persistence.insertDefault(conn);
-        try Workspace.persistence.insert(conn, self.gpa, .{ .id = new_id, .paths = self.paths.items });
+        const new_id = try persistence.insertDefault(conn);
+        try persistence.setPaths(conn, new_id, self.paths.items, self.gpa);
         break :id new_id;
     };
+}
+
+pub fn markForRestoration(self: *Workspace) !void {
+    try persistence.setSession(self.conn, self.id, self.session, self.gpa);
 }
 
 pub fn drop(self: *Workspace) void {

@@ -306,6 +306,16 @@ fn workspace_new(app: *App, session: ent.Entity(Session), extern_paths: Slice(St
     return workspace;
 }
 
+pub export fn odyssey_workspace_mark_for_restoration(app: *App, extern_entity: ExternEntity) void {
+    const workspace = extern_entity.any().into(Workspace) orelse @panic("Missing Workspace Entity");
+    const ptr, const update = workspace.update(app);
+    defer update.end(ptr);
+
+    ptr.markForRestoration() catch |err| {
+        std.log.warn("Workspace would not restore={}", .{err});
+    };
+}
+
 pub export fn odyssey_remove_observer(observer: ExternObserver) void {
     const sub = observer.subscription();
     sub.unsubscribe() catch |err| {
