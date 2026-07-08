@@ -33,11 +33,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func createWorkspaceController(path: String) -> WorkspaceController {
-        WorkspaceController(delegate: self, session:session, path: path)
+        WorkspaceController(delegate: self, session: session, path: path)
     }
 
     func createWorkspaceController(paths: [String]) -> WorkspaceController {
-        WorkspaceController(delegate: self, session:session, paths: paths)
+        WorkspaceController(delegate: self, session: session, paths: paths)
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
@@ -50,5 +50,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return true
+    }
+
+    func selectPathsForNewWorkspace(window: NSWindow) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.canCreateDirectories = false
+        panel.prompt = "Create Workspace"
+
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK else { return }
+            self?.createWorkspace(paths: panel.urls.map(\.path))
+        }
+    }
+
+    func createWorkspace(paths: [String]) {
+        let paths = Odyssey.Workspace.normalizedPaths(paths)
+        guard !paths.isEmpty else { return }
+
+        let controller = createWorkspaceController(paths: paths)
+        controller.showWindow(nil)
+        controller.window?.center()
     }
 }

@@ -7,11 +7,12 @@
 
 import AppKit
 
-final class WorkspaceStoreContent: NSView, NSTableViewDataSource, NSTableViewDelegate {
+class WorkspaceStoreContent: NSView, NSTableViewDataSource, NSTableViewDelegate {
     private let workspaces: [Odyssey.SerializedWorkspace]
-    private let createWorkspace: () -> Void
+    private let stackView = NSStackView()
+    private let toolbar = WorkspaceStoreToolbar(frame: .zero)
+    private let contentView = NSView()
     private let emptyView = NSTextField(labelWithString: "No workspaces found")
-    private let createButton = NSButton(title: "New Workspace", target: nil, action: nil)
     private let scrollView = NSScrollView()
     private lazy var tableView: NSTableView = {
         let tableView = NSTableView()
@@ -29,30 +30,34 @@ final class WorkspaceStoreContent: NSView, NSTableViewDataSource, NSTableViewDel
         return tableView
     }()
 
-    init(workspaces: Odyssey.SerializedWorkspaces, createWorkspace: @escaping () -> Void) {
+    init(workspaces: Odyssey.SerializedWorkspaces) {
         self.workspaces = workspaces.workspaces
-        self.createWorkspace = createWorkspace
 
         super.init(frame: .zero)
 
-        translatesAutoresizingMaskIntoConstraints = false
-        setupCreateButton()
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        stackView.orientation = .vertical
+        stackView.spacing = 0
+        addSubview(stackView)
+        stackView.addArrangedSubview(toolbar)
+        stackView.addArrangedSubview(contentView)
+        stackView.setCustomSpacing(0, after: toolbar)
+
+        setupContentView()
         setupEmptyView()
         setupTableView()
         updateVisibility()
-    }
-
-    private func setupCreateButton() {
-        createButton.translatesAutoresizingMaskIntoConstraints = false
-        createButton.bezelStyle = .rounded
-        createButton.target = self
-        createButton.action = #selector(createWorkspaceButtonPressed)
-        addSubview(createButton)
 
         NSLayoutConstraint.activate([
-            createButton.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-            createButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            stackView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stackView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stackView.topAnchor.constraint(equalTo: topAnchor),
+            stackView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+    }
+
+    private func setupContentView() {
+        contentView.translatesAutoresizingMaskIntoConstraints = false
     }
 
     private func setupEmptyView() {
@@ -60,11 +65,11 @@ final class WorkspaceStoreContent: NSView, NSTableViewDataSource, NSTableViewDel
         emptyView.alignment = .center
         emptyView.font = .systemFont(ofSize: 17, weight: .medium)
         emptyView.textColor = .secondaryLabelColor
-        addSubview(emptyView)
+        contentView.addSubview(emptyView)
 
         NSLayoutConstraint.activate([
-            emptyView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            emptyView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            emptyView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            emptyView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
         ])
     }
 
@@ -73,18 +78,14 @@ final class WorkspaceStoreContent: NSView, NSTableViewDataSource, NSTableViewDel
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.documentView = tableView
-        addSubview(scrollView)
+        contentView.addSubview(scrollView)
 
         NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: createButton.bottomAnchor, constant: 16),
-            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
         ])
-    }
-
-    @objc private func createWorkspaceButtonPressed() {
-        createWorkspace()
     }
 
     private func updateVisibility() {

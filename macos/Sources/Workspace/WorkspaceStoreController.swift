@@ -1,9 +1,9 @@
-//
-//  WorkspaceListController.swift
-//  Odyssey
-//
-//  Created by Adrian Hess on 03/07/26.
-//
+// //
+// //  WorkspaceListController.swift
+// //  Odyssey
+// //
+// //  Created by Adrian Hess on 03/07/26.
+// //
 
 import AppKit
 
@@ -15,8 +15,6 @@ class WorkspaceStoreController: NSWindowController,
     NSWindowDelegate
 {
     private weak var app: AppDelegate?
-    private var workspaceControllers: [WorkspaceController] = []
-    private var toolbarAccessory: NSTitlebarAccessoryViewController?
     private let workspaces: Odyssey.SerializedWorkspaces
 
     init(app: AppDelegate, workspaces: Odyssey.SerializedWorkspaces) {
@@ -25,20 +23,25 @@ class WorkspaceStoreController: NSWindowController,
 
         let window = WorkspaceStoreWindow(
             contentRect: NSRect(x: 0, y: 0, width: 650, height: 550),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            styleMask: [.closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
 
         window.isReleasedWhenClosed = false
         window.isRestorable = false
-        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.backgroundColor = .clear
 
         super.init(window: window)
         window.delegate = self
-        window.contentView = WorkspaceStoreContent(workspaces: workspaces) { [weak self] in
-            self?.selectPathsForNewWorkspace()
-        }
+        window.contentView = WorkspaceStoreContent(workspaces: workspaces)
+
+        let contentView = window.contentView
+        contentView?.wantsLayer = true
+        contentView?.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        contentView?.layer?.masksToBounds = true
+        contentView?.layer?.cornerRadius = 16
     }
 
     private func selectPathsForNewWorkspace() {
@@ -62,7 +65,6 @@ class WorkspaceStoreController: NSWindowController,
         guard !paths.isEmpty else { return }
 
         let controller = app.createWorkspaceController(paths: paths)
-        workspaceControllers.append(controller)
         controller.showWindow(nil)
         controller.window?.center()
     }
@@ -71,4 +73,5 @@ class WorkspaceStoreController: NSWindowController,
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+
 }
