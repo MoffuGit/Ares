@@ -36,6 +36,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         controller.window?.center()
     }
 
+    public func openWorkspace(_ paths: [String]) {
+        let paths = Odyssey.Workspace.normalizedPaths(paths)
+        guard !paths.isEmpty else { return }
+
+        let controller = WorkspaceController(
+            delegate: self, session: session, paths: paths)
+        controller.showWindow(nil)
+        controller.window?.center()
+    }
+
     func applicationWillTerminate(_ aNotification: Notification) {
         odyssey_db_stop()
     }
@@ -60,15 +70,5 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard response == .OK else { return }
             self?.openWorkspace(panel.urls.map(\.path))
         }
-    }
-
-    public func openWorkspace(_ paths: [String]) {
-        let paths = Odyssey.Workspace.normalizedPaths(paths)
-        guard !paths.isEmpty else { return }
-
-        let controller = WorkspaceController(
-            delegate: self, session: session, paths: paths)
-        controller.showWindow(nil)
-        controller.window?.center()
     }
 }
