@@ -58,11 +58,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK else { return }
-            self?.createWorkspace(paths: panel.urls.map(\.path))
+            self?.openWorkspace(panel.urls.map(\.path))
         }
     }
 
-    public func createWorkspace(paths: [String]) {
+    public func openWorkspace(_ paths: [String]) {
         let paths = Odyssey.Workspace.normalizedPaths(paths)
         guard !paths.isEmpty else { return }
 
