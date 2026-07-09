@@ -12,6 +12,7 @@ import OdysseyKit
 class AppDelegate: NSObject, NSApplicationDelegate {
     var app: Odyssey.App
     var session: Odyssey.Session
+    private var workspaceControllers: [WorkspaceController] = []
 
     override init() {
         app = Odyssey.App()
@@ -21,12 +22,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        let restored = Odyssey.SerializedWorkspaces.getBySession(app: app, session: session)
         let controller = WorkspaceHistoryController(
             app: self,
             workspaces: Odyssey.SerializedWorkspaces.getAllMetadataAndValidate()
         )
         controller.showWindow(nil)
         controller.window?.center()
+
+        for workspace in restored.workspaces {
+            openWorkspace(workspace)
+        }
     }
 
     func openWorkspace(_ workspace: Odyssey.SerializedWorkspace) {
@@ -39,6 +45,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let controller = WorkspaceController(
             delegate: self, session: session, paths: paths)
+        register(controller)
         controller.showWindow(nil)
         controller.window?.center()
     }
@@ -46,11 +53,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     public func openWorkspace(_ path: String) {
         let controller = WorkspaceController(
             delegate: self, session: session, path: path)
+        register(controller)
         controller.showWindow(nil)
         controller.window?.center()
     }
 
+    private func register(_ controller: WorkspaceController) {
+        workspaceControllers.append(controller)
+    }
+
+    func workspaceWindowWillClose(_ controller: WorkspaceController) {
+        let isLastWorkspaceWindow =
+            workspaceControllers.count == 1 && workspaceControllers.first === controller
+        if isLastWorkspaceWindow {
+            controller.markForRestoration()
+        }
+        workspaceControllers.removeAll { $0 === controller }
+    }
+
     func applicationWillTerminate(_ aNotification: Notification) {
+        for controller in workspaceControllers {
+            controller.markForRestoration()
+        }
         odyssey_db_stop()
     }
 

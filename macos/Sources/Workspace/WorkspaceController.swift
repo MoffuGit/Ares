@@ -13,9 +13,11 @@ private final class WorkspaceWindow: NSWindow {
 
 final class WorkspaceController: NSWindowController, NSWindowDelegate {
     private let workspace: Odyssey.Workspace
+    private weak var appDelegate: AppDelegate?
 
     init(delegate: AppDelegate, session: Odyssey.Session, path: String) {
         self.workspace = Odyssey.Workspace(app: delegate.app, session: session, path: path)
+        self.appDelegate = delegate
 
         let window = WorkspaceWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
@@ -34,6 +36,7 @@ final class WorkspaceController: NSWindowController, NSWindowDelegate {
 
     init(delegate: AppDelegate, session: Odyssey.Session, paths: [String]) {
         self.workspace = Odyssey.Workspace(app: delegate.app, session: session, paths: paths)
+        self.appDelegate = delegate
 
         let window = WorkspaceWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
@@ -53,5 +56,13 @@ final class WorkspaceController: NSWindowController, NSWindowDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        appDelegate?.workspaceWindowWillClose(self)
+    }
+
+    func markForRestoration() {
+        workspace.markForRestoration()
     }
 }

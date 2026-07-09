@@ -115,6 +115,16 @@ extension Odyssey {
             super.init(app: app, entity: maybe_entity.entity)
         }
 
+        func markForRestoration() {
+            guard let odysseyApp = app.app, let entity = entity else {
+                logger.critical("odyssey_workspace_mark_for_restoration failed: app or entity is nil")
+                return
+            }
+
+            odyssey_workspace_mark_for_restoration(odysseyApp, entity)
+            app.enqueueFlush()
+        }
+
         static func normalizedPaths(_ paths: [String]) -> [String] {
             Array(Set(paths.map { URL(fileURLWithPath: $0).standardizedFileURL.path })).sorted()
         }
