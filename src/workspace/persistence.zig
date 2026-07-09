@@ -3,12 +3,12 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 const testing = std.testing;
 const Io = std.Io;
-const uuid = @import("../uuid.zig");
 
 const zqlite = @import("zqlite");
 
 const db = @import("../db.zig");
 const global = @import("../global.zig");
+const uuid = @import("../uuid.zig");
 
 pub const SerializedWindowBounds = struct {
     x: f64,
@@ -69,7 +69,9 @@ pub fn setPaths(conn: zqlite.Conn, id: i64, paths: []const []const u8, allocator
 
     try conn.exec(
         \\UPDATE workspace
-        \\SET paths = ?
+        \\SET
+        \\  paths = ?,
+        \\  timestamp = unixepoch()
         \\WHERE id = ?
     , .{
         buffer,
@@ -113,7 +115,9 @@ pub fn setSession(conn: zqlite.Conn, id: i64, session: uuid.Uuid, allocator: All
 
     try conn.exec(
         \\UPDATE workspace
-        \\SET session = ?
+        \\SET
+        \\  session = ?,
+        \\  timestamp = unixepoch()
         \\WHERE id = ?
     , .{
         fmt,

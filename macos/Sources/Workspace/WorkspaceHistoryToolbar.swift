@@ -1,18 +1,19 @@
-// //
-// //  WorkSpaceStoreContentToolbar.swift
-// //  Odyssey
-// //
-// //  Created by Adrian Hess on 07/07/26.
-// //
+//
+//  WorkSpaceStoreContentToolbar.swift
+//  Odyssey
+//
+//  Created by Adrian Hess on 07/07/26.
+//
 
 import AppKit
 
-final class WorkspaceStoreToolbar: NSView {
+final class WorkspaceHistoryToolbar: NSView {
     fileprivate enum Metrics {
         static let height: CGFloat = 32
         static let buttonSize: CGFloat = 14
         static let buttonSpacing: CGFloat = 8
         static let leadingPadding: CGFloat = 10
+        static let trailingPadding: CGFloat = 10
     }
 
     private var trackingArea: NSTrackingArea?
@@ -41,11 +42,40 @@ final class WorkspaceStoreToolbar: NSView {
         accessibilityLabel: "Minimize"
     )
 
+    private lazy var createButton: NSButton = {
+        let button = NSButton(
+            title: "Add Workspace", target: self, action: nil)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.bezelStyle = .rounded
+        button.controlSize = .small
+        return button
+    }()
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
 
         translatesAutoresizingMaskIntoConstraints = false
-        setupButtons()
+        addSubview(closeButton)
+        addSubview(minimizeButton)
+        addSubview(createButton)
+
+        NSLayoutConstraint.activate([
+            closeButton.leadingAnchor.constraint(
+                equalTo: leadingAnchor, constant: Metrics.leadingPadding),
+            closeButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            closeButton.widthAnchor.constraint(equalToConstant: Metrics.buttonSize),
+            closeButton.heightAnchor.constraint(equalTo: closeButton.widthAnchor),
+
+            minimizeButton.leadingAnchor.constraint(
+                equalTo: closeButton.trailingAnchor, constant: Metrics.buttonSpacing),
+            minimizeButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            minimizeButton.widthAnchor.constraint(equalTo: closeButton.widthAnchor),
+            minimizeButton.heightAnchor.constraint(equalTo: closeButton.heightAnchor),
+
+            createButton.trailingAnchor.constraint(
+                equalTo: trailingAnchor, constant: -Metrics.trailingPadding),
+            createButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
     }
 
     override var intrinsicContentSize: NSSize {
@@ -78,25 +108,6 @@ final class WorkspaceStoreToolbar: NSView {
 
     override func mouseExited(with event: NSEvent) {
         isHoveringControls = false
-    }
-
-    private func setupButtons() {
-        addSubview(closeButton)
-        addSubview(minimizeButton)
-
-        NSLayoutConstraint.activate([
-            closeButton.leadingAnchor.constraint(
-                equalTo: leadingAnchor, constant: Metrics.leadingPadding),
-            closeButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            closeButton.widthAnchor.constraint(equalToConstant: Metrics.buttonSize),
-            closeButton.heightAnchor.constraint(equalTo: closeButton.widthAnchor),
-
-            minimizeButton.leadingAnchor.constraint(
-                equalTo: closeButton.trailingAnchor, constant: Metrics.buttonSpacing),
-            minimizeButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
-            minimizeButton.widthAnchor.constraint(equalTo: closeButton.widthAnchor),
-            minimizeButton.heightAnchor.constraint(equalTo: closeButton.heightAnchor),
-        ])
     }
 
     @objc private func closeWindow() {
@@ -183,7 +194,8 @@ private final class TrafficLightButton: NSControl {
         path.stroke()
 
         if isActive && showsSymbol {
-            drawSymbol(in: rect, color: borderColor.blended(withFraction: 0.35, of: .black) ?? borderColor)
+            drawSymbol(
+                in: rect, color: borderColor.blended(withFraction: 0.35, of: .black) ?? borderColor)
         }
     }
 
@@ -213,7 +225,8 @@ private final class TrafficLightButton: NSControl {
     }
 
     override func mouseUp(with event: NSEvent) {
-        let shouldSendAction = isPressed && bounds.contains(convert(event.locationInWindow, from: nil))
+        let shouldSendAction =
+            isPressed && bounds.contains(convert(event.locationInWindow, from: nil))
         isPressed = false
 
         if shouldSendAction {

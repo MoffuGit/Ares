@@ -11,33 +11,29 @@ import OdysseyKit
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     var app: Odyssey.App
-    private var session: Odyssey.Session
-    private var workspaceStoreWorkspaces: Odyssey.SerializedWorkspaces
-    private var workspaceStoreController: WorkspaceStoreController?
+    var session: Odyssey.Session
 
     override init() {
         app = Odyssey.App()
         session = Odyssey.Session(app: app)
-        workspaceStoreWorkspaces = Odyssey.SerializedWorkspaces.getAllMetadataAndValidate()
 
         super.init()
     }
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        workspaceStoreController = WorkspaceStoreController(
+        let controller = WorkspaceHistoryController(
             app: self,
-            workspaces: workspaceStoreWorkspaces
+            workspaces: Odyssey.SerializedWorkspaces.getAllMetadataAndValidate()
         )
-        workspaceStoreController?.showWindow(nil)
-        workspaceStoreController?.window?.center()
+        controller.showWindow(nil)
+        controller.window?.center()
     }
 
-    func createWorkspaceController(path: String) -> WorkspaceController {
-        WorkspaceController(delegate: self, session: session, path: path)
-    }
-
-    func createWorkspaceController(paths: [String]) -> WorkspaceController {
-        WorkspaceController(delegate: self, session: session, paths: paths)
+    func openWorkspace(_ workspace: Odyssey.SerializedWorkspace) {
+        let controller = WorkspaceController(
+            delegate: self, session: session, paths: workspace.paths)
+        controller.showWindow(nil)
+        controller.window?.center()
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
@@ -52,7 +48,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    func selectPathsForNewWorkspace(window: NSWindow) {
+    func selectNewWorkspace(window: NSWindow) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -66,11 +62,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func createWorkspace(paths: [String]) {
+    public func createWorkspace(paths: [String]) {
         let paths = Odyssey.Workspace.normalizedPaths(paths)
         guard !paths.isEmpty else { return }
 
-        let controller = createWorkspaceController(paths: paths)
+        let controller = WorkspaceController(
+            delegate: self, session: session, paths: paths)
         controller.showWindow(nil)
         controller.window?.center()
     }
