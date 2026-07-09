@@ -34,6 +34,7 @@ pub fn init(gpa: Allocator) !void {
     std.log.debug("DB PATH={s}", .{slice});
 
     pool = try zqlite.Pool.init(gpa, .{
+        .size = 100,
         .flags = zqlite.OpenFlags.Create |
             zqlite.OpenFlags.ReadWrite |
             zqlite.OpenFlags.EXResCode,
