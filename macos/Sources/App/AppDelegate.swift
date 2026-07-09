@@ -30,10 +30,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func openWorkspace(_ workspace: Odyssey.SerializedWorkspace) {
-        let controller = WorkspaceController(
-            delegate: self, session: session, paths: workspace.paths)
-        controller.showWindow(nil)
-        controller.window?.center()
+        openWorkspace(workspace.paths)
     }
 
     public func openWorkspace(_ paths: [String]) {
@@ -42,6 +39,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let controller = WorkspaceController(
             delegate: self, session: session, paths: paths)
+        controller.showWindow(nil)
+        controller.window?.center()
+    }
+
+    public func openWorkspace(_ path: String) {
+        let controller = WorkspaceController(
+            delegate: self, session: session, path: path)
         controller.showWindow(nil)
         controller.window?.center()
     }
