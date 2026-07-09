@@ -36,7 +36,7 @@ class WorkspaceHistoryController: NSWindowController,
         stackView.layer?.masksToBounds = true
         stackView.layer?.cornerRadius = 16
         let content = WorkspaceHistoryContent(app: app, workspaces: workspaces)
-        stackView.addArrangedSubview(WorkspaceHistoryToolbar())
+        stackView.addArrangedSubview(WorkspaceHistoryToolbar(app: app))
         stackView.addArrangedSubview(content)
 
         super.init(window: window)

@@ -24,6 +24,8 @@ final class WorkspaceHistoryToolbar: NSView {
         }
     }
 
+    private weak var app: AppDelegate?
+
     private lazy var closeButton = TrafficLightButton(
         normalColor: NSColor(calibratedRed: 1.0, green: 0.37, blue: 0.34, alpha: 1.0),
         borderColor: NSColor(calibratedRed: 0.86, green: 0.22, blue: 0.20, alpha: 1.0),
@@ -44,15 +46,17 @@ final class WorkspaceHistoryToolbar: NSView {
 
     private lazy var createButton: NSButton = {
         let button = NSButton(
-            title: "Add Workspace", target: self, action: nil)
+            title: "Add Workspace", target: self, action: #selector(selectNewWorkspace))
         button.translatesAutoresizingMaskIntoConstraints = false
         button.bezelStyle = .rounded
         button.controlSize = .small
         return button
     }()
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
+    init(app: AppDelegate) {
+        self.app = app
+
+        super.init(frame: .zero)
 
         translatesAutoresizingMaskIntoConstraints = false
         addSubview(closeButton)
@@ -116,6 +120,11 @@ final class WorkspaceHistoryToolbar: NSView {
 
     @objc private func minimizeWindow() {
         window?.miniaturize(nil)
+    }
+
+    @objc private func selectNewWorkspace() {
+        guard let window else { return }
+        app?.selectNewWorkspace(window: window)
     }
 
     @available(*, unavailable)

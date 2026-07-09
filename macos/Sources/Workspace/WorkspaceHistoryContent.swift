@@ -10,7 +10,7 @@ import AppKit
 class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegate {
     private let workspaces: [Odyssey.SerializedWorkspace]
     private let workspaceTableView = NSTableView()
-    private let app: AppDelegate
+    private weak let app: AppDelegate?
 
     init(app: AppDelegate, workspaces: Odyssey.SerializedWorkspaces) {
         self.workspaces = workspaces.workspaces
@@ -72,7 +72,7 @@ class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegat
         guard workspaces.indices.contains(row) else { return }
 
         let workspace = workspaces[row]
-        app.openWorkspace(workspace)
+        app?.openWorkspace(workspace)
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
