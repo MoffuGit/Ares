@@ -158,11 +158,14 @@ fn deleteById(conn: zqlite.Conn, id: i64) !void {
 }
 
 pub fn getBySession(conn: zqlite.Conn, allocator: Allocator, session: uuid.Uuid) ![]SerializedWorkspace {
+    const buffer = try uuid.fmt(session, allocator);
+    defer allocator.free(buffer);
+
     var rows = try conn.rows(
         \\SELECT id, paths, session, window_x, window_y, window_width, window_height, timestamp
         \\FROM workspace
         \\WHERE session = ?
-    , .{session});
+    , .{buffer});
     defer rows.deinit();
 
     var workspaces: std.ArrayList(SerializedWorkspace) = .empty;
