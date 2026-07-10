@@ -17,7 +17,7 @@ class WorkspaceHistoryController: NSWindowController,
     init(app: AppDelegate, workspaces: Odyssey.SerializedWorkspaces) {
         let window = WorkspaceHistoryWindow(
             contentRect: NSRect(x: 0, y: 0, width: 650, height: 550),
-            styleMask: [.closable, .miniaturizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -26,6 +26,8 @@ class WorkspaceHistoryController: NSWindowController,
         window.isRestorable = false
         window.isMovableByWindowBackground = true
         window.backgroundColor = .clear
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
 
         let stackView = NSStackView()
         stackView.translatesAutoresizingMaskIntoConstraints = false
