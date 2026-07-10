@@ -150,7 +150,7 @@ pub fn getByPaths(conn: zqlite.Conn, allocator: Allocator, paths: []const []cons
     return try deserialize(allocator, row);
 }
 
-fn deleteById(conn: zqlite.Conn, id: i64) !void {
+pub fn deleteById(conn: zqlite.Conn, id: i64) !void {
     try conn.exec(
         \\DELETE FROM workspace
         \\WHERE id = ?

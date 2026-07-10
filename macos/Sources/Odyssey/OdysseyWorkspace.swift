@@ -57,6 +57,10 @@ extension Odyssey {
             SerializedWorkspaces(odyssey_workspace_get_all_metadata_and_validate())
         }
 
+        static func deleteByID(_ id: Int64) -> Bool {
+            odyssey_workspace_delete_by_id(id) == 0
+        }
+
         static func getBySession(app: Odyssey.App, session: Odyssey.Session) -> SerializedWorkspaces
         {
             guard let odysseyApp = app.app, let sessionEntity = session.entity else {

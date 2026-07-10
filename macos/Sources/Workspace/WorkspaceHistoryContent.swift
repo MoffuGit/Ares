@@ -6,9 +6,10 @@
 //
 
 import AppKit
+import os
 
 class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegate {
-    private let workspaces: [Odyssey.SerializedWorkspace]
+    private var workspaces: [Odyssey.SerializedWorkspace]
     private let workspaceTableView = NSTableView()
     private weak let app: AppDelegate?
 
@@ -99,7 +100,33 @@ class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegat
         cell.isLast = row == workspaces.count - 1
         cell.layer?.zPosition = tableView.selectedRow == row ? 1 : 0
 
+        cell.onDelete = { [weak self] in
+            self?.deleteWorkspace(at: row)
+        }
+
         return cell
+    }
+
+    private func deleteWorkspace(at row: Int) {
+        guard workspaces.indices.contains(row) else { return }
+        let workspace = workspaces[row]
+        guard Odyssey.SerializedWorkspaces.deleteByID(workspace.id) else {
+            Odyssey.logger.critical("odyssey_workspace_delete_by_id failed for id \(workspace.id)")
+            return
+        }
+
+        workspaces.remove(at: row)
+
+        let isEmpty = workspaces.isEmpty
+        workspaceTableView.reloadData()
+
+        if let scrollView = workspaceTableView.enclosingScrollView {
+            for case let emptyView as NSTextField in subviews where emptyView.stringValue == "No workspaces found" {
+                emptyView.isHidden = !isEmpty
+                scrollView.isHidden = isEmpty
+                break
+            }
+        }
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
@@ -133,6 +160,8 @@ private final class WorkspaceStoreEntryView: NSTableCellView {
     var isLast = false {
         didSet { needsDisplay = true }
     }
+
+    var onDelete: (() -> Void)?
 
     private let stackView = NSStackView()
     private let topLabel = NSTextField(labelWithString: "")
@@ -185,6 +214,8 @@ private final class WorkspaceStoreEntryView: NSTableCellView {
         deleteButton.isBordered = false
         deleteButton.imageScaling = .scaleNone
         deleteButton.focusRingType = .none
+        deleteButton.target = self
+        deleteButton.action = #selector(deleteButtonClicked)
         addSubview(deleteButton)
 
         NSLayoutConstraint.activate([
@@ -199,6 +230,10 @@ private final class WorkspaceStoreEntryView: NSTableCellView {
             deleteButton.widthAnchor.constraint(equalToConstant: 16),
             deleteButton.heightAnchor.constraint(equalTo: deleteButton.widthAnchor),
         ])
+    }
+
+    @objc private func deleteButtonClicked() {
+        onDelete?()
     }
 
     private func updateTopLabel() {

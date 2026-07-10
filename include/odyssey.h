@@ -122,6 +122,7 @@ typedef struct {
 odyssey_workspace_list_s odyssey_workspace_get_all_metadata_and_validate(void);
 odyssey_workspace_list_s odyssey_workspace_get_by_session(odyssey_app_t app, odyssey_entity_s session);
 void odyssey_workspace_list_free(odyssey_workspace_list_s list);
+int odyssey_workspace_delete_by_id(int64_t id);
 
 /////////////////
 //~ Session Types

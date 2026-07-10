@@ -396,3 +396,19 @@ pub export fn odyssey_workspace_list_free(list: ExternSerializedWorkspaces) void
     }
     state.gpa.free(workspaces);
 }
+
+pub export fn odyssey_workspace_delete_by_id(id: i64) c_int {
+    workspace_delete_by_id(id) catch |err| {
+        std.log.err("error deleting workspace by id={}", .{err});
+        return 1;
+    };
+    return 0;
+}
+
+fn workspace_delete_by_id(id: i64) !void {
+    const io = state.threaded.io();
+    const conn = try db.acquire(io);
+    defer db.release(io, conn);
+
+    try Workspace.persistence.deleteById(conn, id);
+}
