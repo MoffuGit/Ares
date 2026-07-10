@@ -11,6 +11,17 @@ private final class WorkspaceHistoryWindow: NSWindow {
     override var canBecomeKey: Bool { true }
 }
 
+private final class WorkspaceHistoryContainer: NSStackView {
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        super.updateLayer()
+        let isDark = effectiveAppearance.bestMatch(
+            from: [.aqua, .darkAqua]) == .darkAqua
+        layer?.backgroundColor = (isDark ? NSColor.black : NSColor.white).cgColor
+    }
+}
+
 class WorkspaceHistoryController: NSWindowController,
     NSWindowDelegate
 {
@@ -29,14 +40,14 @@ class WorkspaceHistoryController: NSWindowController,
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
 
-        let stackView = NSStackView()
+        let stackView = WorkspaceHistoryContainer()
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.orientation = .vertical
         stackView.spacing = 0
         stackView.wantsLayer = true
-        stackView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         stackView.layer?.masksToBounds = true
         stackView.layer?.cornerRadius = 16
+        stackView.needsDisplay = true
         let content = WorkspaceHistoryContent(app: app, workspaces: workspaces)
         stackView.addArrangedSubview(WorkspaceHistoryToolbar(app: app))
         stackView.addArrangedSubview(content)

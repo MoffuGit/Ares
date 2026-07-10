@@ -26,10 +26,11 @@ class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegat
         tableView.target = self
         tableView.doubleAction = #selector(openSelectedWorkspace)
         tableView.headerView = nil
-        tableView.rowHeight = 54
+        tableView.rowHeight = 80
         tableView.intercellSpacing = .zero
         tableView.selectionHighlightStyle = .none
         tableView.style = .plain
+        tableView.backgroundColor = .clear
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("Workspace"))
         column.title = "Workspace"
@@ -39,6 +40,7 @@ class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegat
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = false
         scrollView.documentView = tableView
         self.addSubview(scrollView)
 
@@ -89,7 +91,9 @@ class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegat
             ?? WorkspaceStoreEntryView()
 
         cell.identifier = identifier
-        cell.title = workspace.displayPath
+        cell.workspaceID = workspace.id
+        cell.timestamp = workspace.timestamp
+        cell.paths = workspace.paths
         cell.isFocused = tableView.selectedRow == row
         cell.isPreviousFocused = tableView.selectedRow >= 0 && tableView.selectedRow == row - 1
         cell.isLast = row == workspaces.count - 1
@@ -111,8 +115,14 @@ class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegat
 }
 
 private final class WorkspaceStoreEntryView: NSTableCellView {
-    var title = "" {
-        didSet { textField?.stringValue = title }
+    var workspaceID: Int64 = 0 {
+        didSet { updateTopLabel() }
+    }
+    var timestamp: Int64 = 0 {
+        didSet { updateTopLabel() }
+    }
+    var paths: [String] = [] {
+        didSet { updateMiddleLabel() }
     }
     var isFocused = false {
         didSet { needsDisplay = true }
@@ -124,7 +134,11 @@ private final class WorkspaceStoreEntryView: NSTableCellView {
         didSet { needsDisplay = true }
     }
 
-    private let label = NSTextField(labelWithString: "")
+    private let stackView = NSStackView()
+    private let topLabel = NSTextField(labelWithString: "")
+    private let middleLabel = NSTextField(labelWithString: "")
+    private let bottomSpacer = NSView()
+    private let deleteButton = NSButton()
     private let focusedBorderColor = NSColor.systemBlue
     private let borderColor = NSColor.separatorColor
 
@@ -132,16 +146,72 @@ private final class WorkspaceStoreEntryView: NSTableCellView {
         super.init(frame: frameRect)
 
         wantsLayer = true
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.lineBreakMode = .byTruncatingMiddle
-        textField = label
-        addSubview(label)
+
+        // --- Vertical stack ---
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        stackView.orientation = .vertical
+        stackView.alignment = .leading
+        stackView.distribution = .fill
+        addSubview(stackView)
+
+        topLabel.translatesAutoresizingMaskIntoConstraints = false
+        topLabel.font = .systemFont(ofSize: 11, weight: .regular)
+        topLabel.textColor = .secondaryLabelColor
+        topLabel.lineBreakMode = .byTruncatingMiddle
+        stackView.addArrangedSubview(topLabel)
+
+        middleLabel.translatesAutoresizingMaskIntoConstraints = false
+        middleLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        middleLabel.lineBreakMode = .byTruncatingMiddle
+        stackView.addArrangedSubview(middleLabel)
+
+        bottomSpacer.translatesAutoresizingMaskIntoConstraints = false
+        bottomSpacer.heightAnchor.constraint(equalToConstant: 10).isActive = true
+        stackView.addArrangedSubview(bottomSpacer)
+
+        // --- Delete button (absolute top-right) ---
+        guard
+            let minusImage = NSImage(
+                systemSymbolName: "minus",
+                accessibilityDescription: "Delete Workspace"
+            )
+        else { fatalError("SF Symbol 'minus' not available") }
+        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+        deleteButton.image = minusImage.withSymbolConfiguration(symbolConfig) ?? minusImage
+        deleteButton.imagePosition = .imageOnly
+        deleteButton.translatesAutoresizingMaskIntoConstraints = false
+        deleteButton.bezelStyle = .inline
+        deleteButton.controlSize = .regular
+        deleteButton.isBordered = false
+        deleteButton.imageScaling = .scaleNone
+        deleteButton.focusRingType = .none
+        addSubview(deleteButton)
 
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            stackView.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            stackView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+
+            deleteButton.centerYAnchor.constraint(
+                equalTo: topAnchor, constant: 16),
+            deleteButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            deleteButton.widthAnchor.constraint(equalToConstant: 16),
+            deleteButton.heightAnchor.constraint(equalTo: deleteButton.widthAnchor),
         ])
+    }
+
+    private func updateTopLabel() {
+        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .none
+        topLabel.stringValue = "[ \(workspaceID) ] \(formatter.string(from: date))"
+    }
+
+    private func updateMiddleLabel() {
+        let names = paths.map { URL(fileURLWithPath: $0).lastPathComponent }
+        middleLabel.stringValue = names.isEmpty ? "No path" : names.joined(separator: ", ")
     }
 
     override func draw(_ dirtyRect: NSRect) {
