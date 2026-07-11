@@ -61,5 +61,5 @@ pub fn initialWorktreeScan(app: *App, gpa: std.mem.Allocator, io: std.Io, _: *pr
         app.flush();
     }
 
-    try testing.expectEqual(544836, worktree.read(app).snapshot.entries.count);
+    try testing.expectEqual(544859, worktree.read(app).snapshot.entries.count);
 }

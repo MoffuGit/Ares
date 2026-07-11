@@ -25,10 +25,10 @@ pub const Options = struct {
     abs_path: []const u8,
 };
 
+io: Io,
 gpa: Allocator,
 scanning: bool,
 snapshot: Snapshot,
-io: Io,
 scanner: Executor(Scanner),
 waker: sch.Waker,
 
