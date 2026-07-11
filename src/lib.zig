@@ -316,6 +316,11 @@ pub export fn odyssey_workspace_mark_for_restoration(app: *App, extern_entity: E
     };
 }
 
+pub export fn odyssey_workspace_get_id(app: *App, extern_entity: ExternEntity) i64 {
+    const workspace_entity = extern_entity.any().into(Workspace) orelse return -1;
+    return workspace_entity.read(app).id;
+}
+
 pub export fn odyssey_remove_observer(observer: ExternObserver) void {
     const sub = observer.subscription();
     sub.unsubscribe() catch |err| {
