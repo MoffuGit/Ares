@@ -9,11 +9,12 @@ import Cocoa
 import OdysseyKit
 
 @MainActor
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, WorkspaceHistoryManagerDelegate {
     var app: Odyssey.App
     var session: Odyssey.Session
-    private var workspaceControllers: [WorkspaceController] = []
     let workspaceHistoryManager: WorkspaceHistoryManager
+
+    private var workspaceControllers: [WorkspaceController] = []
     private var workspaceHistoryController: WorkspaceHistoryController?
 
     override init() {
@@ -55,17 +56,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let controller = WorkspaceController(
             delegate: self, session: session, paths: paths)
-        register(controller)
+        workspaceControllers.append(controller)
         controller.showWindow(nil)
         controller.window?.center()
 
         if let metadata = controller.serializedMetadata() {
             workspaceHistoryManager.upsert(metadata)
         }
-    }
-
-    private func register(_ controller: WorkspaceController) {
-        workspaceControllers.append(controller)
     }
 
     func workspaceWindowWillClose(_ controller: WorkspaceController) {
@@ -105,9 +102,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.openWorkspace(panel.urls.map(\.path))
         }
     }
-}
 
-extension AppDelegate: WorkspaceHistoryManagerDelegate {
     func workspaceHistoryManager(
         _ manager: WorkspaceHistoryManager,
         didChange workspaces: [Odyssey.SerializedWorkspace],
