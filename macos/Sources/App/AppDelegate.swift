@@ -13,20 +13,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var app: Odyssey.App
     var session: Odyssey.Session
     private var workspaceControllers: [WorkspaceController] = []
+    let workspaceHistoryManager: WorkspaceHistoryManager
+    private var workspaceHistoryController: WorkspaceHistoryController?
 
     override init() {
         app = Odyssey.App()
         session = Odyssey.Session(app: app)
+        workspaceHistoryManager = WorkspaceHistoryManager()
 
         super.init()
+
+        workspaceHistoryManager.delegate = self
     }
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         let restored = Odyssey.SerializedWorkspaces.getBySession(app: app, session: session)
         let controller = WorkspaceHistoryController(
             app: self,
-            workspaces: Odyssey.SerializedWorkspaces.getAllMetadataAndValidate()
+            historyManager: workspaceHistoryManager
         )
+        workspaceHistoryController = controller
         controller.showWindow(nil)
         controller.window?.center()
 
@@ -39,6 +45,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         openWorkspace(workspace.paths)
     }
 
+    public func openWorkspace(_ path: String) {
+        openWorkspace([path])
+    }
+
     public func openWorkspace(_ paths: [String]) {
         let paths = Odyssey.Workspace.normalizedPaths(paths)
         guard !paths.isEmpty else { return }
@@ -48,14 +58,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         register(controller)
         controller.showWindow(nil)
         controller.window?.center()
-    }
 
-    public func openWorkspace(_ path: String) {
-        let controller = WorkspaceController(
-            delegate: self, session: session, path: path)
-        register(controller)
-        controller.showWindow(nil)
-        controller.window?.center()
+        if let metadata = controller.serializedMetadata() {
+            workspaceHistoryManager.upsert(metadata)
+        }
     }
 
     private func register(_ controller: WorkspaceController) {
@@ -98,5 +104,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard response == .OK else { return }
             self?.openWorkspace(panel.urls.map(\.path))
         }
+    }
+}
+
+extension AppDelegate: WorkspaceHistoryManagerDelegate {
+    func workspaceHistoryManager(
+        _ manager: WorkspaceHistoryManager,
+        didChange workspaces: [Odyssey.SerializedWorkspace],
+        removedWorkspace: Odyssey.SerializedWorkspace?
+    ) {
+        if let workspace = removedWorkspace {
+            let normalized = Odyssey.Workspace.normalizedPaths(workspace.paths)
+            let matching = workspaceControllers.filter { $0.paths == normalized }
+            let matchingIDs = Set(matching.map(ObjectIdentifier.init))
+
+            workspaceControllers.removeAll {
+                matchingIDs.contains(ObjectIdentifier($0))
+            }
+
+            for controller in matching {
+                controller.close()
+            }
+        }
+
+        workspaceHistoryController?.reload()
     }
 }

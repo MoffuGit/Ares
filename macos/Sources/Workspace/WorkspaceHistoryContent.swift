@@ -1,5 +1,5 @@
 //
-//  WorksapceListContent.swift
+//  WorkspaceHistoryContent.swift
 //  Odyssey
 //
 //  Created by Adrian Hess on 03/07/26.
@@ -9,12 +9,14 @@ import AppKit
 import os
 
 class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegate {
-    private var workspaces: [Odyssey.SerializedWorkspace]
+    private let manager: WorkspaceHistoryManager
     private let workspaceTableView = NSTableView()
-    private weak let app: AppDelegate?
+    private weak var app: AppDelegate?
+    private let scrollView = NSScrollView()
+    private let emptyView = NSTextField(labelWithString: "No workspaces found")
 
-    init(app: AppDelegate, workspaces: Odyssey.SerializedWorkspaces) {
-        self.workspaces = workspaces.workspaces
+    init(app: AppDelegate, manager: WorkspaceHistoryManager) {
+        self.manager = manager
         self.app = app
 
         super.init(frame: .zero)
@@ -37,7 +39,6 @@ class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegat
         column.title = "Workspace"
         tableView.addTableColumn(column)
 
-        let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
@@ -52,8 +53,6 @@ class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegat
             scrollView.bottomAnchor.constraint(equalTo: self.bottomAnchor),
         ])
 
-        let emptyView = NSTextField(labelWithString: "No workspaces found")
-
         emptyView.translatesAutoresizingMaskIntoConstraints = false
         emptyView.alignment = .center
         emptyView.font = .systemFont(ofSize: 17, weight: .medium)
@@ -65,28 +64,33 @@ class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegat
             emptyView.centerYAnchor.constraint(equalTo: self.centerYAnchor),
         ])
 
-        let isEmpty = self.workspaces.isEmpty
+        reload()
+    }
+
+    func reload() {
+        let isEmpty = manager.workspaces.isEmpty
+        workspaceTableView.reloadData()
         emptyView.isHidden = !isEmpty
         scrollView.isHidden = isEmpty
     }
 
     @objc func openSelectedWorkspace() {
         let row = workspaceTableView.clickedRow
-        guard workspaces.indices.contains(row) else { return }
+        guard manager.workspaces.indices.contains(row) else { return }
 
-        let workspace = workspaces[row]
+        let workspace = manager.workspaces[row]
         app?.openWorkspace(workspace)
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
-        workspaces.count
+        manager.workspaces.count
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int)
         -> NSView?
     {
         let identifier = NSUserInterfaceItemIdentifier("WorkspaceCell")
-        let workspace = workspaces[row]
+        let workspace = manager.workspaces[row]
         let cell =
             tableView.makeView(withIdentifier: identifier, owner: self) as? WorkspaceStoreEntryView
             ?? WorkspaceStoreEntryView()
@@ -97,36 +101,19 @@ class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegat
         cell.paths = workspace.paths
         cell.isFocused = tableView.selectedRow == row
         cell.isPreviousFocused = tableView.selectedRow >= 0 && tableView.selectedRow == row - 1
-        cell.isLast = row == workspaces.count - 1
+        cell.isLast = row == manager.workspaces.count - 1
         cell.layer?.zPosition = tableView.selectedRow == row ? 1 : 0
 
+        let workspaceID = workspace.id
         cell.onDelete = { [weak self] in
-            self?.deleteWorkspace(at: row)
+            do {
+                try self?.manager.remove(id: workspaceID)
+            } catch {
+                Odyssey.logger.error("Failed to remove workspace \(workspaceID): \(error)")
+            }
         }
 
         return cell
-    }
-
-    private func deleteWorkspace(at row: Int) {
-        guard workspaces.indices.contains(row) else { return }
-        let workspace = workspaces[row]
-        guard Odyssey.SerializedWorkspaces.deleteByID(workspace.id) else {
-            Odyssey.logger.critical("odyssey_workspace_delete_by_id failed for id \(workspace.id)")
-            return
-        }
-
-        workspaces.remove(at: row)
-
-        let isEmpty = workspaces.isEmpty
-        workspaceTableView.reloadData()
-
-        if let scrollView = workspaceTableView.enclosingScrollView {
-            for case let emptyView as NSTextField in subviews where emptyView.stringValue == "No workspaces found" {
-                emptyView.isHidden = !isEmpty
-                scrollView.isHidden = isEmpty
-                break
-            }
-        }
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
@@ -135,6 +122,7 @@ class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegat
             columnIndexes: IndexSet(integer: 0)
         )
     }
+
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")

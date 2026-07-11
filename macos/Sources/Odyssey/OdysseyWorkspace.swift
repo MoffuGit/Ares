@@ -14,6 +14,12 @@ extension Odyssey {
         let paths: [String]
         let timestamp: Int64
 
+        init(id: Int64, paths: [String], timestamp: Int64) {
+            self.id = id
+            self.paths = paths
+            self.timestamp = timestamp
+        }
+
         init(_ workspace: odyssey_serialized_workspace_s) {
             id = workspace.id
             timestamp = workspace.timestamp
@@ -127,6 +133,11 @@ extension Odyssey {
 
             odyssey_workspace_mark_for_restoration(odysseyApp, entity)
             app.enqueueFlush()
+        }
+
+        var workspaceID: Int64 {
+            guard let odysseyApp = app.app, let entity = entity else { return -1 }
+            return odyssey_workspace_get_id(odysseyApp, entity)
         }
 
         static func normalizedPaths(_ paths: [String]) -> [String] {

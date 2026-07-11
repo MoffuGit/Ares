@@ -25,7 +25,9 @@ private final class WorkspaceHistoryContainer: NSStackView {
 class WorkspaceHistoryController: NSWindowController,
     NSWindowDelegate
 {
-    init(app: AppDelegate, workspaces: Odyssey.SerializedWorkspaces) {
+    private let content: WorkspaceHistoryContent
+
+    init(app: AppDelegate, historyManager: WorkspaceHistoryManager) {
         let window = WorkspaceHistoryWindow(
             contentRect: NSRect(x: 0, y: 0, width: 650, height: 550),
             styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
@@ -48,7 +50,8 @@ class WorkspaceHistoryController: NSWindowController,
         stackView.layer?.masksToBounds = true
         stackView.layer?.cornerRadius = 16
         stackView.needsDisplay = true
-        let content = WorkspaceHistoryContent(app: app, workspaces: workspaces)
+        let content = WorkspaceHistoryContent(app: app, manager: historyManager)
+        self.content = content
         stackView.addArrangedSubview(WorkspaceHistoryToolbar(app: app))
         stackView.addArrangedSubview(content)
 
@@ -56,6 +59,10 @@ class WorkspaceHistoryController: NSWindowController,
 
         window.delegate = self
         window.contentView = stackView
+    }
+
+    func reload() {
+        content.reload()
     }
 
     @available(*, unavailable)
