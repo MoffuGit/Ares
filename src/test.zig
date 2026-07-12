@@ -1,5 +1,6 @@
 const App = @import("app.zig");
 const chunk_pool = @import("chunk_pool.zig");
+const chunked_path = @import("chunked_path.zig");
 const datastruct = @import("datastruct.zig");
 const entity = @import("entity.zig");
 const Loop = @import("loop.zig");
@@ -13,6 +14,7 @@ const Worktree = @import("worktree.zig");
 test {
     _ = App;
     _ = chunk_pool;
+    _ = chunked_path;
     _ = datastruct;
     _ = entity;
     _ = Loop;
