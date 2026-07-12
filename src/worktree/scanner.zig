@@ -20,6 +20,7 @@ const Context = BackgroundScheduler.Context;
 const Scheduler = sch.Scheduler;
 const tsk = @import("../tasks.zig");
 const Snapshot = @import("snapshot.zig");
+const Entry = Snapshot.Entry;
 
 const UPDATE_INTERVAL: Io.Duration = if (builtin.mode == .Debug) .fromSeconds(5) else .fromMilliseconds(100);
 
@@ -39,35 +40,23 @@ pub const Action = union(enum) {
     pub const Queue = Io.Queue(Action);
 
     initial_scan: void,
-    temp: void,
-};
-
-const State = struct {
-    const Self = @This();
-
-    mutex: Io.Mutex,
-    snapshot: Snapshot,
-    store: ChunkedPathStore,
-
-    pub fn lock(self: *Self, io: Io) Io.Cancelable!void {
-        try self.mutex.lock(io);
-    }
-
-    pub fn unlock(self: *Self, io: Io) void {
-        self.mutex.unlock(io);
-    }
+    entries: []Entry,
+    scan_end: void,
 };
 
 io: Io,
+mutex: Io.Mutex,
 arena: heap.ArenaAllocator,
 gpa: Allocator,
-state: State,
+snapshot: Snapshot,
+store: ChunkedPathStore,
 action_buffer: [8]Action,
 actions: Action.Queue,
 
 updates_buffer: [8]Updates,
 updates: Updates.Queue,
 
+workers: ?[]Worker,
 jobs_buffer: []Worker.Job,
 jobs: Io.Queue(Worker.Job),
 
@@ -99,28 +88,27 @@ pub fn init(
         .jobs = undefined,
         .next_entry_id = .init(0),
         .pending_jobs = .init(0),
-        .state = .{
-            .mutex = .init,
-            .snapshot = undefined,
-            .store = undefined,
-        },
+        .snapshot = undefined,
+        .mutex = .init,
+        .store = undefined,
+        .workers = null,
     };
+
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
 
-    self.jobs_buffer = try arena.alloc(Worker.Job, 1024);
+    self.jobs_buffer = try arena.alloc(Worker.Job, 128);
 
     self.actions = .init(&self.action_buffer);
     self.updates = .init(&self.updates_buffer);
     self.jobs = .init(self.jobs_buffer);
 
-    try self.state.store.init(arena, .{ .chunk_capacity = 1024 * 1024, .inline_capacity = 1024 * 1024 });
+    try self.store.init(arena, .{ .chunk_capacity = 1024 * 1024, .inline_capacity = 1024 * 1024 });
 
-    const root_path = self.state.store.put(snapshot.root_name, 0);
+    const root_path = self.store.put(snapshot.root_name, 0);
 
-    try self.state.snapshot.init(snapshot.abs_root, snapshot.root_name, arena);
-
-    try self.state.snapshot.insert(.{
+    try self.snapshot.init(snapshot.abs_root, snapshot.root_name, arena);
+    try self.snapshot.insert(.{
         .id = self.next_entry_id.fetchAdd(1, .monotonic),
         .path = root_path,
     });
@@ -130,6 +118,17 @@ pub fn init(
 }
 
 pub fn deinit(self: *Scanner) void {
+    self.updates.close(self.io);
+    self.jobs.close(self.io);
+    self.actions.close(self.io);
+    self.group.cancel(self.io);
+    self.store.deinit(self.arena.allocator());
+    if (self.workers) |workers| {
+        for (workers) |*worker| {
+            worker.deinit();
+        }
+    }
+
     var buf: [8]Updates = undefined;
     while (true) {
         const n = self.updates.get(self.io, &buf, 0) catch break;
@@ -144,12 +143,16 @@ pub fn deinit(self: *Scanner) void {
             }
         }
     }
-    self.updates.close(self.io);
-    self.jobs.close(self.io);
-    self.actions.close(self.io);
-    self.group.cancel(self.io);
-    self.state.store.deinit(self.arena.allocator());
+
     self.arena.deinit();
+}
+
+pub fn lock(self: *Scanner) !void {
+    try self.mutex.lock(self.io);
+}
+
+pub fn unlock(self: *Scanner) void {
+    self.mutex.unlock(self.io);
 }
 
 pub fn handleActions(
@@ -172,27 +175,39 @@ pub fn handleActions(
 
 fn _handleActions(
     self: *Scanner,
-    ctx: Context,
+    _: Context,
     waker: sch.Waker,
 ) !void {
     var buffer: [8]Action = undefined;
     for (0..try self.actions.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
-            .initial_scan => try self.initialScan(ctx, waker),
-            else => {},
+            .initial_scan => try self.initialScan(waker),
+            .entries => |entries| {
+                for (entries) |entry| try self.snapshot.insert(entry);
+                self.gpa.free(entries);
+            },
+            .scan_end => {
+                var copy = try self.snapshot.clone(self.gpa);
+                errdefer copy.deinit(self.gpa);
+
+                try self.updates.putOne(self.io, .{ .updated = .{
+                    .snapshot = copy,
+                    .scanning = false,
+                } });
+                try waker.wake();
+            },
         }
     }
 }
 
 fn initialScan(
     self: *Scanner,
-    _: Context,
     waker: sch.Waker,
 ) !void {
     const stat = try Io.Dir.statFile(
         .cwd(),
         self.io,
-        self.state.snapshot.abs_root,
+        self.snapshot.abs_root,
         .{},
     );
 
@@ -203,19 +218,17 @@ fn initialScan(
 
     _ = self.pending_jobs.fetchAdd(1, .monotonic);
 
-    const root_entry = self.state.snapshot.entries.first() orelse return;
+    const root_entry = self.snapshot.entries.first() orelse return;
 
-    try self.jobs.putOne(self.io, .{
-        .abs_path = self.state.snapshot.abs_root,
-        .path_name = root_entry.path,
-    });
+    try self.jobs.putOne(self.io, .{ .path_name = root_entry.path });
+
+    const arena = self.arena.allocator();
 
     const cpu_count = try std.Thread.getCpuCount();
-    for (0..cpu_count) |_| {
-        const arena = self.arena.allocator();
+    self.workers = try arena.alloc(Worker, cpu_count);
 
-        const worker = try arena.create(Worker);
-        try worker.init(self, arena, waker);
+    for (self.workers.?) |*worker| {
+        worker.init(self, self.gpa);
 
         try self.group.concurrent(
             self.io,
@@ -226,37 +239,32 @@ fn initialScan(
 }
 
 const ScannedChild = struct {
-    name: []const u8,
     path: ChunkedPath,
     is_dir: bool,
 };
 
 const Worker = struct {
     pub const Job = struct {
-        abs_path: []const u8,
         path_name: ChunkedPath,
     };
 
+    gpa: Allocator,
     scanner: *Scanner,
-    arena: Allocator,
     queue: std.ArrayList(Job),
     entries: std.ArrayList(Snapshot.Entry),
-    children: std.ArrayList(ScannedChild),
-    waker: sch.Waker,
 
-    pub fn init(self: *Worker, scanner: *Scanner, arena: Allocator, waker: sch.Waker) !void {
-        const queue: std.ArrayList(Job) = .empty;
-        const entries: std.ArrayList(Snapshot.Entry) = .empty;
-        const children: std.ArrayList(ScannedChild) = .empty;
-
+    pub fn init(self: *Worker, scanner: *Scanner, gpa: Allocator) void {
         self.* = .{
-            .arena = arena,
+            .gpa = gpa,
             .scanner = scanner,
-            .queue = queue,
-            .entries = entries,
-            .children = children,
-            .waker = waker,
+            .queue = .empty,
+            .entries = .empty,
         };
+    }
+
+    pub fn deinit(self: *Worker) void {
+        self.queue.deinit(self.gpa);
+        self.entries.deinit(self.gpa);
     }
 
     pub fn work(
@@ -280,11 +288,12 @@ const Worker = struct {
         while (true) {
             const job = if (self.queue.pop()) |job| job else try jobs.getOne(io);
 
-            try self.scanDir(&path_z, job.path_name, job.abs_path);
+            try self.scanDir(&path_z, job.path_name);
 
             try self.flushEntries();
             try self.flushLocalJobs(jobs);
             try self.finishJob();
+            try self.scanner.waker.wake();
         }
     }
 
@@ -292,19 +301,35 @@ const Worker = struct {
         self: *Worker,
         path_z: [:0]u8,
         parent_path: ChunkedPath,
-        abs_path: []const u8,
     ) !void {
-        if (abs_path.len >= path_z.len) return error.NameTooLong;
-        @memcpy(path_z[0..abs_path.len], abs_path);
-        path_z[abs_path.len] = 0;
+        const abs_root = self.scanner.snapshot.abs_root;
+        const root_name = self.scanner.snapshot.root_name;
+        const root_name_len: u32 = @intCast(root_name.len);
+        const relative_len = parent_path.len - root_name_len;
+
+        assert(path_z.len > abs_root.len + relative_len);
+
+        @memcpy(path_z[0..abs_root.len], abs_root);
+        var offset: usize = abs_root.len;
+        var skip: usize = root_name.len;
+        var it = parent_path.iterator();
+        while (it.next()) |segment| {
+            if (skip >= segment.len) {
+                skip -= segment.len;
+                continue;
+            }
+            const take = segment.len - skip;
+            @memcpy(path_z[offset .. offset + take], segment[skip..]);
+            offset += take;
+            skip = 0;
+        }
+        path_z[offset] = 0;
 
         const dir = c.opendir(path_z.ptr) orelse return;
         defer _ = c.closedir(dir);
 
         const point = ".";
         const pointpoint = "..";
-
-        self.children.clearRetainingCapacity();
 
         while (c.readdir(dir)) |entry_raw| {
             const entry: *const c.dirent = @ptrCast(@alignCast(entry_raw));
@@ -316,44 +341,30 @@ const Worker = struct {
             const new_len = parent_path.len + suffix_len;
             if (new_len > MAX_PATH_LEN) continue;
 
-            try self.children.append(self.arena, .{
-                .name = try self.arena.dupe(u8, name),
-                .path = undefined,
-                .is_dir = entry.type == c.DT.DIR,
-            });
-        }
+            var path: ChunkedPath = undefined;
+            var suffix_buf: [MAX_PATH_LEN]u8 = undefined;
+            suffix_buf[0] = '/';
+            @memcpy(suffix_buf[1 .. 1 + name.len], name);
+            const suffix = suffix_buf[0 .. 1 + name.len];
+            const store = &self.scanner.store;
 
-        {
-            const io = self.scanner.io;
-            try self.scanner.state.lock(io);
-            defer self.scanner.state.unlock(io);
+            {
+                try self.scanner.lock();
+                defer self.scanner.unlock();
 
-            const store = &self.scanner.state.store;
-
-            for (self.children.items) |*child| {
-                var suffix_buf: [MAX_PATH_LEN]u8 = undefined;
-                suffix_buf[0] = '/';
-                @memcpy(suffix_buf[1 .. 1 + child.name.len], child.name);
-                const suffix = suffix_buf[0 .. 1 + child.name.len];
-
-                child.path = store.append(parent_path, suffix, 1);
-
-                try self.entries.append(self.arena, .{
-                    .path = child.path,
-                    .id = self.scanner.next_entry_id.fetchAdd(1, .monotonic),
-                });
+                path = store.append(parent_path, suffix, 1);
             }
-        }
 
-        for (self.children.items) |child| {
-            if (!child.is_dir) continue;
+            try self.entries.append(self.gpa, .{
+                .path = path,
+                .id = self.scanner.next_entry_id.fetchAdd(1, .monotonic),
+            });
 
-            const child_abs_path = try std.mem.join(self.arena, "/", &.{ abs_path, child.name });
+            if (entry.type != c.DT.DIR) continue;
 
             _ = self.scanner.pending_jobs.fetchAdd(1, .monotonic);
-            try self.queue.append(self.arena, .{
-                .abs_path = child_abs_path,
-                .path_name = child.path,
+            try self.queue.append(self.gpa, .{
+                .path_name = path,
             });
         }
     }
@@ -361,11 +372,9 @@ const Worker = struct {
     fn flushEntries(self: *Worker) !void {
         if (self.entries.items.len == 0) return;
 
-        const io = self.scanner.io;
-        try self.scanner.state.lock(io);
-        defer self.scanner.state.unlock(io);
+        const clone = try self.entries.clone(self.gpa);
+        try self.scanner.actions.putOne(self.scanner.io, .{ .entries = clone.items });
 
-        for (self.entries.items) |entry| try self.scanner.state.snapshot.insert(entry);
         self.entries.clearRetainingCapacity();
     }
 
@@ -386,19 +395,7 @@ const Worker = struct {
         if (pending != 1) return;
 
         scanner.jobs.close(scanner.io);
-
-        const io = scanner.io;
-        try scanner.state.lock(io);
-        defer scanner.state.unlock(io);
-
-        var copy = try self.scanner.state.snapshot.clone(self.scanner.gpa);
-        errdefer copy.deinit(self.scanner.gpa);
-
-        try scanner.updates.putOne(io, .{ .updated = .{
-            .snapshot = copy,
-            .scanning = false,
-        } });
-        try self.waker.wake();
+        try scanner.actions.putOne(self.scanner.io, .scan_end);
     }
 };
 

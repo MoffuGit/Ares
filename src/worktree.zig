@@ -50,7 +50,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
     self.waker = try ctx.await(handleUpdates, .{});
     errdefer self.waker.close();
 
-    self.scanner = try ctx.executor(Scanner, Scanner.handleActions, .{ self.waker });
+    self.scanner = try ctx.executor(Scanner, Scanner.handleActions, .{self.waker});
     try self.scanner.init(.{
         &self.snapshot,
         ctx.gpa(),
