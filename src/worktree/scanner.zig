@@ -235,7 +235,7 @@ fn initialScan(
     self.workers = try arena.alloc(Worker, cpu_count);
 
     for (self.workers.?) |*worker| {
-        try worker.init(self, self.gpa);
+        worker.init(self, self.gpa);
 
         try self.group.concurrent(
             self.io,
@@ -259,24 +259,19 @@ const Worker = struct {
     scanner: *Scanner,
     queue: std.ArrayList(Job),
     entries: std.ArrayList(Snapshot.Entry),
-    buffer: []align(8) u8,
 
-    pub fn init(self: *Worker, scanner: *Scanner, gpa: Allocator) !void {
+    pub fn init(self: *Worker, scanner: *Scanner, gpa: Allocator) void {
         self.* = .{
             .gpa = gpa,
             .scanner = scanner,
             .queue = .empty,
             .entries = .empty,
-            .buffer = undefined,
         };
-
-        self.buffer = try gpa.alignedAlloc(u8, .@"8", 64 * 1024);
     }
 
     pub fn deinit(self: *Worker) void {
         self.queue.deinit(self.gpa);
         self.entries.deinit(self.gpa);
-        self.gpa.free(self.buffer);
     }
 
     pub fn work(
