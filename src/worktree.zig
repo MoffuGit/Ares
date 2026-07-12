@@ -1,7 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
-const ArenaAllocator = std.heap.ArenaAllocator;
 const Io = std.Io;
 const atomic = std.atomic;
 const path = std.fs.path;
@@ -32,7 +31,7 @@ snapshot: Snapshot,
 scanner: Executor(Scanner),
 waker: sch.Waker,
 
-pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, arena: Allocator, opts: Options) !void {
+pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !void {
     self.* = .{
         .io = io,
         .gpa = ctx.gpa(),
@@ -42,8 +41,8 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, arena: Allocator, o
         .waker = undefined,
     };
 
-    const abs_root = try arena.dupe(u8, opts.abs_path);
-    const root_name = try arena.dupe(u8, path.basename(abs_root));
+    const abs_root = try self.gpa.dupe(u8, opts.abs_path);
+    const root_name = try self.gpa.dupe(u8, path.basename(abs_root));
 
     try self.snapshot.init(abs_root, root_name, self.gpa);
     errdefer self.snapshot.deinit(self.gpa);
@@ -51,7 +50,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, arena: Allocator, o
     self.waker = try ctx.await(handleUpdates, .{});
     errdefer self.waker.close();
 
-    self.scanner = try ctx.executor(Scanner, Scanner.handleActions, .{ arena, self.waker });
+    self.scanner = try ctx.executor(Scanner, Scanner.handleActions, .{ self.waker });
     try self.scanner.init(.{
         &self.snapshot,
         ctx.gpa(),
@@ -63,6 +62,8 @@ pub fn deinit(self: *Worktree) void {
     self.waker.close();
     self.scanner.stop();
     self.snapshot.deinit(self.gpa);
+    self.gpa.free(self.snapshot.abs_root);
+    self.gpa.free(self.snapshot.root_name);
 }
 
 fn handleUpdates(ctx: Context(Worktree)) bool {
@@ -95,9 +96,6 @@ test "Worktree Entity" {
     const gpa = testing.allocator;
     const io = testing.io;
 
-    var arena = ArenaAllocator.init(gpa);
-    defer arena.deinit();
-
     var app: App = undefined;
     try app.init(.{}, gpa, io);
     defer app.deinit();
@@ -106,7 +104,6 @@ test "Worktree Entity" {
         &app,
         .{
             io,
-            arena.allocator(),
             Options{
                 .abs_path = test_build.chromium_path,
             },

@@ -34,18 +34,13 @@ test "Bench Worktree" {
     try res.log(io, .stdout());
 }
 
-pub fn initialWorktreeScan(app: *App, gpa: std.mem.Allocator, io: std.Io, _: *prof.Profiler) !void {
-    var alloc: std.heap.ArenaAllocator = .init(gpa);
-    defer alloc.deinit();
-    const arena = alloc.allocator();
-
+pub fn initialWorktreeScan(app: *App, _: std.mem.Allocator, io: std.Io, _: *prof.Profiler) !void {
     defer app.flush();
 
     const worktree: Entity(Worktree) = try .new(
         app,
         .{
             io,
-            arena,
             Worktree.Options{ .abs_path = test_build.chromium_path },
         },
     );
