@@ -763,6 +763,26 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             return self.count == 0;
         }
 
+        pub fn first(self: *Self) ?V {
+            var current: ?*Node = self.root;
+            while (current) |node| {
+                switch (node.*) {
+                    .Internal => |*internal| {
+                        if (internal.len == 0) {
+                            current = null;
+                            break;
+                        }
+                        current = internal.childs[0];
+                    },
+                    .Leaf => {
+                        if (node.Leaf.len == 0) return null;
+                        return node.Leaf.items[0];
+                    },
+                }
+            }
+            return null;
+        }
+
         pub fn iter(self: *Self) Iterator {
             return Iterator.init(self);
         }
