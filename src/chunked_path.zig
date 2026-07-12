@@ -253,12 +253,130 @@ pub const ChunkedPathStore = struct {
         };
     }
 
+    pub fn append(
+        self: *ChunkedPathStore,
+        existing: ChunkedPath,
+        suffix: []const u8,
+        filename_offset: u32,
+    ) ChunkedPath {
+        assert(existing.len > 0);
+        assert(suffix.len > 0);
+
+        const suffix_len: u32 = @intCast(suffix.len);
+        const new_len: u32 = existing.len + suffix_len;
+
+        assert(new_len <= MAX_PATH_LEN);
+        assert(filename_offset < suffix_len);
+
+        const resolved_offset: u32 = existing.len + filename_offset;
+
+        const full_chunks = existing.len / SIMD_CHUNK_BYTES;
+        const remainder = existing.len % SIMD_CHUNK_BYTES;
+
+        var tail_buf: [MAX_PATH_LEN]u8 = undefined;
+        var tail_len: usize = 0;
+
+        if (remainder > 0) {
+            var ex_node = existing.head;
+            var ex_slot: usize = 0;
+            var i: usize = 0;
+            while (i < full_chunks) : (i += 1) {
+                ex_slot += 1;
+                if (ex_slot >= INLINE_CHUNKS) {
+                    ex_slot = 0;
+                    ex_node = ex_node.?.next;
+                }
+            }
+            const last_chunk = ex_node.?.chunks[ex_slot];
+            @memcpy(tail_buf[0..remainder], last_chunk[0..remainder]);
+            tail_len = remainder;
+        }
+        @memcpy(tail_buf[tail_len .. tail_len + suffix.len], suffix);
+        tail_len += suffix.len;
+
+        const tail_chunks = (tail_len + SIMD_CHUNK_BYTES - 1) / SIMD_CHUNK_BYTES;
+        const new_total_chunks = full_chunks + tail_chunks;
+        const new_total_nodes = (new_total_chunks + INLINE_CHUNKS - 1) / INLINE_CHUNKS;
+
+        var head: ?*InlineChunks = null;
+        var tail_node: ?*InlineChunks = null;
+        {
+            var i: usize = 0;
+            while (i < new_total_nodes) : (i += 1) {
+                const node = self.alloc.create(InlineChunks) catch
+                    @panic("Inline Chunks Overflow");
+                node.* = .{ .next = null, .chunks = undefined };
+                if (head == null) head = node else tail_node.?.next = node;
+                tail_node = node;
+            }
+        }
+
+        var cur_node = head;
+        var slot: usize = 0;
+        {
+            var ex_node = existing.head;
+            var ex_slot: usize = 0;
+            var i: usize = 0;
+            while (i < full_chunks) : (i += 1) {
+                const chunk_ptr = ex_node.?.chunks[ex_slot];
+                cur_node.?.chunks[slot] = self.internChunk(chunk_ptr.*);
+                slot += 1;
+                if (slot >= INLINE_CHUNKS) {
+                    slot = 0;
+                    cur_node = cur_node.?.next;
+                }
+                ex_slot += 1;
+                if (ex_slot >= INLINE_CHUNKS) {
+                    ex_slot = 0;
+                    ex_node = ex_node.?.next;
+                }
+            }
+        }
+
+        {
+            var offset: usize = 0;
+            while (offset < tail_len) {
+                var canonical: SIMD_CHUNK = [_]u8{0} ** SIMD_CHUNK_BYTES;
+                const end = @min(offset + SIMD_CHUNK_BYTES, tail_len);
+                const chunk_len = end - offset;
+                @memcpy(canonical[0..chunk_len], tail_buf[offset..end]);
+                cur_node.?.chunks[slot] = self.internChunk(canonical);
+                slot += 1;
+                if (slot >= INLINE_CHUNKS) {
+                    slot = 0;
+                    cur_node = cur_node.?.next;
+                }
+                offset = end;
+            }
+        }
+
+        return .{
+            .len = new_len,
+            .filename_offset = resolved_offset,
+            .head = head,
+        };
+    }
+
     pub fn free(self: *ChunkedPathStore, chunked_path: *ChunkedPath) void {
         assert(chunked_path.len > 0);
 
         const total_chunks = (chunked_path.len + SIMD_CHUNK_BYTES - 1) / SIMD_CHUNK_BYTES;
 
-        self.destroy(chunked_path.head, total_chunks);
+        assert(total_chunks > 0);
+
+        var node = chunked_path.head;
+        var released: usize = 0;
+
+        while (node) |n| {
+            const next = n.next;
+            const slots = @min(INLINE_CHUNKS, total_chunks - released);
+            for (n.chunks[0..slots]) |chunk_ptr| {
+                self.destroyChunk(chunk_ptr);
+            }
+            released += slots;
+            self.alloc.destroy(n);
+            node = next;
+        }
     }
 
     fn internChunk(self: *ChunkedPathStore, canonical: SIMD_CHUNK) *SIMD_CHUNK {
@@ -286,24 +404,6 @@ pub const ChunkedPathStore = struct {
         } else {
             _ = self.dedup.remove(key);
             self.alloc.destroy(ptr);
-        }
-    }
-
-    fn destroy(self: *ChunkedPathStore, head: ?*InlineChunks, count: usize) void {
-        assert(count > 0);
-
-        var node = head;
-        var released: usize = 0;
-
-        while (node) |n| {
-            const next = n.next;
-            const slots = @min(INLINE_CHUNKS, count - released);
-            for (n.chunks[0..slots]) |chunk_ptr| {
-                self.destroyChunk(chunk_ptr);
-            }
-            released += slots;
-            self.alloc.destroy(n);
-            node = next;
         }
     }
 };
@@ -559,6 +659,160 @@ test "iterator over multi-node path" {
         offset += seg.len;
     }
     try testing.expectEqual(@as(usize, 80), offset);
+}
+
+test "append short suffix to short path (merges into one chunk)" {
+    const gpa = testing.allocator;
+    var store: ChunkedPathStore = undefined;
+    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    defer store.deinit(gpa);
+
+    const orig = "hello";
+    var cs = store.put(orig, 0);
+    defer store.free(&cs);
+
+    const suffix = "/world";
+    // filename_offset is relative to the suffix: "world" starts at index 1.
+    var appended = store.append(cs, suffix, 1);
+    defer store.free(&appended);
+
+    // Original is unchanged.
+    try testing.expectEqual(@as(u32, 5), cs.len);
+    const orig_bytes = try cs.toSlice(gpa);
+    defer gpa.free(orig_bytes);
+    try testing.expectEqualSlices(u8, orig, orig_bytes);
+
+    // Appended path has the combined content.
+    try testing.expectEqual(@as(u32, 11), appended.len);
+    try testing.expectEqual(@as(u32, 6), appended.filename_offset);
+    const new_bytes = try appended.toSlice(gpa);
+    defer gpa.free(new_bytes);
+    try testing.expectEqualSlices(u8, "hello/world", new_bytes);
+}
+
+test "append to exact-chunk-boundary path (suffix starts new chunk)" {
+    const gpa = testing.allocator;
+    var store: ChunkedPathStore = undefined;
+    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    defer store.deinit(gpa);
+
+    const orig = "0123456789abcdef"; // exactly 16 bytes
+    var cs = store.put(orig, 0);
+    defer store.free(&cs);
+
+    // "foo" starts at index 1 within the suffix "/foo".
+    var appended = store.append(cs, "/foo", 1);
+    defer store.free(&appended);
+
+    try testing.expectEqual(@as(u32, 20), appended.len);
+    const new_bytes = try appended.toSlice(gpa);
+    defer gpa.free(new_bytes);
+    try testing.expectEqualSlices(u8, "0123456789abcdef/foo", new_bytes);
+
+    // The full chunk should be shared between the two paths.
+    try testing.expectEqual(cs.head.?.chunks[0], appended.head.?.chunks[0]);
+}
+
+test "append spanning multiple nodes" {
+    const gpa = testing.allocator;
+    var store: ChunkedPathStore = undefined;
+    try store.init(gpa, .{ .chunk_capacity = 256, .inline_capacity = 64 });
+    defer store.deinit(gpa);
+
+    // 80 bytes = 5 chunks = 2 nodes.
+    const orig = "0123456789abcdef" ++ "GHIJKLMNOPQRSTUV" ++ "WXYZabcdefghijkl" ++ "mnopqrstuvwxyzAB" ++ "CDEFGHIJKLMNOPQR";
+    var cs = store.put(orig, 0);
+    defer store.free(&cs);
+
+    const suffix = "/subdir/file.zig";
+    const expected = orig ++ suffix;
+    // "subdir/file.zig" starts at index 1 within the suffix.
+    var appended = store.append(cs, suffix, 1);
+    defer store.free(&appended);
+
+    try testing.expectEqual(@as(u32, @intCast(expected.len)), appended.len);
+    const new_bytes = try appended.toSlice(gpa);
+    defer gpa.free(new_bytes);
+    try testing.expectEqualSlices(u8, expected, new_bytes);
+
+    // First 4 full chunks (first node) should be shared.
+    var i: usize = 0;
+    while (i < 4) : (i += 1) {
+        try testing.expectEqual(cs.head.?.chunks[i], appended.head.?.chunks[i]);
+    }
+}
+
+test "append that fills the partial chunk exactly" {
+    const gpa = testing.allocator;
+    var store: ChunkedPathStore = undefined;
+    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    defer store.deinit(gpa);
+
+    // 10 bytes -> partial chunk with 10/16 used, 6 bytes of padding.
+    const orig = "0123456789";
+    var cs = store.put(orig, 0);
+    defer store.free(&cs);
+
+    // Suffix of 6 bytes fills the remainder exactly.
+    const suffix = "abcdef";
+    // filename starts at index 0 within the suffix.
+    var appended = store.append(cs, suffix, 0);
+    defer store.free(&appended);
+
+    try testing.expectEqual(@as(u32, 16), appended.len);
+    const new_bytes = try appended.toSlice(gpa);
+    defer gpa.free(new_bytes);
+    try testing.expectEqualSlices(u8, "0123456789abcdef", new_bytes);
+
+    // The merged chunk should be a new canonical chunk (different from orig's partial).
+    try testing.expect(cs.head.?.chunks[0] != appended.head.?.chunks[0]);
+}
+
+test "append preserves original after original is freed" {
+    const gpa = testing.allocator;
+    var store: ChunkedPathStore = undefined;
+    try store.init(gpa, .{ .chunk_capacity = 256, .inline_capacity = 64 });
+    defer store.deinit(gpa);
+
+    const orig = "0123456789abcdef"; // full 16-byte chunk
+    var cs = store.put(orig, 0);
+
+    // "test" starts at index 1 within the suffix "/test".
+    var appended = store.append(cs, "/test", 1);
+    defer store.free(&appended);
+
+    // Free the original; the appended path's shared chunk should still be valid.
+    store.free(&cs);
+
+    const new_bytes = try appended.toSlice(gpa);
+    defer gpa.free(new_bytes);
+    try testing.expectEqualSlices(u8, "0123456789abcdef/test", new_bytes);
+}
+
+test "append resolves suffix-relative filename_offset to absolute" {
+    const gpa = testing.allocator;
+    var store: ChunkedPathStore = undefined;
+    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    defer store.deinit(gpa);
+
+    // existing = "src/core" (8 bytes, filename "core" at offset 4)
+    const orig = "src/core";
+    var cs = store.put(orig, 4);
+    defer store.free(&cs);
+
+    // suffix = "/module/file.zig" — filename "file.zig" starts at index 8
+    // within the suffix (after "/module/").
+    const suffix = "/module/file.zig";
+    var appended = store.append(cs, suffix, 8);
+    defer store.free(&appended);
+
+    // Resolved offset should be 8 (existing.len) + 8 = 16.
+    try testing.expectEqual(@as(u32, 16), appended.filename_offset);
+
+    const bytes = try appended.toSlice(gpa);
+    defer gpa.free(bytes);
+    try testing.expectEqualSlices(u8, "src/core/module/file.zig", bytes);
+    try testing.expectEqualSlices(u8, "file.zig", bytes[appended.filename_offset..]);
 }
 
 // -- cmp tests --
