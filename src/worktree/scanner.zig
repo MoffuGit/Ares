@@ -40,8 +40,8 @@ pub const Action = union(enum) {
     pub const Queue = Io.Queue(Action);
 
     initial_scan: void,
+    initial_scan_end: void,
     entries: []Entry,
-    scan_end: void,
 };
 
 io: Io,
@@ -186,7 +186,7 @@ fn _handleActions(
                 for (entries) |entry| try self.snapshot.insert(entry);
                 self.gpa.free(entries);
             },
-            .scan_end => {
+            .initial_scan_end => {
                 var copy = try self.snapshot.clone(self.gpa);
                 errdefer copy.deinit(self.gpa);
 
@@ -195,6 +195,13 @@ fn _handleActions(
                     .scanning = false,
                 } });
                 try waker.wake();
+
+                if (self.workers) |workers| {
+                    for (workers) |*worker| {
+                        worker.deinit();
+                    }
+                    self.workers = null;
+                }
             },
         }
     }
@@ -395,7 +402,7 @@ const Worker = struct {
         if (pending != 1) return;
 
         scanner.jobs.close(scanner.io);
-        try scanner.actions.putOne(self.scanner.io, .scan_end);
+        try scanner.actions.putOne(self.scanner.io, .initial_scan_end);
     }
 };
 
