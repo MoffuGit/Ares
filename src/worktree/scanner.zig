@@ -50,7 +50,7 @@ arena: heap.ArenaAllocator,
 gpa: Allocator,
 snapshot: Snapshot,
 store: ChunkedPathStore,
-action_buffer: [8]Action,
+action_buffer: [16]Action,
 actions: Action.Queue,
 
 updates_buffer: [8]Updates,
@@ -178,7 +178,7 @@ fn _handleActions(
     _: Context,
     waker: sch.Waker,
 ) !void {
-    var buffer: [8]Action = undefined;
+    var buffer: [16]Action = undefined;
     for (0..try self.actions.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
             .initial_scan => try self.initialScan(waker),
@@ -235,7 +235,7 @@ fn initialScan(
     self.workers = try arena.alloc(Worker, cpu_count);
 
     for (self.workers.?) |*worker| {
-        worker.init(self, self.gpa);
+        try worker.init(self, self.gpa);
 
         try self.group.concurrent(
             self.io,
@@ -259,19 +259,24 @@ const Worker = struct {
     scanner: *Scanner,
     queue: std.ArrayList(Job),
     entries: std.ArrayList(Snapshot.Entry),
+    buffer: []align(8) u8,
 
-    pub fn init(self: *Worker, scanner: *Scanner, gpa: Allocator) void {
+    pub fn init(self: *Worker, scanner: *Scanner, gpa: Allocator) !void {
         self.* = .{
             .gpa = gpa,
             .scanner = scanner,
             .queue = .empty,
             .entries = .empty,
+            .buffer = undefined,
         };
+
+        self.buffer = try gpa.alignedAlloc(u8, .@"8", 64 * 1024);
     }
 
     pub fn deinit(self: *Worker) void {
         self.queue.deinit(self.gpa);
         self.entries.deinit(self.gpa);
+        self.gpa.free(self.buffer);
     }
 
     pub fn work(
