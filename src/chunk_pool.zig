@@ -32,6 +32,7 @@ pub const ChunkPool = struct {
     chunk_size: u32,
     reserved: u32 = 0,
     free_list: Chunk.Index = .none,
+    mutex: Io.Mutex,
 
     pub fn init(self: *ChunkPool, allocator: Allocator, capacity: u32, size: u32) !void {
         assert(capacity < std.math.maxInt(u32));
@@ -50,6 +51,7 @@ pub const ChunkPool = struct {
         std.log.debug("ChunkPool size={} capacity={} | Chunk size={}", .{ buffer.len, capacity, size });
 
         self.* = .{
+            .mutex = .init,
             .buffer = buffer,
             .alignment = alignment,
             .chunk_size = size,
@@ -58,6 +60,14 @@ pub const ChunkPool = struct {
 
     pub fn deinit(self: *ChunkPool, gpa: Allocator) void {
         gpa.rawFree(self.buffer, self.alignment, @returnAddress());
+    }
+
+    pub fn lock(self: *ChunkPool, io: Io) void {
+        self.mutex.lockUncancelable(io);
+    }
+
+    pub fn unlock(self: *ChunkPool, io: Io) void {
+        self.mutex.unlock(io);
     }
 
     pub fn alloc(self: *ChunkPool) ?[]u8 {
@@ -98,7 +108,6 @@ pub const ChunkPool = struct {
 
 pub const ChunkAllocator = struct {
     pools: []ChunkPool,
-    mutex: Io.Mutex,
     io: Io,
 
     const PoolConfig = struct { u32, u32 };
@@ -110,7 +119,6 @@ pub const ChunkAllocator = struct {
     pub fn init(self: *ChunkAllocator, child_alloc: Allocator, pool_configs: []const PoolConfig) !void {
         self.* = .{
             .pools = undefined,
-            .mutex = undefined,
             .io = undefined,
         };
 
@@ -139,7 +147,6 @@ pub const ChunkAllocator = struct {
     pub fn initThreadSafe(self: *ChunkAllocator, io: Io, child_alloc: Allocator, pool_configs: []const PoolConfig) !void {
         self.* = .{
             .pools = undefined,
-            .mutex = .init,
             .io = io,
         };
 
@@ -220,12 +227,13 @@ pub const ChunkAllocator = struct {
         const max_size = self.pools[self.pools.len - 1].chunk_size;
         if (len > max_size) panic("Chunk of {} bytes exceeds max chunk size {}", .{ len, max_size });
 
-        self.mutex.lockUncancelable(self.io);
-        defer self.mutex.unlock(self.io);
-
         for (self.pools) |*pool| {
             if (len > pool.chunk_size) continue;
             if (alignment.toByteUnits() > pool.alignment.toByteUnits()) continue;
+
+            pool.lock(self.io);
+            defer pool.unlock(self.io);
+
             const buffer = pool.alloc() orelse return null;
             return buffer.ptr;
         }
@@ -249,12 +257,13 @@ pub const ChunkAllocator = struct {
     fn threadSafeFree(ctx: *anyopaque, memory: []u8, _: mem.Alignment, _: usize) void {
         const self: *ChunkAllocator = @ptrCast(@alignCast(ctx));
 
-        self.mutex.lockUncancelable(self.io);
-        defer self.mutex.unlock(self.io);
-
         for (self.pools) |*pool| {
             if (@intFromPtr(memory.ptr) < @intFromPtr(pool.buffer.ptr)) continue;
             if (@intFromPtr(memory.ptr) >= @intFromPtr(pool.buffer.ptr) + pool.buffer.len) continue;
+
+            pool.lock(self.io);
+            defer pool.unlock(self.io);
+
             pool.free(memory.ptr[0..pool.chunk_size]);
             return;
         }

@@ -45,7 +45,6 @@ pub const Action = union(enum) {
 };
 
 io: Io,
-mutex: Io.Mutex,
 arena: heap.ArenaAllocator,
 gpa: Allocator,
 snapshot: Snapshot,
@@ -89,7 +88,6 @@ pub fn init(
         .next_entry_id = .init(0),
         .pending_jobs = .init(0),
         .snapshot = undefined,
-        .mutex = .init,
         .store = undefined,
         .workers = null,
     };
@@ -106,7 +104,7 @@ pub fn init(
     self.updates = .init(&self.updates_buffer);
     self.jobs = .init(self.jobs_buffer);
 
-    try self.store.init(arena, .{ .chunk_capacity = 1024 * 1024, .inline_capacity = 1024 * 1024 });
+    try self.store.init(io, arena, .{ .chunk_capacity = 1024 * 1024, .inline_capacity = 1024 * 1024 });
 
     const root_path = self.store.put(root_name, 0);
 
@@ -162,14 +160,6 @@ pub fn deinit(self: *Scanner) void {
     }
 
     self.arena.deinit();
-}
-
-pub fn lock(self: *Scanner) !void {
-    try self.mutex.lock(self.io);
-}
-
-pub fn unlock(self: *Scanner) void {
-    self.mutex.unlock(self.io);
 }
 
 pub fn handleActions(
@@ -372,12 +362,7 @@ const Worker = struct {
             const suffix = suffix_buf[0 .. 1 + name.len];
             const store = &self.scanner.store;
 
-            {
-                try self.scanner.lock();
-                defer self.scanner.unlock();
-
-                path = store.append(parent_path, suffix, 1);
-            }
+            path = store.append(parent_path, suffix, 1);
 
             try self.entries.append(self.gpa, .{
                 .path = path,

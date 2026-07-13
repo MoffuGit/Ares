@@ -2,6 +2,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
+const Io = std.Io;
 const math = std.math;
 
 const chunk_pool = @import("chunk_pool.zig");
@@ -155,6 +156,8 @@ const SharedChunk = struct {
 };
 
 pub const ChunkedPathStore = struct {
+    io: Io,
+    mutex: Io.Mutex,
     alloc: Allocator,
     chunks: ChunkAllocator,
     dedup: std.AutoHashMap(SIMD_CHUNK, SharedChunk),
@@ -164,25 +167,35 @@ pub const ChunkedPathStore = struct {
         inline_capacity: u32,
     };
 
-    pub fn init(self: *ChunkedPathStore, allocator: Allocator, config: Config) !void {
+    pub fn init(self: *ChunkedPathStore, io: Io, allocator: Allocator, config: Config) !void {
         self.* = .{
+            .io = io,
+            .mutex = .init,
             .alloc = undefined,
             .chunks = undefined,
             .dedup = undefined,
         };
 
-        try self.chunks.init(allocator, &.{
+        try self.chunks.initThreadSafe(io, allocator, &.{
             .{ config.chunk_capacity, SIMD_CHUNK_BYTES },
             .{ config.inline_capacity, INLINE_NODE_SIZE },
         });
         errdefer self.chunks.deinit(allocator);
 
-        self.alloc = self.chunks.allocator();
+        self.alloc = self.chunks.threadSafeAllocator();
 
         self.dedup = .init(allocator);
         errdefer self.dedup.deinit();
 
         try self.dedup.ensureTotalCapacity(config.chunk_capacity);
+    }
+
+    pub fn lock(self: *ChunkedPathStore) void {
+        self.mutex.lockUncancelable(self.io);
+    }
+
+    pub fn unlock(self: *ChunkedPathStore) void {
+        self.mutex.unlock(self.io);
     }
 
     pub fn deinit(self: *ChunkedPathStore, allocator: Allocator) void {
@@ -380,6 +393,9 @@ pub const ChunkedPathStore = struct {
     }
 
     fn internChunk(self: *ChunkedPathStore, canonical: SIMD_CHUNK) *SIMD_CHUNK {
+        self.lock();
+        defer self.unlock();
+
         if (self.dedup.getPtr(canonical)) |entry| {
             entry.ref_count += 1;
             return entry.ptr;
@@ -395,6 +411,9 @@ pub const ChunkedPathStore = struct {
     }
 
     fn destroyChunk(self: *ChunkedPathStore, ptr: *SIMD_CHUNK) void {
+        self.lock();
+        defer self.unlock();
+
         const key: SIMD_CHUNK = ptr.*;
         const entry = self.dedup.getPtr(key) orelse return;
         assert(entry.ptr == ptr);
@@ -410,8 +429,10 @@ pub const ChunkedPathStore = struct {
 
 test "short partial path round-trip" {
     const gpa = testing.allocator;
+    const io = testing.io;
+
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const path = "hello";
@@ -435,8 +456,9 @@ test "short partial path round-trip" {
 
 test "exactly 16 bytes" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const path = "0123456789abcdef";
@@ -453,8 +475,9 @@ test "exactly 16 bytes" {
 
 test "exactly 64 bytes (one node, four chunks)" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const path = "0123456789abcdef" ++ "GHIJKLMNOPQRSTUV" ++ "WXYZabcdefghijkl" ++ "mnopqrstuvwxyzAB";
@@ -473,9 +496,10 @@ test "exactly 64 bytes (one node, four chunks)" {
 
 test "longer than 64 bytes (multi-node)" {
     const gpa = testing.allocator;
+    const io = testing.io;
 
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
     defer store.deinit(gpa);
 
     const path = "0123456789abcdef" ++ "GHIJKLMNOPQRSTUV" ++ "WXYZabcdefghijkl" ++ "mnopqrstuvwxyzAB" ++ "CDEFGHIJKLMNOPQR";
@@ -496,8 +520,9 @@ test "longer than 64 bytes (multi-node)" {
 
 test "maximum 4096-byte path" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 256, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 256, .inline_capacity = 64 });
     defer store.deinit(gpa);
 
     var path_buf: [MAX_PATH_LEN]u8 = undefined;
@@ -516,8 +541,9 @@ test "maximum 4096-byte path" {
 
 test "identical chunks shared across paths" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const shared_prefix = "0123456789abcdef";
@@ -532,8 +558,9 @@ test "identical chunks shared across paths" {
 
 test "repeated chunk within one path" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 1, .inline_capacity = 4 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const block = "AAAAAAAAAAAAAAAA";
@@ -553,8 +580,9 @@ test "repeated chunk within one path" {
 
 test "different chunks are not shared" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     var cs_a = store.put("0123456789abcdef", 0);
@@ -568,8 +596,9 @@ test "different chunks are not shared" {
 
 test "filename offset preserved" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const path = "src/chunked_string.zig";
@@ -588,8 +617,9 @@ test "filename offset preserved" {
 
 test "identical bytes with different offsets still share chunks" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const path = "0123456789abcdef";
@@ -605,8 +635,9 @@ test "identical bytes with different offsets still share chunks" {
 
 test "store bulk deinit no leak" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     _ = store.put("src/chunked_string.zig", 4);
@@ -618,8 +649,9 @@ test "store bulk deinit no leak" {
 
 test "copyTo with exact and undersized buffers" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const path = "0123456789abcdefGHIJKLMNOPQRSTUV";
@@ -644,8 +676,9 @@ test "copyTo with exact and undersized buffers" {
 
 test "iterator over multi-node path" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const path = "0123456789abcdef" ++ "GHIJKLMNOPQRSTUV" ++ "WXYZabcdefghijkl" ++ "mnopqrstuvwxyzAB" ++ "CDEFGHIJKLMNOPQR";
@@ -663,8 +696,9 @@ test "iterator over multi-node path" {
 
 test "append short suffix to short path (merges into one chunk)" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const orig = "hello";
@@ -692,8 +726,9 @@ test "append short suffix to short path (merges into one chunk)" {
 
 test "append to exact-chunk-boundary path (suffix starts new chunk)" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const orig = "0123456789abcdef"; // exactly 16 bytes
@@ -715,8 +750,9 @@ test "append to exact-chunk-boundary path (suffix starts new chunk)" {
 
 test "append spanning multiple nodes" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 256, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     // 80 bytes = 5 chunks = 2 nodes.
@@ -744,8 +780,9 @@ test "append spanning multiple nodes" {
 
 test "append that fills the partial chunk exactly" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     // 10 bytes -> partial chunk with 10/16 used, 6 bytes of padding.
@@ -770,8 +807,9 @@ test "append that fills the partial chunk exactly" {
 
 test "append preserves original after original is freed" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 256, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const orig = "0123456789abcdef"; // full 16-byte chunk
@@ -791,8 +829,9 @@ test "append preserves original after original is freed" {
 
 test "append resolves suffix-relative filename_offset to absolute" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     // existing = "src/core" (8 bytes, filename "core" at offset 4)
@@ -819,8 +858,9 @@ test "append resolves suffix-relative filename_offset to absolute" {
 
 test "cmp equal strings" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const path = "src/chunked_string.zig";
@@ -835,8 +875,9 @@ test "cmp equal strings" {
 
 test "cmp differs at first byte" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     var cs_a = store.put("abc", 0);
@@ -850,8 +891,9 @@ test "cmp differs at first byte" {
 
 test "cmp differs at last byte of first chunk" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const path_a = "0123456789abcdeA";
@@ -867,8 +909,9 @@ test "cmp differs at last byte of first chunk" {
 
 test "cmp differs in second chunk" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     // 32 bytes = 2 chunks. Second chunk differs at first byte.
@@ -885,8 +928,9 @@ test "cmp differs in second chunk" {
 
 test "cmp differs in second node (multi-node)" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     // 80 bytes = 5 chunks = 2 nodes. Difference at chunk 4 (first slot of second node).
@@ -904,8 +948,9 @@ test "cmp differs in second node (multi-node)" {
 
 test "cmp prefix — shorter is less" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     var cs_short = store.put("hello", 0);
@@ -919,8 +964,9 @@ test "cmp prefix — shorter is less" {
 
 test "cmp prefix across chunk boundary" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     // 16 bytes exactly vs 17 bytes (first chunk identical, second has 1 byte).
@@ -936,8 +982,9 @@ test "cmp prefix across chunk boundary" {
 
 test "cmp partial chunk vs full chunk (padding as zero)" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 64, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     // "hello" is 5 bytes + 11 zeros in its chunk.
@@ -958,8 +1005,9 @@ test "cmp partial chunk vs full chunk (padding as zero)" {
 
 test "cmp long equal paths (multi-node)" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 256, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const path = "0123456789abcdef" ++ "GHIJKLMNOPQRSTUV" ++ "WXYZabcdefghijkl" ++ "mnopqrstuvwxyzAB" ++ "CDEFGHIJKLMNOPQR";
@@ -973,8 +1021,9 @@ test "cmp long equal paths (multi-node)" {
 
 test "cmp max length equal" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 256, .inline_capacity = 128 });
+    try store.init(io, gpa, .{ .chunk_capacity = 256, .inline_capacity = 128 });
     defer store.deinit(gpa);
 
     var path_buf: [MAX_PATH_LEN]u8 = undefined;
@@ -990,8 +1039,9 @@ test "cmp max length equal" {
 
 test "cmp max length differ at last byte" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 256, .inline_capacity = 128 });
+    try store.init(io, gpa, .{ .chunk_capacity = 256, .inline_capacity = 128 });
     defer store.deinit(gpa);
 
     var path_a: [MAX_PATH_LEN]u8 = undefined;
@@ -1014,8 +1064,9 @@ test "cmp max length differ at last byte" {
 
 test "cmp ignores filename_offset" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const path = "0123456789abcdef";
@@ -1030,8 +1081,9 @@ test "cmp ignores filename_offset" {
 
 test "cmp matches std.mem.order on random paths" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(gpa, .{ .chunk_capacity = 256, .inline_capacity = 64 });
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
     defer store.deinit(gpa);
 
     const test_paths = [_][]const u8{
