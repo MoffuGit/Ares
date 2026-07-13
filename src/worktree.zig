@@ -9,13 +9,13 @@ const test_build = @import("test_build");
 const App = @import("app.zig");
 const Entity = App.Entity;
 const Context = App.Context;
-const Scanner = @import("worktree/scanner.zig");
-const Updates = Scanner.Updates;
-const Snapshot = @import("worktree/snapshot.zig");
 const sch = @import("scheduler.zig");
 const BackgroundScheduler = sch.BackgroundScheduler;
 const Executor = BackgroundScheduler.Executor;
 const Scheduler = sch.Scheduler;
+const Scanner = @import("worktree/scanner.zig");
+const Updates = Scanner.Updates;
+const Snapshot = @import("worktree/snapshot.zig");
 
 pub const Worktree = @This();
 
@@ -51,13 +51,12 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
         io,
     });
 
-    self.snapshot = try self.scanner.ptr.snapshot.clone(self.gpa);
+    self.snapshot = try self.scanner.ptr.snapshot.clone();
 }
 
 pub fn deinit(self: *Worktree) void {
     self.waker.close();
     self.scanner.stop();
-    self.snapshot.deinit(self.gpa);
 }
 
 fn handleUpdates(ctx: Context(Worktree)) bool {
@@ -76,7 +75,9 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
         switch (buffer[idx]) {
             .started => self.scanning = true,
             .updated => |updated| {
-                self.snapshot.deinit(self.gpa);
+                try self.scanner.ptr.actions.putOne(self.io, .{ .reclaim = self.snapshot });
+                try self.scanner.waker.wake();
+
                 self.snapshot = updated.snapshot;
                 self.scanning = updated.scanning;
             },

@@ -135,7 +135,7 @@ pub const BackgroundScheduler = struct {
         };
 
         self.queues.init();
-        try self.chunks.initThreadSafe(io, self.arena, &.{ .{ 50, MAX_SIZE }, .{ 10, 1280 } });
+        try self.chunks.initThreadSafe(io, self.arena, &.{ .{ 50, MAX_SIZE }, .{ 10, 4096 } });
         try self.tasks.init(arena, self.chunks.threadSafeAllocator(), io);
         try self.loop.init(io);
         errdefer self.loop.deinit();

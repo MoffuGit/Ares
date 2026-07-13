@@ -13,6 +13,8 @@ pub const Entry = struct {
     path: ChunkedPath,
 };
 
+pub const NODE_SIZE = Entries.NODE_SIZE;
+
 const Entries = btree.BPlusTree(ChunkedPath, Entry, ChunkedPath.cmp);
 
 const Snapshot = @This();
@@ -21,37 +23,36 @@ entries: Entries,
 
 abs_root: []const u8,
 root_name: []const u8,
-chunks: ChunkAllocator,
+chunk: Allocator,
 
-pub fn init(self: *Snapshot, abs_root: []const u8, root_name: []const u8, alloc: Allocator) !void {
+pub fn init(self: *Snapshot, abs_root: []const u8, root_name: []const u8, chunk: Allocator) !void {
     self.* = .{
         .abs_root = abs_root,
         .root_name = root_name,
         .entries = undefined,
-        .chunks = undefined,
+        .chunk = chunk,
     };
-    try self.chunks.init(alloc, &.{.{ 1024 * 1024, Entries.NODE_SIZE }});
 
-    try self.entries.init(self.chunks.allocator());
+    try self.entries.init(self.chunk);
 }
 
-pub fn clone(self: *const Snapshot, alloc: Allocator) !Snapshot {
+pub fn clone(self: *const Snapshot) !Snapshot {
     var copy: Snapshot = .{
         .abs_root = self.abs_root,
         .root_name = self.root_name,
         .entries = undefined,
-        .chunks = undefined,
+        .chunk = self.chunk,
     };
-    try copy.chunks.init(alloc, &.{.{ @as(u32, @intCast(self.entries.count)), Entries.NODE_SIZE }});
-    copy.entries = try self.entries.clone(copy.chunks.allocator());
+
+    copy.entries = try self.entries.clone(self.chunk);
 
     return copy;
 }
 
 pub fn insert(self: *Snapshot, entry: Entry) !void {
-    _ = try self.entries.insert(self.chunks.allocator(), entry.path, entry);
+    _ = try self.entries.insert(self.chunk, entry.path, entry);
 }
 
-pub fn deinit(self: *Snapshot, alloc: Allocator) void {
-    self.chunks.deinit(alloc);
+pub fn deinit(self: *Snapshot) void {
+    self.entries.deinit(self.chunk);
 }
