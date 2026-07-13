@@ -3,7 +3,6 @@ const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const atomic = std.atomic;
-const path = std.fs.path;
 
 const test_build = @import("test_build");
 
@@ -41,29 +40,24 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
         .waker = undefined,
     };
 
-    const abs_root = try self.gpa.dupe(u8, opts.abs_path);
-    const root_name = try self.gpa.dupe(u8, path.basename(abs_root));
-
-    try self.snapshot.init(abs_root, root_name, self.gpa);
-    errdefer self.snapshot.deinit(self.gpa);
-
     self.waker = try ctx.await(handleUpdates, .{});
     errdefer self.waker.close();
 
     self.scanner = try ctx.executor(Scanner, Scanner.handleActions, .{self.waker});
+    errdefer self.scanner.stop();
     try self.scanner.init(.{
-        &self.snapshot,
+        opts.abs_path,
         ctx.gpa(),
         io,
     });
+
+    self.snapshot = try self.scanner.ptr.snapshot.clone(self.gpa);
 }
 
 pub fn deinit(self: *Worktree) void {
     self.waker.close();
     self.scanner.stop();
     self.snapshot.deinit(self.gpa);
-    self.gpa.free(self.snapshot.abs_root);
-    self.gpa.free(self.snapshot.root_name);
 }
 
 fn handleUpdates(ctx: Context(Worktree)) bool {

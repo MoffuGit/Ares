@@ -70,7 +70,7 @@ waker: tsk.Waker,
 pub fn init(
     self: *Scanner,
     waker: tsk.Waker,
-    snapshot: *Snapshot,
+    abs_path: []const u8,
     gpa: Allocator,
     io: Io,
 ) !void {
@@ -97,6 +97,9 @@ pub fn init(
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
 
+    const abs_root = try arena.dupe(u8, abs_path);
+    const root_name = try arena.dupe(u8, std.fs.path.basename(abs_root));
+
     self.jobs_buffer = try arena.alloc(Worker.Job, 128);
 
     self.actions = .init(&self.action_buffer);
@@ -105,9 +108,9 @@ pub fn init(
 
     try self.store.init(arena, .{ .chunk_capacity = 1024 * 1024, .inline_capacity = 1024 * 1024 });
 
-    const root_path = self.store.put(snapshot.root_name, 0);
+    const root_path = self.store.put(root_name, 0);
 
-    try self.snapshot.init(snapshot.abs_root, snapshot.root_name, arena);
+    try self.snapshot.init(abs_root, root_name, arena);
     try self.snapshot.insert(.{
         .id = self.next_entry_id.fetchAdd(1, .monotonic),
         .path = root_path,
@@ -121,11 +124,25 @@ pub fn deinit(self: *Scanner) void {
     self.updates.close(self.io);
     self.jobs.close(self.io);
     self.actions.close(self.io);
-    self.group.cancel(self.io);
+    self.group.await(self.io) catch |err| {
+        std.log.err("await err={}", .{err});
+    };
     self.store.deinit(self.arena.allocator());
     if (self.workers) |workers| {
         for (workers) |*worker| {
             worker.deinit();
+        }
+    }
+
+    var action_buf: [16]Action = undefined;
+    while (true) {
+        const n = self.actions.get(self.io, &action_buf, 0) catch break;
+        if (n == 0) break;
+        for (action_buf[0..n]) |action| {
+            switch (action) {
+                .entries => |entries| self.gpa.free(entries),
+                else => {},
+            }
         }
     }
 
@@ -379,8 +396,8 @@ const Worker = struct {
     fn flushEntries(self: *Worker) !void {
         if (self.entries.items.len == 0) return;
 
-        const clone = try self.entries.clone(self.gpa);
-        errdefer self.gpa.free(clone.items);
+        var clone = try self.entries.clone(self.gpa);
+        errdefer clone.deinit(self.gpa);
         try self.scanner.actions.putOne(self.scanner.io, .{ .entries = clone.items });
 
         self.entries.clearRetainingCapacity();

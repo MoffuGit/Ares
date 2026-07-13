@@ -36,6 +36,8 @@ pub const ChunkPool = struct {
     pub fn init(self: *ChunkPool, allocator: Allocator, capacity: u32, size: u32) !void {
         assert(capacity < std.math.maxInt(u32));
         assert(size >= MAX_ALIGN.toByteUnits());
+        assert(capacity > 0);
+        assert(size > 0);
 
         const alignment: mem.Alignment = .fromByteUnits(size);
         const len = @as(usize, size) * @as(usize, capacity);
