@@ -380,6 +380,7 @@ const Worker = struct {
         if (self.entries.items.len == 0) return;
 
         const clone = try self.entries.clone(self.gpa);
+        errdefer self.gpa.free(clone.items);
         try self.scanner.actions.putOne(self.scanner.io, .{ .entries = clone.items });
 
         self.entries.clearRetainingCapacity();
