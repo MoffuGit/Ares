@@ -534,13 +534,12 @@ fn scanDir(
         const new_len = parent_path.len + suffix_len;
         if (new_len > MAX_PATH_LEN) continue;
 
-        var path: ChunkedPath = undefined;
         var suffix_buf: [MAX_PATH_LEN]u8 = undefined;
         suffix_buf[0] = '/';
         @memcpy(suffix_buf[1 .. 1 + name.len], name);
         const suffix = suffix_buf[0 .. 1 + name.len];
 
-        path = self.path_store.append(parent_path, suffix, 1);
+        const path: ChunkedPath = self.path_store.append(parent_path, suffix, 1);
 
         const ptr = shared.createEntry();
 
