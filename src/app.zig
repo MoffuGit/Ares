@@ -37,8 +37,7 @@ pub const Options = struct {
 pub const App = @This();
 
 gpa: Allocator,
-alloc: heap.ArenaAllocator,
-arena: Allocator,
+arena: heap.ArenaAllocator,
 entities: EntityStore,
 events: std.Deque(Event),
 listeners: Listeners,
@@ -68,23 +67,22 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
-        .alloc = .init(gpa),
-        .arena = undefined,
+        .arena = .init(gpa),
         .events = .empty,
     };
-    self.arena = self.alloc.allocator();
-    errdefer self.alloc.deinit();
+    const arena = self.arena.allocator();
+    errdefer self.arena.deinit();
 
-    try self.chunks.init(self.arena, &.{ .{ 50, MAX_SIZE }, .{ 50, Observers.NODE_SIZE } });
+    try self.chunks.init(arena, &.{ .{ 50, MAX_SIZE }, .{ 50, Observers.NODE_SIZE } });
     try self.observers.init(self.chunks.allocator());
     try self.listeners.init(self.chunks.allocator());
-    try self.entities.init(self.arena, 100);
+    try self.entities.init(arena, 100);
     try self.notifications.init(self.chunks.allocator());
 
-    try self.background_scheduler.init(options, self.arena, io);
+    try self.background_scheduler.init(options, arena, io);
     errdefer self.background_scheduler.deinit();
 
-    try self.scheduler.init(options, self.arena, self.chunks.allocator(), io);
+    try self.scheduler.init(options, arena, self.chunks.allocator(), io);
     errdefer self.scheduler.deinit();
 }
 
@@ -92,7 +90,7 @@ pub fn deinit(self: *App) void {
     self.scheduler.deinit();
     self.background_scheduler.deinit();
     self.events.deinit(self.gpa);
-    self.alloc.deinit();
+    self.arena.deinit();
 }
 
 pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Entity(T) {
@@ -356,7 +354,7 @@ pub fn Context(comptime T: type) type {
         }
 
         pub fn arena(self: *const @This()) Allocator {
-            return self.app.arena;
+            return self.app.arena.allocator();
         }
 
         pub fn update(self: *const @This()) struct { *T, UpdateFrame } {
