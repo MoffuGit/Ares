@@ -9,8 +9,6 @@ const heap = std.heap;
 const builtin = @import("builtin");
 
 const App = @import("../app.zig");
-const attr = @import("attr.zig");
-const BulkScanner = attr.BulkScanner;
 const chunk_pool = @import("../chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const chunked_path = @import("../chunked_path.zig");
@@ -27,6 +25,8 @@ const Executor = BackgroundScheduler.Executor;
 const Context = BackgroundScheduler.Context;
 const Scheduler = sch.Scheduler;
 const tsk = @import("../tasks.zig");
+const attr = @import("attr.zig");
+const BulkAttr = attr.BulkAttr;
 const Snapshot = @import("snapshot.zig");
 
 pub const Entry = struct {
@@ -517,7 +517,7 @@ fn scanDir(
     const dir = job.dir;
     defer dir.close(self.io);
 
-    var bulk = BulkScanner.init(dir.handle, buffer, .{
+    var bulk = BulkAttr.init(dir.handle, buffer, .{
         .size = true,
         .mtime = true,
         .inode = true,

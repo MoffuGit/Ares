@@ -87,13 +87,13 @@ inline fn tsToNs(ts: Timespec) i64 {
     return ts.sec *% std.time.ns_per_s +% ts.nsec;
 }
 
-pub const ScanError = error{
+pub const AttError = error{
     Unsupported, // need to fallback to fstat
     PermissionDenied,
     ReadFailed,
 };
 
-pub const BulkScanner = if (!supported) struct {} else struct {
+pub const BulkAttr = if (!supported) struct {} else struct {
     fd: std.c.fd_t,
     buf: []align(8) u8,
     alist: AttrList,
@@ -105,7 +105,7 @@ pub const BulkScanner = if (!supported) struct {} else struct {
     /// call means "unsupported filesystem"; later it would be a real error.
     primed: bool = false,
 
-    pub fn init(fd: std.c.fd_t, buf: []align(8) u8, mask: Mask) BulkScanner {
+    pub fn init(fd: std.c.fd_t, buf: []align(8) u8, mask: Mask) BulkAttr {
         // TODO unify the mask so we do not need to recreate it & make the mask
         var common: u32 = ATTR_CMN_RETURNED_ATTRS | ATTR_CMN_ERROR | ATTR_CMN_NAME | ATTR_CMN_OBJTYPE;
         if (mask.btime) common |= ATTR_CMN_CRTIME;
@@ -137,7 +137,7 @@ pub const BulkScanner = if (!supported) struct {} else struct {
         };
     }
 
-    fn refill(self: *BulkScanner) ScanError!bool {
+    fn refill(self: *BulkAttr) AttError!bool {
         while (true) {
             const n = getattrlistbulk(self.fd, &self.alist, self.buf.ptr, self.buf.len, FSOPT_NOFOLLOW);
             if (n < 0) {
@@ -159,7 +159,7 @@ pub const BulkScanner = if (!supported) struct {} else struct {
 
     /// Returns the next entry, or null when the directory is exhausted.
     /// "." and ".." are never returned by getattrlistbulk.
-    pub fn next(self: *BulkScanner) ScanError!?Entry {
+    pub fn next(self: *BulkAttr) AttError!?Entry {
         outer: while (true) {
             if (self.remaining == 0) {
                 if (!try self.refill()) return null;
