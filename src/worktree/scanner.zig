@@ -388,7 +388,7 @@ const SharedState = struct {
 
         try self.job_queue.init(arena, @intCast(threads));
 
-        try self.chunks.initThreadSafe(io, arena, &.{
+        try self.chunks.init(arena, &.{
             .{ 1024 * 1024, @max(@sizeOf(Entry), @sizeOf(Job)) },
         });
     }
@@ -403,23 +403,23 @@ const SharedState = struct {
     }
 
     pub fn allocator(self: *SharedState) Allocator {
-        return self.chunks.threadSafeAllocator();
+        return self.chunks.allocator();
     }
 
     pub fn createJob(self: *SharedState) *Job {
-        return self.chunks.threadSafeAllocator().create(Job) catch @panic("Scanner Job Overflow");
+        return self.chunks.allocator().create(Job) catch @panic("Scanner Job Overflow");
     }
 
     pub fn destroyJob(self: *SharedState, job: *Job) void {
-        self.chunks.threadSafeAllocator().destroy(job);
+        self.chunks.allocator().destroy(job);
     }
 
     pub fn createEntry(self: *SharedState) *Entry {
-        return self.chunks.threadSafeAllocator().create(Entry) catch @panic("Scanner Entry Overflow");
+        return self.chunks.allocator().create(Entry) catch @panic("Scanner Entry Overflow");
     }
 
     pub fn destroyEntry(self: *SharedState, entry: *Entry) void {
-        self.chunks.threadSafeAllocator().destroy(entry);
+        self.chunks.allocator().destroy(entry);
     }
 };
 

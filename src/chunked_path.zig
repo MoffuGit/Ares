@@ -176,13 +176,13 @@ pub const ChunkedPathStore = struct {
             .dedup = undefined,
         };
 
-        try self.chunks.initThreadSafe(io, allocator, &.{
+        try self.chunks.init(allocator, &.{
             .{ config.chunk_capacity, SIMD_CHUNK_BYTES },
             .{ config.inline_capacity, INLINE_NODE_SIZE },
         });
         errdefer self.chunks.deinit(allocator);
 
-        self.alloc = self.chunks.threadSafeAllocator();
+        self.alloc = self.chunks.allocator();
 
         self.dedup = .init(allocator);
         errdefer self.dedup.deinit();

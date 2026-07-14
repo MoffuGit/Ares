@@ -135,8 +135,8 @@ pub const BackgroundScheduler = struct {
         };
 
         self.queues.init();
-        try self.chunks.initThreadSafe(io, self.arena, &.{ .{ 50, MAX_SIZE }, .{ 10, 2048 } });
-        try self.tasks.init(arena, self.chunks.threadSafeAllocator(), io);
+        try self.chunks.init(self.arena, &.{ .{ 50, MAX_SIZE }, .{ 10, 2048 } });
+        try self.tasks.init(arena, self.chunks.allocator(), io);
         try self.loop.init(io);
         errdefer self.loop.deinit();
 
@@ -264,7 +264,7 @@ pub const BackgroundScheduler = struct {
     pub fn executor(self: *@This(), T: type, function: anytype, args: anytype) !Executor(T) {
         const Args = @TypeOf(args);
 
-        const alloc = self.chunks.threadSafeAllocator();
+        const alloc = self.chunks.allocator();
 
         const ptr = try alloc.create(T);
         errdefer alloc.destroy(ptr);
@@ -277,7 +277,7 @@ pub const BackgroundScheduler = struct {
 
                 const rearm = @call(.always_inline, function, .{ _ptr, Context{ .scheduler = scheduler, .waker = .{ .port = port } } } ++ _args ++ .{res});
                 if (!rearm) {
-                    const _alloc = scheduler.chunks.threadSafeAllocator();
+                    const _alloc = scheduler.chunks.allocator();
                     _alloc.destroy(_ptr);
                 }
 
