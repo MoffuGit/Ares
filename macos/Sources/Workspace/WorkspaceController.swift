@@ -47,7 +47,7 @@ final class WorkspaceController: NSWindowController, NSWindowDelegate {
     }
 
     func serializedMetadata() -> Odyssey.SerializedWorkspace? {
-        let id = workspace.workspaceID
+        let id = workspace.Id
         guard id >= 0 else { return nil }
         return Odyssey.SerializedWorkspace(
             id: id,

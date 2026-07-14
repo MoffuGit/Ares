@@ -135,7 +135,7 @@ extension Odyssey {
             app.enqueueFlush()
         }
 
-        var workspaceID: Int64 {
+        var Id: Int64 {
             guard let odysseyApp = app.app, let entity = entity else { return -1 }
             return odyssey_workspace_get_id(odysseyApp, entity)
         }
