@@ -33,7 +33,7 @@ pub const Entry = struct {
     next: ?*Entry = null,
 };
 
-const UPDATE_INTERVAL: Io.Duration = if (builtin.mode == .Debug) .fromSeconds(5) else .fromMilliseconds(100);
+const UPDATE_INTERVAL: Io.Duration = .fromMilliseconds(100);
 
 const Scanner = @This();
 
@@ -65,6 +65,8 @@ chunks: ChunkAllocator,
 
 shared: ?*SharedState,
 
+timer: ?BackgroundScheduler.Cancelation = null,
+
 action_buffer: [8]Action,
 actions: Action.Queue,
 
@@ -95,6 +97,7 @@ pub fn init(
         .snapshot = undefined,
         .path_store = undefined,
         .shared = null,
+        .timer = null,
     };
 
     const arena = self.arena.allocator();
@@ -132,6 +135,11 @@ pub fn init(
 }
 
 pub fn deinit(self: *Scanner) void {
+    if (self.timer) |timer| {
+        timer.cancel();
+        self.timer = null;
+    }
+
     if (self.shared) |shared| {
         shared.stop();
         self.group.await(self.io) catch |err| {
@@ -185,8 +193,22 @@ fn _handleActions(
     var buffer: [8]Action = undefined;
     for (0..try self.actions.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
-            .initial_scan => try self.initialScan(waker, ctx.waker),
+            .initial_scan => {
+                try self.initialScan(waker, ctx.waker);
+                if (builtin.mode != .Debug) {
+                    self.timer = try ctx.scheduler.timer(
+                        timerCallback,
+                        .{ self, waker },
+                        @as(u64, @intCast(UPDATE_INTERVAL.toMilliseconds())),
+                    );
+                }
+            },
             .scan_end => {
+                if (self.timer) |timer| {
+                    timer.cancel();
+                    self.timer = null;
+                }
+
                 if (self.shared) |shared| {
                     shared.stop();
                     try self.group.await(self.io);
@@ -253,6 +275,21 @@ fn initialScan(
             .{ self, @as(u32, @intCast(i)) },
         );
     }
+}
+
+fn timerCallback(self: *Scanner, waker: sch.Waker, res: anyerror!void) bool {
+    res catch return false;
+    if (self.shared == null) return false;
+
+    const snapshot = self.snapshot.clone() catch return true;
+    self.updates.putOne(self.io, .{ .updated = .{
+        .scanning = true,
+        .snapshot = snapshot,
+    } }) catch return true;
+
+    waker.wake() catch return true;
+
+    return true;
 }
 
 //SOURCE: https://github.com/dmtrKovalenko/zlob/tree/main
