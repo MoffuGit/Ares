@@ -30,6 +30,7 @@ pub const AnyEntity = struct {
     }
 
     pub fn into(self: @This(), T: type) ?Entity(T) {
+        assert(self.type_id == TypeInfo.init(T));
         if (!self.store.entities.contains(self.id)) return null;
 
         return .{
@@ -65,6 +66,10 @@ pub fn Entity(comptime T: type) type {
 
         pub fn notify(self: @This(), app: *App) void {
             app.notify(self);
+        }
+
+        pub fn nevent(self: @This(), app: *App, comptime E: type) !*E {
+            return try app.nevent(self, E);
         }
 
         pub fn init(store: *EntityStore, new_id: EntityId) @This() {

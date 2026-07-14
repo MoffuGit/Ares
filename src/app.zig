@@ -25,6 +25,7 @@ const Executor = BackgroundScheduler.Executor;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
+const TypeId = typeId.TypeId;
 
 pub const Options = struct {
     fn noop(_: *anyopaque) void {}
@@ -39,6 +40,8 @@ gpa: Allocator,
 alloc: heap.ArenaAllocator,
 arena: Allocator,
 entities: EntityStore,
+events: std.Deque(Event),
+listeners: Listeners,
 observers: Observers,
 chunks: ChunkAllocator,
 peding_updates: u16,
@@ -59,6 +62,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .notifications = undefined,
         .entities = undefined,
         .observers = undefined,
+        .listeners = undefined,
         .chunks = undefined,
         .background_scheduler = undefined,
         .peding_updates = 0,
@@ -66,12 +70,14 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .gpa = gpa,
         .alloc = .init(gpa),
         .arena = undefined,
+        .events = .empty,
     };
     self.arena = self.alloc.allocator();
     errdefer self.alloc.deinit();
 
     try self.chunks.init(self.arena, &.{ .{ 50, MAX_SIZE }, .{ 50, Observers.NODE_SIZE } });
     try self.observers.init(self.chunks.allocator());
+    try self.listeners.init(self.chunks.allocator());
     try self.entities.init(self.arena, 100);
     try self.notifications.init(self.chunks.allocator());
 
@@ -85,6 +91,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
 pub fn deinit(self: *App) void {
     self.scheduler.deinit();
     self.background_scheduler.deinit();
+    self.events.deinit(self.gpa);
     self.alloc.deinit();
 }
 
@@ -169,6 +176,7 @@ pub fn flush(self: *App) void {
     self.scheduler.run() catch @panic("Scheduler run Error");
     self.destroy_dropped_entities();
     self.flush_notifications();
+    self.flush_events();
 }
 
 pub fn @"defer"(self: *App, function: anytype, args: anytype) Scheduler.Cancelation {
@@ -182,10 +190,22 @@ pub fn await(self: *App, function: anytype, args: anytype) !Waker {
 pub fn flush_notifications(self: *App) void {
     var iter = self.notifications.iter();
     while (iter.next()) |id| {
-        self.observers.notify(id, .{self});
+        self.observers.notify(id, .{ self, id });
     }
 
     self.notifications.clear(self.chunks.allocator());
+}
+
+pub fn flush_events(self: *App) void {
+    const chunk = self.chunks.allocator();
+    while (self.events.popFront()) |event| {
+        self.listeners.notify(
+            event.id,
+            .{ self, event.ptr, event.type },
+        );
+
+        event.destroy(chunk);
+    }
 }
 
 pub fn destroy_dropped_entities(self: *App) void {
@@ -194,14 +214,92 @@ pub fn destroy_dropped_entities(self: *App) void {
     while (self.entities.popDrop()) |drop| {
         const ptr, const key, const type_info = drop;
 
+        self.listeners.remove(key);
         self.observers.remove(key);
+
         type_info.deinit(ptr);
         type_info.destroy(ptr, alloc);
+
         self.entities.recycle(key);
     }
 }
 
-pub const Observers = Subscriptions(EntityId, &.{*App}, ent.entityOrder);
+pub const Event = struct {
+    id: EntityId,
+    type: TypeId,
+    ptr: *anyopaque,
+
+    pub fn destroy(self: *const Event, chunk: Allocator) void {
+        self.type.deinit(self.ptr);
+        self.type.destroy(self.ptr, chunk);
+    }
+};
+
+pub const Listeners = Subscriptions(
+    EntityId,
+    &.{ *App, *anyopaque, TypeId },
+    ent.entityOrder,
+);
+
+pub fn listen(
+    self: *App,
+    entity: anytype,
+    comptime E: type,
+    function: anytype,
+    args: anytype,
+) !Listeners.Subscription {
+    const _Entity = @TypeOf(entity);
+
+    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
+        @compileError("entity must be an Entity(T)");
+    }
+
+    const Args = @TypeOf(args);
+
+    const TypeErased = struct {
+        fn _callback(app: *App, ptr: *anyopaque, _type: TypeId, _args: Args) bool {
+            if (TypeInfo.init(E) != _type) return true;
+            const event: *E = @ptrCast(@alignCast(ptr));
+            return @call(.always_inline, function, .{ app, event } ++ _args);
+        }
+
+        fn enable(sub: Listeners.Subscription, res: anyerror!void) bool {
+            res catch @panic("Deferred Subscription Error");
+            sub.enable();
+            return false;
+        }
+    };
+
+    const sub = try self.listeners.insert(
+        entity.id(),
+        TypeErased._callback,
+        .{args},
+    );
+
+    _ = self.@"defer"(TypeErased.enable, .{sub});
+
+    return sub;
+}
+
+pub fn nevent(self: *App, entity: anytype, comptime E: type) !*E {
+    const _Entity = @TypeOf(entity);
+    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
+        @compileError("entity must be an Entity(T)");
+    }
+
+    const chunk = self.chunks.allocator();
+    const ptr = try chunk.create(E);
+    errdefer chunk.destroy(ptr);
+
+    try self.events.pushBack(
+        self.gpa,
+        .{ .id = entity.id(), .ptr = ptr, .type = TypeInfo.init(E) },
+    );
+
+    return ptr;
+}
+
+pub const Observers = Subscriptions(EntityId, &.{ *App, EntityId }, ent.entityOrder);
 
 pub fn observe(
     self: *App,
@@ -218,7 +316,8 @@ pub fn observe(
     const Args = @TypeOf(args);
 
     const TypeErased = struct {
-        fn _callback(app: *App, observed: AnyEntity, _args: Args) bool {
+        fn _callback(app: *App, id: EntityId, _args: Args) bool {
+            const observed = AnyEntity.init(&app.entities, id, TypeInfo.init(T));
             const _entity = observed.into(T) orelse return false;
             return @call(.always_inline, function, .{ app, _entity } ++ _args);
         }
@@ -233,7 +332,7 @@ pub fn observe(
     const sub = try self.observers.insert(
         entity.id(),
         TypeErased._callback,
-        .{ entity.any, args },
+        .{args},
     );
 
     _ = self.@"defer"(TypeErased.enable, .{sub});
@@ -270,6 +369,36 @@ pub fn Context(comptime T: type) type {
 
         pub fn notify(self: *const @This()) void {
             self.entity.notify(self.app);
+        }
+
+        pub fn nevent(self: *const @This(), comptime E: type) !*E {
+            return try self.entity.nevent(self.app, E);
+        }
+
+        pub fn listen(self: *const @This(), comptime E: type, entity: anytype, function: anytype, args: anytype) !Listeners.Subscription {
+            const Args = @TypeOf(args);
+
+            const TypeErased = struct {
+                pub fn callback(
+                    app: *App,
+                    event: *E,
+                    any: AnyEntity,
+                    _args: Args,
+                ) bool {
+                    const _entity = any.into(T) orelse return false;
+
+                    const ctx: Context(T) = .new(app, _entity);
+
+                    const ptr, const _update = _entity.update(app);
+                    defer _update.end(ptr);
+
+                    @call(.always_inline, function, .{ ptr, event, ctx } ++ _args);
+
+                    return true;
+                }
+            };
+
+            return try self.app.listen(entity, E, TypeErased.callback, .{ self.entity.any, args });
         }
 
         pub fn observe(
@@ -482,6 +611,120 @@ test "Observe entities" {
         entity.drop();
     }
 
+    app.flush();
+}
+
+test "Listen entities events" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+
+    const TestEvent = struct {
+        id: usize,
+    };
+
+    const TestStruct = struct {
+        index: usize,
+
+        pub fn init(self: *@This(), _: Context(@This())) !void {
+            self.* = .{ .index = 0 };
+        }
+
+        pub fn set_index(self: *@This(), index: usize) void {
+            self.index = index;
+        }
+
+        pub fn inc(self: *@This()) void {
+            self.index += 1;
+        }
+    };
+
+    const TestEntity = Entity(TestStruct);
+
+    var app: App = undefined;
+    try app.init(.{}, allocator, io);
+    defer app.deinit();
+
+    const listened = try TestEntity.new(&app, .{});
+
+    var context: usize = 0;
+
+    const Listened = struct {
+        pub fn callback(_: *App, evt: *TestEvent, _context: *usize) bool {
+            _context.* = evt.id;
+            return false;
+        }
+    };
+
+    _ = try app.listen(listened, TestEvent, Listened.callback, .{&context});
+
+    const evt = try listened.nevent(&app, TestEvent);
+    evt.* = .{
+        .id = 35,
+    };
+
+    app.flush();
+
+    try testing.expectEqual(context, 35);
+
+    listened.drop();
+    app.flush();
+}
+
+test "Context listen entities events" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+
+    const TestEvent = struct {
+        id: usize,
+    };
+
+    const TestStruct = struct {
+        index: usize,
+
+        pub fn init(self: *@This(), _: Context(@This())) !void {
+            self.* = .{ .index = 0 };
+        }
+
+        pub fn set_index(self: *@This(), index: usize) void {
+            self.index = index;
+        }
+
+        pub fn inc(self: *@This()) void {
+            self.index += 1;
+        }
+    };
+
+    const TestEntity = Entity(TestStruct);
+
+    var app: App = undefined;
+    try app.init(.{}, allocator, io);
+    defer app.deinit();
+
+    const listened = try TestEntity.new(&app, .{});
+    const listener = try TestEntity.new(&app, .{});
+    const context = listener.ctx(&app);
+
+    const Listened = struct {
+        pub fn callback(ptr: *TestStruct, evt: *TestEvent, _: Context(TestStruct)) void {
+            ptr.index = evt.id;
+        }
+    };
+
+    _ = try context.listen(TestEvent, listened, Listened.callback, .{});
+
+    const evt = try listened.nevent(&app, TestEvent);
+    evt.* = .{
+        .id = 35,
+    };
+
+    app.flush();
+
+    try testing.expectEqual(listener.read(&app).index, 35);
+
+    listened.drop();
+    listener.drop();
     app.flush();
 }
 
