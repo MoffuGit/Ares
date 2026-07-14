@@ -7,10 +7,16 @@ const chunked_path = @import("../chunked_path.zig");
 const ChunkedPath = chunked_path.ChunkedPath;
 const datastruct = @import("../datastruct.zig");
 const btree = datastruct.btree;
+const Io = std.Io;
+const File = Io.File;
 
 pub const Entry = struct {
     id: u64,
     path: ChunkedPath,
+    kind: File.Kind,
+    size: u64,
+    mtime: Io.Timestamp,
+    inode: u64,
 };
 
 pub const NODE_SIZE = Entries.NODE_SIZE;
