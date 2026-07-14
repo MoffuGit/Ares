@@ -29,14 +29,8 @@ const Scheduler = sch.Scheduler;
 const tsk = @import("../tasks.zig");
 const Snapshot = @import("snapshot.zig");
 
-//TODO: use the existing Entry definition on snapshot
 pub const Entry = struct {
-    id: u64,
-    path: ChunkedPath,
-    size: u64,
-    mtime: Io.Timestamp,
-    inode: u64,
-    kind: Io.File.Kind,
+    data: Snapshot.Entry,
     next: ?*Entry = null,
 };
 
@@ -199,14 +193,7 @@ fn _handleActions(
     if (self.shared) |shared| {
         const alloc = shared.allocator();
         while (shared.entries.pop()) |entry| {
-            try self.snapshot.insert(.{
-                .id = entry.id,
-                .path = entry.path,
-                .size = entry.size,
-                .inode = entry.inode,
-                .mtime = entry.mtime,
-                .kind = entry.kind,
-            });
+            try self.snapshot.insert(entry.data);
 
             alloc.destroy(entry);
         }
@@ -558,12 +545,14 @@ fn scanDir(
         const ptr = shared.createEntry();
 
         ptr.* = .{
-            .path = path,
-            .id = self.next_entry_id.fetchAdd(1, .monotonic),
-            .inode = entry.meta.inode,
-            .mtime = .fromNanoseconds(@intCast(entry.meta.mtime_ns)),
-            .size = entry.meta.size,
-            .kind = entry.kind,
+            .data = .{
+                .path = path,
+                .id = self.next_entry_id.fetchAdd(1, .monotonic),
+                .inode = entry.meta.inode,
+                .mtime = .fromNanoseconds(@intCast(entry.meta.mtime_ns)),
+                .size = entry.meta.size,
+                .kind = entry.kind,
+            },
         };
 
         shared.entries.push(ptr);
