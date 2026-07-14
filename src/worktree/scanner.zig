@@ -27,6 +27,12 @@ const Scheduler = sch.Scheduler;
 const tsk = @import("../tasks.zig");
 const Snapshot = @import("snapshot.zig");
 
+pub const Entry = struct {
+    id: u64,
+    path: ChunkedPath,
+    next: ?*Entry = null,
+};
+
 const UPDATE_INTERVAL: Io.Duration = if (builtin.mode == .Debug) .fromSeconds(5) else .fromMilliseconds(100);
 
 const Scanner = @This();
@@ -50,15 +56,16 @@ pub const Action = union(enum) {
 };
 
 io: Io,
+gpa: Allocator,
 arena: heap.ArenaAllocator,
 
 snapshot: Snapshot,
 path_store: ChunkedPathStore,
 chunks: ChunkAllocator,
 
-shared: SharedState,
+shared: ?*SharedState,
 
-action_buffer: [16]Action,
+action_buffer: [8]Action,
 actions: Action.Queue,
 
 updates_buffer: [8]Updates,
@@ -66,11 +73,6 @@ updates: Updates.Queue,
 
 next_entry_id: atomic.Value(u64),
 group: Io.Group,
-
-waker: tsk.Waker,
-entries: mpsc.Intrusive(Entry),
-
-scanning: bool,
 
 pub fn init(
     self: *Scanner,
@@ -80,9 +82,8 @@ pub fn init(
     io: Io,
 ) !void {
     self.* = .{
-        .scanning = true,
+        .gpa = gpa,
         .chunks = undefined,
-        .waker = waker,
         .group = .init,
         .io = io,
         .arena = .init(gpa),
@@ -93,14 +94,8 @@ pub fn init(
         .next_entry_id = .init(0),
         .snapshot = undefined,
         .path_store = undefined,
-        .entries = undefined,
-        .shared = undefined,
+        .shared = null,
     };
-
-    self.entries.init();
-
-    try self.shared.init(io, gpa);
-    errdefer self.shared.deinit();
 
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
@@ -133,16 +128,17 @@ pub fn init(
     });
 
     try self.actions.putOne(self.io, .initial_scan);
-    try self.waker.wake();
+    try waker.wake();
 }
 
 pub fn deinit(self: *Scanner) void {
-    if (self.scanning) {
-        self.shared.stop();
+    if (self.shared) |shared| {
+        shared.stop();
         self.group.await(self.io) catch |err| {
             std.log.err("{}", .{err});
         };
-        self.shared.deinit();
+        shared.deinit();
+        self.shared = null;
     }
 
     self.updates.close(self.io);
@@ -171,28 +167,32 @@ pub fn handleActions(
 
 fn _handleActions(
     self: *Scanner,
-    _: Context,
+    ctx: Context,
     waker: sch.Waker,
 ) !void {
-    while (self.entries.pop()) |entry| {
-        try self.snapshot.insert(.{
-            .id = entry.id,
-            .path = entry.path,
-        });
+    if (self.shared) |shared| {
+        const alloc = shared.allocator();
+        while (shared.entries.pop()) |entry| {
+            try self.snapshot.insert(.{
+                .id = entry.id,
+                .path = entry.path,
+            });
 
-        self.shared.destroyEntry(entry);
+            alloc.destroy(entry);
+        }
     }
 
-    var buffer: [16]Action = undefined;
+    var buffer: [8]Action = undefined;
     for (0..try self.actions.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
-            .initial_scan => {
-                assert(self.scanning);
-                try self.initialScan(waker);
-            },
+            .initial_scan => try self.initialScan(waker, ctx.waker),
             .scan_end => {
-                self.scanning = false;
-                self.shared.stop();
+                if (self.shared) |shared| {
+                    shared.stop();
+                    try self.group.await(self.io);
+                    shared.deinit();
+                    self.shared = null;
+                }
 
                 try self.updates.putOne(self.io, .{ .updated = .{
                     .scanning = false,
@@ -200,9 +200,6 @@ fn _handleActions(
                 } });
 
                 try waker.wake();
-
-                try self.group.await(self.io);
-                self.shared.deinit();
             },
             .reclaim => |*snapshot| {
                 snapshot.deinit();
@@ -214,6 +211,7 @@ fn _handleActions(
 fn initialScan(
     self: *Scanner,
     waker: sch.Waker,
+    bg_waker: tsk.Waker,
 ) !void {
     const stat = try Io.Dir.statFile(
         .cwd(),
@@ -227,63 +225,171 @@ fn initialScan(
     try self.updates.putOne(self.io, .started);
     try waker.wake();
 
+    const arena = self.arena.allocator();
+    const cpu_count = try std.Thread.getCpuCount();
+
+    const shared = try arena.create(SharedState);
+    try shared.init(self.io, self.gpa, cpu_count, bg_waker);
+    errdefer {
+        shared.deinit();
+        self.shared = null;
+    }
+
+    self.shared = shared;
+
     const root_entry = self.snapshot.entries.first() orelse return;
 
-    const job = self.shared.createJob();
+    const job = shared.createJob();
     job.* = .{
         .path = root_entry.path,
     };
 
-    try self.shared.pushJob(job);
+    shared.job_queue.push(self.io, 0, job);
 
-    const cpu_count = try std.Thread.getCpuCount();
-
-    for (0..cpu_count) |_| {
+    for (0..cpu_count) |i| {
         try self.group.concurrent(
             self.io,
             Scanner.scan,
-            .{self},
+            .{ self, @as(u32, @intCast(i)) },
         );
     }
 }
 
+//SOURCE: https://github.com/dmtrKovalenko/zlob/tree/main
+//LICENSE: [ZLOB]
+
+pub const Job = struct {
+    path: ChunkedPath,
+    fd: posix.fd_t = -1,
+    next: ?*Job = null,
+};
+
+const LocalQueue = struct {
+    mutex: Io.Mutex = .init,
+    queue: queue.Intrusive(Job) = .{},
+    approx_len: atomic.Value(usize) = .init(0),
+};
+
+const JobQueue = struct {
+    locals: []LocalQueue = &.{},
+    wait_mutex: Io.Mutex = .init,
+    cond: Io.Condition = .init,
+    queued: atomic.Value(usize) = .init(0),
+    outstanding: atomic.Value(usize) = .init(0),
+    closed: atomic.Value(bool) = .init(false),
+
+    pub fn init(q: *JobQueue, arena: Allocator, workers: u32) !void {
+        const n: usize = @max(1, @as(usize, @intCast(workers)));
+        q.locals = try arena.alloc(LocalQueue, n);
+        for (q.locals) |*local| local.* = .{};
+    }
+
+    pub fn push(q: *JobQueue, io: Io, worker_id: u32, job: *Job) void {
+        const local = &q.locals[q.localIndex(worker_id)];
+        local.mutex.lockUncancelable(io);
+        local.queue.push(job);
+        _ = local.approx_len.fetchAdd(1, .release);
+        _ = q.outstanding.fetchAdd(1, .release);
+        const queued_before = q.queued.fetchAdd(1, .release);
+        local.mutex.unlock(io);
+        if (queued_before < q.locals.len) q.wakeOne(io);
+    }
+
+    pub fn pop(q: *JobQueue, io: Io, worker_id: u32) ?*Job {
+        const home = q.localIndex(worker_id);
+        while (true) {
+            if (q.popFrom(io, home)) |job| return job;
+            if (q.steal(io, home)) |job| return job;
+            if (q.closed.load(.acquire)) return null;
+
+            q.wait_mutex.lockUncancelable(io);
+            while (q.queued.load(.acquire) == 0 and !q.closed.load(.acquire)) {
+                q.cond.waitUncancelable(io, &q.wait_mutex);
+            }
+            q.wait_mutex.unlock(io);
+        }
+    }
+
+    pub fn taskDone(q: *JobQueue, io: Io) bool {
+        if (q.outstanding.fetchSub(1, .acq_rel) == 1) {
+            q.closed.store(true, .release);
+            q.wakeAll(io);
+            return true;
+        }
+        return false;
+    }
+
+    pub fn wakeAll(q: *JobQueue, io: Io) void {
+        q.wait_mutex.lockUncancelable(io);
+        defer q.wait_mutex.unlock(io);
+        q.cond.broadcast(io);
+    }
+
+    fn wakeOne(q: *JobQueue, io: Io) void {
+        q.wait_mutex.lockUncancelable(io);
+        defer q.wait_mutex.unlock(io);
+        q.cond.signal(io);
+    }
+
+    fn localIndex(q: *JobQueue, worker_id: u32) usize {
+        return @as(usize, @intCast(worker_id)) % q.locals.len;
+    }
+
+    fn popFrom(q: *JobQueue, io: Io, index: usize) ?*Job {
+        const local = &q.locals[index];
+        if (local.approx_len.load(.acquire) == 0) return null;
+        local.mutex.lockUncancelable(io);
+        defer local.mutex.unlock(io);
+        const job = local.queue.pop() orelse return null;
+        _ = local.approx_len.fetchSub(1, .release);
+        _ = q.queued.fetchSub(1, .acq_rel);
+        return job;
+    }
+
+    fn steal(q: *JobQueue, io: Io, home: usize) ?*Job {
+        var offset: usize = 1;
+        while (offset < q.locals.len) : (offset += 1) {
+            const index = (home + offset) % q.locals.len;
+            if (q.locals[index].approx_len.load(.acquire) == 0) continue;
+            if (q.popFrom(io, index)) |job| return job;
+        }
+        return null;
+    }
+};
+
 const SharedState = struct {
-    arena: heap.ArenaAllocator,
     io: Io,
-    mutex: Io.Mutex,
-    queue: queue.Intrusive(Job),
+    entries: mpsc.Intrusive(Entry),
+    arena: heap.ArenaAllocator,
 
-    jobs: ChunkAllocator,
-    entries: ChunkAllocator,
-
-    pending_jobs: atomic.Value(u64),
-
-    stopped: atomic.Value(bool),
+    job_queue: JobQueue,
+    chunks: ChunkAllocator,
+    waker: tsk.Waker,
 
     pub fn init(
         self: *SharedState,
         io: Io,
         child_allocator: Allocator,
+        threads: usize,
+        waker: tsk.Waker,
     ) !void {
         self.* = .{
             .io = io,
-            .arena = .init(child_allocator),
-            .mutex = .init,
-            .queue = .{},
-            .jobs = undefined,
             .entries = undefined,
-            .pending_jobs = .init(0),
-            .stopped = .init(false),
+            .arena = .init(child_allocator),
+            .job_queue = .{},
+            .chunks = undefined,
+            .waker = waker,
         };
+        self.entries.init();
+
         errdefer self.arena.deinit();
         const arena = self.arena.allocator();
 
-        try self.entries.initThreadSafe(io, arena, &.{
-            .{ 1024 * 1024, @sizeOf(Entry) },
-        });
+        try self.job_queue.init(arena, @intCast(threads));
 
-        try self.jobs.initThreadSafe(io, arena, &.{
-            .{ 1024 * 1024, @sizeOf(Job) },
+        try self.chunks.initThreadSafe(io, arena, &.{
+            .{ 1024 * 1024, @max(@sizeOf(Entry), @sizeOf(Job)) },
         });
     }
 
@@ -292,80 +398,57 @@ const SharedState = struct {
     }
 
     pub fn stop(self: *SharedState) void {
-        self.stopped.store(true, .release);
+        self.job_queue.closed.store(true, .release);
+        self.job_queue.wakeAll(self.io);
+    }
+
+    pub fn allocator(self: *SharedState) Allocator {
+        return self.chunks.threadSafeAllocator();
     }
 
     pub fn createJob(self: *SharedState) *Job {
-        _ = self.pending_jobs.fetchAdd(1, .monotonic);
-        return self.jobs.threadSafeAllocator().create(Job) catch @panic("Scanner Job Overflow");
+        return self.chunks.threadSafeAllocator().create(Job) catch @panic("Scanner Job Overflow");
     }
 
-    pub fn destroyJob(self: *SharedState, job: *Job) u64 {
-        self.jobs.threadSafeAllocator().destroy(job);
-        return self.pending_jobs.fetchSub(1, .acq_rel);
+    pub fn destroyJob(self: *SharedState, job: *Job) void {
+        self.chunks.threadSafeAllocator().destroy(job);
     }
 
     pub fn createEntry(self: *SharedState) *Entry {
-        return self.entries.threadSafeAllocator().create(Entry) catch @panic("Scanner Entry Overflow");
+        return self.chunks.threadSafeAllocator().create(Entry) catch @panic("Scanner Entry Overflow");
     }
 
     pub fn destroyEntry(self: *SharedState, entry: *Entry) void {
-        self.entries.threadSafeAllocator().destroy(entry);
+        self.chunks.threadSafeAllocator().destroy(entry);
     }
-
-    pub fn pushJob(self: *SharedState, job: *Job) !void {
-        try self.mutex.lock(self.io);
-        defer self.mutex.unlock(self.io);
-
-        self.queue.push(job);
-    }
-
-    pub fn popJob(self: *SharedState) ?*Job {
-        self.mutex.lock(self.io) catch return null;
-        defer self.mutex.unlock(self.io);
-
-        return self.queue.pop();
-    }
-};
-
-pub const Job = struct {
-    path: ChunkedPath,
-    fd: posix.fd_t = -1,
-    next: ?*Job = null,
-};
-
-pub const Entry = struct {
-    id: u64,
-    path: ChunkedPath,
-    next: ?*Entry = null,
 };
 
 pub fn scan(
     self: *Scanner,
+    worker_id: u32,
 ) void {
-    self._scan() catch |err| {
+    self._scan(worker_id) catch |err| {
         std.log.err("worker err: {}", .{err});
     };
 }
 
 pub fn _scan(
     self: *Scanner,
+    worker_id: u32,
 ) !void {
+    const shared = self.shared orelse return;
     var path_z: [MAX_PATH_LEN:0]u8 = undefined;
 
-    while (!self.shared.stopped.load(.acquire)) {
-        while (self.shared.popJob()) |job| {
-            try self.scanDir(&path_z, job.path);
+    while (shared.job_queue.pop(self.io, worker_id)) |job| {
+        try self.scanDir(&path_z, job.path, worker_id);
 
-            const pending = self.shared.destroyJob(job);
-            assert(pending > 0);
+        shared.destroyJob(job);
 
-            if (pending == 1) {
-                try self.actions.putOne(self.io, .scan_end);
-            }
-
-            try self.waker.wake();
+        if (shared.job_queue.taskDone(self.io)) {
+            try self.actions.putOne(self.io, .scan_end);
         }
+
+        try shared.waker.wake();
     }
 }
 
@@ -373,7 +456,9 @@ fn scanDir(
     self: *Scanner,
     path_z: [:0]u8,
     parent_path: ChunkedPath,
+    worker_id: u32,
 ) !void {
+    const shared = self.shared orelse return;
     const abs_root = self.snapshot.abs_root;
     const root_name = self.snapshot.root_name;
     const root_name_len: u32 = @intCast(root_name.len);
@@ -404,7 +489,7 @@ fn scanDir(
     const pointpoint = "..";
 
     while (c.readdir(dir)) |entry_raw| {
-        if (self.shared.stopped.load(.acquire)) break;
+        if (shared.job_queue.closed.load(.acquire)) break;
 
         const entry: *const c.dirent = @ptrCast(@alignCast(entry_raw));
         const name = direntNameFromEntry(entry);
@@ -423,23 +508,23 @@ fn scanDir(
 
         path = self.path_store.append(parent_path, suffix, 1);
 
-        const ptr = self.shared.createEntry();
+        const ptr = shared.createEntry();
 
         ptr.* = .{
             .path = path,
             .id = self.next_entry_id.fetchAdd(1, .monotonic),
         };
 
-        self.entries.push(ptr);
+        shared.entries.push(ptr);
 
         if (entry.type != c.DT.DIR) continue;
 
-        const job = self.shared.createJob();
+        const job = shared.createJob();
         job.* = .{
             .path = path,
         };
 
-        try self.shared.pushJob(job);
+        shared.job_queue.push(self.io, worker_id, job);
     }
 }
 
