@@ -11,6 +11,18 @@ private final class WorkspaceWindow: NSWindow {
     override var canBecomeKey: Bool { true }
 }
 
+private final class WorkspaceContainer: NSStackView {
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        super.updateLayer()
+        let isDark =
+            effectiveAppearance.bestMatch(
+                from: [.aqua, .darkAqua]) == .darkAqua
+        layer?.backgroundColor = (isDark ? NSColor.black : NSColor.white).cgColor
+    }
+}
+
 final class WorkspaceController: NSWindowController, NSWindowDelegate {
     let paths: [String]
     private let workspace: Odyssey.Workspace
@@ -35,10 +47,27 @@ final class WorkspaceController: NSWindowController, NSWindowDelegate {
 
         window.isReleasedWhenClosed = false
         window.isRestorable = false
+        window.isMovableByWindowBackground = true
+        window.backgroundColor = .clear
         window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+
+        let stackView = WorkspaceContainer()
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        stackView.orientation = .vertical
+        stackView.spacing = 0
+        stackView.wantsLayer = true
+        stackView.layer?.masksToBounds = true
+        stackView.layer?.cornerRadius = 16
+        stackView.needsDisplay = true
+        stackView.addArrangedSubview(WorkspaceToolbar())
+        stackView.addArrangedSubview(WorkspaceContent())
+        stackView.addArrangedSubview(WorkspaceStatusBar())
 
         super.init(window: window)
+
         window.delegate = self
+        window.contentView = stackView
     }
 
     @available(*, unavailable)
