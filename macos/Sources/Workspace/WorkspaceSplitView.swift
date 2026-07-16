@@ -21,6 +21,8 @@ final class WorkspaceSplitView: NSStackView {
 
     private enum Metrics {
         static let dividerWidth: CGFloat = 8
+        static let collapsedDividerWidth: CGFloat = 16
+        static let minimumSidebarWidth: CGFloat = 4
         static let minimumCenterWidth: CGFloat = 100
         static let defaultSidebarWidth: CGFloat = 220
         static let maximumSidebarWidth: CGFloat = 480
@@ -40,6 +42,11 @@ final class WorkspaceSplitView: NSStackView {
 
     private var leftWidthConstraint: NSLayoutConstraint!
     private var rightWidthConstraint: NSLayoutConstraint!
+
+    private var leftDividerWidthConstraint: NSLayoutConstraint!
+    private var rightDividerWidthConstraint: NSLayoutConstraint!
+    private var leftDividerLeadingConstraint: NSLayoutConstraint!
+    private var rightDividerLeadingConstraint: NSLayoutConstraint!
 
     private struct ActiveDrag {
         let side: WorkspaceDividerView.Side
@@ -68,13 +75,10 @@ final class WorkspaceSplitView: NSStackView {
         setContentHuggingPriority(.defaultLow, for: .vertical)
         setContentCompressionResistancePriority(.defaultHigh, for: .vertical)
 
-        for view in [leftPane, leftDivider, centerPane, rightDivider, rightPane] {
+        for view in [leftPane, centerPane, rightPane] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addArrangedSubview(view)
         }
-
-        leftDivider.widthAnchor.constraint(equalToConstant: Metrics.dividerWidth).isActive = true
-        rightDivider.widthAnchor.constraint(equalToConstant: Metrics.dividerWidth).isActive = true
 
         centerPane.widthAnchor.constraint(
             greaterThanOrEqualToConstant: Metrics.minimumCenterWidth
@@ -97,8 +101,35 @@ final class WorkspaceSplitView: NSStackView {
         leftWidthConstraint.isActive = true
         rightWidthConstraint.isActive = true
 
-        leftPane.isHidden = leftState.isCollapsed
-        rightPane.isHidden = rightState.isCollapsed
+        // Dividers overlay on top of the panes, centered on each boundary so
+        // they don't consume any layout width.
+        for divider in [leftDivider, rightDivider] {
+            divider.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(divider)
+            divider.topAnchor.constraint(equalTo: topAnchor).isActive = true
+            divider.bottomAnchor.constraint(equalTo: bottomAnchor).isActive = true
+        }
+
+        leftDividerWidthConstraint = leftDivider.widthAnchor.constraint(
+            equalToConstant: effectiveDividerWidth(collapsed: leftState.isCollapsed)
+        )
+        rightDividerWidthConstraint = rightDivider.widthAnchor.constraint(
+            equalToConstant: effectiveDividerWidth(collapsed: rightState.isCollapsed)
+        )
+        leftDividerWidthConstraint.isActive = true
+        rightDividerWidthConstraint.isActive = true
+
+        // Center each divider on its pane boundary.
+        leftDividerLeadingConstraint = leftDivider.leadingAnchor.constraint(
+            equalTo: leftPane.trailingAnchor,
+            constant: -effectiveDividerWidth(collapsed: leftState.isCollapsed) / 2
+        )
+        rightDividerLeadingConstraint = rightDivider.leadingAnchor.constraint(
+            equalTo: rightPane.leadingAnchor,
+            constant: -effectiveDividerWidth(collapsed: rightState.isCollapsed) / 2
+        )
+        leftDividerLeadingConstraint.isActive = true
+        rightDividerLeadingConstraint.isActive = true
 
         installGestureRecognizers(for: .left, on: leftDivider)
         installGestureRecognizers(for: .right, on: rightDivider)
@@ -145,6 +176,16 @@ final class WorkspaceSplitView: NSStackView {
         case .ended, .cancelled, .failed:
             if activeDrag != nil {
                 window?.enableCursorRects()
+                // Re-evaluate hover based on the actual cursor position, since
+                // mouseExited may not have fired during the drag and the
+                // tracking area may fire a stale mouseEntered on re-enable.
+                let cursorInWindow = window?.mouseLocationOutsideOfEventStream
+                let cursorInDivider = cursorInWindow.flatMap {
+                    divider.convert($0, from: nil)
+                }
+                divider.isHovering = cursorInDivider.map {
+                    divider.bounds.contains($0)
+                } ?? false
             }
             activeDrag = nil
         default:
@@ -154,23 +195,28 @@ final class WorkspaceSplitView: NSStackView {
 
     @objc private func handleDoubleClick(_ recognizer: NSClickGestureRecognizer) {
         guard let divider = recognizer.view as? WorkspaceDividerView else { return }
+        // Reset hover state since the collapse/expand can move the divider out
+        // from under the cursor without a mouseExited being delivered.
+        divider.isHovering = false
         toggleCollapsed(divider.side)
     }
 
     // MARK: - State mutations
 
     private func setExpandedWidth(_ width: CGFloat, for side: WorkspaceDividerView.Side) {
-        let clamped = min(max(width, 0), maximumWidth(for: side))
+        let clamped = min(max(width, Metrics.minimumSidebarWidth), maximumWidth(for: side))
         if side == .left {
             leftState.expandedWidth = clamped
             leftState.isCollapsed = false
-            leftPane.isHidden = false
             leftWidthConstraint.constant = clamped
+            leftDivider.isCollapsed = false
+            updateDividerConstraints(for: .left)
         } else {
             rightState.expandedWidth = clamped
             rightState.isCollapsed = false
-            rightPane.isHidden = false
             rightWidthConstraint.constant = clamped
+            rightDivider.isCollapsed = false
+            updateDividerConstraints(for: .right)
         }
         layoutSubtreeIfNeeded()
     }
@@ -185,8 +231,9 @@ final class WorkspaceSplitView: NSStackView {
             } else {
                 leftState.isCollapsed = true
             }
-            leftPane.isHidden = leftState.isCollapsed
             leftWidthConstraint.constant = leftState.effectiveWidth
+            leftDivider.isCollapsed = leftState.isCollapsed
+            updateDividerConstraints(for: .left)
         } else {
             if rightState.isCollapsed {
                 rightState.expandedWidth = min(
@@ -196,8 +243,9 @@ final class WorkspaceSplitView: NSStackView {
             } else {
                 rightState.isCollapsed = true
             }
-            rightPane.isHidden = rightState.isCollapsed
             rightWidthConstraint.constant = rightState.effectiveWidth
+            rightDivider.isCollapsed = rightState.isCollapsed
+            updateDividerConstraints(for: .right)
         }
         layoutSubtreeIfNeeded()
     }
@@ -212,9 +260,24 @@ final class WorkspaceSplitView: NSStackView {
         let otherWidth = (side == .left ? rightState : leftState).effectiveWidth
         let available = bounds.width
             - otherWidth
-            - 2 * Metrics.dividerWidth
             - Metrics.minimumCenterWidth
         return min(Metrics.maximumSidebarWidth, max(0, available))
+    }
+
+    private func effectiveDividerWidth(collapsed: Bool) -> CGFloat {
+        collapsed ? Metrics.collapsedDividerWidth : Metrics.dividerWidth
+    }
+
+    private func updateDividerConstraints(for side: WorkspaceDividerView.Side) {
+        let collapsed = side == .left ? leftState.isCollapsed : rightState.isCollapsed
+        let width = effectiveDividerWidth(collapsed: collapsed)
+        if side == .left {
+            leftDividerWidthConstraint.constant = width
+            leftDividerLeadingConstraint.constant = -width / 2
+        } else {
+            rightDividerWidthConstraint.constant = width
+            rightDividerLeadingConstraint.constant = -width / 2
+        }
     }
 }
 
@@ -224,6 +287,7 @@ final class WorkspacePaneView: NSView {
     init() {
         super.init(frame: .zero)
         wantsLayer = true
+        clipsToBounds = true
     }
 
     @available(*, unavailable)
@@ -243,6 +307,22 @@ private final class WorkspaceDividerView: NSView {
 
     let side: Side
 
+    /// Whether the adjacent pane is fully collapsed. When collapsed, hovering
+    /// draws an extra-thick line to signal that the pane can be dragged open.
+    var isCollapsed = false {
+        didSet {
+            guard oldValue != isCollapsed else { return }
+            needsDisplay = true
+        }
+    }
+
+    var isHovering = false {
+        didSet {
+            guard oldValue != isHovering else { return }
+            needsDisplay = true
+        }
+    }
+
     init(side: Side) {
         self.side = side
         super.init(frame: .zero)
@@ -261,6 +341,32 @@ private final class WorkspaceDividerView: NSView {
         addCursorRect(bounds, cursor: .resizeLeftRight)
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        // Remove any stale tracking areas we own.
+        trackingAreas
+            .filter { $0.owner === self }
+            .forEach { removeTrackingArea($0) }
+        addTrackingArea(
+            NSTrackingArea(
+                rect: bounds,
+                options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            )
+        )
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        isHovering = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        isHovering = false
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         needsDisplay = true
@@ -270,13 +376,17 @@ private final class WorkspaceDividerView: NSView {
         super.draw(dirtyRect)
 
         NSColor.separatorColor.setFill()
-        // Draw the line on the edge adjacent to the center pane.
-        let lineX: CGFloat
-        if side == .left {
-            lineX = bounds.maxX - 0.5
+        // Draw the separator line centered. Normal: 1px, hovered: 2px,
+        // hovered-while-collapsed: 4px to signal the pane can be dragged open.
+        let lineWidth: CGFloat
+        if isCollapsed && isHovering {
+            lineWidth = 4
+        } else if isHovering {
+            lineWidth = 2
         } else {
-            lineX = bounds.minX + 0.5
+            lineWidth = 1
         }
-        NSRect(x: lineX, y: bounds.minY, width: 1, height: bounds.height).fill()
+        let lineX = bounds.midX - lineWidth / 2
+        NSRect(x: lineX, y: bounds.minY, width: lineWidth, height: bounds.height).fill()
     }
 }
