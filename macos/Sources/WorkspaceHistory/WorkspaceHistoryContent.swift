@@ -55,7 +55,7 @@ class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegat
 
         emptyView.translatesAutoresizingMaskIntoConstraints = false
         emptyView.alignment = .center
-        emptyView.font = .systemFont(ofSize: 17, weight: .medium)
+        emptyView.font = .systemFont(ofSize: 14, weight: .regular)
         emptyView.textColor = .secondaryLabelColor
         self.addSubview(emptyView)
 
