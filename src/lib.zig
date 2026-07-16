@@ -60,6 +60,11 @@ pub fn Option(T: type) type {
         fn some(val: T) @This() {
             return .{ .value = val, .valid = true };
         }
+
+        fn maybe(val: ?T) @This() {
+            if (val) |s| return some(s);
+            return .none;
+        }
     };
 }
 
@@ -135,6 +140,8 @@ const ExternSerializedWorkspace = extern struct {
     paths: Slice(String),
     session: Option(u128),
     window: Option(ExternSerializedWindowBounds),
+    left_dock: Option(f64),
+    right_dock: Option(f64),
     timestamp: i64,
     id: i64,
 
@@ -148,9 +155,11 @@ const ExternSerializedWorkspace = extern struct {
 
         return .{
             .paths = .init(paths),
-            .session = if (workspace.session) |session| .some(session) else .none,
+            .session = .maybe(workspace.session),
             .window = if (workspace.window) |window| .some(.init(window)) else .none,
             .timestamp = workspace.timestamp,
+            .left_dock = .maybe(workspace.left_dock),
+            .right_dock = .maybe(workspace.right_dock),
             .id = workspace.id,
         };
     }

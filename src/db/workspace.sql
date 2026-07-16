@@ -6,5 +6,7 @@ CREATE TABLE IF NOT EXISTS workspace (
     window_y REAL,
     window_width REAL,
     window_height REAL,
+    left_dock REAL,
+    right_dock REAL,
     timestamp INTEGER DEFAULT (unixepoch())
 );

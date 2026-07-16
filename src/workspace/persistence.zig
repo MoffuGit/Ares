@@ -21,6 +21,8 @@ pub const SerializedWorkspace = struct {
     paths: []const []const u8,
     session: ?uuid.Uuid = null,
     window: ?SerializedWindowBounds = null,
+    left_dock: ?f64 = null,
+    right_dock: ?f64 = null,
     timestamp: i64 = 0,
     id: i64,
 
@@ -88,8 +90,8 @@ pub fn insert(conn: zqlite.Conn, allocator: Allocator, workspace: SerializedWork
 
     const bounds = workspace.window;
     try conn.exec(
-        \\INSERT INTO workspace (id, paths, session, window_x, window_y, window_width, window_height, timestamp)
-        \\VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
+        \\INSERT INTO workspace (id, paths, session, window_x, window_y, window_width, window_height, left_dock, right_dock, timestamp)
+        \\VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
         \\ON CONFLICT(id) DO UPDATE SET
         \\    paths = excluded.paths,
         \\    session = excluded.session,
@@ -97,6 +99,8 @@ pub fn insert(conn: zqlite.Conn, allocator: Allocator, workspace: SerializedWork
         \\    window_y = excluded.window_y,
         \\    window_width = excluded.window_width,
         \\    window_height = excluded.window_height,
+        \\    left_dock = excluded.left_dock,
+        \\    right_dock = excluded.right_dock,
         \\    timestamp = unixepoch()
     , .{
         workspace.id,
@@ -106,6 +110,8 @@ pub fn insert(conn: zqlite.Conn, allocator: Allocator, workspace: SerializedWork
         if (bounds) |b| b.y else null,
         if (bounds) |b| b.width else null,
         if (bounds) |b| b.height else null,
+        if (workspace.left_dock) |dock| dock else null,
+        if (workspace.right_dock) |dock| dock else null,
     });
 }
 
@@ -127,7 +133,7 @@ pub fn setSession(conn: zqlite.Conn, id: i64, session: uuid.Uuid, allocator: All
 
 pub fn get(conn: zqlite.Conn, allocator: Allocator, id: i64) !?SerializedWorkspace {
     const row = (try conn.row(
-        \\SELECT id, paths, session, window_x, window_y, window_width, window_height, timestamp
+        \\SELECT id, paths, session, window_x, window_y, window_width, window_height, left_dock, right_dock, timestamp
         \\FROM workspace
         \\WHERE id = ?
     , .{id})) orelse return null;
@@ -275,12 +281,17 @@ fn deserialize(allocator: Allocator, row: zqlite.Row) !SerializedWorkspace {
         .height = row.float(6),
     } else null;
 
+    const left_dock = row.nullableFloat(7);
+    const right_dock = row.nullableFloat(8);
+
     return .{
         .id = row.int(0),
         .paths = paths,
         .session = session,
         .window = window_bounds,
-        .timestamp = row.int(7),
+        .left_dock = left_dock,
+        .right_dock = right_dock,
+        .timestamp = row.int(9),
     };
 }
 
@@ -298,6 +309,8 @@ test "insert and get workspace paths using delimiter" {
         .id = 42,
         .paths = &.{ "/tmp/project", "/Users/me/workspace" },
         .window = .{ .x = 1, .y = 2, .width = 800, .height = 600 },
+        .left_dock = 56,
+        .right_dock = 78,
     });
 
     const workspace = (try get(conn, alloc, 42)).?;
@@ -309,6 +322,8 @@ test "insert and get workspace paths using delimiter" {
     try std.testing.expect(workspace.session == null);
     try std.testing.expect(workspace.window != null);
     try std.testing.expectEqual(@as(f64, 1), workspace.window.?.x);
+    try std.testing.expectEqual(@as(f64, 56), workspace.left_dock);
+    try std.testing.expectEqual(@as(f64, 78), workspace.right_dock);
     try std.testing.expect(workspace.timestamp > 0);
 }
 
