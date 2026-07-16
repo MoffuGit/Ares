@@ -65,7 +65,6 @@ path_store: ChunkedPathStore,
 chunks: ChunkAllocator,
 
 shared: ?*SharedState,
-
 timer: ?BackgroundScheduler.Cancelation = null,
 
 action_buffer: [8]Action,

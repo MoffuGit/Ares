@@ -349,6 +349,10 @@ pub fn Context(comptime T: type) type {
             return .{ .app = app, .entity = entity };
         }
 
+        pub fn drop(self: *const @This()) void {
+            self.entity.drop();
+        }
+
         pub fn gpa(self: *const @This()) Allocator {
             return self.app.gpa;
         }
