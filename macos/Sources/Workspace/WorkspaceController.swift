@@ -26,7 +26,7 @@ private final class WorkspaceContainer: NSStackView {
 final class WorkspaceController: NSWindowController, NSWindowDelegate {
     let paths: [String]
     private let workspace: Odyssey.Workspace
-    private let splitViewController = WorkspaceSplitViewController()
+    private let splitView = WorkspaceSplitView()
     private weak var appDelegate: AppDelegate?
 
     convenience init(delegate: AppDelegate, session: Odyssey.Session, path: String) {
@@ -52,6 +52,7 @@ final class WorkspaceController: NSWindowController, NSWindowDelegate {
         window.backgroundColor = .clear
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        window.contentMinSize = NSSize(width: 480, height: 300)
 
         let stackView = WorkspaceContainer()
         stackView.orientation = .vertical
@@ -61,8 +62,12 @@ final class WorkspaceController: NSWindowController, NSWindowDelegate {
         stackView.layer?.cornerRadius = 16
         stackView.needsDisplay = true
         stackView.addArrangedSubview(WorkspaceToolbar())
-        stackView.addArrangedSubview(splitViewController.view)
+        stackView.addArrangedSubview(splitView)
         stackView.addArrangedSubview(WorkspaceStatusBar())
+        
+        NSLayoutConstraint.activate([
+            splitView.widthAnchor.constraint(equalTo: stackView.widthAnchor)
+        ]);
 
         super.init(window: window)
 
