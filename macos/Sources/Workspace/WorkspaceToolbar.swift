@@ -1,6 +1,6 @@
 import AppKit
 
-class WorkspaceToolbar: NSView {
+class WorkspaceToolBar: NSView {
     fileprivate enum Metrics {
         static let height: CGFloat = 32
         static let trailingPadding: CGFloat = 10
