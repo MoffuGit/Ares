@@ -9,7 +9,7 @@ import OdysseyKit
 import os
 
 extension Odyssey {
-    final class Session: Entity {
+    class Session: Entity {
         init(app: Odyssey.App) {
             guard let odysseyApp = app.app else {
                 logger.critical("odyssey_session_new failed: app is nil")

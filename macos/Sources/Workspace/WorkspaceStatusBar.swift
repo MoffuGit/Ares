@@ -7,7 +7,7 @@
 
 import AppKit
 
-final class WorkspaceStatusBar: NSView {
+class WorkspaceStatusBar: NSView {
     fileprivate enum Metrics {
         static let height: CGFloat = 32
     }

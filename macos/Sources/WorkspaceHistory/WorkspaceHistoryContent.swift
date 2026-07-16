@@ -129,7 +129,7 @@ class WorkspaceHistoryContent: NSView, NSTableViewDataSource, NSTableViewDelegat
     }
 }
 
-private final class WorkspaceStoreEntryView: NSTableCellView {
+private class WorkspaceStoreEntryView: NSTableCellView {
     var workspaceID: Int64 = 0 {
         didSet { updateTopLabel() }
     }

@@ -7,11 +7,11 @@
 
 import AppKit
 
-private final class WorkspaceHistoryWindow: NSWindow {
+private class WorkspaceHistoryWindow: NSWindow {
     override var canBecomeKey: Bool { true }
 }
 
-private final class WorkspaceHistoryContainer: NSStackView {
+private class WorkspaceHistoryContainer: NSStackView {
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {

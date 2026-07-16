@@ -7,7 +7,7 @@
 
 import AppKit
 
-final class WorkspaceHistoryToolbar: NSView {
+class WorkspaceHistoryToolbar: NSView {
     fileprivate enum Metrics {
         static let height: CGFloat = 32
         static let trailingPadding: CGFloat = 10

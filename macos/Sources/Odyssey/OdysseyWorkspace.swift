@@ -42,7 +42,7 @@ extension Odyssey {
         }
     }
 
-    final class SerializedWorkspaces {
+    class SerializedWorkspaces {
         let list: odyssey_workspace_list_s
         let workspaces: [SerializedWorkspace]
 
@@ -82,7 +82,7 @@ extension Odyssey {
         }
     }
 
-    final class Workspace: Entity {
+    class Workspace: Entity {
         convenience init(app: Odyssey.App, session: Odyssey.Session, path: String) {
             self.init(app: app, session: session, paths: [path])
         }

@@ -7,7 +7,7 @@
 
 import AppKit
 
-final class WorkspaceContent: NSView {
+class WorkspaceContent: NSView {
     init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
