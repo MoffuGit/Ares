@@ -21,7 +21,6 @@ class WorkspaceDocks: NSStackView {
         static let minimumSidebarWidth: CGFloat = 4
         static let minimumCenterWidth: CGFloat = 100
         static let defaultSidebarWidth: CGFloat = 220
-        static let maximumSidebarWidth: CGFloat = 480
     }
 
     private struct SidebarState {
@@ -119,7 +118,9 @@ class WorkspaceDocks: NSStackView {
 
         installGestureRecognizers(for: .left, on: leftDivider)
         installGestureRecognizers(for: .right, on: rightDivider)
-    
+
+        collapse(.left)
+        collapse(.right)
     }
 
     @available(*, unavailable)
@@ -215,6 +216,21 @@ class WorkspaceDocks: NSStackView {
         layoutSubtreeIfNeeded()
     }
 
+    func collapse(_ side: WorkspaceDividerView.Side) {
+        if side == .left {
+            leftState.isCollapsed = true
+            leftWidthConstraint.constant = leftState.effectiveWidth
+            leftDivider.isCollapsed = leftState.isCollapsed
+            updateDividerConstraints(for: .left)
+        } else {
+            rightState.isCollapsed = true
+            rightWidthConstraint.constant = rightState.effectiveWidth
+            rightDivider.isCollapsed = rightState.isCollapsed
+            updateDividerConstraints(for: .right)
+        }
+        layoutSubtreeIfNeeded()
+    }
+
     func toggleCollapsed(_ side: WorkspaceDividerView.Side) {
         if side == .left {
             if leftState.isCollapsed {
@@ -256,7 +272,7 @@ class WorkspaceDocks: NSStackView {
             bounds.width
             - otherWidth
             - Metrics.minimumCenterWidth
-        return min(Metrics.maximumSidebarWidth, max(0, available))
+        return max(0, available)
     }
 
     private func effectiveDividerWidth(collapsed: Bool) -> CGFloat {
@@ -363,13 +379,12 @@ class WorkspaceDividerView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        NSColor.separatorColor.setFill()
         let lineWidth: CGFloat
         if isCollapsed && isHovering {
+            NSColor.systemBlue.setFill()
             lineWidth = 4
-        } else if isHovering {
-            lineWidth = 2
         } else {
+            NSColor.separatorColor.setFill()
             lineWidth = 1
         }
         let lineX = bounds.midX - lineWidth / 2
