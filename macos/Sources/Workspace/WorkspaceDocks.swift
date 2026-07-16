@@ -215,7 +215,7 @@ class WorkspaceDocks: NSStackView {
         layoutSubtreeIfNeeded()
     }
 
-    private func toggleCollapsed(_ side: WorkspaceDividerView.Side) {
+    func toggleCollapsed(_ side: WorkspaceDividerView.Side) {
         if side == .left {
             if leftState.isCollapsed {
                 leftState.expandedWidth = min(
@@ -289,7 +289,7 @@ class WorkspaceDock: NSView {
     }
 }
 
-private class WorkspaceDividerView: NSView {
+class WorkspaceDividerView: NSView {
     enum Side {
         case left
         case right

@@ -60,9 +60,13 @@ class WorkspaceController: NSWindowController, NSWindowDelegate, WorkspaceDelega
         appDelegate?.workspaceWindowWillClose(self)
     }
     
-    func toggleLeftDock() {}
+    func toggleLeftDock() {
+        docks.toggleCollapsed(.left);
+    }
     
-    func toggleRightDock() {}
+    func toggleRightDock() {
+        docks.toggleCollapsed(.right);
+    }
     
     func markForRestoration() {
         workspace.markForRestoration()
