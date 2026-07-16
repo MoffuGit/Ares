@@ -23,7 +23,6 @@ pub const Options = struct {
 
 io: Io,
 id: i64,
-gpa: Allocator,
 conn: zqlite.Conn,
 session: uuid.Uuid,
 arena: heap.ArenaAllocator,
@@ -39,13 +38,14 @@ pub fn init(
     const conn = try db.acquire(io);
     errdefer db.release(io, conn);
 
+    const gpa = ctx.gpa();
+
     self.* = .{
         .session = options.session,
         .id = undefined,
         .io = io,
-        .gpa = ctx.gpa(),
         .conn = conn,
-        .arena = .init(ctx.gpa()),
+        .arena = .init(gpa),
         .paths = undefined,
         .project = try .new(ctx.app, .{self.arena.allocator()}),
     };
@@ -58,18 +58,18 @@ pub fn init(
         self.paths.appendAssumeCapacity(copy);
     }
 
-    self.id = if (try persistence.getByPaths(conn, self.gpa, self.paths.items)) |serialized| id: {
-        defer serialized.deinit(self.gpa);
+    self.id = if (try persistence.getByPaths(conn, gpa, self.paths.items)) |serialized| id: {
+        defer serialized.deinit(gpa);
         break :id serialized.id;
     } else id: {
         const new_id = try persistence.insertDefault(conn);
-        try persistence.setPaths(conn, new_id, self.paths.items, self.gpa);
+        try persistence.setPaths(conn, new_id, self.paths.items, gpa);
         break :id new_id;
     };
 }
 
-pub fn markForRestoration(self: *Workspace) !void {
-    try persistence.setSession(self.conn, self.id, self.session, self.gpa);
+pub fn markForRestoration(self: *Workspace, gpa: Allocator) !void {
+    try persistence.setSession(self.conn, self.id, self.session, gpa);
 }
 
 pub fn drop(self: *Workspace) void {

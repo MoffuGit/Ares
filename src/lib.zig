@@ -311,7 +311,7 @@ pub export fn odyssey_workspace_mark_for_restoration(app: *App, extern_entity: E
     const ptr, const update = workspace.update(app);
     defer update.end(ptr);
 
-    ptr.markForRestoration() catch |err| {
+    ptr.markForRestoration(app.gpa) catch |err| {
         std.log.warn("Workspace would not restore={}", .{err});
     };
 }

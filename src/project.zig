@@ -13,7 +13,7 @@ worktree_store: Entity(WorktreeStore),
 pub fn init(self: *Project, ctx: Context(Project), arena: Allocator) !void {
     self.* = .{
         .arena = arena,
-        .worktree_store = try .new(ctx.app, .{}),
+        .worktree_store = try .new(ctx.app, .{arena}),
     };
 }
 

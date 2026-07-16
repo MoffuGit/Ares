@@ -6,11 +6,13 @@ const Worktree = @import("../worktree.zig");
 
 const WorktreeStore = @This();
 
-worktrees: std.ArrayList(Worktree),
+worktrees: std.AutoHashMap(u8, Worktree),
+next_id: u8,
 
-pub fn init(self: *WorktreeStore, _: Context(WorktreeStore)) !void {
+pub fn init(self: *WorktreeStore, _: Context(WorktreeStore), arena: Allocator) !void {
     self.* = .{
-        .worktrees = .empty,
+        .next_id = 0,
+        .worktrees = .init(arena),
     };
 }
 
