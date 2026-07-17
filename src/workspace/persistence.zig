@@ -115,6 +115,29 @@ pub fn insert(conn: zqlite.Conn, allocator: Allocator, workspace: SerializedWork
     });
 }
 
+pub fn setBounds(conn: zqlite.Conn, id: i64, bounds: ?SerializedWindowBounds, left_dock: ?f64, right_dock: ?f64) !void {
+    try conn.exec(
+        \\UPDATE workspace
+        \\SET
+        \\  window_x = ?,
+        \\  window_y = ?,
+        \\  window_width = ?,
+        \\  window_height = ?,
+        \\  left_dock = ?,
+        \\  right_dock = ?,
+        \\  timestamp = unixepoch()
+        \\WHERE id = ?
+    , .{
+        if (bounds) |b| b.x else null,
+        if (bounds) |b| b.y else null,
+        if (bounds) |b| b.width else null,
+        if (bounds) |b| b.height else null,
+        if (left_dock) |dock| dock else null,
+        if (right_dock) |dock| dock else null,
+        id,
+    });
+}
+
 pub fn setSession(conn: zqlite.Conn, id: i64, session: uuid.Uuid, allocator: Allocator) !void {
     const fmt = try uuid.fmt(session, allocator);
     defer allocator.free(fmt);
@@ -190,7 +213,7 @@ pub fn getBySession(conn: zqlite.Conn, allocator: Allocator, session: uuid.Uuid)
 
 pub fn getAllMetadata(conn: zqlite.Conn, allocator: Allocator) ![]SerializedWorkspace {
     var rows = try conn.rows(
-        \\SELECT id, paths, timestamp
+        \\SELECT id, paths, session, window_x, window_y, window_width, window_height, left_dock, right_dock, timestamp
         \\FROM workspace
     , .{});
     defer rows.deinit();
@@ -202,25 +225,9 @@ pub fn getAllMetadata(conn: zqlite.Conn, allocator: Allocator) ![]SerializedWork
     }
 
     while (rows.next()) |row| {
-        const paths_text = row.text(1);
-        const path_count: usize = if (paths_text.len == 0) 0 else mem.count(u8, paths_text, &.{PATH_DELIMITER}) + 1;
-        const paths = try allocator.alloc([]const u8, path_count);
-        var path_index: usize = 0;
-        errdefer {
-            for (paths[0..path_index]) |path| allocator.free(path);
-            allocator.free(paths);
-        }
+        const serialized = try deserialize(allocator, row);
 
-        var iter = mem.splitScalar(u8, paths_text, PATH_DELIMITER);
-        while (iter.next()) |path| : (path_index += 1) {
-            paths[path_index] = try allocator.dupe(u8, path);
-        }
-
-        try workspaces.append(allocator, .{
-            .id = row.int(0),
-            .paths = paths,
-            .timestamp = row.int(2),
-        });
+        try workspaces.append(allocator, serialized);
     }
     if (rows.err) |err| return err;
 
@@ -295,7 +302,7 @@ fn deserialize(allocator: Allocator, row: zqlite.Row) !SerializedWorkspace {
     };
 }
 
-test "insert and get workspace paths using delimiter" {
+test "basic operation" {
     const alloc = testing.allocator;
     const io = testing.io;
 
@@ -325,6 +332,15 @@ test "insert and get workspace paths using delimiter" {
     try std.testing.expectEqual(@as(f64, 56), workspace.left_dock);
     try std.testing.expectEqual(@as(f64, 78), workspace.right_dock);
     try std.testing.expect(workspace.timestamp > 0);
+
+    try setBounds(conn, 42, .{ .x = 78, .y = 67, .width = 80, .height = 60 }, 89, 10);
+
+    const updated = (try get(conn, alloc, 42)).?;
+    defer updated.deinit(alloc);
+
+    try std.testing.expectEqual(SerializedWindowBounds{ .height = 60, .width = 80, .x = 78, .y = 67 }, updated.window);
+    try std.testing.expectEqual(@as(f64, 89), updated.left_dock);
+    try std.testing.expectEqual(@as(f64, 10), updated.right_dock);
 }
 
 test "getByPaths returns workspace matching ordered paths" {

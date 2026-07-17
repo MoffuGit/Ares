@@ -7,6 +7,7 @@
 import Foundation
 import OdysseyKit
 import os
+import CoreGraphics
 
 extension Odyssey {
     struct SerializedWindowBounds {
@@ -21,6 +22,13 @@ extension Odyssey {
             self.x  = bounds.x
             self.y = bounds.y
         }
+        
+        init(_ bounds: NSRect) {
+            self.height = bounds.height
+            self.width = bounds.width
+            self.x  = bounds.origin.x
+            self.y = bounds.origin.y
+        }
     }
     
     struct SerializedWorkspace {
@@ -31,11 +39,11 @@ extension Odyssey {
         let paths: [String]
         let timestamp: Int64
         
-        init(id: Int64, paths: [String], timestamp: Int64) {
+        init(id: Int64, paths: [String], timestamp: Int64, rect: NSRect) {
             self.id = id
             self.paths = paths
             self.timestamp = timestamp
-            self.windowBounds = nil
+            self.windowBounds = .init(rect)
             self.leftDock = nil
             self.rightDock = nil
         }
@@ -171,6 +179,21 @@ extension Odyssey {
             
             odyssey_workspace_mark_for_restoration(odysseyApp, entity)
             app.enqueueFlush()
+        }
+        
+        func setBounds(window: NSRect, leftDock: Double?, rightDock: Double?) {
+            guard let odysseyApp = app.app, let entity = entity else {
+                logger.critical("odyssey_workspace_set_bounds failed: app or entity is nil")
+                return
+            }
+            
+            let point = window.origin;
+            
+            let maybeWindow = odyssey_maybe_workspace_window_bounds_s.init(value: .init(x: point.x, y: point.y, width: window.width , height: window.height), valid: true);
+            let maybeLeftDock = odyssey_maybe_workspace_dock_width_s(width: leftDock ?? 0, valid: leftDock != nil);
+            let maybeRigthDock = odyssey_maybe_workspace_dock_width_s(width: rightDock ?? 0, valid: rightDock != nil);
+            
+            odyssey_workspace_set_bounds(odysseyApp, entity, maybeWindow, maybeLeftDock, maybeRigthDock)
         }
         
         var Id: Int64 {

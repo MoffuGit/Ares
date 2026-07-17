@@ -68,8 +68,12 @@ pub fn init(
     };
 }
 
-pub fn markForRestoration(self: *Workspace, gpa: Allocator) !void {
+pub fn markForRestoration(self: *const Workspace, gpa: Allocator) !void {
     try persistence.setSession(self.conn, self.id, self.session, gpa);
+}
+
+pub fn setBounds(self: *const Workspace, bounds: ?persistence.SerializedWindowBounds, left_dock: ?f64, right_dock: ?f64) !void {
+    try persistence.setBounds(self.conn, self.id, bounds, left_dock, right_dock);
 }
 
 pub fn drop(self: *Workspace) void {

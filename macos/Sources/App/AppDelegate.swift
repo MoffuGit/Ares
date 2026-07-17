@@ -8,6 +8,7 @@
 import Cocoa
 import Foundation
 import OdysseyKit
+import os
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, WorkspaceHistoryManagerDelegate {
@@ -44,23 +45,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, WorkspaceHistoryManagerDeleg
     }
 
     func openWorkspace(_ workspace: Odyssey.SerializedWorkspace) {
-        openWorkspace(workspace.paths)
+        if let bound = workspace.windowBounds {
+            openWorkspace(workspace.paths, rect: NSRect(x: bound.x, y: bound.y, width: bound.width, height: bound.height))
+        } else {
+            openWorkspace(workspace.paths)
+        }
     }
 
     public func openWorkspace(_ path: String) {
         openWorkspace([path])
     }
 
-    public func openWorkspace(_ paths: [String]) {
+    public func openWorkspace(_ paths: [String], rect: NSRect? = nil) {
         let paths = Odyssey.Workspace.normalizedPaths(paths)
         guard !paths.isEmpty else { return }
 
         let controller = WorkspaceController(
-            delegate: self, session: session, paths: paths)
+            delegate: self, session: session, paths: paths, rect: rect)
         workspaceControllers.append(controller)
-        controller.showWindow(nil)
-        controller.window?.center()
 
+        controller.showWindow(nil)
+        
         if let metadata = controller.serializedMetadata() {
             workspaceHistoryManager.upsert(metadata)
         }
@@ -72,12 +77,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, WorkspaceHistoryManagerDeleg
         if isLastWorkspaceWindow {
             controller.markForRestoration()
         }
+        
+        if let metadata = controller.serializedMetadata() {
+            workspaceHistoryManager.upsert(metadata)
+        }
+
+        controller.saveBounds();
         workspaceControllers.removeAll { $0 === controller }
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
         for controller in workspaceControllers {
             controller.markForRestoration()
+            controller.saveBounds();
         }
         odyssey_db_stop()
     }

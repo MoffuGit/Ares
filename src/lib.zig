@@ -65,6 +65,10 @@ pub fn Option(T: type) type {
             if (val) |s| return some(s);
             return .none;
         }
+
+        fn into(self: @This()) ?T {
+            return if (self.valid) self.value else null;
+        }
     };
 }
 
@@ -132,6 +136,15 @@ const ExternSerializedWindowBounds = extern struct {
             .y = bounds.y,
             .width = bounds.width,
             .height = bounds.height,
+        };
+    }
+
+    fn into(self: @This()) Workspace.persistence.SerializedWindowBounds {
+        return .{
+            .x = self.x,
+            .y = self.y,
+            .height = self.height,
+            .width = self.width,
         };
     }
 };
@@ -317,11 +330,21 @@ fn workspace_new(app: *App, session: ent.Entity(Session), extern_paths: Slice(St
 
 pub export fn odyssey_workspace_mark_for_restoration(app: *App, extern_entity: ExternEntity) void {
     const workspace = extern_entity.any().into(Workspace) orelse @panic("Missing Workspace Entity");
-    const ptr, const update = workspace.update(app);
-    defer update.end(ptr);
+    const ptr = workspace.read(app);
 
     ptr.markForRestoration(app.gpa) catch |err| {
         std.log.warn("Workspace would not restore={}", .{err});
+    };
+}
+
+pub export fn odyssey_workspace_set_bounds(app: *App, extern_entity: ExternEntity, extern_bounds: Option(ExternSerializedWindowBounds), left_dock: Option(f64), right_dock: Option(f64)) void {
+    const workspace = extern_entity.any().into(Workspace) orelse @panic("Missing Workspace Entity");
+    const ptr = workspace.read(app);
+
+    const bounds = if (extern_bounds.into()) |n| n.into() else null;
+
+    ptr.setBounds(bounds, left_dock.into(), right_dock.into()) catch |err| {
+        std.log.warn("Workspace window would not restore={}", .{err});
     };
 }
 
