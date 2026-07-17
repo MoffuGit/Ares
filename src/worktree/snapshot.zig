@@ -1,5 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
+const File = Io.File;
 
 const chunk_pool = @import("../chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
@@ -7,16 +9,16 @@ const chunked_path = @import("../chunked_path.zig");
 const ChunkedPath = chunked_path.ChunkedPath;
 const datastruct = @import("../datastruct.zig");
 const btree = datastruct.btree;
-const Io = std.Io;
-const File = Io.File;
 
 pub const Entry = struct {
-    id: u64,
     path: ChunkedPath,
-    kind: File.Kind,
-    size: u64,
     mtime: Io.Timestamp,
+    id: u64,
+    size: u64,
     inode: u64,
+    kind: File.Kind,
+    hidden: bool,
+    ignored: bool,
 };
 
 pub const NODE_SIZE = Entries.NODE_SIZE;
@@ -57,6 +59,15 @@ pub fn clone(self: *const Snapshot) !Snapshot {
 
 pub fn insert(self: *Snapshot, entry: Entry) !void {
     _ = try self.entries.insert(self.chunk, entry.path, entry);
+}
+
+pub fn hiddenCount(self: *const Snapshot) usize {
+    var it = self.entries.iterConst();
+    var count: usize = 0;
+    while (it.next()) |kv| {
+        if (kv.value.hidden) count += 1;
+    }
+    return count;
 }
 
 pub fn deinit(self: *Snapshot) void {

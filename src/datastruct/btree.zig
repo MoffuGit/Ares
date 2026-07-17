@@ -783,7 +783,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             return null;
         }
 
-        pub fn iter(self: *Self) Iterator {
+        pub fn iter(self: *const Self) Iterator {
             return Iterator.init(self);
         }
 

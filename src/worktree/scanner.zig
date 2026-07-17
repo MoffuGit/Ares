@@ -139,6 +139,8 @@ pub fn init(
         .size = stat.size,
         .mtime = stat.mtime,
         .kind = stat.kind,
+        .hidden = false,
+        .ignored = false,
     });
 
     try self.actions.putOne(self.io, .initial_scan);
@@ -528,6 +530,7 @@ fn scanDir(
         if (shared.queue.closed.load(.acquire)) break;
 
         const name = entry.name;
+        const is_hidden = name.len > 0 and name[0] == '.';
 
         const suffix_len: u32 = 1 + @as(u32, @intCast(name.len));
         const new_len = parent_path.len + suffix_len;
@@ -550,12 +553,14 @@ fn scanDir(
                 .mtime = .fromNanoseconds(@intCast(entry.meta.mtime_ns)),
                 .size = entry.meta.size,
                 .kind = entry.kind,
+                .hidden = is_hidden,
+                .ignored = false,
             },
         };
 
         shared.entries.push(ptr);
 
-        if (entry.kind != .directory) continue;
+        if (is_hidden or entry.kind != .directory) continue;
 
         const new_dir = try dir.openDir(self.io, name, .{ .follow_symlinks = false, .iterate = true });
 
