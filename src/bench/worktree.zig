@@ -17,6 +17,7 @@ const WorktreeScanObserver = struct {
         self.scanning = worktree.read(ctx.app).scanning;
     }
 };
+const EXPECTED_ENTRIES = 544859;
 
 test "Bench Worktree" {
     const gpa = std.heap.c_allocator;
@@ -56,5 +57,5 @@ pub fn initialWorktreeScan(app: *App, _: std.mem.Allocator, io: std.Io, _: *prof
         app.flush();
     }
 
-    try testing.expectEqual(544859, worktree.read(app).snapshot.entries.count);
+    if (EXPECTED_ENTRIES != worktree.read(app).snapshot.entries.count) @panic("wrong number of entries");
 }
