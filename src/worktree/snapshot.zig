@@ -61,15 +61,6 @@ pub fn insert(self: *Snapshot, entry: Entry) !void {
     _ = try self.entries.insert(self.chunk, entry.path, entry);
 }
 
-pub fn hiddenCount(self: *const Snapshot) usize {
-    var it = self.entries.iterConst();
-    var count: usize = 0;
-    while (it.next()) |kv| {
-        if (kv.value.hidden) count += 1;
-    }
-    return count;
-}
-
 pub fn deinit(self: *Snapshot) void {
     self.entries.deinit(self.chunk);
 }
