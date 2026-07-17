@@ -81,12 +81,20 @@ void odyssey_remove_observer(odyssey_observer_s observer);
 
 ///////////////////
 //~ Workspace Types
-//
+
 typedef struct {
     odyssey_string_s* ptr;
     size_t len;
 } odyssey_workspace_paths_s;
 
+typedef odyssey_maybe_entity_s odyssey_workspace_creation_t;
+odyssey_workspace_creation_t odyssey_workspace_new(odyssey_app_t app, odyssey_entity_s session, odyssey_workspace_paths_s paths);
+void odyssey_workspace_mark_for_restoration(odyssey_app_t app, odyssey_entity_s workspace);
+int64_t odyssey_workspace_get_id(odyssey_app_t app, odyssey_entity_s workspace);
+
+////////////////////////
+//~ SerializedWorkspaces
+//
 typedef struct {
     double x;
     double y;
@@ -99,18 +107,17 @@ typedef struct {
     bool valid;
 } odyssey_maybe_workspace_window_bounds_s;
 
-typedef odyssey_maybe_entity_s odyssey_workspace_creation_t;
-odyssey_workspace_creation_t odyssey_workspace_new(odyssey_app_t app, odyssey_entity_s session, odyssey_workspace_paths_s paths);
-void odyssey_workspace_mark_for_restoration(odyssey_app_t app, odyssey_entity_s workspace);
-int64_t odyssey_workspace_get_id(odyssey_app_t app, odyssey_entity_s workspace);
-
-////////////////////////
-//~ SerializedWorkspaces
+typedef struct {
+    double width;
+    bool valid;
+} odyssey_maybe_workspace_dock_width_s;
 
 typedef struct {
     odyssey_workspace_paths_s paths;
     odyssey_maybe_u128_s session;
     odyssey_maybe_workspace_window_bounds_s window;
+    odyssey_maybe_workspace_dock_width_s left_dock;
+    odyssey_maybe_workspace_dock_width_s right_dock;
     int64_t timestamp;
     int64_t id;
 } odyssey_serialized_workspace_s;
