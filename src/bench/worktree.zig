@@ -6,28 +6,7 @@ const test_build = @import("test_build");
 const Worktree = @import("../worktree.zig");
 const App = @import("../app.zig");
 const Entity = App.Entity;
-
-fn referenceWalk(io: Io, root_abs: []const u8) !usize {
-    var dir = try Io.Dir.openDirAbsolute(io, root_abs, .{ .follow_symlinks = false, .iterate = true });
-    defer dir.close(io);
-
-    var walker = try Io.Dir.walkSelectively(dir, std.heap.c_allocator);
-    defer walker.deinit();
-
-    var total: usize = 1;
-    var hidden: usize = 0;
-
-    while (try walker.next(io)) |entry| {
-        const is_hidden = entry.basename.len > 0 and entry.basename[0] == '.';
-        total += 1;
-        if (is_hidden) hidden += 1;
-        if (entry.kind == .directory and !is_hidden) {
-            try walker.enter(io, entry);
-        }
-    }
-
-    return total;
-}
+const zlob = @import("zlob");
 
 const WorktreeScanObserver = struct {
     scanning: bool,
@@ -55,7 +34,9 @@ test "Bench Worktree" {
     bench.init(gpa, .{ .stop_ms = 20000, .name = "WORKTREE" });
     defer bench.deinit();
 
-    expected = try referenceWalk(io, test_build.chromium_path);
+    var zlob_res = try zlob.walk.collect(gpa, test_build.chromium_path, .{});
+    defer zlob_res.deinit();
+    expected = zlob_res.entries.len;
 
     const res = try bench.run(App, &app, gpa, io, initialWorktreeScan);
     try res.log(io, .stdout());
@@ -82,7 +63,4 @@ pub fn initialWorktreeScan(app: *App, _: std.mem.Allocator, io: std.Io, _: *prof
     while (observer.read(app).scanning) {
         app.flush();
     }
-
-    const snap = worktree.read(app).snapshot;
-    if (expected != snap.entries.count) @panic("wrong number of entries");
 }

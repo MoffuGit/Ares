@@ -29,6 +29,8 @@ const attr = @import("attr.zig");
 const BulkAttr = attr.BulkAttr;
 const Snapshot = @import("snapshot.zig");
 
+const GitIgnore = @import("zlob").GitIgnore;
+
 pub const Entry = struct {
     data: Snapshot.Entry,
     next: ?*Entry = null,
@@ -37,6 +39,12 @@ pub const Entry = struct {
 const UPDATE_INTERVAL: Io.Duration = .fromMilliseconds(100);
 
 const Scanner = @This();
+
+const IgnoreNode = struct {
+    parent: ?*const IgnoreNode,
+    gi: GitIgnore,
+    relative_offset: u32,
+};
 
 pub const Updates = union(enum) {
     pub const Queue = Io.Queue(Updates);
@@ -309,6 +317,7 @@ pub const Job = struct {
     path: ChunkedPath,
     dir: Io.Dir,
     next: ?*Job = null,
+    ignore: ?*const IgnoreNode = null,
 };
 
 const Queue = struct {
@@ -444,7 +453,7 @@ const SharedState = struct {
         try self.queue.init(arena, @intCast(threads));
 
         try self.chunks.init(arena, &.{
-            .{ 1024 * 1024, @max(@sizeOf(Entry), @sizeOf(Job)) },
+            .{ 1024 * 1024, @max(@sizeOf(Entry), @sizeOf(Job), @sizeOf(IgnoreNode)) },
         });
     }
 
@@ -494,13 +503,15 @@ pub fn _scan(
 ) !void {
     const shared = self.shared orelse return;
     const buffer = try shared.arena.allocator().alignedAlloc(u8, .@"8", 64 * 1024);
+    const ignore_buffer = try shared.arena.allocator().alloc(u8, 1024 * 1024);
 
     while (shared.queue.pop(self.io, worker_id)) |job| {
-        try self.scanDir(job, worker_id, shared, buffer);
+        try self.scanDir(job, worker_id, shared, buffer, ignore_buffer);
 
         shared.destroyJob(job);
 
         if (shared.queue.taskDone(self.io)) {
+            @branchHint(.unlikely);
             try self.actions.putOne(self.io, .scan_end);
         }
 
@@ -514,9 +525,27 @@ fn scanDir(
     worker_id: u32,
     shared: *SharedState,
     buffer: []align(8) u8,
+    ignore_buffer: []u8,
 ) !void {
     const dir = job.dir;
     defer dir.close(self.io);
+
+    const arena = shared.arena.allocator();
+    var effective_ignore: ?*const IgnoreNode = job.ignore;
+    {
+        const content = dir.readFile(self.io, ".gitignore", ignore_buffer) catch null;
+
+        if (content) |src| {
+            const gi = try GitIgnore.parse(arena, src);
+            const node = try shared.chunks.allocator().create(IgnoreNode);
+            node.* = .{
+                .parent = job.ignore,
+                .gi = gi,
+                .relative_offset = job.path.len + 1,
+            };
+            effective_ignore = node;
+        }
+    }
 
     var bulk = BulkAttr.init(dir.handle, buffer, .{
         .size = true,
@@ -527,10 +556,14 @@ fn scanDir(
     const parent_path = job.path;
 
     while (try bulk.next()) |entry| {
-        if (shared.queue.closed.load(.acquire)) break;
+        if (shared.queue.closed.load(.acquire)) {
+            @branchHint(.unlikely);
+            break;
+        }
 
         const name = entry.name;
         const is_hidden = name.len > 0 and name[0] == '.';
+        const is_dir = entry.kind == .directory;
 
         const suffix_len: u32 = 1 + @as(u32, @intCast(name.len));
         const new_len = parent_path.len + suffix_len;
@@ -542,6 +575,10 @@ fn scanDir(
         const suffix = suffix_buf[0 .. 1 + name.len];
 
         const path: ChunkedPath = self.path_store.append(parent_path, suffix, 1);
+
+        var path_buf: [MAX_PATH_LEN]u8 = undefined;
+        const relative = path.write(&path_buf);
+        const ignored = isIgnored(effective_ignore, path_buf[0..relative], name, is_dir);
 
         const ptr = shared.createEntry();
 
@@ -560,7 +597,7 @@ fn scanDir(
 
         shared.entries.push(ptr);
 
-        if (is_hidden or entry.kind != .directory) continue;
+        if (is_hidden or ignored or !is_dir) continue;
 
         const new_dir = try dir.openDir(self.io, name, .{ .follow_symlinks = false, .iterate = true });
 
@@ -568,8 +605,30 @@ fn scanDir(
         new.* = .{
             .dir = new_dir,
             .path = path,
+            .ignore = effective_ignore,
         };
 
         shared.queue.push(self.io, worker_id, new);
     }
+}
+
+fn isIgnored(
+    start: ?*const IgnoreNode,
+    path: []const u8,
+    basename: []const u8,
+    is_dir: bool,
+) bool {
+    var node = start;
+    while (node) |n| : (node = n.parent) {
+        if (n.gi.is_empty) continue;
+
+        if (n.gi.checkWithBasename(
+            path[n.relative_offset..],
+            basename,
+            is_dir,
+        )) |verdict| {
+            return verdict;
+        }
+    }
+    return false;
 }

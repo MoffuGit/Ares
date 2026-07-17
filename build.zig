@@ -147,6 +147,10 @@ fn rootModule(
         .sanitize_c = .off,
         .imports = &.{
             .{ .name = "prof", .module = prof_mod },
+            .{ .name = "zlob", .module = b.dependency("zlob", .{
+                .target = target,
+                .optimize = optimize,
+            }).module("zlob_core") },
             .{ .name = "zqlite", .module = zqlite.module("zqlite") },
             .{ .name = "objc", .module = objc.module("objc") },
         },
