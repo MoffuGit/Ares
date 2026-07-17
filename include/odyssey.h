@@ -94,7 +94,7 @@ int64_t odyssey_workspace_get_id(odyssey_app_t app, odyssey_entity_s workspace);
 
 ////////////////////////
 //~ SerializedWorkspaces
-//
+
 typedef struct {
     double x;
     double y;
