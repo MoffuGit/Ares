@@ -85,6 +85,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WorkspaceHistoryManagerDeleg
         workspaceControllers.append(controller)
 
         controller.showWindow(nil)
+        if(rect == nil) {
+            controller.window?.center()
+        }
         
         if let metadata = controller.serializedMetadata() {
             workspaceHistoryManager.upsert(metadata)

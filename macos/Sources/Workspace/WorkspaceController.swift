@@ -12,7 +12,7 @@ class WorkspaceController: NSWindowController, NSWindowDelegate, WorkspaceDelega
     private let toolBar = WorkspaceToolBar()
     private let statusBar = WorkspaceStatusBar()
     private let docks: WorkspaceDocks
-    private let content = NSStackView()
+    private let content = WorkspaceContainer()
     internal let workspace: Odyssey.Workspace
     private weak var appDelegate: AppDelegate?
 
@@ -114,8 +114,19 @@ private class WorkspaceWindow: NSWindow {
         )
 
         self.isRestorable = false
-        self.backgroundColor = .black
+        self.backgroundColor = .clear
         self.titlebarAppearsTransparent = true
         self.contentMinSize = NSSize(width: 480, height: 300)
+    }
+}
+
+private class WorkspaceContainer: NSStackView {
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        super.updateLayer()
+        let isDark = effectiveAppearance.bestMatch(
+            from: [.aqua, .darkAqua]) == .darkAqua
+        layer?.backgroundColor = (isDark ? NSColor.black : NSColor.white).cgColor
     }
 }
