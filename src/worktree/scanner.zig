@@ -591,7 +591,7 @@ fn scanDir(
                 .size = entry.meta.size,
                 .kind = entry.kind,
                 .hidden = is_hidden,
-                .ignored = false,
+                .ignored = ignored,
             },
         };
 
