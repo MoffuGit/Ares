@@ -170,7 +170,7 @@ pub fn getByPaths(conn: zqlite.Conn, allocator: Allocator, paths: []const []cons
     defer allocator.free(paths_text);
 
     const row = (try conn.row(
-        \\SELECT id, paths, session, window_x, window_y, window_width, window_height, timestamp
+        \\SELECT id, paths, session, window_x, window_y, window_width, window_height, left_dock, right_dock, timestamp
         \\FROM workspace
         \\WHERE paths = ?
     , .{paths_text})) orelse return null;
@@ -191,7 +191,7 @@ pub fn getBySession(conn: zqlite.Conn, allocator: Allocator, session: uuid.Uuid)
     defer allocator.free(buffer);
 
     var rows = try conn.rows(
-        \\SELECT id, paths, session, window_x, window_y, window_width, window_height, timestamp
+        \\SELECT id, paths, session, window_x, window_y, window_width, window_height, left_dock, right_dock, timestamp
         \\FROM workspace
         \\WHERE session = ?
     , .{buffer});
