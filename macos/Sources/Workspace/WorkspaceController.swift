@@ -22,11 +22,22 @@ class WorkspaceController: NSWindowController, NSWindowDelegate, WorkspaceDelega
         self.init(delegate: delegate, session: session, paths: [path], rect: rect)
     }
 
-    init(delegate: AppDelegate, session: Odyssey.Session, paths: [String], rect: NSRect? = nil) {
+    init(
+        delegate: AppDelegate,
+        session: Odyssey.Session,
+        paths: [String],
+        rect: NSRect? = nil,
+        leftDock: Double? = nil,
+        rightDock: Double? = nil
+    ) {
         self.paths = Odyssey.Workspace.normalizedPaths(paths)
         self.workspace = Odyssey.Workspace(app: delegate.app, session: session, paths: self.paths)
         self.appDelegate = delegate
-        self.docks = WorkspaceDocks(center: NSView())
+        self.docks = WorkspaceDocks(
+            center: NSView(),
+            leftDockInitialWidth: leftDock,
+            rightDockInitialWidth: rightDock
+        )
 
         content.orientation = .vertical
         content.spacing = 0
@@ -57,7 +68,9 @@ class WorkspaceController: NSWindowController, NSWindowDelegate, WorkspaceDelega
             id: id,
             paths: paths,
             timestamp: Int64(Date().timeIntervalSince1970),
-            rect: window!.frame
+            rect: window!.frame,
+            leftDock: docks.dockWidth(for: .left),
+            rightDock: docks.dockWidth(for: .right)
         )
     }
 
@@ -82,7 +95,11 @@ class WorkspaceController: NSWindowController, NSWindowDelegate, WorkspaceDelega
     }
 
     func saveBounds() {
-        workspace.setBounds(window: window!.frame, leftDock: 0.0, rightDock: 0.0)
+        workspace.setBounds(
+            window: window!.frame,
+            leftDock: docks.dockWidth(for: .left),
+            rightDock: docks.dockWidth(for: .right)
+        )
     }
 }
 

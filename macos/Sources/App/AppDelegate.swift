@@ -46,9 +46,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, WorkspaceHistoryManagerDeleg
 
     func openWorkspace(_ workspace: Odyssey.SerializedWorkspace) {
         if let bound = workspace.windowBounds {
-            openWorkspace(workspace.paths, rect: NSRect(x: bound.x, y: bound.y, width: bound.width, height: bound.height))
+            openWorkspace(
+                workspace.paths,
+                rect: NSRect(x: bound.x, y: bound.y, width: bound.width, height: bound.height),
+                leftDock: workspace.leftDock,
+                rightDock: workspace.rightDock
+            )
         } else {
-            openWorkspace(workspace.paths)
+            openWorkspace(
+                workspace.paths,
+                leftDock: workspace.leftDock,
+                rightDock: workspace.rightDock
+            )
         }
     }
 
@@ -56,12 +65,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, WorkspaceHistoryManagerDeleg
         openWorkspace([path])
     }
 
-    public func openWorkspace(_ paths: [String], rect: NSRect? = nil) {
+    public func openWorkspace(
+        _ paths: [String],
+        rect: NSRect? = nil,
+        leftDock: Double? = nil,
+        rightDock: Double? = nil
+    ) {
         let paths = Odyssey.Workspace.normalizedPaths(paths)
         guard !paths.isEmpty else { return }
 
         let controller = WorkspaceController(
-            delegate: self, session: session, paths: paths, rect: rect)
+            delegate: self,
+            session: session,
+            paths: paths,
+            rect: rect,
+            leftDock: leftDock,
+            rightDock: rightDock
+        )
         workspaceControllers.append(controller)
 
         controller.showWindow(nil)

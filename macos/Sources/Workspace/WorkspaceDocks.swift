@@ -50,13 +50,31 @@ class WorkspaceDocks: NSStackView {
 
     private var activeDrag: ActiveDrag?
 
-    init(center: NSView) {
+    init(center: NSView, leftDockInitialWidth: Double? = nil, rightDockInitialWidth: Double? = nil)
+    {
         super.init(frame: .zero)
+
+        // A nil or sub-minimum width means the dock should start collapsed.
+        // This also covers legacy persisted rows that stored 0.0 with
+        // valid=true to mean "collapsed" — those would otherwise leave the
+        // dock "expanded" at a 0px width, which produces a degenerate layout.
+        let leftStartsExpanded =
+            leftDockInitialWidth
+            .map { $0 >= Double(Metrics.minimumSidebarWidth) } ?? false
+        let rightStartsExpanded =
+            rightDockInitialWidth
+            .map { $0 >= Double(Metrics.minimumSidebarWidth) } ?? false
+
+        if leftStartsExpanded {
+            leftState.expandedWidth = CGFloat(leftDockInitialWidth!)
+        }
+        if rightStartsExpanded {
+            rightState.expandedWidth = CGFloat(rightDockInitialWidth!)
+        }
 
         orientation = .horizontal
         distribution = .fill
         spacing = 0
-        translatesAutoresizingMaskIntoConstraints = false
 
         // Expand to fill the vertical space offered by the containing stack.
         setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -107,11 +125,11 @@ class WorkspaceDocks: NSStackView {
 
         leftDividerLeadingConstraint = leftDivider.leadingAnchor.constraint(
             equalTo: leftDock.trailingAnchor,
-            constant: -effectiveDividerWidth(collapsed: leftState.isCollapsed) / 2
+            constant: -effectiveDividerWidth(collapsed: leftState.isCollapsed)
         )
         rightDividerLeadingConstraint = rightDivider.leadingAnchor.constraint(
             equalTo: rightDock.leadingAnchor,
-            constant: -effectiveDividerWidth(collapsed: rightState.isCollapsed) / 2
+            constant: -effectiveDividerWidth(collapsed: rightState.isCollapsed)
         )
         leftDividerLeadingConstraint.isActive = true
         rightDividerLeadingConstraint.isActive = true
@@ -119,8 +137,11 @@ class WorkspaceDocks: NSStackView {
         installGestureRecognizers(for: .left, on: leftDivider)
         installGestureRecognizers(for: .right, on: rightDivider)
 
-        collapse(.left)
-        collapse(.right)
+        // Docks that aren't starting expanded are collapsed now; expanded
+        // docks already had their width constraint and divider geometry
+        // initialized from the expanded state above.
+        if !leftStartsExpanded { collapse(.left) }
+        if !rightStartsExpanded { collapse(.right) }
     }
 
     @available(*, unavailable)
@@ -194,6 +215,13 @@ class WorkspaceDocks: NSStackView {
         // from under the cursor without a mouseExited being delivered.
         divider.isHovering = false
         toggleCollapsed(divider.side)
+    }
+
+    /// Returns the current dock width for `side`, or `nil` when the dock is
+    /// collapsed (so callers can persist "collapsed" rather than width 0).
+    func dockWidth(for side: WorkspaceDividerView.Side) -> Double? {
+        let state = self.state(for: side)
+        return state.isCollapsed ? nil : Double(state.expandedWidth)
     }
 
     // MARK: - State mutations
