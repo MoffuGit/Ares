@@ -44,7 +44,6 @@ class WorkspaceController: NSWindowController, NSWindowDelegate, WorkspaceDelega
         content.wantsLayer = true
         content.layer?.masksToBounds = true
         content.layer?.cornerRadius = 16
-        content.layer?.backgroundColor = .white
 
         content.addArrangedSubview(toolBar)
         content.addArrangedSubview(docks)
