@@ -47,7 +47,7 @@ pub fn init(
         .conn = conn,
         .arena = .init(gpa),
         .paths = undefined,
-        .project = try .new(ctx.app, .{self.arena.allocator()}),
+        .project = undefined,
     };
     errdefer self.arena.deinit();
 
@@ -57,6 +57,15 @@ pub fn init(
         const copy = try self.arena.allocator().dupe(u8, path);
         self.paths.appendAssumeCapacity(copy);
     }
+
+    self.project = try .new(ctx.app, .{
+        Project.Options{
+            .arena = self.arena.allocator(),
+            .paths = self.paths.items,
+            .io = io,
+        },
+    });
+    errdefer self.project.drop();
 
     self.id = if (try persistence.getByPaths(conn, gpa, self.paths.items)) |serialized| id: {
         defer serialized.deinit(gpa);

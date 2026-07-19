@@ -186,7 +186,8 @@ pub fn handleActions(
         self.deinit();
         return false;
     };
-    self._handleActions(ctx, waker) catch {
+    self._handleActions(ctx, waker) catch |err| {
+        std.log.err("Worktree Scanner err={}", .{err});
         self.deinit();
         return false;
     };

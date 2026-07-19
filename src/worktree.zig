@@ -73,13 +73,21 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
     const updates = &self.scanner.ptr.updates;
     for (0..try updates.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
-            .started => self.scanning = true,
+            .started => {
+                std.log.info("scanner for path \"{s}\" started", .{self.snapshot.abs_root});
+                self.scanning = true;
+            },
             .updated => |updated| {
                 try self.scanner.ptr.actions.putOne(self.io, .{ .reclaim = self.snapshot });
                 try self.scanner.waker.wake();
 
                 self.snapshot = updated.snapshot;
                 self.scanning = updated.scanning;
+
+                std.log.info("scanner for path \"{s}\" update", .{self.snapshot.abs_root});
+                if (!self.scanning) {
+                    std.log.info("scanner for path \"{s}\" ended", .{self.snapshot.abs_root});
+                }
             },
         }
     }

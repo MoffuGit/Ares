@@ -7,6 +7,7 @@
 
 import OdysseyKit
 
+@MainActor
 extension Odyssey {
     class Entity {
         let app: Odyssey.App
