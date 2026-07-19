@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const mem = std.mem;
 const debug = std.debug;
 const assert = debug.assert;
@@ -7,6 +6,7 @@ const Allocator = mem.Allocator;
 const testing = std.testing;
 const panic = debug.panic;
 const atomic = std.atomic;
+const builtin = @import("builtin");
 
 const constans = @import("contants.zig");
 const MAX_ALIGN = constans.MAX_ALIGN;
@@ -47,6 +47,8 @@ fn freeListVersion(state: u64) u32 {
 }
 
 pub const ChunkPool = struct {
+    pub const Index = Chunk.Index;
+
     buffer: []u8,
     alignment: mem.Alignment,
     chunk_size: u32,
@@ -80,7 +82,7 @@ pub const ChunkPool = struct {
         gpa.rawFree(self.buffer, self.alignment, @returnAddress());
     }
 
-    fn popFreeList(self: *ChunkPool) ?*Chunk {
+    fn popFreeList(self: *ChunkPool) ?Index {
         while (true) {
             const state = self.free_list.load(.acquire);
             const head_index = freeListIndex(state);
@@ -89,26 +91,42 @@ pub const ChunkPool = struct {
             const next_index = chunk.?.header().loadNext();
             const new_state = packFreeList(freeListVersion(state) + 1, next_index);
             if (self.free_list.cmpxchgWeak(state, new_state, .acq_rel, .monotonic) == null) {
-                return chunk.?;
+                return head_index;
             }
         }
     }
 
-    fn allocBump(self: *ChunkPool) ?*Chunk {
+    fn allocBump(self: *ChunkPool) ?Index {
         while (true) {
             const current = self.reserved.load(.monotonic);
             const offset = @as(usize, current) * self.chunk_size;
             if (offset >= self.buffer.len) return null;
             if (self.reserved.cmpxchgWeak(current, current + 1, .monotonic, .monotonic) == null) {
-                return @ptrCast(@alignCast(&self.buffer[offset]));
+                return @enumFromInt(current);
             }
         }
     }
 
+    pub fn allocIndex(self: *ChunkPool) ?Index {
+        return self.popFreeList() orelse self.allocBump();
+    }
+
+    pub fn sliceFromIndex(self: *ChunkPool, index: Index) ?[]u8 {
+        if (index == .none) return null;
+        const start = @as(usize, @intFromEnum(index)) * self.chunk_size;
+        if (start >= self.buffer.len) return null;
+        return self.buffer[start .. start + self.chunk_size];
+    }
+
     pub fn alloc(self: *ChunkPool) ?[]u8 {
-        const chunk = self.popFreeList() orelse self.allocBump() orelse return null;
-        const ptr: [*]u8 = @ptrCast(chunk);
-        return ptr[0..self.chunk_size];
+        const index = self.allocIndex() orelse return null;
+        return self.sliceFromIndex(index).?;
+    }
+
+    pub fn freeIndex(self: *ChunkPool, index: Index) void {
+        assert(index != .none);
+        const chunk = self.get(index) orelse @panic("ChunkPool.freeIndex: index out of range");
+        self.pushFreeList(index, chunk);
     }
 
     fn freePrepare(self: *ChunkPool, buffer: []u8) struct { index: Chunk.Index, chunk: *Chunk } {
@@ -272,6 +290,60 @@ test "Chunk Pool reuses chunk after capacity is exhausted" {
 
     const reused = pool.alloc() orelse return error.TestUnexpectedResult;
     try testing.expectEqual(first.ptr, reused.ptr);
+}
+
+test "Chunk Pool index API allocates distinct writable indices" {
+    const gpa = testing.allocator;
+
+    var pool: ChunkPool = undefined;
+    try pool.init(gpa, 3, 128);
+    defer pool.deinit(gpa);
+
+    const idx_a = pool.allocIndex() orelse return error.TestUnexpectedResult;
+    const idx_b = pool.allocIndex() orelse return error.TestUnexpectedResult;
+    try testing.expect(idx_a != .none);
+    try testing.expect(idx_b != .none);
+    try testing.expect(idx_a != idx_b);
+
+    const slice_a = pool.sliceFromIndex(idx_a).?;
+    const slice_b = pool.sliceFromIndex(idx_b).?;
+    try testing.expectEqual(@as(usize, 128), slice_a.len);
+    try testing.expect(slice_a.ptr != slice_b.ptr);
+
+    @memset(slice_a, 0xAB);
+    try testing.expectEqual(@as(u8, 0xAB), pool.sliceFromIndex(idx_a).?[0]);
+    // Writing through one index must not bleed into another.
+    try testing.expectEqual(@as(u8, 0), pool.sliceFromIndex(idx_b).?[0]);
+}
+
+test "Chunk Pool freeIndex then allocIndex reuses the slot" {
+    const gpa = testing.allocator;
+
+    var pool: ChunkPool = undefined;
+    try pool.init(gpa, 2, 128);
+    defer pool.deinit(gpa);
+
+    const idx_a = pool.allocIndex() orelse return error.TestUnexpectedResult;
+    _ = pool.allocIndex() orelse return error.TestUnexpectedResult;
+    try testing.expect(pool.allocIndex() == null);
+
+    pool.freeIndex(idx_a);
+
+    const reused = pool.allocIndex() orelse return error.TestUnexpectedResult;
+    try testing.expectEqual(idx_a, reused);
+}
+
+test "Chunk Pool sliceFromIndex rejects none and out-of-range indices" {
+    const gpa = testing.allocator;
+
+    var pool: ChunkPool = undefined;
+    try pool.init(gpa, 2, 128);
+    defer pool.deinit(gpa);
+
+    try testing.expect(pool.sliceFromIndex(.none) == null);
+
+    const forged: ChunkPool.Index = @enumFromInt(1_000_000);
+    try testing.expect(pool.sliceFromIndex(forged) == null);
 }
 
 test "Chunk Allocator" {

@@ -7,6 +7,7 @@ const math = std.math;
 
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
+const ChunkPool = chunk_pool.ChunkPool;
 const constans = @import("contants.zig");
 const SIMD_CHUNK_BYTES = constans.SIMD_CHUNK_BYTES;
 const INLINE_CHUNKS = constans.INLINE_CHUNKS;
@@ -16,27 +17,35 @@ pub const SIMD_CHUNK = [SIMD_CHUNK_BYTES]u8;
 
 pub const InlineChunks = struct {
     next: ?*InlineChunks,
-    chunks: [INLINE_CHUNKS]*SIMD_CHUNK,
+    chunks: [INLINE_CHUNKS]ChunkPool.Index,
 };
 
 const INLINE_NODE_SIZE = @sizeOf(InlineChunks);
+
+fn resolveChunk(pool: *ChunkPool, index: ChunkPool.Index) *SIMD_CHUNK {
+    const bytes = pool.sliceFromIndex(index) orelse @panic("invalid SIMD chunk index");
+    assert(bytes.len == SIMD_CHUNK_BYTES);
+    return @ptrCast(@alignCast(bytes.ptr));
+}
 
 pub const ChunkedPath = struct {
     len: u32,
     filename_offset: u32,
     head: ?*InlineChunks,
+    pool: *ChunkPool,
 
     pub const Iterator = struct {
         node: ?*InlineChunks,
         slot: usize,
         remaining: u32,
+        pool: *ChunkPool,
 
         pub fn next(self: *Iterator) ?[]const u8 {
             if (self.remaining == 0) return null;
 
             const node = self.node orelse return null;
 
-            const chunk = node.chunks[self.slot];
+            const chunk = resolveChunk(self.pool, node.chunks[self.slot]);
 
             if (self.remaining >= SIMD_CHUNK_BYTES) {
                 const result: []const u8 = chunk[0..SIMD_CHUNK_BYTES];
@@ -65,6 +74,7 @@ pub const ChunkedPath = struct {
             .node = self.head,
             .slot = 0,
             .remaining = self.len,
+            .pool = self.pool,
         };
     }
 
@@ -110,8 +120,8 @@ pub const ChunkedPath = struct {
         var remaining_b: u32 = other.len;
 
         while (remaining_a > 0 and remaining_b > 0) {
-            const chunk_a: *SIMD_CHUNK = node_a.?.chunks[slot_a];
-            const chunk_b: *SIMD_CHUNK = node_b.?.chunks[slot_b];
+            const chunk_a: *SIMD_CHUNK = resolveChunk(self.pool, node_a.?.chunks[slot_a]);
+            const chunk_b: *SIMD_CHUNK = resolveChunk(other.pool, node_b.?.chunks[slot_b]);
 
             const a_vec: Vec = chunk_a.*;
             const b_vec: Vec = chunk_b.*;
@@ -151,15 +161,16 @@ pub const ChunkedPath = struct {
 };
 
 const SharedChunk = struct {
-    ptr: *SIMD_CHUNK,
+    index: ChunkPool.Index,
     ref_count: usize,
 };
 
 pub const ChunkedPathStore = struct {
     io: Io,
     mutex: Io.Mutex,
-    alloc: Allocator,
-    chunks: ChunkAllocator,
+    inline_alloc: Allocator,
+    simd_pool: ChunkPool,
+    inline_chunks: ChunkAllocator,
     dedup: std.AutoHashMap(SIMD_CHUNK, SharedChunk),
 
     pub const Config = struct {
@@ -171,18 +182,21 @@ pub const ChunkedPathStore = struct {
         self.* = .{
             .io = io,
             .mutex = .init,
-            .alloc = undefined,
-            .chunks = undefined,
+            .inline_alloc = undefined,
+            .simd_pool = undefined,
+            .inline_chunks = undefined,
             .dedup = undefined,
         };
 
-        try self.chunks.init(allocator, &.{
-            .{ config.chunk_capacity, SIMD_CHUNK_BYTES },
+        try self.simd_pool.init(allocator, config.chunk_capacity, SIMD_CHUNK_BYTES);
+        errdefer self.simd_pool.deinit(allocator);
+
+        try self.inline_chunks.init(allocator, &.{
             .{ config.inline_capacity, INLINE_NODE_SIZE },
         });
-        errdefer self.chunks.deinit(allocator);
+        errdefer self.inline_chunks.deinit(allocator);
 
-        self.alloc = self.chunks.allocator();
+        self.inline_alloc = self.inline_chunks.allocator();
 
         self.dedup = .init(allocator);
         errdefer self.dedup.deinit();
@@ -200,7 +214,8 @@ pub const ChunkedPathStore = struct {
 
     pub fn deinit(self: *ChunkedPathStore, allocator: Allocator) void {
         self.dedup.deinit();
-        self.chunks.deinit(allocator);
+        self.inline_chunks.deinit(allocator);
+        self.simd_pool.deinit(allocator);
     }
 
     pub fn chunkCount(self: *const ChunkedPathStore) usize {
@@ -221,10 +236,13 @@ pub const ChunkedPathStore = struct {
             var i: usize = 0;
 
             while (i < total_nodes) : (i += 1) {
-                const node = self.alloc.create(InlineChunks) catch
+                const node = self.inline_alloc.create(InlineChunks) catch
                     @panic("Inline Chunks Overflow");
 
-                node.* = .{ .next = null, .chunks = undefined };
+                node.* = .{
+                    .next = null,
+                    .chunks = [_]ChunkPool.Index{.none} ** INLINE_CHUNKS,
+                };
 
                 if (head == null) head = node else tail.?.next = node;
 
@@ -245,9 +263,9 @@ pub const ChunkedPathStore = struct {
 
             @memcpy(canonical[0..chunk_len], path[offset..end]);
 
-            const chunk_ptr = self.internChunk(canonical);
+            const chunk_index = self.internChunk(canonical);
 
-            cur_node.?.chunks[slot] = chunk_ptr;
+            cur_node.?.chunks[slot] = chunk_index;
             chunks_interned += 1;
             slot += 1;
 
@@ -263,6 +281,7 @@ pub const ChunkedPathStore = struct {
             .len = @intCast(path.len),
             .filename_offset = filename_offset,
             .head = head,
+            .pool = &self.simd_pool,
         };
     }
 
@@ -300,7 +319,7 @@ pub const ChunkedPathStore = struct {
                     ex_node = ex_node.?.next;
                 }
             }
-            const last_chunk = ex_node.?.chunks[ex_slot];
+            const last_chunk = resolveChunk(existing.pool, ex_node.?.chunks[ex_slot]);
             @memcpy(tail_buf[0..remainder], last_chunk[0..remainder]);
             tail_len = remainder;
         }
@@ -316,9 +335,12 @@ pub const ChunkedPathStore = struct {
         {
             var i: usize = 0;
             while (i < new_total_nodes) : (i += 1) {
-                const node = self.alloc.create(InlineChunks) catch
+                const node = self.inline_alloc.create(InlineChunks) catch
                     @panic("Inline Chunks Overflow");
-                node.* = .{ .next = null, .chunks = undefined };
+                node.* = .{
+                    .next = null,
+                    .chunks = [_]ChunkPool.Index{.none} ** INLINE_CHUNKS,
+                };
                 if (head == null) head = node else tail_node.?.next = node;
                 tail_node = node;
             }
@@ -331,8 +353,8 @@ pub const ChunkedPathStore = struct {
             var ex_slot: usize = 0;
             var i: usize = 0;
             while (i < full_chunks) : (i += 1) {
-                const chunk_ptr = ex_node.?.chunks[ex_slot];
-                cur_node.?.chunks[slot] = self.internChunk(chunk_ptr.*);
+                const existing_chunk = resolveChunk(existing.pool, ex_node.?.chunks[ex_slot]);
+                cur_node.?.chunks[slot] = self.internChunk(existing_chunk.*);
                 slot += 1;
                 if (slot >= INLINE_CHUNKS) {
                     slot = 0;
@@ -367,6 +389,7 @@ pub const ChunkedPathStore = struct {
             .len = new_len,
             .filename_offset = resolved_offset,
             .head = head,
+            .pool = &self.simd_pool,
         };
     }
 
@@ -383,46 +406,45 @@ pub const ChunkedPathStore = struct {
         while (node) |n| {
             const next = n.next;
             const slots = @min(INLINE_CHUNKS, total_chunks - released);
-            for (n.chunks[0..slots]) |chunk_ptr| {
-                self.destroyChunk(chunk_ptr);
+            for (n.chunks[0..slots]) |chunk_index| {
+                self.destroyChunk(chunk_index);
             }
             released += slots;
-            self.alloc.destroy(n);
+            self.inline_alloc.destroy(n);
             node = next;
         }
     }
 
-    fn internChunk(self: *ChunkedPathStore, canonical: SIMD_CHUNK) *SIMD_CHUNK {
+    fn internChunk(self: *ChunkedPathStore, canonical: SIMD_CHUNK) ChunkPool.Index {
         self.lock();
         defer self.unlock();
 
         if (self.dedup.getPtr(canonical)) |entry| {
             entry.ref_count += 1;
-            return entry.ptr;
+            return entry.index;
         }
 
-        const buf = self.alloc.create(SIMD_CHUNK) catch @panic("SIMD CHUNK Overflow");
-        @memcpy(buf, &canonical);
-        const ptr: *SIMD_CHUNK = @ptrCast(@alignCast(buf.ptr));
+        const index = self.simd_pool.allocIndex() orelse @panic("SIMD CHUNK Overflow");
+        resolveChunk(&self.simd_pool, index).* = canonical;
 
-        self.dedup.putAssumeCapacity(canonical, .{ .ptr = ptr, .ref_count = 1 });
+        self.dedup.putAssumeCapacity(canonical, .{ .index = index, .ref_count = 1 });
 
-        return ptr;
+        return index;
     }
 
-    fn destroyChunk(self: *ChunkedPathStore, ptr: *SIMD_CHUNK) void {
+    fn destroyChunk(self: *ChunkedPathStore, index: ChunkPool.Index) void {
         self.lock();
         defer self.unlock();
 
-        const key: SIMD_CHUNK = ptr.*;
+        const key: SIMD_CHUNK = resolveChunk(&self.simd_pool, index).*;
         const entry = self.dedup.getPtr(key) orelse return;
-        assert(entry.ptr == ptr);
+        assert(entry.index == index);
 
         if (entry.ref_count > 1) {
             entry.ref_count -= 1;
         } else {
             _ = self.dedup.remove(key);
-            self.alloc.destroy(ptr);
+            self.simd_pool.freeIndex(index);
         }
     }
 };
@@ -1136,4 +1158,54 @@ test "cmp matches std.mem.order on random paths" {
             try testing.expectEqual(expected, actual);
         }
     }
+}
+
+test "cmp across two stores resolves indices through each node's own pool" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+
+    var store_a: ChunkedPathStore = undefined;
+    try store_a.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    defer store_a.deinit(gpa);
+
+    var store_b: ChunkedPathStore = undefined;
+    try store_b.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    defer store_b.deinit(gpa);
+
+    // Same bytes in two stores: equal numeric indices may coincide but the pools
+    // are distinct. cmp must still report .eq because the chunk contents match.
+    var cs_a = store_a.put("src/chunked_path.zig", 4);
+    defer store_a.free(&cs_a);
+    var cs_b = store_b.put("src/chunked_path.zig", 4);
+    defer store_b.free(&cs_b);
+    try testing.expectEqual(std.math.Order.eq, cs_a.cmp(cs_b));
+
+    // Different bytes: first chunk differs at index 0 ('s' vs 't').
+    var cs_c = store_a.put("tsc/chunked_path.zig", 4);
+    defer store_a.free(&cs_c);
+    try testing.expectEqual(std.math.Order.lt, cs_a.cmp(cs_c));
+    try testing.expectEqual(std.math.Order.gt, cs_c.cmp(cs_b));
+}
+
+test "freed SIMD chunk index is reused for new content" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+
+    var store: ChunkedPathStore = undefined;
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    defer store.deinit(gpa);
+
+    var first = store.put("hello", 0);
+    const reused_index = first.head.?.chunks[0];
+    store.free(&first);
+
+    // A different single-chunk path should recycle the freed index slot.
+    var second = store.put("world", 0);
+    defer store.free(&second);
+
+    try testing.expectEqual(reused_index, second.head.?.chunks[0]);
+
+    const bytes = try second.toSlice(gpa);
+    defer gpa.free(bytes);
+    try testing.expectEqualSlices(u8, "world", bytes);
 }

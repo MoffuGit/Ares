@@ -74,7 +74,7 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
     for (0..try updates.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
             .started => {
-                std.log.info("scanner for path \"{s}\" started", .{self.snapshot.abs_root});
+                std.log.debug("scanner for path \"{s}\" started", .{self.snapshot.abs_root});
                 self.scanning = true;
             },
             .updated => |updated| {
@@ -84,9 +84,9 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
                 self.snapshot = updated.snapshot;
                 self.scanning = updated.scanning;
 
-                std.log.info("scanner for path \"{s}\" update", .{self.snapshot.abs_root});
+                std.log.debug("scanner for path \"{s}\" update", .{self.snapshot.abs_root});
                 if (!self.scanning) {
-                    std.log.info("scanner for path \"{s}\" ended", .{self.snapshot.abs_root});
+                    std.log.debug("scanner for path \"{s}\" ended", .{self.snapshot.abs_root});
                 }
             },
         }
