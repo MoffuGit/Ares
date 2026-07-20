@@ -5,6 +5,7 @@ pub const multi_queue = @import("datastruct/multi_queue.zig");
 pub const queue = @import("datastruct/queue.zig");
 pub const slotmap = @import("datastruct/slotmap.zig");
 pub const heap = @import("datastruct/heap.zig");
+pub const stealing = @import("datastruct/stealing_queue.zig");
 
 test {
     _ = heap;
