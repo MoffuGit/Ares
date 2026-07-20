@@ -96,6 +96,33 @@ pub const ChunkedPath = struct {
         return to_copy;
     }
 
+    pub fn basename(self: ChunkedPath, buffer: []u8) usize {
+        const name_len: usize = self.len - self.filename_offset;
+        if (buffer.len < name_len) @panic("basename buffer too small");
+
+        var it = self.iterator();
+        var skip: usize = self.filename_offset;
+        var written: usize = 0;
+
+        while (it.next()) |segment| {
+            if (written == name_len) break;
+
+            var seg = segment;
+            if (skip > 0) {
+                const advance = @min(skip, seg.len);
+                seg = seg[advance..];
+                skip -= advance;
+                if (seg.len == 0) continue;
+            }
+
+            const take = @min(seg.len, name_len - written);
+            @memcpy(buffer[written .. written + take], seg[0..take]);
+            written += take;
+        }
+
+        return name_len;
+    }
+
     pub fn toSlice(self: ChunkedPath, allocator: Allocator) ![]u8 {
         const buf = try allocator.alloc(u8, self.len);
         assert(buf.len == self.write(buf));
@@ -1158,6 +1185,46 @@ test "cmp matches std.mem.order on random paths" {
             try testing.expectEqual(expected, actual);
         }
     }
+}
+
+test "basename writes filename into buffer" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var store: ChunkedPathStore = undefined;
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    defer store.deinit(gpa);
+
+    const path = "src/worktree/snapshot.zig";
+    const filename_offset: u32 = @intCast(std.mem.lastIndexOfScalar(u8, path, '/').? + 1);
+
+    var cs = store.put(path, filename_offset);
+    defer store.free(&cs);
+
+    var buf: [64]u8 = undefined;
+    const written = cs.basename(&buf);
+    try testing.expectEqual(@as(usize, path.len - filename_offset), written);
+    try testing.expectEqualSlices(u8, "snapshot.zig", buf[0..written]);
+}
+
+test "basename spans chunk boundary" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var store: ChunkedPathStore = undefined;
+    try store.init(io, gpa, .{ .chunk_capacity = 16, .inline_capacity = 16 });
+    defer store.deinit(gpa);
+
+    // 80 bytes = 5 chunks. Place filename_offset at 48 (start of chunk 3).
+    const path = "0123456789abcdef" ++ "GHIJKLMNOPQRSTUV" ++ "WXYZabcdefghijkl" ++ "mnopqrstuvwxyzAB" ++ "CDEFGHIJKLMNOPQR";
+    const filename_offset: u32 = 48;
+    const expected = path[filename_offset..];
+
+    var cs = store.put(path, filename_offset);
+    defer store.free(&cs);
+
+    var buf: [64]u8 = undefined;
+    const written = cs.basename(&buf);
+    try testing.expectEqual(@as(usize, expected.len), written);
+    try testing.expectEqualSlices(u8, expected, buf[0..written]);
 }
 
 test "cmp across two stores resolves indices through each node's own pool" {
