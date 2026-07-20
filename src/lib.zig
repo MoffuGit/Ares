@@ -8,6 +8,7 @@ const heap = std.heap;
 const db = @import("db.zig");
 const ent = @import("entity.zig");
 const global = @import("global.zig");
+const os = @import("os.zig");
 const Session = @import("session.zig");
 const uuid = @import("uuid.zig");
 const Workspace = @import("workspace.zig");
@@ -206,6 +207,8 @@ const ExternSerializedWorkspaces = extern struct {
 
 pub export fn odyssey_init(c_argc: c_int, c_argv: [*][*:0]c_char) c_int {
     assert(builtin.link_libc);
+    os.raiseFdLimit();
+
     const argv = @as([*][*:0]u8, @ptrCast(c_argv))[0..@intCast(c_argc)];
     const environ: std.process.Environ.Block = if (@hasField(std.process.Environ.Block, "slice")) environ: {
         const c_environ = std.c.environ;

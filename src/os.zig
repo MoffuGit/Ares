@@ -1,6 +1,10 @@
 const std = @import("std");
-const objc = @import("objc");
+const log = std.log;
 const Allocator = std.mem.Allocator;
+const builtin = @import("builtin");
+
+const objc = @import("objc");
+
 const constants = @import("contants.zig");
 const BUNDLE_ID = constants.BUNDLE_ID;
 
@@ -14,6 +18,32 @@ const NSSearchPathDirectory = enum(c_ulong) {
 const NSSearchPathDomainMask = enum(c_ulong) {
     NSUserDomainMask = 1,
 };
+
+pub fn raiseFdLimit() void {
+    if (builtin.os.tag != .macos) return;
+
+    const posix = std.posix;
+    var lim = posix.getrlimit(.NOFILE) catch return;
+    if (lim.cur >= lim.max) return;
+
+    var min: posix.rlim_t = lim.cur;
+    var max: posix.rlim_t = 1 << 20;
+    if (lim.max != posix.RLIM.INFINITY) {
+        min = lim.max;
+        max = lim.max;
+    }
+
+    while (true) {
+        lim.cur = min + @divTrunc(max - min, 2);
+        if (posix.setrlimit(.NOFILE, lim)) |_| {
+            min = lim.cur;
+        } else |_| {
+            max = lim.cur;
+        }
+        if (min + 1 >= max) break;
+    }
+    log.debug("file handle limit raised value={}", .{lim.cur});
+}
 
 pub fn appSupportPath(alloc: std.mem.Allocator, sub_path: []const u8) ![]const u8 {
     return try commonDir(
