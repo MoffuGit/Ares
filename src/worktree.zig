@@ -51,7 +51,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
         io,
     });
 
-    self.snapshot = try self.scanner.ptr.snapshot.clone();
+    self.snapshot = try self.scanner.ptr.snapshot.clone(ctx.gpa());
 }
 
 pub fn deinit(self: *Worktree) void {

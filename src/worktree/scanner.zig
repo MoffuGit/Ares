@@ -13,8 +13,7 @@ const GitIgnore = @import("zlob").GitIgnore;
 const App = @import("../app.zig");
 const chunk_pool = @import("../chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
-const chunked_path = @import("../chunked_path.zig");
-const ChunkedPath = chunked_path.ChunkedPath;
+const ChunkedPath = @import("../chunked_path.zig").ChunkedPath;
 const contants = @import("../contants.zig");
 const MAX_PATH_LEN = contants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
@@ -99,7 +98,24 @@ pub fn deinit(self: *Scanner) void {
     self.workers.deinit();
     self.updates.close(self.io);
     self.actions.close(self.io);
+    self.clearUpdates();
     self.snapshot.deinit();
+}
+
+pub fn clearUpdates(self: *Scanner) void {
+    var buffer: [8]Updates = undefined;
+    const updates = &self.updates;
+    const len = updates.get(self.io, &buffer, 0) catch 0;
+    if (len == 0) return;
+
+    for (0..len) |idx| {
+        switch (buffer[idx]) {
+            .updated => |*updated| {
+                updated.snapshot.deinit();
+            },
+            else => {},
+        }
+    }
 }
 
 pub fn handleActions(
@@ -147,7 +163,7 @@ fn _handleActions(
                 try self.updates.putOne(self.io, .{
                     .updated = .{
                         .scanning = false,
-                        .snapshot = try self.snapshot.clone(),
+                        .snapshot = try self.snapshot.clone(self.gpa),
                     },
                 });
 
@@ -169,7 +185,7 @@ fn initialScan(
         .{},
     );
 
-    const path = self.snapshot.paths.put(self.snapshot.root_name, 0);
+    const path = self.snapshot.newPath(self.snapshot.root_name, 0);
     self.snapshot.insert(
         path,
         .{
@@ -223,7 +239,7 @@ fn _timerCallback(self: *Scanner, ctx: Context) !void {
     try self.updates.putOne(self.io, .{
         .updated = .{
             .scanning = true,
-            .snapshot = try self.snapshot.clone(),
+            .snapshot = try self.snapshot.clone(self.gpa),
         },
     });
 
@@ -504,7 +520,7 @@ fn scanDir(
         @memcpy(suffix_buf[1 .. 1 + name.len], name);
         const suffix = suffix_buf[0 .. 1 + name.len];
 
-        const path: ChunkedPath = self.snapshot.paths.append(parent_path, suffix, 1);
+        const path: ChunkedPath = self.snapshot.appendToPath(parent_path, suffix, 1);
 
         var path_buf: [MAX_PATH_LEN]u8 = undefined;
         const relative = path.write(&path_buf);

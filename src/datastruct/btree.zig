@@ -787,31 +787,6 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             return Iterator.init(self);
         }
 
-        pub fn forEachMut(
-            self: *Self,
-            context: anytype,
-            comptime f: fn (@TypeOf(context), *K, *V) void,
-        ) void {
-            var current: ?*Node = self.root;
-            while (current) |node| {
-                switch (node.*) {
-                    .Internal => |*internal| {
-                        if (internal.len == 0) return;
-                        current = internal.childs[0];
-                    },
-                    .Leaf => break,
-                }
-            }
-            var leaf = current;
-            while (leaf) |node| {
-                var i: usize = 0;
-                while (i < node.Leaf.len) : (i += 1) {
-                    f(context, &node.Leaf.keys[i], &node.Leaf.items[i]);
-                }
-                leaf = node.Leaf.next;
-            }
-        }
-
         /// Create a range iterator over [start, end] (both inclusive)
         pub fn range(self: *Self, start: K, end: K) RangeIterator {
             return RangeIterator.init(self, .{ .inclusive = start }, .{ .inclusive = end });
@@ -923,13 +898,13 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
                 return null;
             }
 
-            pub fn next_mut(self: *Iterator) ?struct { key: K, value: *V } {
+            pub fn next_mut(self: *Iterator) ?struct { key: *K, value: *V } {
                 while (self.leaf) |node| {
                     if (node.is_leaf()) {
-                        const leaf = node.Leaf;
+                        const leaf = &node.Leaf;
                         if (self.index < leaf.len) {
                             self.index += 1;
-                            return .{ .key = leaf.keys[self.index - 1], .value = &leaf.items[self.index - 1] };
+                            return .{ .key = &leaf.keys[self.index - 1], .value = &leaf.items[self.index - 1] };
                         } else {
                             self.leaf = leaf.next;
                             self.index = 0;
