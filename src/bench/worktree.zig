@@ -104,7 +104,7 @@ fn verifyWorktree(app: *App, io: Io) !void {
     var it = snap.entries.iter();
     while (it.next()) |kv| {
         const entry = kv.value;
-        if (entry.hidden or entry.ignored) continue;
+        if (entry.meta.hidden or entry.meta.ignored) continue;
 
         var buf: [MAX_PATH_LEN]u8 = undefined;
         const written = entry.path.write(&buf);

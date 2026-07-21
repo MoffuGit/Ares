@@ -57,6 +57,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
 pub fn deinit(self: *Worktree) void {
     self.waker.close();
     self.scanner.stop();
+    self.snapshot.deinit();
 }
 
 fn handleUpdates(ctx: Context(Worktree)) bool {
@@ -78,9 +79,7 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
                 self.scanning = true;
             },
             .updated => |updated| {
-                try self.scanner.ptr.actions.putOne(self.io, .{ .reclaim = self.snapshot });
-                try self.scanner.waker.wake();
-
+                self.snapshot.deinit();
                 self.snapshot = updated.snapshot;
                 self.scanning = updated.scanning;
 

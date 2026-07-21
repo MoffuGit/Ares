@@ -15,7 +15,6 @@ const chunk_pool = @import("../chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const chunked_path = @import("../chunked_path.zig");
 const ChunkedPath = chunked_path.ChunkedPath;
-const ChunkedPathStore = chunked_path.ChunkedPathStore;
 const contants = @import("../contants.zig");
 const MAX_PATH_LEN = contants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
@@ -51,28 +50,17 @@ pub const Action = union(enum) {
 
     initial_scan: void,
     scan_end: void,
-    reclaim: Snapshot,
 };
 
 io: Io,
 gpa: Allocator,
-arena: heap.ArenaAllocator,
-
 snapshot: Snapshot,
-path_store: ChunkedPathStore,
-chunks: ChunkAllocator,
-
-shared: ?*SharedState,
-timer: ?BackgroundScheduler.Cancelation = null,
-
+timer: ?BackgroundScheduler.Cancelation,
+workers: Workers,
 action_buffer: [8]Action,
 actions: Action.Queue,
-
 updates_buffer: [8]Updates,
 updates: Updates.Queue,
-
-next_entry_id: atomic.Value(u64),
-group: Io.Group,
 
 pub fn init(
     self: *Scanner,
@@ -82,45 +70,23 @@ pub fn init(
     io: Io,
 ) !void {
     self.* = .{
-        .gpa = gpa,
-        .chunks = undefined,
-        .group = .init,
         .io = io,
-        .arena = .init(gpa),
+        .gpa = gpa,
         .action_buffer = undefined,
-        .updates_buffer = undefined,
         .actions = undefined,
         .updates = undefined,
-        .next_entry_id = .init(0),
+        .updates_buffer = undefined,
         .snapshot = undefined,
-        .path_store = undefined,
-        .shared = null,
+        .workers = undefined,
         .timer = null,
     };
 
-    const arena = self.arena.allocator();
-    errdefer self.arena.deinit();
-
-    const abs_root = try arena.dupe(u8, abs_path);
-    const root_name = try arena.dupe(u8, std.fs.path.basename(abs_root));
+    self.workers.init(io);
 
     self.actions = .init(&self.action_buffer);
     self.updates = .init(&self.updates_buffer);
 
-    try self.path_store.init(
-        io,
-        arena,
-        .{
-            .chunk_capacity = 1024 * 1024,
-            .inline_capacity = 1024 * 1024,
-        },
-    );
-
-    try self.chunks.init(arena, &.{.{
-        1024 * 1024, Snapshot.NODE_SIZE,
-    }});
-
-    try self.snapshot.init(abs_root, root_name, self.chunks.allocator());
+    try self.snapshot.init(abs_path, gpa, io);
 
     try self.actions.putOne(self.io, .initial_scan);
     try waker.wake();
@@ -129,22 +95,11 @@ pub fn init(
 pub fn deinit(self: *Scanner) void {
     if (self.timer) |timer| {
         timer.cancel();
-        self.timer = null;
     }
-
-    if (self.shared) |shared| {
-        shared.stop();
-        self.group.await(self.io) catch |err| {
-            std.log.err("{}", .{err});
-        };
-        shared.deinit();
-        self.shared = null;
-    }
-
+    self.workers.deinit();
     self.updates.close(self.io);
     self.actions.close(self.io);
-
-    self.arena.deinit();
+    self.snapshot.deinit();
 }
 
 pub fn handleActions(
@@ -173,43 +128,21 @@ fn _handleActions(
     ctx: Context,
     waker: sch.Waker,
 ) !void {
-    if (self.shared) |shared| {
-        const alloc = shared.allocator();
-
-        while (shared.entries.pop()) |entry| {
-            try self.snapshot.insert(entry.data);
-
-            alloc.destroy(entry);
-        }
+    while (self.workers.popEntry()) |entry| {
+        self.snapshot.insert(entry.path, entry.meta);
     }
 
     var buffer: [8]Action = undefined;
     for (0..try self.actions.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
-            .initial_scan => {
-                try self.initialScan(waker, ctx);
-
-                if (builtin.mode != .Debug) {
-                    self.timer = try ctx.scheduler.timer(
-                        timerCallback,
-                        .{ self, waker },
-                        @as(u64, @intCast(UPDATE_INTERVAL.toMilliseconds())),
-                    );
-                }
-            },
+            .initial_scan => try self.initialScan(waker, ctx),
             .scan_end => {
                 if (self.timer) |timer| {
                     self.timer = null;
                     timer.cancel();
                 }
 
-                if (self.shared) |shared| {
-                    self.shared = null;
-
-                    shared.stop();
-                    try self.group.await(self.io);
-                    shared.deinit();
-                }
+                self.workers.deinit();
 
                 try self.updates.putOne(self.io, .{
                     .updated = .{
@@ -219,9 +152,6 @@ fn _handleActions(
                 });
 
                 try waker.wake();
-            },
-            .reclaim => |*snapshot| {
-                snapshot.deinit();
             },
         }
     }
@@ -239,49 +169,36 @@ fn initialScan(
         .{},
     );
 
-    try self.snapshot.insert(.{
-        .id = self.next_entry_id.fetchAdd(1, .monotonic),
-        .path = self
-            .path_store
-            .put(self.snapshot.root_name, 0),
-        .inode = stat.inode,
-        .size = stat.size,
-        .mtime = stat.mtime,
-        .kind = stat.kind,
-        .hidden = false,
-        .ignored = false,
-    });
+    const path = self.snapshot.paths.put(self.snapshot.root_name, 0);
+    self.snapshot.insert(
+        path,
+        .{
+            .inode = stat.inode,
+            .size = stat.size,
+            .mtime = stat.mtime,
+            .kind = stat.kind,
+            .hidden = false,
+            .ignored = false,
+        },
+    );
 
     if (stat.kind != .directory) return;
-
-    const entry = self.snapshot.entries.first() orelse @panic("Impossible");
 
     try self.updates.putOne(self.io, .started);
     try waker.wake();
 
-    const arena = self.arena.allocator();
+    self.timer = try ctx.scheduler.timer(timerCallback, .{ self, ctx }, @intCast(UPDATE_INTERVAL.toMilliseconds()));
+
     const cpu_count = try std.Thread.getCpuCount();
 
-    const shared = try arena.create(SharedState);
-    try shared.init(self.io, self.gpa, cpu_count);
+    try self.workers.start(self.gpa, @intCast(cpu_count));
+    errdefer self.workers.deinit();
 
-    errdefer {
-        shared.deinit();
-        self.shared = null;
-    }
-
-    self.shared = shared;
-
-    const job = shared.createJob();
-    job.* = .{
-        .path = entry.path,
-        .fd = null,
-    };
-
-    shared.queue.push(self.io, 0, job);
+    const root_job = self.workers.createJob(path, null, null);
+    self.workers.pushJob(0, root_job);
 
     for (0..cpu_count) |i| {
-        try self.group.concurrent(
+        try self.workers.group.concurrent(
             self.io,
             Scanner.scan,
             .{ self, @as(u32, @intCast(i)), ctx },
@@ -289,12 +206,12 @@ fn initialScan(
     }
 }
 
-fn timerCallback(self: *Scanner, waker: sch.Waker, res: anyerror!void) bool {
+fn timerCallback(self: *Scanner, ctx: Context, res: anyerror!void) bool {
     res catch return false;
 
-    if (self.shared == null) return false;
+    if (!self.workers.working) return false;
 
-    self._timerCallback(waker) catch |err| {
+    self._timerCallback(ctx) catch |err| {
         std.log.err("Scanner Timer err={}", .{err});
         return false;
     };
@@ -302,7 +219,7 @@ fn timerCallback(self: *Scanner, waker: sch.Waker, res: anyerror!void) bool {
     return true;
 }
 
-fn _timerCallback(self: *Scanner, waker: sch.Waker) !void {
+fn _timerCallback(self: *Scanner, ctx: Context) !void {
     try self.updates.putOne(self.io, .{
         .updated = .{
             .scanning = true,
@@ -310,7 +227,7 @@ fn _timerCallback(self: *Scanner, waker: sch.Waker) !void {
         },
     });
 
-    try waker.wake();
+    try ctx.waker.wake();
 }
 
 const IgnoreNode = struct {
@@ -323,13 +240,20 @@ const IgnoreNode = struct {
 pub const Job = struct {
     path: ChunkedPath,
     fd: ?*SharedFd,
+    ignore: ?*const IgnoreNode,
     next: ?*Job = null,
-    ignore: ?*const IgnoreNode = null,
 };
 
 const SharedFd = struct {
     dir: Io.Dir,
     refs: atomic.Value(u32),
+
+    pub fn init(self: *SharedFd, dir: Io.Dir, refs: u32) void {
+        self.* = .{
+            .dir = dir,
+            .refs = .init(refs),
+        };
+    }
 
     fn release(self: *SharedFd) u32 {
         return self.refs.fetchSub(1, .acq_rel);
@@ -341,92 +265,144 @@ const SharedFd = struct {
 };
 
 pub const Entry = struct {
-    data: Snapshot.Entry,
+    path: ChunkedPath,
+    meta: Snapshot.Meta,
     next: ?*Entry = null,
 };
 
-const SharedState = struct {
+const Workers = struct {
     io: Io,
-    entries: mpsc.Intrusive(Entry),
+    group: Io.Group,
     arena: heap.ArenaAllocator,
+    entries: mpsc.Intrusive(Entry),
 
-    queue: stealing.StealingQueue(Job),
     chunks: ChunkAllocator,
+    queue: stealing.StealingQueue(Job),
 
-    pub fn init(
-        self: *SharedState,
-        io: Io,
-        child_allocator: Allocator,
-        threads: usize,
-    ) !void {
+    working: bool,
+
+    pub fn init(self: *Workers, io: Io) void {
         self.* = .{
             .io = io,
+            .working = false,
+            .group = .init,
+            .arena = undefined,
             .entries = undefined,
-            .arena = .init(child_allocator),
-            .queue = .{},
             .chunks = undefined,
+            .queue = .{},
         };
         self.entries.init();
+    }
 
+    pub fn start(self: *Workers, gpa: Allocator, workers: u32) !void {
+        assert(!self.working);
+
+        self.arena = .init(gpa);
         errdefer self.arena.deinit();
         const arena = self.arena.allocator();
 
-        try self.queue.init(arena, @intCast(threads));
-
         try self.chunks.init(arena, &.{
-            .{ 1024 * 1024, @max(@sizeOf(Entry), @sizeOf(Job), @sizeOf(SharedFd)) },
+            .{ 1024 * 1024, @max(@sizeOf(Entry), @sizeOf(SharedFd)) },
+            .{ 1024 * 1024, @sizeOf(Job) },
         });
+        errdefer self.chunks.deinit(arena);
+
+        try self.queue.init(arena, workers);
+
+        self.working = true;
     }
 
-    pub fn deinit(self: *SharedState) void {
-        for (self.queue.queues) |*local| {
-            while (local.queue.pop()) |job| {
-                self.destroyJob(job);
-            }
-        }
-        self.arena.deinit();
-    }
+    pub fn deinit(self: *Workers) void {
+        if (!self.working) return;
 
-    pub fn stop(self: *SharedState) void {
         self.queue.closed.store(true, .release);
         self.queue.wakeAll(self.io);
+
+        self.group.await(self.io) catch |err| {
+            std.log.err("Workers stop err={}", .{err});
+        };
+
+        for (self.queue.queues) |*local| {
+            while (local.queue.pop()) |job| {
+                if (job.fd) |fd| {
+                    const prev = fd.release();
+                    assert(prev != 0);
+                    if (prev == 1) fd.close(self.io);
+                }
+            }
+        }
+
+        self.arena.deinit();
+        self.working = false;
     }
 
-    pub fn allocator(self: *SharedState) Allocator {
-        return self.chunks.allocator();
+    pub fn sharedFd(self: *Workers, dir: Io.Dir, refs: u32) *SharedFd {
+        const alloc = self.chunks.allocator();
+        const shared = alloc.create(SharedFd) catch @panic("Scanner Job Overflow");
+        shared.init(dir, refs);
+        return shared;
     }
 
-    pub fn createJob(self: *SharedState) *Job {
-        return self.chunks.allocator().create(Job) catch @panic("Scanner Job Overflow");
+    pub fn createJob(
+        self: *Workers,
+        path: ChunkedPath,
+        fd: ?*SharedFd,
+        ignore: ?*const IgnoreNode,
+    ) *Job {
+        const alloc = self.chunks.allocator();
+        const job = alloc.create(Job) catch @panic("Scanner Job Overflow");
+        job.* = .{ .path = path, .fd = fd, .ignore = ignore };
+        return job;
     }
 
-    pub fn destroyJob(self: *SharedState, job: *Job) void {
+    pub fn pushJob(self: *Workers, worker_id: u32, job: *Job) void {
+        self.queue.push(self.io, worker_id, job);
+    }
+
+    pub fn popJob(self: *Workers, worker_id: u32) ?*Job {
+        return self.queue.pop(self.io, worker_id);
+    }
+
+    pub fn finishJob(self: *Workers, job: *Job) void {
+        const alloc = self.chunks.allocator();
+
         if (job.fd) |fd| {
             const prev = fd.release();
 
             assert(prev != 0);
             if (prev == 1) {
                 fd.close(self.io);
-                self.destroySharedFd(fd);
+                alloc.destroy(fd);
             }
         }
         self.chunks.allocator().destroy(job);
     }
 
-    pub fn createSharedFd(self: *SharedState) *SharedFd {
-        return self.chunks.allocator().create(SharedFd) catch @panic("Scanner SharedFd Overflow");
+    pub fn pushEntry(self: *Workers, path: ChunkedPath, meta: Snapshot.Meta) void {
+        const alloc = self.chunks.allocator();
+
+        const entry = alloc.create(Entry) catch @panic("Scanner Entry Overflow");
+        entry.* = .{
+            .path = path,
+            .meta = meta,
+        };
+        self.entries.push(entry);
     }
 
-    pub fn destroySharedFd(self: *SharedState, ref: *SharedFd) void {
-        self.chunks.allocator().destroy(ref);
+    pub fn popEntry(self: *Workers) ?Entry {
+        const pop = self.entries.pop() orelse return null;
+
+        defer self.chunks.allocator().destroy(pop);
+
+        return pop.*;
     }
 
-    pub fn createEntry(self: *SharedState) *Entry {
-        return self.chunks.allocator().create(Entry) catch @panic("Scanner Entry Overflow");
+    pub fn done(self: *Workers) bool {
+        return self.queue.taskDone(self.io);
     }
 
-    pub fn destroyEntry(self: *SharedState, entry: *Entry) void {
-        self.chunks.allocator().destroy(entry);
+    pub fn closed(self: *Workers) bool {
+        return self.queue.closed.load(.acquire);
     }
 };
 
@@ -445,16 +421,16 @@ pub fn _scan(
     worker_id: u32,
     ctx: Context,
 ) !void {
-    const shared = self.shared orelse return;
-    const buffer = try shared.arena.allocator().alignedAlloc(u8, .@"8", 64 * 1024);
-    const ignore_buffer = try shared.arena.allocator().alloc(u8, 1024 * 1024);
+    const arena = self.workers.arena.allocator();
+    const buffer = try arena.alignedAlloc(u8, .@"8", 64 * 1024);
+    const ignore_buffer = try arena.alloc(u8, 1024 * 1024);
 
-    while (shared.queue.pop(self.io, worker_id)) |job| {
-        defer shared.destroyJob(job);
+    while (self.workers.popJob(worker_id)) |job| {
+        defer self.workers.finishJob(job);
 
-        try self.scanDir(job, worker_id, shared, buffer, ignore_buffer);
+        try self.scanDir(job, worker_id, buffer, ignore_buffer);
 
-        if (shared.queue.taskDone(self.io)) {
+        if (self.workers.done()) {
             @branchHint(.unlikely);
             try self.actions.putOne(self.io, .scan_end);
         }
@@ -467,7 +443,6 @@ fn scanDir(
     self: *Scanner,
     job: *Job,
     worker_id: u32,
-    shared: *SharedState,
     buffer: []align(8) u8,
     ignore_buffer: []u8,
 ) !void {
@@ -481,7 +456,7 @@ fn scanDir(
     };
     errdefer dir.close(self.io);
 
-    const arena = shared.arena.allocator();
+    const arena = self.workers.arena.allocator();
     var effective_ignore: ?*const IgnoreNode = job.ignore;
     {
         const content = dir.readFile(self.io, ".gitignore", ignore_buffer) catch null;
@@ -507,75 +482,56 @@ fn scanDir(
     const parent_path = job.path;
 
     var jobs: queue.Intrusive(Job) = .{};
-
-    var pending_count: u32 = 0;
+    var count: u32 = 0;
     errdefer {
         while (jobs.pop()) |j| {
-            shared.destroyJob(j);
+            self.workers.finishJob(j);
         }
     }
 
     while (try bulk.next()) |entry| {
-        if (shared.queue.closed.load(.acquire)) {
+        if (self.workers.closed()) {
             @branchHint(.unlikely);
             break;
         }
 
         const name = entry.name;
-        const is_hidden = name.len > 0 and name[0] == '.';
         const is_dir = entry.kind == .directory;
+        const is_hidden = name.len > 0 and name[0] == '.';
 
         var suffix_buf: [MAX_PATH_LEN]u8 = undefined;
         suffix_buf[0] = '/';
         @memcpy(suffix_buf[1 .. 1 + name.len], name);
         const suffix = suffix_buf[0 .. 1 + name.len];
 
-        const path: ChunkedPath = self.path_store.append(parent_path, suffix, 1);
+        const path: ChunkedPath = self.snapshot.paths.append(parent_path, suffix, 1);
 
         var path_buf: [MAX_PATH_LEN]u8 = undefined;
         const relative = path.write(&path_buf);
         const ignored = isIgnored(effective_ignore, path_buf[0..relative], name, is_dir);
 
-        const ptr = shared.createEntry();
-
-        ptr.* = .{
-            .data = .{
-                .path = path,
-                .id = self.next_entry_id.fetchAdd(1, .monotonic),
-                .inode = entry.meta.inode,
-                .mtime = .fromNanoseconds(@intCast(entry.meta.mtime_ns)),
-                .size = entry.meta.size,
-                .kind = entry.kind,
-                .hidden = is_hidden,
-                .ignored = ignored,
-            },
-        };
-
-        shared.entries.push(ptr);
+        self.workers.pushEntry(path, .{
+            .inode = entry.meta.inode,
+            .mtime = .fromNanoseconds(@intCast(entry.meta.mtime_ns)),
+            .size = entry.meta.size,
+            .kind = entry.kind,
+            .hidden = is_hidden,
+            .ignored = ignored,
+        });
 
         if (is_hidden or ignored or !is_dir) continue;
 
-        const new = shared.createJob();
-        new.* = .{
-            .path = path,
-            .fd = null,
-            .ignore = effective_ignore,
-        };
-
+        const new = self.workers.createJob(path, null, effective_ignore);
         jobs.push(new);
-        pending_count += 1;
+        count += 1;
     }
 
-    if (pending_count > 0) {
-        const shared_fd = shared.createSharedFd();
-        shared_fd.* = .{
-            .dir = dir,
-            .refs = .init(pending_count),
-        };
+    if (count > 0) {
+        const shared = self.workers.sharedFd(dir, count);
 
         while (jobs.pop()) |j| {
-            j.fd = shared_fd;
-            shared.queue.push(self.io, worker_id, j);
+            j.fd = shared;
+            self.workers.pushJob(worker_id, j);
         }
     } else {
         dir.close(self.io);
