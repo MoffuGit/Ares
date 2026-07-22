@@ -29,8 +29,8 @@ pub const Waker = struct {
     }
 
     pub fn close(self: *const Waker) void {
-        self.waker.close();
         self.cancelation.cancel();
+        self.waker.close();
     }
 };
 
@@ -250,7 +250,6 @@ pub const BackgroundScheduler = struct {
             }
 
             pub fn stop(self: *@This()) void {
-                self.waker.close();
                 self.cancelation.cancel();
             }
         };
@@ -274,13 +273,12 @@ pub const BackgroundScheduler = struct {
         const TypeErased = struct {
             fn callback(scheduler: *BackgroundScheduler, _ptr: *T, _task: *Task, _args: Args, res: anyerror!void) bool {
                 const port = _task.completion.operation.machport.port;
-
                 const rearm = @call(.always_inline, function, .{ _ptr, Context{ .scheduler = scheduler, .waker = .{ .port = port } } } ++ _args ++ .{res});
                 if (!rearm) {
                     const _alloc = scheduler.chunks.allocator();
                     _alloc.destroy(_ptr);
+                    _ = system.mach_port_deallocate(system.mach_task_self(), port);
                 }
-
                 return rearm;
             }
         };
