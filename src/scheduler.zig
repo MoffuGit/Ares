@@ -295,7 +295,7 @@ pub const BackgroundScheduler = struct {
         };
     }
 };
-//
+
 test "Background Scheduler runs deferred tasks and frees memory on stop" {
     const testing = std.testing;
     const heap = std.heap;

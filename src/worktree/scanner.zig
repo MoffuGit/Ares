@@ -13,7 +13,9 @@ const GitIgnore = @import("zlob").GitIgnore;
 const App = @import("../app.zig");
 const chunk_pool = @import("../chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
-const ChunkedPath = @import("../chunked_path.zig").ChunkedPath;
+const ChunkedPathStore = @import("../chunked_path.zig");
+const ChunkedPath = ChunkedPathStore.ChunkedPath;
+const INLINE_NODE_SIZE = ChunkedPathStore.INLINE_NODE_SIZE;
 const contants = @import("../contants.zig");
 const MAX_PATH_LEN = contants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
@@ -60,6 +62,8 @@ action_buffer: [8]Action,
 actions: Action.Queue,
 updates_buffer: [8]Updates,
 updates: Updates.Queue,
+paths: ChunkedPathStore,
+chunks: ChunkAllocator,
 
 pub fn init(
     self: *Scanner,
@@ -78,12 +82,22 @@ pub fn init(
         .snapshot = undefined,
         .workers = undefined,
         .timer = null,
+        .paths = undefined,
+        .chunks = undefined,
     };
 
     self.workers.init(io);
 
     self.actions = .init(&self.action_buffer);
     self.updates = .init(&self.updates_buffer);
+
+    try self.paths.init(io, gpa, 1024 * 1024);
+    errdefer self.paths.deinit(gpa);
+
+    try self.chunks.init(gpa, &.{
+        .{ 1024 * 1024, INLINE_NODE_SIZE },
+    });
+    errdefer self.chunks.deinit(gpa);
 
     try self.snapshot.init(abs_path, gpa, io);
 
@@ -100,6 +114,8 @@ pub fn deinit(self: *Scanner) void {
     self.actions.close(self.io);
     self.clearUpdates();
     self.snapshot.deinit();
+    self.paths.deinit(self.gpa);
+    self.chunks.deinit(self.gpa);
 }
 
 pub fn clearUpdates(self: *Scanner) void {
@@ -185,7 +201,8 @@ fn initialScan(
         .{},
     );
 
-    const path = self.snapshot.newPath(self.snapshot.root_name, 0);
+    const path = self.paths.put(self.snapshot.root_name, 0, self.chunks.allocator());
+
     self.snapshot.insert(
         path,
         .{
@@ -203,7 +220,9 @@ fn initialScan(
     try self.updates.putOne(self.io, .started);
     try waker.wake();
 
-    self.timer = try ctx.scheduler.timer(timerCallback, .{ self, ctx }, @intCast(UPDATE_INTERVAL.toMilliseconds()));
+    //BUG:
+    //this fucks with everything
+    // self.timer = try ctx.scheduler.timer(timerCallback, .{ self, ctx }, @intCast(UPDATE_INTERVAL.toMilliseconds()));
 
     const cpu_count = try std.Thread.getCpuCount();
 
@@ -520,7 +539,7 @@ fn scanDir(
         @memcpy(suffix_buf[1 .. 1 + name.len], name);
         const suffix = suffix_buf[0 .. 1 + name.len];
 
-        const path: ChunkedPath = self.snapshot.appendToPath(parent_path, suffix, 1);
+        const path: ChunkedPath = self.paths.append(parent_path, suffix, 1, self.chunks.allocator());
 
         var path_buf: [MAX_PATH_LEN]u8 = undefined;
         const relative = path.write(&path_buf);

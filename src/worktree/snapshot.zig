@@ -42,7 +42,6 @@ io: Io,
 arena: heap.ArenaAllocator,
 chunks: ChunkAllocator,
 
-paths: ChunkedPathStore,
 entries: Entries,
 
 abs_root: []u8,
@@ -63,7 +62,6 @@ pub fn init(
         .abs_root = undefined,
         .root_name = undefined,
         .entries = undefined,
-        .paths = undefined,
         .next_entry_id = .init(0),
     };
 
@@ -73,11 +71,8 @@ pub fn init(
     self.abs_root = try arena.dupe(u8, abs_path);
     self.root_name = try arena.dupe(u8, std.fs.path.basename(self.abs_root));
 
-    try self.paths.init(io, arena, 1024 * 1024);
-
     try self.chunks.init(arena, &.{
         .{ 1024 * 1024, NODE_SIZE },
-        .{ 1024 * 1024, INLINE_NODE_SIZE },
     });
 
     try self.entries.init(self.chunks.allocator());
@@ -91,25 +86,11 @@ pub fn insert(self: *Snapshot, path: ChunkedPath, meta: Meta) void {
     }) catch @panic("Snapshot Nodes Overflow");
 }
 
-pub fn newPath(self: *Snapshot, path: []const u8, offset: u32) ChunkedPath {
-    return self.paths.put(path, offset, self.chunks.allocator());
-}
-
-pub fn appendToPath(
-    self: *Snapshot,
-    path: ChunkedPath,
-    suffix: []const u8,
-    offset: u32,
-) ChunkedPath {
-    return self.paths.append(path, suffix, offset, self.chunks.allocator());
-}
-
 pub fn clone(self: *const Snapshot, gpa: Allocator) !Snapshot {
     var copy: Snapshot = .{
         .io = self.io,
         .arena = .init(gpa),
         .chunks = undefined,
-        .paths = undefined,
         .entries = undefined,
         .abs_root = undefined,
         .root_name = undefined,
@@ -126,17 +107,6 @@ pub fn clone(self: *const Snapshot, gpa: Allocator) !Snapshot {
         .{ 1024 * 1024, INLINE_NODE_SIZE },
     });
     copy.entries = try self.entries.clone(copy.chunks.allocator());
-
-    try copy.paths.init(self.io, arena, 1024 * 1024);
-
-    var iter = copy.entries.iter();
-    var buf: [MAX_PATH_LEN]u8 = undefined;
-    while (iter.next_mut()) |entry| {
-        const len = entry.key.write(&buf);
-        const new_path = copy.paths.put(buf[0..len], entry.key.filename_offset, copy.chunks.allocator());
-        entry.key.* = new_path;
-        entry.value.path = new_path;
-    }
 
     return copy;
 }
