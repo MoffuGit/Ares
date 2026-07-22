@@ -220,14 +220,12 @@ fn initialScan(
     try self.updates.putOne(self.io, .started);
     try waker.wake();
 
-    //BUG:
-    //this fucks with everything
-    // self.timer = try ctx.scheduler.timer(timerCallback, .{ self, ctx }, @intCast(UPDATE_INTERVAL.toMilliseconds()));
-
     const cpu_count = try std.Thread.getCpuCount();
 
     try self.workers.start(self.gpa, @intCast(cpu_count));
     errdefer self.workers.deinit();
+
+    self.timer = try ctx.scheduler.timer(timerCallback, .{ self, waker }, @intCast(UPDATE_INTERVAL.toMilliseconds()));
 
     const root_job = self.workers.createJob(path, null, null);
     self.workers.pushJob(0, root_job);
@@ -241,12 +239,12 @@ fn initialScan(
     }
 }
 
-fn timerCallback(self: *Scanner, ctx: Context, res: anyerror!void) bool {
+fn timerCallback(self: *Scanner, waker: sch.Waker, res: anyerror!void) bool {
     res catch return false;
 
     if (!self.workers.working) return false;
 
-    self._timerCallback(ctx) catch |err| {
+    self._timerCallback(waker) catch |err| {
         std.log.err("Scanner Timer err={}", .{err});
         return false;
     };
@@ -254,7 +252,7 @@ fn timerCallback(self: *Scanner, ctx: Context, res: anyerror!void) bool {
     return true;
 }
 
-fn _timerCallback(self: *Scanner, ctx: Context) !void {
+fn _timerCallback(self: *Scanner, waker: sch.Waker) !void {
     try self.updates.putOne(self.io, .{
         .updated = .{
             .scanning = true,
@@ -262,7 +260,7 @@ fn _timerCallback(self: *Scanner, ctx: Context) !void {
         },
     });
 
-    try ctx.waker.wake();
+    try waker.wake();
 }
 
 const IgnoreNode = struct {
