@@ -14,9 +14,9 @@ const Kevent = std.c.kevent64_s;
 const builtin = @import("builtin");
 
 const datastruct = @import("datastruct.zig");
-const multi_queue = datastruct.multi_queue;
+const MultiQueue = datastruct.MultiQueue;
 const heap = datastruct.heap;
-const queue = datastruct.queue;
+const Queue = datastruct.Queue;
 
 const Queues = union(enum) {
     timers: Completion,
@@ -32,7 +32,7 @@ kq: posix.fd_t,
 
 time: Time,
 
-queues: multi_queue.MultiIntrusive(Queues),
+queues: MultiQueue(Queues),
 timers: heap.Intrusive(Timer, void, Timer.less),
 inflight: usize,
 stopped: bool,
@@ -162,7 +162,7 @@ pub fn flush_timers(self: *Loop) void {
 }
 
 pub fn flush_completions(self: *Loop) void {
-    var defered: queue.Intrusive(Completion) = .{};
+    var defered: Queue(Completion) = .{};
 
     while (self.queues.pop(.completions)) |completion| {
         assert(completion.state == .completed);

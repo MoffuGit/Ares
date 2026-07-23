@@ -7,7 +7,7 @@ const mpsc = @import("mpsc.zig");
 /// `Queues` must be a tagged union whose fields are queue names and whose field
 /// types are intrusive element types. Each element type must provide `next` with
 /// type `?*T`, matching `mpsc.Intrusive(T)`.
-pub fn MultiIntrusive(comptime Queues: type) type {
+pub fn MultiMpsc(comptime Queues: type) type {
     const info = @typeInfo(Queues);
     if (info != .@"union") @compileError("MultiIntrusive expects a union type");
 
@@ -20,7 +20,7 @@ pub fn MultiIntrusive(comptime Queues: type) type {
         var field_types: [fields.len]type = undefined;
         var field_attrs: [fields.len]std.builtin.Type.UnionField.Attributes = undefined;
         for (fields, &field_names, &field_types, &field_attrs) |field, *name, *Type, *attrs| {
-            const QueueType = mpsc.Intrusive(field.type);
+            const QueueType = mpsc.Mpsc(field.type);
             name.* = field.name;
             Type.* = QueueType;
             attrs.* = .{ .@"align" = @alignOf(QueueType) };
@@ -52,7 +52,7 @@ pub fn MultiIntrusive(comptime Queues: type) type {
             return queue(self, tag).empty();
         }
 
-        pub fn queue(self: *Self, comptime tag: Tag) *mpsc.Intrusive(FieldType(tag)) {
+        pub fn queue(self: *Self, comptime tag: Tag) *mpsc.Mpsc(FieldType(tag)) {
             @setRuntimeSafety(false);
             return &@field(self.queues[@intFromEnum(tag)], @tagName(tag));
         }
@@ -63,7 +63,7 @@ pub fn MultiIntrusive(comptime Queues: type) type {
     };
 }
 
-test MultiIntrusive {
+test MultiMpsc {
     const Completion = struct {
         const Self = @This();
         id: usize = 0,
@@ -76,7 +76,7 @@ test MultiIntrusive {
         submissions: Completion,
     };
 
-    const MultiQueue = MultiIntrusive(Queues);
+    const MultiQueue = MultiMpsc(Queues);
     var queues: MultiQueue = undefined;
     queues.init();
 

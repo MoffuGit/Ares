@@ -14,7 +14,7 @@ pub fn StealingQueue(T: type) type {
 
         const Queue = struct {
             mutex: Io.Mutex = .init,
-            queue: queue.Intrusive(T) = .{},
+            queue: queue.Queue(T) = .{},
             approx_len: atomic.Value(usize) = .init(0),
         };
 

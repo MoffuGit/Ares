@@ -19,7 +19,7 @@ const assert = std.debug.assert;
 /// the element and how its allocated is up to them.
 ///
 /// [1]: https://www.1024cores.net/home/lock-free-algorithms/queues/intrusive-mpsc-node-based-queue
-pub fn Intrusive(comptime T: type) type {
+pub fn Mpsc(comptime T: type) type {
     return struct {
         const Self = @This();
 
@@ -86,7 +86,7 @@ pub fn Intrusive(comptime T: type) type {
     };
 }
 
-test Intrusive {
+test Mpsc {
     const testing = std.testing;
 
     // Types
@@ -94,7 +94,7 @@ test Intrusive {
         const Self = @This();
         next: ?*Self = null,
     };
-    const Queue = Intrusive(Elem);
+    const Queue = Mpsc(Elem);
     var q: Queue = undefined;
     q.init();
 

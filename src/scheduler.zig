@@ -5,18 +5,18 @@ const atomic = std.atomic;
 const builtin = std.builtin;
 const posix = std.posix;
 const system = posix.system;
-const constants = @import("contants.zig");
-const MAX_SIZE = constants.MAX_SIZE;
 
+const App = @import("app.zig");
 const chunks_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunks_pool.ChunkAllocator;
+const constants = @import("contants.zig");
+const MAX_SIZE = constants.MAX_SIZE;
 const datastruct = @import("datastruct.zig");
-const multi_mpsc = datastruct.multi_mpsc;
+const MultiMpsc = datastruct.MultiMpsc;
 const Loop = @import("loop.zig");
 const Tasks = @import("tasks.zig");
 const Task = Tasks.Task;
 const TaskId = Tasks.TaskId;
-const App = @import("app.zig");
 
 pub const Waker = struct {
     waker: Tasks.Waker,
@@ -118,7 +118,7 @@ pub const BackgroundScheduler = struct {
     stop: atomic.Value(bool) = .init(false),
     stopped: atomic.Value(bool) = .init(false),
     arena: Allocator,
-    queues: multi_mpsc.MultiIntrusive(Queues),
+    queues: MultiMpsc(Queues),
     chunks: ChunkAllocator,
     options: App.Options,
 

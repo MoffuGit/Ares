@@ -19,9 +19,9 @@ const INLINE_NODE_SIZE = ChunkedPathStore.INLINE_NODE_SIZE;
 const contants = @import("../contants.zig");
 const MAX_PATH_LEN = contants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
-const queue = datastruct.queue;
-const mpsc = datastruct.mpsc;
-const stealing = datastruct.stealing;
+const Queue = datastruct.Queue;
+const Mpsc = datastruct.Mpsc;
+const StealingQueue = datastruct.StealingQueue;
 const sch = @import("../scheduler.zig");
 const BackgroundScheduler = sch.BackgroundScheduler;
 const Executor = BackgroundScheduler.Executor;
@@ -307,10 +307,10 @@ const Workers = struct {
     io: Io,
     group: Io.Group,
     arena: heap.ArenaAllocator,
-    entries: mpsc.Intrusive(Entry),
+    entries: Mpsc(Entry),
 
     chunks: ChunkAllocator,
-    queue: stealing.StealingQueue(Job),
+    queue: StealingQueue(Job),
 
     working: bool,
 
@@ -514,7 +514,7 @@ fn scanDir(
 
     const parent_path = job.path;
 
-    var jobs: queue.Intrusive(Job) = .{};
+    var jobs: Queue(Job) = .{};
     var count: u32 = 0;
     errdefer {
         while (jobs.pop()) |j| {
