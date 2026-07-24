@@ -321,7 +321,7 @@ pub const ChunkedPath = struct {
         return buffer[0..name_len];
     }
 
-    pub fn toSlice(self: ChunkedPath, allocator: Allocator) ![]u8 {
+    pub fn slice(self: ChunkedPath, allocator: Allocator) ![]u8 {
         const buf = try allocator.alloc(u8, self.len);
         assert(buf.len == self.path(buf).len);
 
@@ -396,7 +396,7 @@ test "SIMD_CHUNK_BYTES path" {
     var cs = store.put(path, 0, gpa);
     defer store.free(&cs, gpa);
 
-    const bytes = try cs.toSlice(gpa);
+    const bytes = try cs.slice(gpa);
     defer gpa.free(bytes);
     try testing.expectEqualSlices(u8, path, bytes);
 }
@@ -414,7 +414,7 @@ test "INLINE_CHUNKS path" {
     var cs = store.put(path, 0, gpa);
     defer store.free(&cs, gpa);
 
-    const bytes = try cs.toSlice(gpa);
+    const bytes = try cs.slice(gpa);
     defer gpa.free(bytes);
     try testing.expectEqualSlices(u8, path, bytes);
 }
@@ -437,7 +437,7 @@ test "Multi INLINE_CHUNKS path" {
     try testing.expect(cs.chunks.first.?.next != null);
     try testing.expectEqual(@as(?*InlineChunks, null), cs.chunks.first.?.next.?.next);
 
-    const bytes = try cs.toSlice(gpa);
+    const bytes = try cs.slice(gpa);
     defer gpa.free(bytes);
     try testing.expectEqualSlices(u8, path, bytes);
 }
@@ -458,7 +458,7 @@ test "maximum 4096-byte path" {
 
     try testing.expectEqual(@as(u32, MAX_PATH_LEN), cs.len);
 
-    const bytes = try cs.toSlice(gpa);
+    const bytes = try cs.slice(gpa);
     defer gpa.free(bytes);
     try testing.expectEqualSlices(u8, path, bytes);
 }
@@ -495,7 +495,7 @@ test "filename offset preserved" {
 
     try testing.expectEqual(filename_offset + 1, cs.filename_offset);
 
-    const bytes = try cs.toSlice(gpa);
+    const bytes = try cs.slice(gpa);
     defer gpa.free(bytes);
     try testing.expectEqualSlices(u8, path, bytes);
     try testing.expectEqualSlices(u8, "chunked_string.zig", bytes[cs.filename_offset..]);
@@ -580,14 +580,14 @@ test "append short suffix to short path (merges into one chunk)" {
 
     // Original is unchanged.
     try testing.expectEqual(@as(u32, 5), cs.len);
-    const orig_bytes = try cs.toSlice(gpa);
+    const orig_bytes = try cs.slice(gpa);
     defer gpa.free(orig_bytes);
     try testing.expectEqualSlices(u8, orig, orig_bytes);
 
     // Appended path has the combined content.
     try testing.expectEqual(@as(u32, 11), appended.len);
     try testing.expectEqual(@as(u32, 6), appended.filename_offset);
-    const new_bytes = try appended.toSlice(gpa);
+    const new_bytes = try appended.slice(gpa);
     defer gpa.free(new_bytes);
     try testing.expectEqualSlices(u8, "hello/world", new_bytes);
 }
@@ -608,7 +608,7 @@ test "append to exact-chunk-boundary path (suffix starts new chunk)" {
     defer store.free(&appended, gpa);
 
     try testing.expectEqual(@as(u32, 20), appended.len);
-    const new_bytes = try appended.toSlice(gpa);
+    const new_bytes = try appended.slice(gpa);
     defer gpa.free(new_bytes);
     try testing.expectEqualSlices(u8, "0123456789abcdef/foo", new_bytes);
 
@@ -635,7 +635,7 @@ test "append spanning multiple nodes" {
     defer store.free(&appended, gpa);
 
     try testing.expectEqual(@as(u32, @intCast(expected.len)), appended.len);
-    const new_bytes = try appended.toSlice(gpa);
+    const new_bytes = try appended.slice(gpa);
     defer gpa.free(new_bytes);
     try testing.expectEqualSlices(u8, expected, new_bytes);
 
@@ -665,7 +665,7 @@ test "append that fills the partial chunk exactly" {
     defer store.free(&appended, gpa);
 
     try testing.expectEqual(@as(u32, 16), appended.len);
-    const new_bytes = try appended.toSlice(gpa);
+    const new_bytes = try appended.slice(gpa);
     defer gpa.free(new_bytes);
     try testing.expectEqualSlices(u8, "0123456789abcdef", new_bytes);
 
@@ -690,7 +690,7 @@ test "append preserves original after original is freed" {
     // Free the original; the appended path's shared chunk should still be valid.
     store.free(&cs, gpa);
 
-    const new_bytes = try appended.toSlice(gpa);
+    const new_bytes = try appended.slice(gpa);
     defer gpa.free(new_bytes);
     try testing.expectEqualSlices(u8, "0123456789abcdef/test", new_bytes);
 }
@@ -716,7 +716,7 @@ test "append resolves suffix-relative filename_offset to absolute" {
     // Resolved offset should be 8 (existing.len) + 8 = 16.
     try testing.expectEqual(@as(u32, 16), appended.filename_offset);
 
-    const bytes = try appended.toSlice(gpa);
+    const bytes = try appended.slice(gpa);
     defer gpa.free(bytes);
     try testing.expectEqualSlices(u8, "src/core/module/file.zig", bytes);
     try testing.expectEqualSlices(u8, "file.zig", bytes[appended.filename_offset..]);
