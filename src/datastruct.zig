@@ -4,6 +4,7 @@ pub const DoublyLinkedList = doubly_linked_list.DoublyLinkedList;
 pub const heap = @import("datastruct/heap.zig");
 pub const linked_list = @import("datastruct/linked_list.zig");
 pub const LinkedList = linked_list.SinglyLinkedList;
+pub const mem_map = @import("datastruct/memory_map.zig");
 pub const mpsc = @import("datastruct/mpsc.zig");
 pub const Mpsc = mpsc.Mpsc;
 pub const multi_mpsc = @import("datastruct/multi_mpsc.zig");
@@ -15,7 +16,6 @@ pub const Queue = queue.Queue;
 pub const slotmap = @import("datastruct/slotmap.zig");
 pub const stealing = @import("datastruct/stealing_queue.zig");
 pub const StealingQueue = stealing.StealingQueue;
-pub const mem_map = @import("datastruct/memory_map.zig");
 
 test {
     _ = mem_map;
