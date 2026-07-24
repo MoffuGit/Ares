@@ -1,5 +1,6 @@
 pub const btree = @import("datastruct/btree.zig");
 pub const doubly_linked_list = @import("datastruct/doubly_linked_list.zig");
+pub const DoublyLinkedList = doubly_linked_list.DoublyLinkedList;
 pub const heap = @import("datastruct/heap.zig");
 pub const mpsc = @import("datastruct/mpsc.zig");
 pub const Mpsc = mpsc.Mpsc;
@@ -18,7 +19,7 @@ test {
     _ = heap;
     _ = multi_mpsc;
     _ = multi_queue;
-    _ = Mpsc;
+    _ = mpsc;
     _ = queue;
     _ = slotmap;
     _ = btree;

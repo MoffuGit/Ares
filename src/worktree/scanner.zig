@@ -481,8 +481,8 @@ fn scanDir(
 ) !void {
     const dir = bkl: {
         if (job.fd) |fd| {
-            const len = job.path.basename(buffer);
-            break :bkl try fd.dir.openDir(self.io, buffer[0..len], .{ .follow_symlinks = false, .iterate = true });
+            const basename = job.path.basename(buffer);
+            break :bkl try fd.dir.openDir(self.io, basename, .{ .follow_symlinks = false, .iterate = true });
         }
 
         break :bkl try Io.Dir.openDirAbsolute(self.io, self.snapshot.abs_root, .{ .follow_symlinks = false, .iterate = true });
@@ -540,8 +540,8 @@ fn scanDir(
         const path: ChunkedPath = self.paths.append(parent_path, suffix, 1, self.chunks.allocator());
 
         var path_buf: [MAX_PATH_LEN]u8 = undefined;
-        const relative = path.write(&path_buf);
-        const ignored = isIgnored(effective_ignore, path_buf[0..relative], name, is_dir);
+        const relative = path.path(&path_buf);
+        const ignored = isIgnored(effective_ignore, relative, name, is_dir);
 
         self.workers.pushEntry(path, .{
             .inode = entry.meta.inode,

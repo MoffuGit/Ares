@@ -107,8 +107,7 @@ fn verifyWorktree(app: *App, io: Io) !void {
         if (entry.meta.hidden or entry.meta.ignored) continue;
 
         var buf: [MAX_PATH_LEN]u8 = undefined;
-        const written = entry.path.write(&buf);
-        const full = buf[0..written];
+        const full = entry.path.path(&buf);
 
         if (full.len == root_name.len and std.mem.eql(u8, full, root_name)) continue;
 

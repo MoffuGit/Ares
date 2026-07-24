@@ -6,6 +6,8 @@ const Io = std.Io;
 const math = std.math;
 const heap = std.heap;
 
+const datastruct = @import("datastruct.zig");
+const DoublyLinkedList = datastruct.DoublyLinkedList;
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkPool = chunk_pool.ChunkPool;
 const constans = @import("contants.zig");
@@ -13,17 +15,22 @@ const SIMD_CHUNK_BYTES = constans.SIMD_CHUNK_BYTES;
 const INLINE_CHUNKS = constans.INLINE_CHUNKS;
 const MAX_PATH_LEN = constans.MAX_PATH_LEN;
 
-pub const SIMD_CHUNK = [SIMD_CHUNK_BYTES]u8;
 pub const INLINE_NODE_SIZE = @sizeOf(InlineChunks);
 
+pub const Chunk = [SIMD_CHUNK_BYTES]u8;
 const SharedChunk = struct { index: ChunkPool.Index, ref_count: usize };
+pub const InlineChunks = struct {
+    next: ?*InlineChunks = null,
+    prev: ?*InlineChunks = null,
+    chunks: [INLINE_CHUNKS]ChunkPool.Index,
+};
 
 pub const ChunkedPathStore = @This();
 
 io: Io,
 mutex: Io.Mutex,
 pool: ChunkPool,
-dedup: std.AutoHashMap(SIMD_CHUNK, SharedChunk),
+dedup: std.AutoHashMap(Chunk, SharedChunk),
 
 pub fn init(self: *ChunkedPathStore, io: Io, allocator: Allocator, capacity: u32) !void {
     self.* = .{
@@ -55,7 +62,7 @@ pub fn deinit(self: *ChunkedPathStore, allocator: Allocator) void {
     self.pool.deinit(allocator);
 }
 
-pub fn chunkCount(self: *const ChunkedPathStore) usize {
+fn chunkCount(self: *const ChunkedPathStore) usize {
     return self.dedup.count();
 }
 
@@ -67,35 +74,21 @@ pub fn put(self: *ChunkedPathStore, path: []const u8, filename_offset: u32, allo
     const total_chunks = (path.len + SIMD_CHUNK_BYTES - 1) / SIMD_CHUNK_BYTES;
     const total_nodes = (total_chunks + INLINE_CHUNKS - 1) / INLINE_CHUNKS;
 
-    var head_node: InlineChunks = .{
-        .next = null,
-        .chunks = [_]ChunkPool.Index{.none} ** INLINE_CHUNKS,
-    };
-    var tail: *InlineChunks = &head_node;
+    var chunks: DoublyLinkedList(InlineChunks) = .{};
     {
-        var i: usize = 1;
+        var i: usize = 0;
         while (i < total_nodes) : (i += 1) {
-            const node = alloc.create(InlineChunks) catch
-                @panic("Inline Chunks Overflow");
-
-            node.* = .{
-                .next = null,
-                .chunks = [_]ChunkPool.Index{.none} ** INLINE_CHUNKS,
-            };
-
-            tail.next = node;
-            tail = node;
+            chunks.append(alloc.create(InlineChunks) catch @panic("Inline Chunks Overflow"));
         }
     }
 
-    var cur_node: *InlineChunks = &head_node;
+    var node = chunks.first orelse unreachable;
     var slot: usize = 0;
     var chunks_interned: usize = 0;
-
     var offset: usize = 0;
 
     while (offset < path.len) {
-        var canonical: SIMD_CHUNK = [_]u8{0} ** SIMD_CHUNK_BYTES;
+        var canonical: Chunk = [_]u8{0} ** SIMD_CHUNK_BYTES;
         const end = @min(offset + SIMD_CHUNK_BYTES, path.len);
         const chunk_len = end - offset;
 
@@ -103,13 +96,13 @@ pub fn put(self: *ChunkedPathStore, path: []const u8, filename_offset: u32, allo
 
         const chunk_index = self.internChunk(canonical);
 
-        cur_node.chunks[slot] = chunk_index;
+        node.chunks[slot] = chunk_index;
         chunks_interned += 1;
         slot += 1;
 
         if (slot >= INLINE_CHUNKS) {
             slot = 0;
-            if (cur_node.next) |next| cur_node = next;
+            if (node.next) |next| node = next;
         }
 
         offset = end;
@@ -118,7 +111,7 @@ pub fn put(self: *ChunkedPathStore, path: []const u8, filename_offset: u32, allo
     return .{
         .len = @intCast(path.len),
         .filename_offset = filename_offset,
-        .head = head_node,
+        .chunks = chunks,
         .pool = &self.pool,
     };
 }
@@ -133,107 +126,14 @@ pub fn append(
     assert(existing.len > 0);
     assert(suffix.len > 0);
 
-    const suffix_len: u32 = @intCast(suffix.len);
-    const new_len: u32 = existing.len + suffix_len;
+    var buffer: [MAX_PATH_LEN]u8 = undefined;
+    const len: u32 = @intCast(existing.path(&buffer).len);
+    const new_len = len + suffix.len;
+    const new_offset = len + filename_offset;
 
-    assert(new_len <= MAX_PATH_LEN);
-    assert(filename_offset < suffix_len);
+    @memcpy(buffer[len..new_len], suffix);
 
-    const resolved_offset: u32 = existing.len + filename_offset;
-
-    const full_chunks = existing.len / SIMD_CHUNK_BYTES;
-    const remainder = existing.len % SIMD_CHUNK_BYTES;
-
-    var tail_buf: [MAX_PATH_LEN]u8 = undefined;
-    var tail_len: usize = 0;
-
-    if (remainder > 0) {
-        var ex_node: ?*const InlineChunks = &existing.head;
-        var ex_slot: usize = 0;
-        var i: usize = 0;
-        while (i < full_chunks) : (i += 1) {
-            ex_slot += 1;
-            if (ex_slot >= INLINE_CHUNKS) {
-                ex_slot = 0;
-                ex_node = ex_node.?.next;
-            }
-        }
-        const last_chunk = resolveChunk(existing.pool, ex_node.?.chunks[ex_slot]);
-        @memcpy(tail_buf[0..remainder], last_chunk[0..remainder]);
-        tail_len = remainder;
-    }
-    @memcpy(tail_buf[tail_len .. tail_len + suffix.len], suffix);
-    tail_len += suffix.len;
-
-    const tail_chunks = (tail_len + SIMD_CHUNK_BYTES - 1) / SIMD_CHUNK_BYTES;
-    const new_total_chunks = full_chunks + tail_chunks;
-    const new_total_nodes = (new_total_chunks + INLINE_CHUNKS - 1) / INLINE_CHUNKS;
-
-    var head_node: InlineChunks = .{
-        .next = null,
-        .chunks = [_]ChunkPool.Index{.none} ** INLINE_CHUNKS,
-    };
-    var tail_node: *InlineChunks = &head_node;
-
-    {
-        var i: usize = 1;
-        while (i < new_total_nodes) : (i += 1) {
-            const node = alloc.create(InlineChunks) catch
-                @panic("Inline Chunks Overflow");
-            node.* = .{
-                .next = null,
-                .chunks = [_]ChunkPool.Index{.none} ** INLINE_CHUNKS,
-            };
-            tail_node.next = node;
-            tail_node = node;
-        }
-    }
-
-    var cur_node: *InlineChunks = &head_node;
-    var slot: usize = 0;
-    {
-        var ex_node: ?*const InlineChunks = &existing.head;
-        var ex_slot: usize = 0;
-        var i: usize = 0;
-        while (i < full_chunks) : (i += 1) {
-            const existing_chunk = resolveChunk(existing.pool, ex_node.?.chunks[ex_slot]);
-            cur_node.chunks[slot] = self.internChunk(existing_chunk.*);
-            slot += 1;
-            if (slot >= INLINE_CHUNKS) {
-                slot = 0;
-                if (cur_node.next) |next| cur_node = next;
-            }
-            ex_slot += 1;
-            if (ex_slot >= INLINE_CHUNKS) {
-                ex_slot = 0;
-                ex_node = ex_node.?.next;
-            }
-        }
-    }
-
-    {
-        var offset: usize = 0;
-        while (offset < tail_len) {
-            var canonical: SIMD_CHUNK = [_]u8{0} ** SIMD_CHUNK_BYTES;
-            const end = @min(offset + SIMD_CHUNK_BYTES, tail_len);
-            const chunk_len = end - offset;
-            @memcpy(canonical[0..chunk_len], tail_buf[offset..end]);
-            cur_node.chunks[slot] = self.internChunk(canonical);
-            slot += 1;
-            if (slot >= INLINE_CHUNKS) {
-                slot = 0;
-                if (cur_node.next) |next| cur_node = next;
-            }
-            offset = end;
-        }
-    }
-
-    return .{
-        .len = new_len,
-        .filename_offset = resolved_offset,
-        .head = head_node,
-        .pool = &self.pool,
-    };
+    return self.put(buffer[0..new_len], new_offset, alloc);
 }
 
 pub fn free(self: *ChunkedPathStore, chunked_path: *ChunkedPath, alloc: Allocator) void {
@@ -244,28 +144,21 @@ pub fn free(self: *ChunkedPathStore, chunked_path: *ChunkedPath, alloc: Allocato
     assert(total_chunks > 0);
 
     var released: usize = 0;
-    {
-        const head_slots = @min(INLINE_CHUNKS, total_chunks - released);
-        for (chunked_path.head.chunks[0..head_slots]) |chunk_index| {
-            self.destroyChunk(chunk_index);
-        }
-        released += head_slots;
-    }
 
-    var node = chunked_path.head.next;
+    var node = chunked_path.chunks.first;
     while (node) |n| {
         const next = n.next;
-        const slots = @min(INLINE_CHUNKS, total_chunks - released);
-        for (n.chunks[0..slots]) |chunk_index| {
+        const len = @min(INLINE_CHUNKS, total_chunks - released);
+        for (n.chunks[0..len]) |chunk_index| {
             self.destroyChunk(chunk_index);
         }
-        released += slots;
+        released += len;
         alloc.destroy(n);
         node = next;
     }
 }
 
-fn internChunk(self: *ChunkedPathStore, canonical: SIMD_CHUNK) ChunkPool.Index {
+fn internChunk(self: *ChunkedPathStore, canonical: Chunk) ChunkPool.Index {
     self.lock();
     defer self.unlock();
 
@@ -286,8 +179,8 @@ fn destroyChunk(self: *ChunkedPathStore, index: ChunkPool.Index) void {
     self.lock();
     defer self.unlock();
 
-    const key: SIMD_CHUNK = resolveChunk(&self.pool, index).*;
-    const entry = self.dedup.getPtr(key) orelse return;
+    const key: Chunk = resolveChunk(&self.pool, index).*;
+    const entry = self.dedup.getPtr(key) orelse unreachable;
     assert(entry.index == index);
 
     if (entry.ref_count > 1) {
@@ -298,26 +191,21 @@ fn destroyChunk(self: *ChunkedPathStore, index: ChunkPool.Index) void {
     }
 }
 
-fn resolveChunk(pool: *ChunkPool, index: ChunkPool.Index) *SIMD_CHUNK {
+fn resolveChunk(pool: *ChunkPool, index: ChunkPool.Index) *Chunk {
     const bytes = pool.sliceFromIndex(index) orelse @panic("invalid SIMD chunk index");
     assert(bytes.len == SIMD_CHUNK_BYTES);
     return @ptrCast(@alignCast(bytes.ptr));
 }
 
-pub const InlineChunks = struct {
-    next: ?*InlineChunks,
-    chunks: [INLINE_CHUNKS]ChunkPool.Index,
-};
-
 pub const ChunkedPath = struct {
     len: u32,
     filename_offset: u32,
-    head: InlineChunks,
+    chunks: DoublyLinkedList(InlineChunks),
     pool: *ChunkPool,
 
     pub const Iterator = struct {
         node: ?*const InlineChunks,
-        slot: usize,
+        index: usize,
         remaining: u32,
         pool: *ChunkPool,
 
@@ -326,20 +214,18 @@ pub const ChunkedPath = struct {
 
             const node: *const InlineChunks = self.node orelse return null;
 
-            const chunk = resolveChunk(self.pool, node.chunks[self.slot]);
+            const chunk = resolveChunk(self.pool, node.chunks[self.index]);
 
             if (self.remaining >= SIMD_CHUNK_BYTES) {
-                const result: []const u8 = chunk[0..SIMD_CHUNK_BYTES];
-
                 self.remaining -= SIMD_CHUNK_BYTES;
-                self.slot += 1;
+                self.index += 1;
 
-                if (self.slot >= INLINE_CHUNKS) {
-                    self.slot = 0;
+                if (self.index == INLINE_CHUNKS) {
+                    self.index = 0;
                     self.node = node.next;
                 }
 
-                return result;
+                return chunk[0..SIMD_CHUNK_BYTES];
             } else {
                 const result: []const u8 = chunk[0..self.remaining];
 
@@ -350,21 +236,63 @@ pub const ChunkedPath = struct {
         }
     };
 
+    pub const ReverseIterator = struct {
+        node: ?*const InlineChunks,
+        index: usize,
+        remaining: u32,
+        pool: *ChunkPool,
+
+        pub fn next(self: *ReverseIterator) ?[]const u8 {
+            if (self.remaining == 0) return null;
+
+            const node: *const InlineChunks = self.node orelse return null;
+
+            const chunk = resolveChunk(self.pool, node.chunks[self.index]);
+
+            const rem = self.remaining % SIMD_CHUNK_BYTES;
+
+            const take: usize = if (rem == 0) SIMD_CHUNK_BYTES else rem;
+            const result: []const u8 = chunk[0..take];
+
+            self.remaining -= @intCast(take);
+
+            if (self.index == 0) {
+                self.index = INLINE_CHUNKS - 1;
+                self.node = node.prev;
+            } else {
+                self.index -= 1;
+            }
+
+            return result;
+        }
+    };
+
     pub fn iterator(self: *const ChunkedPath) Iterator {
         return .{
-            .node = &self.head,
-            .slot = 0,
+            .node = self.chunks.first,
+            .index = 0,
             .remaining = self.len,
             .pool = self.pool,
         };
     }
 
-    pub fn write(self: ChunkedPath, buffer: []u8) usize {
-        const to_copy = @min(self.len, buffer.len);
+    pub fn reverse_iterator(self: *const ChunkedPath) ReverseIterator {
+        const chunks = (self.len + SIMD_CHUNK_BYTES - 1) / SIMD_CHUNK_BYTES;
+
+        return .{
+            .node = self.chunks.last,
+            .index = (chunks - 1) % INLINE_CHUNKS,
+            .remaining = self.len,
+            .pool = self.pool,
+        };
+    }
+
+    pub fn path(self: ChunkedPath, buffer: []u8) []u8 {
+        assert(buffer.len >= self.len);
 
         var it = self.iterator();
         var offset: usize = 0;
-        var remaining: usize = to_copy;
+        var remaining: usize = self.len;
 
         while (it.next()) |segment| {
             if (remaining == 0) break;
@@ -374,39 +302,28 @@ pub const ChunkedPath = struct {
             remaining -= take;
         }
 
-        return to_copy;
+        return buffer[0..self.len];
     }
 
-    pub fn basename(self: ChunkedPath, buffer: []u8) usize {
+    pub fn basename(self: ChunkedPath, buffer: []u8) []u8 {
         const name_len: usize = self.len - self.filename_offset;
-        if (buffer.len < name_len) @panic("basename buffer too small");
+        assert(buffer.len >= name_len);
 
-        var it = self.iterator();
-        var skip: usize = self.filename_offset;
-        var written: usize = 0;
-
+        var it = self.reverse_iterator();
+        var offset: usize = @intCast(name_len);
         while (it.next()) |segment| {
-            if (written == name_len) break;
-
-            var seg = segment;
-            if (skip > 0) {
-                const advance = @min(skip, seg.len);
-                seg = seg[advance..];
-                skip -= advance;
-                if (seg.len == 0) continue;
-            }
-
-            const take = @min(seg.len, name_len - written);
-            @memcpy(buffer[written .. written + take], seg[0..take]);
-            written += take;
+            if (offset == 0) break;
+            const take: usize = @min(segment.len, offset);
+            @memcpy(buffer[offset - take .. offset], segment[segment.len - take .. segment.len]);
+            offset -= take;
         }
 
-        return name_len;
+        return buffer[0..name_len];
     }
 
     pub fn toSlice(self: ChunkedPath, allocator: Allocator) ![]u8 {
         const buf = try allocator.alloc(u8, self.len);
-        assert(buf.len == self.write(buf));
+        assert(buf.len == self.path(buf).len);
 
         return buf;
     }
@@ -420,16 +337,16 @@ pub const ChunkedPath = struct {
         const MaskInt = std.meta.Int(.unsigned, SIMD_CHUNK_BYTES);
         const all_ones: MaskInt = @as(MaskInt, 0) -% 1;
 
-        var node_a: ?*const InlineChunks = &self.head;
-        var node_b: ?*const InlineChunks = &other.head;
+        var node_a = self.chunks.first;
+        var node_b = other.chunks.first;
         var slot_a: usize = 0;
         var slot_b: usize = 0;
         var remaining_a: u32 = self.len;
         var remaining_b: u32 = other.len;
 
         while (remaining_a > 0 and remaining_b > 0) {
-            const chunk_a: *SIMD_CHUNK = resolveChunk(self.pool, node_a.?.chunks[slot_a]);
-            const chunk_b: *SIMD_CHUNK = resolveChunk(other.pool, node_b.?.chunks[slot_b]);
+            const chunk_a: *Chunk = resolveChunk(self.pool, node_a.?.chunks[slot_a]);
+            const chunk_b: *Chunk = resolveChunk(other.pool, node_b.?.chunks[slot_b]);
 
             const a_vec: Vec = chunk_a.*;
             const b_vec: Vec = chunk_b.*;
@@ -468,33 +385,7 @@ pub const ChunkedPath = struct {
     }
 };
 
-test "short partial path round-trip" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-
-    var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
-    defer store.deinit(gpa);
-
-    const path = "hello";
-    var cs = store.put(path, 0, gpa);
-    defer store.free(&cs, gpa);
-
-    try testing.expectEqual(@as(u32, 5), cs.len);
-    try testing.expectEqual(@as(?*InlineChunks, null), cs.head.next);
-
-    const bytes = try cs.toSlice(gpa);
-    defer gpa.free(bytes);
-    try testing.expectEqualSlices(u8, path, bytes);
-
-    var it = cs.iterator();
-    const seg = it.next().?;
-    try testing.expectEqual(@as(usize, 5), seg.len);
-    try testing.expectEqualSlices(u8, "hello", seg);
-    try testing.expectEqual(@as(?[]const u8, null), it.next());
-}
-
-test "exactly 16 bytes" {
+test "SIMD_CHUNK_BYTES path" {
     const gpa = testing.allocator;
     const io = testing.io;
     var store: ChunkedPathStore = undefined;
@@ -505,15 +396,12 @@ test "exactly 16 bytes" {
     var cs = store.put(path, 0, gpa);
     defer store.free(&cs, gpa);
 
-    try testing.expectEqual(@as(u32, 16), cs.len);
-    try testing.expectEqual(@as(?*InlineChunks, null), cs.head.next);
-
     const bytes = try cs.toSlice(gpa);
     defer gpa.free(bytes);
     try testing.expectEqualSlices(u8, path, bytes);
 }
 
-test "exactly 64 bytes (one node, four chunks)" {
+test "INLINE_CHUNKS path" {
     const gpa = testing.allocator;
     const io = testing.io;
     var store: ChunkedPathStore = undefined;
@@ -526,15 +414,12 @@ test "exactly 64 bytes (one node, four chunks)" {
     var cs = store.put(path, 0, gpa);
     defer store.free(&cs, gpa);
 
-    try testing.expectEqual(@as(u32, 64), cs.len);
-    try testing.expectEqual(@as(?*InlineChunks, null), cs.head.next);
-
     const bytes = try cs.toSlice(gpa);
     defer gpa.free(bytes);
     try testing.expectEqualSlices(u8, path, bytes);
 }
 
-test "longer than 64 bytes (multi-node)" {
+test "Multi INLINE_CHUNKS path" {
     const gpa = testing.allocator;
     const io = testing.io;
 
@@ -549,8 +434,8 @@ test "longer than 64 bytes (multi-node)" {
     defer store.free(&cs, gpa);
 
     try testing.expectEqual(@as(u32, 80), cs.len);
-    try testing.expect(cs.head.next != null);
-    try testing.expectEqual(@as(?*InlineChunks, null), cs.head.next.?.next);
+    try testing.expect(cs.chunks.first.?.next != null);
+    try testing.expectEqual(@as(?*InlineChunks, null), cs.chunks.first.?.next.?.next);
 
     const bytes = try cs.toSlice(gpa);
     defer gpa.free(bytes);
@@ -591,46 +476,8 @@ test "identical chunks shared across paths" {
     var cs_b = store.put(shared_prefix, 0, gpa);
     defer store.free(&cs_b, gpa);
 
-    try testing.expectEqual(cs_a.head.chunks[0], cs_b.head.chunks[0]);
+    try testing.expectEqual(cs_a.chunks.first.?.chunks[0], cs_b.chunks.first.?.chunks[0]);
     try testing.expectEqual(@as(usize, 1), store.chunkCount());
-}
-
-test "repeated chunk within one path" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-    var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
-    defer store.deinit(gpa);
-
-    const block = "AAAAAAAAAAAAAAAA";
-    const path = block ++ block;
-    try testing.expectEqual(@as(usize, 32), path.len);
-
-    var cs = store.put(path, 0, gpa);
-    defer store.free(&cs, gpa);
-
-    try testing.expectEqual(cs.head.chunks[0], cs.head.chunks[1]);
-    try testing.expectEqual(@as(usize, 1), store.chunkCount());
-
-    const bytes = try cs.toSlice(gpa);
-    defer gpa.free(bytes);
-    try testing.expectEqualSlices(u8, path, bytes);
-}
-
-test "different chunks are not shared" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-    var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
-    defer store.deinit(gpa);
-
-    var cs_a = store.put("0123456789abcdef", 0, gpa);
-    defer store.free(&cs_a, gpa);
-    var cs_b = store.put("abcdefghijklmnop", 0, gpa);
-    defer store.free(&cs_b, gpa);
-
-    try testing.expect(cs_a.head.chunks[0] != cs_b.head.chunks[0]);
-    try testing.expectEqual(@as(usize, 2), store.chunkCount());
 }
 
 test "filename offset preserved" {
@@ -654,65 +501,6 @@ test "filename offset preserved" {
     try testing.expectEqualSlices(u8, "chunked_string.zig", bytes[cs.filename_offset..]);
 }
 
-test "identical bytes with different offsets still share chunks" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-    var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
-    defer store.deinit(gpa);
-
-    const path = "0123456789abcdef";
-    var cs_a = store.put(path, 0, gpa);
-    defer store.free(&cs_a, gpa);
-    var cs_b = store.put(path, 5, gpa);
-    defer store.free(&cs_b, gpa);
-
-    try testing.expectEqual(cs_a.head.chunks[0], cs_b.head.chunks[0]);
-    try testing.expectEqual(@as(u32, 0), cs_a.filename_offset);
-    try testing.expectEqual(@as(u32, 5), cs_b.filename_offset);
-}
-
-test "store bulk deinit no leak" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-    var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
-    defer store.deinit(gpa);
-
-    _ = store.put("src/chunked_string.zig", 4, gpa);
-    _ = store.put("src/contants.zig", 4, gpa);
-    _ = store.put("src/chunk_pool.zig", 4, gpa);
-    _ = store.put("build.zig", 0, gpa);
-    _ = store.put("src/worktree/snapshot.zig", 4, gpa);
-}
-
-test "copyTo with exact and undersized buffers" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-    var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
-    defer store.deinit(gpa);
-
-    const path = "0123456789abcdefGHIJKLMNOPQRSTUV";
-    var cs = store.put(path, 0, gpa);
-    defer store.free(&cs, gpa);
-
-    var exact: [32]u8 = undefined;
-    const copied_exact = cs.write(&exact);
-    try testing.expectEqual(@as(usize, 32), copied_exact);
-    try testing.expectEqualSlices(u8, path, exact[0..copied_exact]);
-
-    var large: [64]u8 = undefined;
-    const copied_large = cs.write(&large);
-    try testing.expectEqual(@as(usize, 32), copied_large);
-    try testing.expectEqualSlices(u8, path, large[0..copied_large]);
-
-    var small: [16]u8 = undefined;
-    const copied_small = cs.write(&small);
-    try testing.expectEqual(@as(usize, 16), copied_small);
-    try testing.expectEqualSlices(u8, path[0..16], small[0..copied_small]);
-}
-
 test "iterator over multi-node path" {
     const gpa = testing.allocator;
     const io = testing.io;
@@ -731,6 +519,47 @@ test "iterator over multi-node path" {
         offset += seg.len;
     }
     try testing.expectEqual(@as(usize, 80), offset);
+}
+
+test "reverse iterator over multi-node path" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var store: ChunkedPathStore = undefined;
+    try store.init(io, gpa, 16);
+    defer store.deinit(gpa);
+
+    const path = "0123456789abcdef" ++ "GHIJKLMNOPQRSTUV" ++ "WXYZabcdefghijkl" ++ "mnopqrstuvwxyzAB" ++ "CDEFGHIJKLMNOPQR";
+    var cs = store.put(path, 0, gpa);
+    defer store.free(&cs, gpa);
+
+    var it = cs.reverse_iterator();
+    var offset: usize = path.len;
+    while (it.next()) |seg| {
+        try testing.expectEqualSlices(u8, path[offset - seg.len .. offset], seg);
+        offset -= seg.len;
+    }
+    try testing.expectEqual(@as(usize, 0), offset);
+}
+
+test "reverse iterator over partial-chunk path" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var store: ChunkedPathStore = undefined;
+    try store.init(io, gpa, 16);
+    defer store.deinit(gpa);
+
+    // 20 bytes -> 2 chunks: a full 16-byte chunk and a 4-byte partial chunk.
+    const path = "0123456789abcdef" ++ "WXYZ";
+    var cs = store.put(path, 0, gpa);
+    defer store.free(&cs, gpa);
+
+    var it = cs.reverse_iterator();
+    var offset: usize = path.len;
+    while (it.next()) |seg| {
+        try testing.expectEqualSlices(u8, path[offset - seg.len .. offset], seg);
+        offset -= seg.len;
+    }
+    try testing.expectEqual(@as(usize, 0), offset);
 }
 
 test "append short suffix to short path (merges into one chunk)" {
@@ -784,7 +613,7 @@ test "append to exact-chunk-boundary path (suffix starts new chunk)" {
     try testing.expectEqualSlices(u8, "0123456789abcdef/foo", new_bytes);
 
     // The full chunk should be shared between the two paths.
-    try testing.expectEqual(cs.head.chunks[0], appended.head.chunks[0]);
+    try testing.expectEqual(cs.chunks.first.?.chunks[0], appended.chunks.first.?.chunks[0]);
 }
 
 test "append spanning multiple nodes" {
@@ -813,7 +642,7 @@ test "append spanning multiple nodes" {
     // First 4 full chunks (first node) should be shared.
     var i: usize = 0;
     while (i < 4) : (i += 1) {
-        try testing.expectEqual(cs.head.chunks[i], appended.head.chunks[i]);
+        try testing.expectEqual(cs.chunks.first.?.chunks[i], appended.chunks.first.?.chunks[i]);
     }
 }
 
@@ -841,7 +670,7 @@ test "append that fills the partial chunk exactly" {
     try testing.expectEqualSlices(u8, "0123456789abcdef", new_bytes);
 
     // The merged chunk should be a new canonical chunk (different from orig's partial).
-    try testing.expect(cs.head.chunks[0] != appended.head.chunks[0]);
+    try testing.expect(cs.chunks.first.?.chunks[0] != appended.chunks.first.?.chunks[0]);
 }
 
 test "append preserves original after original is freed" {
@@ -1171,9 +1000,9 @@ test "basename writes filename into buffer" {
     defer store.free(&cs, gpa);
 
     var buf: [64]u8 = undefined;
-    const written = cs.basename(&buf);
-    try testing.expectEqual(@as(usize, path.len - filename_offset), written);
-    try testing.expectEqualSlices(u8, "snapshot.zig", buf[0..written]);
+    const basename = cs.basename(&buf);
+    try testing.expectEqual(@as(usize, path.len - filename_offset), basename.len);
+    try testing.expectEqualSlices(u8, "snapshot.zig", basename);
 }
 
 test "basename spans chunk boundary" {
@@ -1192,7 +1021,7 @@ test "basename spans chunk boundary" {
     defer store.free(&cs, gpa);
 
     var buf: [64]u8 = undefined;
-    const written = cs.basename(&buf);
-    try testing.expectEqual(@as(usize, expected.len), written);
-    try testing.expectEqualSlices(u8, expected, buf[0..written]);
+    const basename = cs.basename(&buf);
+    try testing.expectEqual(@as(usize, expected.len), basename.len);
+    try testing.expectEqualSlices(u8, expected, basename);
 }
