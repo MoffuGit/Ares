@@ -1,5 +1,5 @@
-//SOURCE: https://github.com/EpicGames/raddebugger
-//LICENSE: [RADDEBUGGER]
+// SOURCE: https://github.com/EpicGames/raddebugger
+// LICENSE: [RADDEBUGGER]
 
 const std = @import("std");
 const math = @import("../math.zig");
@@ -7,43 +7,39 @@ const queue = @import("queue.zig");
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
 
-const MemoryMapRange = struct {
+const MemMapRng = struct {
     vaddr_range: math.Rngu64,
     base: [*]u8,
+    next: ?*MemMapRng = null,
 };
 
-const MemoryMapNode = struct {
-    range: MemoryMapRange,
-    next: ?*MemoryMapNode = null,
-};
+const MemMap = struct {
+    ranges: queue.Queue(MemMapRng) = .{},
 
-const MemoryMap = struct {
-    nodes: queue.Queue(MemoryMapNode) = .{},
+    pub fn push(self: *MemMap, vaddr_range: math.Rngu64, base: *anyopaque, alloc: Allocator) !void {
+        const range = try alloc.create(MemMapRng);
+        range.* = .{ .base = @ptrCast(base), .vaddr_range = vaddr_range };
 
-    pub fn push(self: *MemoryMap, range: math.Rngu64, base: *anyopaque, alloc: Allocator) !void {
-        const node = try alloc.create(MemoryMapNode);
-        node.* = .{ .range = .{ .base = @ptrCast(base), .vaddr_range = range } };
-
-        self.nodes.push(node);
+        self.ranges.push(range);
     }
 
-    pub fn read(self: *MemoryMap, range: math.Rngu64, dest: []u8) u64 {
+    pub fn read(self: *MemMap, range: math.Rngu64, dest: []u8) u64 {
         var dest_vaddr = range.min;
         while (true) {
             var found = false;
             const start_vaddr = dest_vaddr;
-            var node = self.nodes.head;
+            var node = self.ranges.head;
             while (node) |n| : (node = n.next) {
-                if (n.range.vaddr_range.contains(dest_vaddr)) {
-                    const src_off = dest_vaddr - n.range.vaddr_range.min;
-                    const possible = n.range.vaddr_range.max - dest_vaddr;
+                if (n.vaddr_range.contains(dest_vaddr)) {
+                    const src_off = dest_vaddr - n.vaddr_range.min;
+                    const possible = n.vaddr_range.max - dest_vaddr;
                     const needed = range.max - dest_vaddr;
                     const to_read = @min(needed, possible);
 
                     const dest_off: usize = @intCast(dest_vaddr - range.min);
                     const len: usize = @intCast(to_read);
                     const off: usize = @intCast(src_off);
-                    @memcpy(dest[dest_off .. dest_off + len], n.range.base[off .. off + len]);
+                    @memcpy(dest[dest_off .. dest_off + len], n.base[off .. off + len]);
 
                     dest_vaddr += to_read;
                     found = true;
@@ -55,7 +51,7 @@ const MemoryMap = struct {
         return dest_vaddr - range.min;
     }
 
-    pub fn slice(self: *MemoryMap, range: math.Rngu64, alloc: Allocator) ![]u8 {
+    pub fn slice(self: *MemMap, range: math.Rngu64, alloc: Allocator) ![]u8 {
         const buffer = try alloc.alloc(u8, range.dim());
         _ = self.read(range, buffer);
         return buffer;
@@ -66,7 +62,7 @@ test "Memory Map Simple Test" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
 
-    var map: MemoryMap = .{};
+    var map: MemMap = .{};
 
     var buffer: [16]u8 = .{5} ** 5 ++ .{0} ** 11;
     try map.push(.{ .min = 0, .max = buffer.len }, &buffer, arena.allocator());
@@ -81,7 +77,7 @@ test "Memory Map Simple Slice Test" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
 
-    var map: MemoryMap = .{};
+    var map: MemMap = .{};
 
     var buffer: [16]u8 = .{5} ** 5 ++ .{0} ** 11;
     try map.push(.{ .min = 0, .max = buffer.len }, &buffer, arena.allocator());
@@ -95,7 +91,7 @@ test "Memory Map: small buffers read all at once" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
 
-    var map: MemoryMap = .{};
+    var map: MemMap = .{};
 
     // Three 4-byte buffers at contiguous vaddr ranges.
     var buf_a: [4]u8 = .{ 0x10, 0x11, 0x12, 0x13 };
@@ -121,7 +117,7 @@ test "Memory Map: two medium buffers read into one chunk" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
 
-    var map: MemoryMap = .{};
+    var map: MemMap = .{};
 
     // Two 64-byte buffers at contiguous vaddr ranges.
     // Each byte stores its own vaddr so verification is trivial.
@@ -144,7 +140,7 @@ test "Memory Map: two medium buffers read in smaller chunks" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
 
-    var map: MemoryMap = .{};
+    var map: MemMap = .{};
 
     var buf_a: [64]u8 = undefined;
     var buf_b: [64]u8 = undefined;
@@ -172,7 +168,7 @@ test "Memory Map: overlapping ranges, first inserted takes priority" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
 
-    var map: MemoryMap = .{};
+    var map: MemMap = .{};
 
     // A covers 0-8 (first inserted, takes priority in the overlap).
     // B covers 0-16 (second inserted, overlaps A in 0-8, extends to 16).
@@ -194,7 +190,7 @@ test "Memory Map: gap stops the read at last valid byte" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
 
-    var map: MemoryMap = .{};
+    var map: MemMap = .{};
 
     // A covers 0-8, B covers 16-24. Gap from 8-16.
     var buf_a: [8]u8 = .{0xAA} ** 8;
