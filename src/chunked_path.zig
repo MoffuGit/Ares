@@ -5,15 +5,15 @@ const testing = std.testing;
 const Io = std.Io;
 const math = std.math;
 
-const datastruct = @import("datastruct.zig");
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkPool = chunk_pool.ChunkPool;
-const mem_map = datastruct.mem_map;
-const MemMap = mem_map.MemMap;
-const MemMapRng = mem_map.MemMapRng;
 const constans = @import("contants.zig");
 const SIMD_CHUNK_BYTES = constans.SIMD_CHUNK_BYTES;
 const MAX_PATH_LEN = constans.MAX_PATH_LEN;
+const datastruct = @import("datastruct.zig");
+const mem_map = datastruct.mem_map;
+const MemMap = mem_map.MemMap;
+const MemMapRng = mem_map.MemMapRng;
 
 pub const RANGE_NODE_SIZE = @sizeOf(MemMapRng);
 
@@ -21,43 +21,19 @@ pub const Chunk = [SIMD_CHUNK_BYTES]u8;
 
 pub const ChunkedPathStore = @This();
 
-io: Io,
-mutex: Io.Mutex,
 pool: ChunkPool,
-dedup: std.AutoHashMap(Chunk, *Chunk),
 
-pub fn init(self: *ChunkedPathStore, io: Io, allocator: Allocator, capacity: u32) !void {
+pub fn init(self: *ChunkedPathStore, allocator: Allocator, capacity: u32) !void {
     self.* = .{
-        .io = io,
-        .mutex = .init,
         .pool = undefined,
-        .dedup = undefined,
     };
 
     try self.pool.init(allocator, capacity, SIMD_CHUNK_BYTES);
     errdefer self.pool.deinit(allocator);
-
-    self.dedup = .init(allocator);
-    errdefer self.dedup.deinit();
-
-    try self.dedup.ensureTotalCapacity(capacity);
-}
-
-pub fn lock(self: *ChunkedPathStore) void {
-    self.mutex.lockUncancelable(self.io);
-}
-
-pub fn unlock(self: *ChunkedPathStore) void {
-    self.mutex.unlock(self.io);
 }
 
 pub fn deinit(self: *ChunkedPathStore, allocator: Allocator) void {
-    self.dedup.deinit();
     self.pool.deinit(allocator);
-}
-
-fn chunkCount(self: *const ChunkedPathStore) usize {
-    return self.dedup.count();
 }
 
 pub fn put(self: *ChunkedPathStore, path: []const u8, filename_offset: u32, alloc: Allocator) ChunkedPath {
@@ -69,13 +45,16 @@ pub fn put(self: *ChunkedPathStore, path: []const u8, filename_offset: u32, allo
     var offset: usize = 0;
     while (offset < path.len) {
         var canonical: Chunk = [_]u8{0} ** SIMD_CHUNK_BYTES;
+        const buf = self.pool.alloc() orelse @panic("SIMD CHUNK Overflow");
+        const chunk: *Chunk = @ptrCast(@alignCast(buf.ptr));
+
         const end = @min(offset + SIMD_CHUNK_BYTES, path.len);
         const chunk_len = end - offset;
 
         @memcpy(canonical[0..chunk_len], path[offset..end]);
+        chunk.* = canonical;
 
-        const chunk_ptr = self.internChunk(canonical);
-        memmap.push(.{ .min = offset, .max = end }, chunk_ptr, alloc) catch @panic("MemMap Range Overflow");
+        memmap.push(.{ .min = offset, .max = end }, chunk, alloc) catch @panic("MemMap Range Overflow");
 
         offset = end;
     }
@@ -97,30 +76,31 @@ pub fn append(
     assert(existing.len > 0);
     assert(suffix.len > 0);
 
-    var buffer: [MAX_PATH_LEN]u8 = undefined;
-    const len: u32 = @intCast(existing.path(&buffer).len);
-    const new_len = len + suffix.len;
-    assert(new_len <= MAX_PATH_LEN);
-    const new_offset = len + filename_offset;
+    var new_memmap: MemMap = .{};
+    const memmap = existing.memmap;
 
-    @memcpy(buffer[len..new_len], suffix);
+    var curr = memmap.ranges.head;
+    while (curr) |range| : (curr = range.next) {
+        new_memmap.push(range.vaddr_range, range.base, alloc) catch @panic("MemMap Range Overflow");
+    }
 
-    return self.put(buffer[0..new_len], new_offset, alloc);
-}
+    const path_len = existing.len;
+    var suffix_map = self.put(suffix, filename_offset, alloc);
 
-fn internChunk(self: *ChunkedPathStore, canonical: Chunk) *Chunk {
-    self.lock();
-    defer self.unlock();
+    while (suffix_map.memmap.ranges.pop()) |node| {
+        const min = node.vaddr_range.min;
+        const max = node.vaddr_range.max;
 
-    if (self.dedup.get(canonical)) |ptr| return ptr;
+        node.vaddr_range = .{ .min = path_len + min, .max = path_len + max };
 
-    const buf = self.pool.alloc() orelse @panic("SIMD CHUNK Overflow");
-    const chunk: *Chunk = @ptrCast(@alignCast(buf.ptr));
-    chunk.* = canonical;
+        new_memmap.ranges.push(node);
+    }
 
-    self.dedup.putAssumeCapacity(canonical, chunk);
-
-    return chunk;
+    return .{
+        .len = @intCast(path_len + suffix.len),
+        .filename_offset = path_len + filename_offset,
+        .memmap = new_memmap,
+    };
 }
 
 pub const ChunkedPath = struct {
@@ -148,10 +128,7 @@ pub const ChunkedPath = struct {
     }
 
     pub fn slice(self: *const ChunkedPath, allocator: Allocator) ![]u8 {
-        const buf = try allocator.alloc(u8, self.len);
-        assert(buf.len == self.path(buf).len);
-
-        return buf;
+        return try self.memmap.slice(.{ .min = 0, .max = self.len }, allocator);
     }
 
     pub fn cmp(self: ChunkedPath, other: ChunkedPath) math.Order {
@@ -165,10 +142,8 @@ pub const ChunkedPath = struct {
 
         var node_a = self.memmap.ranges.head;
         var node_b = other.memmap.ranges.head;
-        var remaining_a: u32 = self.len;
-        var remaining_b: u32 = other.len;
 
-        while (remaining_a > 0 and remaining_b > 0) {
+        while (node_a != null and node_b != null) {
             const base_a = node_a.?.base;
             const base_b = node_b.?.base;
 
@@ -193,8 +168,6 @@ pub const ChunkedPath = struct {
                 }
             }
 
-            remaining_a -= @min(remaining_a, SIMD_CHUNK_BYTES);
-            remaining_b -= @min(remaining_b, SIMD_CHUNK_BYTES);
             node_a = node_a.?.next;
             node_b = node_b.?.next;
         }
@@ -205,9 +178,8 @@ pub const ChunkedPath = struct {
 
 test "SIMD_CHUNK_BYTES path" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -224,9 +196,8 @@ test "SIMD_CHUNK_BYTES path" {
 
 test "multi-chunk path" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -245,10 +216,9 @@ test "multi-chunk path" {
 
 test "multi-node path spans multiple ranges" {
     const gpa = testing.allocator;
-    const io = testing.io;
 
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 64);
+    try store.init(gpa, 64);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -274,9 +244,8 @@ test "multi-node path spans multiple ranges" {
 
 test "maximum 4096-byte path" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 256);
+    try store.init(gpa, 256);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -296,30 +265,10 @@ test "maximum 4096-byte path" {
     try testing.expectEqualSlices(u8, path, bytes);
 }
 
-test "identical chunks shared across paths" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-    var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
-    defer store.deinit(gpa);
-
-    var arena = std.heap.ArenaAllocator.init(gpa);
-    defer arena.deinit();
-    const node_alloc = arena.allocator();
-
-    const shared_prefix = "0123456789abcdef";
-    const cs_a = store.put(shared_prefix, 0, node_alloc);
-    const cs_b = store.put(shared_prefix, 0, node_alloc);
-
-    try testing.expectEqual(cs_a.memmap.ranges.head.?.base, cs_b.memmap.ranges.head.?.base);
-    try testing.expectEqual(@as(usize, 1), store.chunkCount());
-}
-
 test "filename offset preserved" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -341,9 +290,8 @@ test "filename offset preserved" {
 
 test "append short suffix to short path (merges into one chunk)" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -373,9 +321,8 @@ test "append short suffix to short path (merges into one chunk)" {
 
 test "append to exact-chunk-boundary path (suffix starts new chunk)" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -399,9 +346,8 @@ test "append to exact-chunk-boundary path (suffix starts new chunk)" {
 
 test "append spanning multiple nodes" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -433,40 +379,10 @@ test "append spanning multiple nodes" {
     }
 }
 
-test "append that fills the partial chunk exactly" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-    var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
-    defer store.deinit(gpa);
-
-    var arena = std.heap.ArenaAllocator.init(gpa);
-    defer arena.deinit();
-    const node_alloc = arena.allocator();
-
-    // 10 bytes -> partial chunk with 10/16 used, 6 bytes of padding.
-    const orig = "0123456789";
-    const cs = store.put(orig, 0, node_alloc);
-
-    // Suffix of 6 bytes fills the remainder exactly.
-    const suffix = "abcdef";
-    // filename starts at index 0 within the suffix.
-    const appended = store.append(cs, suffix, 0, node_alloc);
-
-    try testing.expectEqual(@as(u32, 16), appended.len);
-    const new_bytes = try appended.slice(gpa);
-    defer gpa.free(new_bytes);
-    try testing.expectEqualSlices(u8, "0123456789abcdef", new_bytes);
-
-    // The merged chunk should be a new canonical chunk (different from orig's partial).
-    try testing.expect(cs.memmap.ranges.head.?.base != appended.memmap.ranges.head.?.base);
-}
-
 test "append resolves suffix-relative filename_offset to absolute" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -492,9 +408,8 @@ test "append resolves suffix-relative filename_offset to absolute" {
 }
 test "cmp equal strings" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -511,9 +426,8 @@ test "cmp equal strings" {
 
 test "cmp differs at first byte" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -529,9 +443,8 @@ test "cmp differs at first byte" {
 
 test "cmp differs at last byte of first chunk" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -549,9 +462,8 @@ test "cmp differs at last byte of first chunk" {
 
 test "cmp differs in second chunk" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -570,9 +482,8 @@ test "cmp differs in second chunk" {
 
 test "cmp differs in second node (multi-node)" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -592,9 +503,8 @@ test "cmp differs in second node (multi-node)" {
 
 test "cmp prefix — shorter is less" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -610,9 +520,8 @@ test "cmp prefix — shorter is less" {
 
 test "cmp prefix across chunk boundary" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -630,9 +539,8 @@ test "cmp prefix across chunk boundary" {
 
 test "cmp partial chunk vs full chunk (padding as zero)" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -655,9 +563,8 @@ test "cmp partial chunk vs full chunk (padding as zero)" {
 
 test "cmp long equal paths (multi-node)" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -673,9 +580,8 @@ test "cmp long equal paths (multi-node)" {
 
 test "cmp max length equal" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 256);
+    try store.init(gpa, 512);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -693,9 +599,8 @@ test "cmp max length equal" {
 
 test "cmp max length differ at last byte" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 256);
+    try store.init(gpa, 512);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -720,9 +625,8 @@ test "cmp max length differ at last byte" {
 
 test "cmp matches std.mem.order on random paths" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 1024);
+    try store.init(gpa, 2048 * 2);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -781,9 +685,8 @@ test "cmp matches std.mem.order on random paths" {
 
 test "basename writes filename into buffer" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -803,9 +706,8 @@ test "basename writes filename into buffer" {
 
 test "basename spans chunk boundary" {
     const gpa = testing.allocator;
-    const io = testing.io;
     var store: ChunkedPathStore = undefined;
-    try store.init(io, gpa, 16);
+    try store.init(gpa, 16);
     defer store.deinit(gpa);
 
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -823,4 +725,65 @@ test "basename spans chunk boundary" {
     const basename = cs.basename(&buf);
     try testing.expectEqual(@as(usize, expected.len), basename.len);
     try testing.expectEqualSlices(u8, expected, basename);
+}
+
+test "identical chunks" {
+    const gpa = testing.allocator;
+    var store: ChunkedPathStore = undefined;
+    try store.init(gpa, 16);
+    defer store.deinit(gpa);
+
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    const node_alloc = arena.allocator();
+
+    const shared_prefix = "0123456789abcdef";
+    const cs_a = store.put(shared_prefix, 0, node_alloc);
+    const cs_b = store.put(shared_prefix, 0, node_alloc);
+
+    try testing.expectEqualStrings(cs_a.memmap.ranges.head.?.base[0..SIMD_CHUNK_BYTES], cs_b.memmap.ranges.head.?.base[0..SIMD_CHUNK_BYTES]);
+}
+
+test "append that fills the partial chunk exactly" {
+    const gpa = testing.allocator;
+    var store: ChunkedPathStore = undefined;
+    try store.init(gpa, 16);
+    defer store.deinit(gpa);
+
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    const node_alloc = arena.allocator();
+
+    // 10 bytes -> partial chunk with 10/16 used, 6 bytes of padding.
+    const orig = "0123456789";
+    const cs = store.put(orig, 0, node_alloc);
+
+    // Suffix of 6 bytes fills the remainder exactly.
+    const suffix = "abcdef";
+    // filename starts at index 0 within the suffix.
+    const appended = store.append(cs, suffix, 0, node_alloc);
+
+    try testing.expectEqual(@as(u32, 16), appended.len);
+    const new_bytes = try appended.slice(gpa);
+    defer gpa.free(new_bytes);
+    try testing.expectEqualSlices(u8, "0123456789abcdef", new_bytes);
+}
+
+test "temp" {
+    const gpa = testing.allocator;
+    var store: ChunkedPathStore = undefined;
+    try store.init(gpa, 16);
+    defer store.deinit(gpa);
+
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    const node_alloc = arena.allocator();
+
+    const orig = "ios/chrome/browser/device_reauth";
+    const cs = store.put(orig, 19, node_alloc);
+    const new = store.append(cs, "/OWNERS", 1, node_alloc);
+
+    var basename: [16]u8 = undefined;
+
+    try testing.expectEqualSlices(u8, "OWNERS", new.basename(&basename));
 }

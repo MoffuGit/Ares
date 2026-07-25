@@ -91,11 +91,11 @@ pub fn init(
     self.actions = .init(&self.action_buffer);
     self.updates = .init(&self.updates_buffer);
 
-    try self.paths.init(io, gpa, 1024 * 1024);
+    try self.paths.init(gpa, 1024 * 1024 * 1024);
     errdefer self.paths.deinit(gpa);
 
     try self.chunks.init(gpa, &.{
-        .{ 4 * 1024 * 1024, RANGE_NODE_SIZE },
+        .{ 1024 * 1024 * 1024, RANGE_NODE_SIZE },
     });
     errdefer self.chunks.deinit(gpa);
 

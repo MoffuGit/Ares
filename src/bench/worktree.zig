@@ -121,6 +121,7 @@ fn verifyWorktree(app: *App, io: Io) !void {
 
     const ody_count = ody_set.count();
     const zlob_count = zlob_set.count();
+    const snapshot_count = snap.entries.count;
 
     if (ody_count == zlob_count) {
         var zit = zlob_set.iterator();
@@ -146,7 +147,17 @@ fn verifyWorktree(app: *App, io: Io) !void {
         return;
     }
 
+    var entries = snap.entries.iter();
+    var acc: usize = 0;
+    while (entries.next()) |kv| {
+        if (!kv.value.meta.hidden) {
+            acc += 1;
+        }
+    }
+
     std.debug.print("\n=== WORKTREE SNAPSHOT MISMATCH ===\n", .{});
+    std.debug.print("odyssey snapshot entries: {d}\n", .{snapshot_count});
+    std.debug.print("odyssey snapshot visible entries: {d}\n", .{acc});
     std.debug.print("odyssey visible entries: {d}\n", .{ody_count});
     std.debug.print("zlob    visible entries: {d}\n", .{zlob_count});
     printFirstDivergence(&ody_set, &zlob_set);
