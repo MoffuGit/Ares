@@ -768,22 +768,3 @@ test "append that fills the partial chunk exactly" {
     defer gpa.free(new_bytes);
     try testing.expectEqualSlices(u8, "0123456789abcdef", new_bytes);
 }
-
-test "temp" {
-    const gpa = testing.allocator;
-    var store: ChunkedPathStore = undefined;
-    try store.init(gpa, 16);
-    defer store.deinit(gpa);
-
-    var arena = std.heap.ArenaAllocator.init(gpa);
-    defer arena.deinit();
-    const node_alloc = arena.allocator();
-
-    const orig = "ios/chrome/browser/device_reauth";
-    const cs = store.put(orig, 19, node_alloc);
-    const new = store.append(cs, "/OWNERS", 1, node_alloc);
-
-    var basename: [16]u8 = undefined;
-
-    try testing.expectEqualSlices(u8, "OWNERS", new.basename(&basename));
-}
