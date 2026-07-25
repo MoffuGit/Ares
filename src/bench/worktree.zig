@@ -107,9 +107,10 @@ fn verifyWorktree(app: *App, io: Io) !void {
         if (entry.meta.hidden or entry.meta.ignored) continue;
 
         var buf: [MAX_PATH_LEN]u8 = undefined;
-        const full = entry.path.path(&buf);
+        const len = entry.path.read(&buf);
+        const full = buf[0..len];
 
-        if (full.len == root_name.len and std.mem.eql(u8, full, root_name)) continue;
+        if (len == root_name.len and std.mem.eql(u8, full, root_name)) continue;
 
         if (full.len < prefix_len or full[root_name.len] != '/') {
             std.debug.print("verifyWorktreeScan: unexpected path shape: '{s}'\n", .{full});

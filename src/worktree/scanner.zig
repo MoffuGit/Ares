@@ -13,9 +13,9 @@ const GitIgnore = @import("zlob").GitIgnore;
 const App = @import("../app.zig");
 const chunk_pool = @import("../chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
-const ChunkedPathStore = @import("../chunked_path.zig");
-const ChunkedPath = ChunkedPathStore.ChunkedPath;
-const RANGE_NODE_SIZE = ChunkedPathStore.RANGE_NODE_SIZE;
+const ChunkedPath = @import("../chunked_path.zig");
+const RANGE_NODE_SIZE = ChunkedPath.RANGE_NODE_SIZE;
+const CHUNK_SIZE = ChunkedPath.CHUNKS_SIZE;
 const contants = @import("../contants.zig");
 const MAX_PATH_LEN = contants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
@@ -62,7 +62,6 @@ action_buffer: [8]Action,
 actions: Action.Queue,
 updates_buffer: [8]Updates,
 updates: Updates.Queue,
-paths: ChunkedPathStore,
 chunks: ChunkAllocator,
 
 pub fn init(
@@ -82,7 +81,6 @@ pub fn init(
         .snapshot = undefined,
         .workers = undefined,
         .timer = null,
-        .paths = undefined,
         .chunks = undefined,
     };
 
@@ -91,11 +89,9 @@ pub fn init(
     self.actions = .init(&self.action_buffer);
     self.updates = .init(&self.updates_buffer);
 
-    try self.paths.init(gpa, 1024 * 1024 * 1024);
-    errdefer self.paths.deinit(gpa);
-
     try self.chunks.init(gpa, &.{
         .{ 1024 * 1024 * 1024, RANGE_NODE_SIZE },
+        .{ 1024 * 1024 * 1024, CHUNK_SIZE },
     });
     errdefer self.chunks.deinit(gpa);
 
@@ -114,7 +110,6 @@ pub fn deinit(self: *Scanner) void {
     self.actions.close(self.io);
     self.clearUpdates();
     self.snapshot.deinit();
-    self.paths.deinit(self.gpa);
     self.chunks.deinit(self.gpa);
 }
 
@@ -201,7 +196,7 @@ fn initialScan(
         .{},
     );
 
-    const path = self.paths.put(self.snapshot.root_name, 0, self.chunks.allocator());
+    const path: ChunkedPath = .new(self.snapshot.root_name, 0, self.chunks.allocator());
 
     self.snapshot.insert(
         path,
@@ -481,8 +476,8 @@ fn scanDir(
 ) !void {
     const dir = bkl: {
         if (job.fd) |fd| {
-            const basename = job.path.basename(buffer);
-            break :bkl try fd.dir.openDir(self.io, basename, .{ .follow_symlinks = false, .iterate = true });
+            const len = job.path.basename(buffer);
+            break :bkl try fd.dir.openDir(self.io, buffer[0..len], .{ .follow_symlinks = false, .iterate = true });
         }
 
         break :bkl try Io.Dir.openDirAbsolute(self.io, self.snapshot.abs_root, .{ .follow_symlinks = false, .iterate = true });
@@ -537,11 +532,11 @@ fn scanDir(
         @memcpy(suffix_buf[1 .. 1 + name.len], name);
         const suffix = suffix_buf[0 .. 1 + name.len];
 
-        const path: ChunkedPath = self.paths.append(parent_path, suffix, 1, self.chunks.allocator());
+        const path: ChunkedPath = .extend(parent_path, suffix, 1, self.chunks.allocator());
 
         var path_buf: [MAX_PATH_LEN]u8 = undefined;
-        const relative = path.path(&path_buf);
-        const ignored = isIgnored(effective_ignore, relative, name, is_dir);
+        const len = path.read(&path_buf);
+        const ignored = isIgnored(effective_ignore, path_buf[0..len], name, is_dir);
 
         self.workers.pushEntry(path, .{
             .inode = entry.meta.inode,
