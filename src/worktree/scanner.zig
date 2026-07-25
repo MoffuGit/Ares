@@ -15,7 +15,7 @@ const chunk_pool = @import("../chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const ChunkedPathStore = @import("../chunked_path.zig");
 const ChunkedPath = ChunkedPathStore.ChunkedPath;
-const INLINE_NODE_SIZE = ChunkedPathStore.INLINE_NODE_SIZE;
+const RANGE_NODE_SIZE = ChunkedPathStore.RANGE_NODE_SIZE;
 const contants = @import("../contants.zig");
 const MAX_PATH_LEN = contants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
@@ -95,7 +95,7 @@ pub fn init(
     errdefer self.paths.deinit(gpa);
 
     try self.chunks.init(gpa, &.{
-        .{ 1024 * 1024, INLINE_NODE_SIZE },
+        .{ 4 * 1024 * 1024, RANGE_NODE_SIZE },
     });
     errdefer self.chunks.deinit(gpa);
 

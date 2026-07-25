@@ -9,10 +9,7 @@ const chunk_pool = @import("../chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const ChunkedPathStore = @import("../chunked_path.zig");
 const ChunkedPath = ChunkedPathStore.ChunkedPath;
-const INLINE_NODE_SIZE = ChunkedPathStore.INLINE_NODE_SIZE;
 const contants = @import("../contants.zig");
-const SIMD_CHUNK_BYTES = contants.SIMD_CHUNK_BYTES;
-const INLINE_CHUNKS = contants.INLINE_CHUNKS;
 const MAX_PATH_LEN = contants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
 const btree = datastruct.btree;
@@ -104,7 +101,6 @@ pub fn clone(self: *const Snapshot, gpa: Allocator) !Snapshot {
 
     try copy.chunks.init(arena, &.{
         .{ 1024 * 1024, NODE_SIZE },
-        .{ 1024 * 1024, INLINE_NODE_SIZE },
     });
     copy.entries = try self.entries.clone(copy.chunks.allocator());
 

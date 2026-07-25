@@ -7,13 +7,13 @@ const queue = @import("queue.zig");
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
 
-const MemMapRng = struct {
+pub const MemMapRng = struct {
     vaddr_range: math.Rngu64,
     base: [*]u8,
     next: ?*MemMapRng = null,
 };
 
-const MemMap = struct {
+pub const MemMap = struct {
     ranges: queue.Queue(MemMapRng) = .{},
 
     pub fn push(self: *MemMap, vaddr_range: math.Rngu64, base: *anyopaque, alloc: Allocator) !void {
@@ -23,7 +23,7 @@ const MemMap = struct {
         self.ranges.push(range);
     }
 
-    pub fn read(self: *MemMap, range: math.Rngu64, dest: []u8) u64 {
+    pub fn read(self: *const MemMap, range: math.Rngu64, dest: []u8) u64 {
         var dest_vaddr = range.min;
         while (true) {
             var found = false;
@@ -51,7 +51,7 @@ const MemMap = struct {
         return dest_vaddr - range.min;
     }
 
-    pub fn slice(self: *MemMap, range: math.Rngu64, alloc: Allocator) ![]u8 {
+    pub fn slice(self: *const MemMap, range: math.Rngu64, alloc: Allocator) ![]u8 {
         const buffer = try alloc.alloc(u8, range.dim());
         _ = self.read(range, buffer);
         return buffer;
