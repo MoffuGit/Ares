@@ -127,7 +127,6 @@ pub const Task = struct {
     pool: *Tasks,
     completion: Completion = .noop,
     context: *anyopaque,
-    next: ?*Task = null,
 
     pub fn destroy(self: *Task) void {
         self.pool.destroy(self.id);

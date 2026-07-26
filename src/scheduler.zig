@@ -14,6 +14,7 @@ const MAX_SIZE = constants.MAX_SIZE;
 const datastruct = @import("datastruct.zig");
 const MultiMpsc = datastruct.MultiMpsc;
 const Loop = @import("loop.zig");
+const Completion = Loop.Completion;
 const Tasks = @import("tasks.zig");
 const Task = Tasks.Task;
 const TaskId = Tasks.TaskId;
@@ -104,9 +105,9 @@ pub const Scheduler = struct {
 
 const Queues = union(enum) {
     cancelations: Tasks.Cancelation,
-    completions: Task,
-    timers: Task,
-    submissions: Task,
+    completions: Completion,
+    timers: Completion,
+    submissions: Completion,
 };
 
 pub const BackgroundScheduler = struct {
@@ -174,14 +175,14 @@ pub const BackgroundScheduler = struct {
                 self.tasks.destroy_cancelation(cancelation);
             }
         }
-        while (self.queues.pop(.completions)) |task| {
-            self.loop.complete(&task.completion);
+        while (self.queues.pop(.completions)) |completion| {
+            self.loop.complete(completion);
         }
-        while (self.queues.pop(.timers)) |task| {
-            self.loop.submit_timer(&task.completion);
+        while (self.queues.pop(.timers)) |completion| {
+            self.loop.submit_timer(completion);
         }
-        while (self.queues.pop(.submissions)) |task| {
-            self.loop.submit(&task.completion);
+        while (self.queues.pop(.submissions)) |completion| {
+            self.loop.submit(completion);
         }
     }
 
@@ -193,7 +194,7 @@ pub const BackgroundScheduler = struct {
         const task = self.tasks.create();
 
         task.@"defer"(function, context);
-        self.queues.push(.completions, task);
+        self.queues.push(.completions, &task.completion);
 
         return .{ .scheduler = self, .id = task.id };
     }
@@ -206,7 +207,7 @@ pub const BackgroundScheduler = struct {
         const task = self.tasks.create();
         const waker = try task.await(function, context);
 
-        self.queues.push(.submissions, task);
+        self.queues.push(.submissions, &task.completion);
 
         return .{
             Cancelation{ .id = task.id, .scheduler = self },
@@ -223,7 +224,7 @@ pub const BackgroundScheduler = struct {
         const task = self.tasks.create();
 
         task.timer(function, context, ms);
-        self.queues.push(.timers, task);
+        self.queues.push(.timers, &task.completion);
 
         return .{ .scheduler = self, .id = task.id };
     }
@@ -283,7 +284,7 @@ pub const BackgroundScheduler = struct {
             }
         };
         const waker = try task.await(TypeErased.callback, .{ self, ptr, task, args });
-        self.queues.push(.submissions, task);
+        self.queues.push(.submissions, &task.completion);
 
         return .{
             .ptr = ptr,
