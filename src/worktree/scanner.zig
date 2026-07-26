@@ -141,10 +141,8 @@ pub fn handleActions(
     };
 
     self._handleActions(ctx, waker) catch |err| {
-        self.deinit();
-
         std.log.err("Worktree Scanner err={}", .{err});
-        return false;
+        return true;
     };
 
     return true;
