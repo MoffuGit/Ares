@@ -22,6 +22,7 @@ const datastruct = @import("../datastruct.zig");
 const Queue = datastruct.Queue;
 const Mpsc = datastruct.Mpsc;
 const StealingQueue = datastruct.StealingQueue;
+const global = @import("../global.zig");
 const sch = @import("../scheduler.zig");
 const BackgroundScheduler = sch.BackgroundScheduler;
 const Executor = BackgroundScheduler.Executor;
@@ -32,6 +33,7 @@ const attr = @import("attr.zig");
 const BulkAttr = attr.BulkAttr;
 const Snapshot = @import("snapshot.zig");
 
+const state = &global.state;
 const UPDATE_INTERVAL: Io.Duration = .fromMilliseconds(100);
 
 const Scanner = @This();
@@ -213,9 +215,7 @@ fn initialScan(
     try self.updates.putOne(self.io, .started);
     try waker.wake();
 
-    const cpu_count = try std.Thread.getCpuCount();
-
-    try self.workers.start(self.gpa, @intCast(cpu_count));
+    try self.workers.start(self.gpa, @intCast(state.cpu_count));
     errdefer self.workers.deinit();
 
     self.timer = try ctx.scheduler.timer(timerCallback, .{ self, waker }, @intCast(UPDATE_INTERVAL.toMilliseconds()));
@@ -223,7 +223,7 @@ fn initialScan(
     const root_job = self.workers.createJob(path, null, null);
     self.workers.pushJob(0, root_job);
 
-    for (0..cpu_count) |i| {
+    for (0..state.cpu_count) |i| {
         try self.workers.group.concurrent(
             self.io,
             Scanner.scan,
@@ -447,14 +447,12 @@ pub fn _scan(
     worker_id: u32,
     ctx: Context,
 ) !void {
-    const arena = self.workers.arena.allocator();
-    const buffer = try arena.alignedAlloc(u8, .@"8", 64 * 1024);
-    const ignore_buffer = try arena.alloc(u8, 1024 * 1024);
+    var buffer: [64 * 1024]u8 = undefined;
 
     while (self.workers.popJob(worker_id)) |job| {
         defer self.workers.finishJob(job);
 
-        try self.scanDir(job, worker_id, buffer, ignore_buffer);
+        try self.scanDir(job, worker_id, &buffer);
 
         if (self.workers.done()) {
             @branchHint(.unlikely);
@@ -469,8 +467,7 @@ fn scanDir(
     self: *Scanner,
     job: *Job,
     worker_id: u32,
-    buffer: []align(8) u8,
-    ignore_buffer: []u8,
+    buffer: []u8,
 ) !void {
     const dir = bkl: {
         if (job.fd) |fd| {
@@ -485,7 +482,7 @@ fn scanDir(
     const arena = self.workers.arena.allocator();
     var effective_ignore: ?*const IgnoreNode = job.ignore;
     {
-        const content = dir.readFile(self.io, ".gitignore", ignore_buffer) catch null;
+        const content = dir.readFile(self.io, ".gitignore", buffer) catch null;
 
         if (content) |src| {
             const gi = try GitIgnore.parse(arena, src);

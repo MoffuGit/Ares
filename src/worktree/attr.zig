@@ -95,7 +95,7 @@ pub const AttError = error{
 
 pub const BulkAttr = if (!supported) struct {} else struct {
     fd: std.c.fd_t,
-    buf: []align(8) u8,
+    buf: []u8,
     alist: AttrList,
     mask: Mask,
     /// Entries remaining in the current batch.
@@ -105,7 +105,7 @@ pub const BulkAttr = if (!supported) struct {} else struct {
     /// call means "unsupported filesystem"; later it would be a real error.
     primed: bool = false,
 
-    pub fn init(fd: std.c.fd_t, buf: []align(8) u8, mask: Mask) BulkAttr {
+    pub fn init(fd: std.c.fd_t, buf: []u8, mask: Mask) BulkAttr {
         // TODO unify the mask so we do not need to recreate it & make the mask
         var common: u32 = ATTR_CMN_RETURNED_ATTRS | ATTR_CMN_ERROR | ATTR_CMN_NAME | ATTR_CMN_OBJTYPE;
         if (mask.btime) common |= ATTR_CMN_CRTIME;

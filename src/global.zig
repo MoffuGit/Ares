@@ -1,6 +1,8 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const process = std.process;
+const Io = std.Io;
+const Allocator = std.mem.Allocator;
+const builtin = @import("builtin");
 
 pub var state: GlobalState = undefined;
 
@@ -14,8 +16,9 @@ var safe_allocator: std.heap.DebugAllocator(.{}) = .init;
 const GlobalState = struct {
     const Self = @This();
 
-    gpa: std.mem.Allocator,
-    threaded: std.Io.Threaded,
+    gpa: Allocator,
+    threaded: Io.Threaded,
+    cpu_count: usize,
 
     pub fn init(self: *Self, args: process.Args.Vector, environ: process.Environ.Block) !void {
         const gpa = if (use_safe_allocator)
@@ -25,9 +28,12 @@ const GlobalState = struct {
         else
             comptime unreachable;
 
+        const cpu_count = try std.Thread.getCpuCount();
+
         const threaded: std.Io.Threaded = .init(gpa, .{
             .argv0 = .init(.{ .vector = args }),
             .environ = .{ .block = environ },
+            .concurrent_limit = Io.Limit.limited(cpu_count * 2),
         });
 
         std.log.info("odyssey zig version={}", .{builtin.zig_version});
@@ -36,6 +42,7 @@ const GlobalState = struct {
         self.* = .{
             .gpa = gpa,
             .threaded = threaded,
+            .cpu_count = cpu_count,
         };
     }
 

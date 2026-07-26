@@ -11,6 +11,7 @@ const App = @import("../app.zig");
 const Entity = App.Entity;
 const contants = @import("../contants.zig");
 const MAX_PATH_LEN = contants.MAX_PATH_LEN;
+const global = @import("../global.zig");
 const Worktree = @import("../worktree.zig");
 const Snapshot = @import("../worktree/snapshot.zig");
 
@@ -20,8 +21,11 @@ pub fn observe(app: *App, worktree: Entity(Worktree), scanning: *bool) bool {
 }
 
 test "Worktree Bench" {
-    const gpa = std.heap.c_allocator;
-    const io = testing.io;
+    try global.state.init(&.{}, .empty);
+    defer global.state.deinit();
+
+    const gpa = global.state.gpa;
+    const io = global.state.threaded.io();
 
     var app: App = undefined;
     try app.init(.{}, gpa, io);
