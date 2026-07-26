@@ -16,15 +16,14 @@ const builtin = @import("builtin");
 const datastruct = @import("datastruct.zig");
 const MultiQueue = datastruct.MultiQueue;
 const heap = datastruct.heap;
-const Queue = datastruct.Queue;
 
-const Queues = union(enum) {
+const Queues = MultiQueue(union(enum) {
     timers: Completion,
-    cancellations: Completion,
     canceling: Completion,
     submissions: Completion,
     completions: Completion,
-};
+    cancellations: Completion,
+});
 
 pub const Loop = @This();
 
@@ -32,7 +31,7 @@ kq: posix.fd_t,
 
 time: Time,
 
-queues: MultiQueue(Queues),
+queues: Queues,
 timers: heap.Intrusive(Timer, void, Timer.less),
 inflight: usize,
 stopped: bool,
@@ -162,7 +161,7 @@ pub fn flush_timers(self: *Loop) void {
 }
 
 pub fn flush_completions(self: *Loop) void {
-    var defered: Queue(Completion) = .{};
+    var defered: datastruct.Queue(Completion) = .{};
 
     while (self.queues.pop(.completions)) |completion| {
         assert(completion.state == .completed);
@@ -305,11 +304,7 @@ pub fn mach(
     context: anytype,
     data: MachPort,
 ) void {
-    completion.mach(
-        function,
-        context,
-        data,
-    );
+    completion.mach(function, context, data);
     self.submit(completion);
 }
 
@@ -379,6 +374,35 @@ pub const Completion = struct {
         return false;
     }
 
+    pub fn set(
+        completion: *Completion,
+        callback: anytype,
+        context: anytype,
+        comptime op_tag: meta.Tag(Operation),
+        op_data: @FieldType(Operation, @tagName(op_tag)),
+        resolver: anytype,
+    ) void {
+        const Context = @TypeOf(context);
+
+        const TypeErased = struct {
+            fn complete(_: *Loop, _completion: *Completion) bool {
+                if (_completion.result == null) {
+                    _completion.result = @call(.always_inline, resolver, .{@field(_completion.operation, @tagName(op_tag))});
+                }
+
+                const _context: Context = @ptrCast(@alignCast(_completion.context));
+                return @call(.always_inline, callback, .{ _context, _completion, _completion.result.? });
+            }
+        };
+
+        completion.* = .{
+            .state = .idle,
+            .operation = @unionInit(Operation, @tagName(op_tag), op_data),
+            .context = context,
+            .callback = TypeErased.complete,
+        };
+    }
+
     pub fn canceled(self: *Completion) void {
         self.state = .completed;
         switch (self.operation) {
@@ -391,7 +415,10 @@ pub const Completion = struct {
 
     pub fn kevent(self: *Completion, event: *Kevent) void {
         switch (self.operation) {
-            .cancel, .noop, .@"defer", .timer => panic("{s} operation reached the submissions queueu", .{@tagName(self.operation)}),
+            .cancel, .noop, .@"defer", .timer => panic(
+                "{s} operation reached the submissions queueu",
+                .{@tagName(self.operation)},
+            ),
             .machport => |m| {
                 const buffer: []u8 = switch (m.buffer) {
                     .slice => |slice| slice,
@@ -404,10 +431,7 @@ pub const Completion = struct {
                     .fflags = @bitCast(std.c.MACH.RCV{ .MSG = true }),
                     .data = 0,
                     .udata = @intFromPtr(self),
-                    .ext = .{
-                        @intFromPtr(buffer.ptr),
-                        buffer.len,
-                    },
+                    .ext = .{ @intFromPtr(buffer.ptr), buffer.len },
                 };
             },
         }
@@ -492,35 +516,6 @@ pub const Completion = struct {
             .context = context,
             .callback = TypeErased.complete,
             .state = .idle,
-        };
-    }
-
-    pub fn set(
-        completion: *Completion,
-        callback: anytype,
-        context: anytype,
-        comptime op_tag: meta.Tag(Operation),
-        op_data: @FieldType(Operation, @tagName(op_tag)),
-        resolver: anytype,
-    ) void {
-        const Context = @TypeOf(context);
-
-        const TypeErased = struct {
-            fn complete(_: *Loop, _completion: *Completion) bool {
-                if (_completion.result == null) {
-                    _completion.result = @call(.always_inline, resolver, .{@field(_completion.operation, @tagName(op_tag))});
-                }
-
-                const _context: Context = @ptrCast(@alignCast(_completion.context));
-                return @call(.always_inline, callback, .{ _context, _completion, _completion.result.? });
-            }
-        };
-
-        completion.* = .{
-            .state = .idle,
-            .operation = @unionInit(Operation, @tagName(op_tag), op_data),
-            .context = context,
-            .callback = TypeErased.complete,
         };
     }
 
