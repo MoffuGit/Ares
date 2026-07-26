@@ -92,10 +92,12 @@ pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *co
         pub fn deinit(self: *Self) void {
             var outer = self.subscribers.iter();
             while (outer.next()) |entry| {
-                if (self.subscribers.get_ref(entry.key)) |maybe_subscribers| if (maybe_subscribers.*) |*subscribers| {
-                    self.destroyContexts(subscribers);
-                    subscribers.deinit(self.chunk);
-                };
+                if (self.subscribers.get_ref(entry.key)) |maybe_subscribers| {
+                    if (maybe_subscribers.*) |*subscribers| {
+                        self.destroyContexts(subscribers);
+                        subscribers.deinit(self.chunk);
+                    }
+                }
             }
             self.subscribers.deinit(self.chunk);
             self.clearDrops();
