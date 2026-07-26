@@ -120,8 +120,8 @@ pub const EntityStore = struct {
         return self.entities.put(ptr) catch @panic("Entities Overflow");
     }
 
-    pub fn get(self: *@This(), comptime T: type, entity: Entity(T)) *T {
-        const ptr = self.entities.get(entity.id()) orelse @panic("Reading non existing entity");
+    pub fn get(self: *@This(), comptime T: type, id: EntityId) *T {
+        const ptr = self.entities.get(id) orelse @panic("Reading non existing entity");
         return @ptrCast(@alignCast(ptr.*));
     }
 
@@ -179,8 +179,8 @@ test "entity store returns inserted data and rejects wrong type" {
     const id = store.insert(ptr);
     const entity: Entity(A) = .init(&store, id);
 
-    try std.testing.expectEqual(ptr, store.get(A, entity));
-    try std.testing.expectEqual(@as(u32, 42), store.get(A, entity).value);
+    try std.testing.expectEqual(ptr, store.get(A, entity.id()));
+    try std.testing.expectEqual(@as(u32, 42), store.get(A, entity.id()).value);
 }
 
 test "closing entity records id and type when ref count reaches zero" {

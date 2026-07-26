@@ -137,13 +137,13 @@ pub fn update_frame(self: *App, comptime T: type, entity: Entity(T)) struct { *T
     self.start_update();
     self.entities.start_update(entity.any.id);
 
-    const ptr = self.entities.get(T, entity);
+    const ptr = self.entities.get(T, entity.id());
 
     return .{ ptr, .{ .any = entity.any, .app = self } };
 }
 
 pub fn read_entity(self: *App, comptime T: type, entity: Entity(T)) *const T {
-    return self.entities.get(T, entity);
+    return self.entities.get(T, entity.id());
 }
 
 pub fn notify(self: *App, entity: anytype) void {
