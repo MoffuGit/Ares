@@ -329,7 +329,7 @@ pub fn observe(
     const TypeErased = struct {
         fn _callback(app: *App, id: EntityId, _args: Args) bool {
             const observed = AnyEntity.init(&app.entities, id, TypeInfo.init(T));
-            const _entity = observed.into(T) orelse return false;
+            const _entity = _Entity.from(observed) orelse return false;
             return @call(.always_inline, function, .{ app, _entity } ++ _args);
         }
 
@@ -400,7 +400,7 @@ pub fn Context(comptime T: type) type {
                     any: AnyEntity,
                     _args: Args,
                 ) bool {
-                    const _entity = any.into(T) orelse return false;
+                    const _entity = _Entity.from(any) orelse return false;
 
                     const ctx: Context(T) = .new(app, _entity);
 
@@ -432,7 +432,7 @@ pub fn Context(comptime T: type) type {
                     any: AnyEntity,
                     _args: Args,
                 ) bool {
-                    const _entity = any.into(T) orelse return false;
+                    const _entity = _Entity.from(any) orelse return false;
 
                     const ctx: Context(T) = .new(app, _entity);
 
@@ -453,7 +453,7 @@ pub fn Context(comptime T: type) type {
             const TypeErased = struct {
                 pub fn @"defer"(any: AnyEntity, app: *App, _args: Args, res: anyerror!void) bool {
                     res catch return false;
-                    const _entity = any.into(T) orelse return false;
+                    const _entity = _Entity.from(any) orelse return false;
 
                     const ctx: Context(T) = .new(app, _entity);
 
@@ -468,7 +468,7 @@ pub fn Context(comptime T: type) type {
             const TypeErased = struct {
                 pub fn async(any: AnyEntity, app: *App, _args: Args, res: anyerror!void) bool {
                     res catch return false;
-                    const _entity = any.into(T) orelse return false;
+                    const _entity = _Entity.from(any) orelse return false;
 
                     const ctx: Context(T) = .new(app, _entity);
 

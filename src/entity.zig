@@ -29,15 +29,6 @@ pub const AnyEntity = struct {
         return .{ .store = store, .id = id, .type_id = type_id };
     }
 
-    pub fn into(self: @This(), T: type) ?Entity(T) {
-        assert(self.type_id == TypeInfo.init(T));
-        if (!self.store.entities.contains(self.id)) return null;
-
-        return .{
-            .any = self,
-        };
-    }
-
     pub fn drop(self: @This()) void {
         if (self.store.entities.get(self.id)) |ptr| {
             self.type_id.drop(ptr.*);
@@ -54,6 +45,15 @@ pub fn Entity(comptime T: type) type {
 
         pub fn new(app: *App, args: anytype) !@This() {
             return try app.new(T, T.init, args);
+        }
+
+        pub fn from(any: AnyEntity) ?@This() {
+            assert(any.type_id == TypeInfo.init(T));
+            if (!any.store.entities.contains(any.id)) return null;
+
+            return .{
+                .any = any,
+            };
         }
 
         pub fn update(self: @This(), app: *App) struct { *T, UpdateFrame } {
