@@ -19,13 +19,30 @@ const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
 const sch = @import("scheduler.zig");
 const BackgroundScheduler = sch.BackgroundScheduler;
-const Scheduler = sch.Scheduler;
-const Waker = sch.Waker;
 const Executor = BackgroundScheduler.Executor;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
+const Loop = @import("loop.zig");
+const Tasks = @import("tasks.zig");
+const TaskId = Tasks.TaskId;
+
+pub const Waker = struct {
+    waker: Tasks.Waker,
+    options: App.Options,
+    cancelation: App.Cancelation,
+
+    pub fn wake(self: *const Waker) !void {
+        try self.waker.wake();
+        self.options.wakeup_cb(self.options.userdata);
+    }
+
+    pub fn close(self: *const Waker) void {
+        self.cancelation.cancel();
+        self.waker.close();
+    }
+};
 
 pub const Options = struct {
     fn noop(_: *anyopaque) void {}
@@ -45,7 +62,9 @@ observers: Observers,
 chunks: ChunkAllocator,
 peding_updates: u16,
 
-scheduler: sch.Scheduler,
+tasks: Tasks,
+loop: Loop,
+
 background_scheduler: BackgroundScheduler,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
@@ -56,8 +75,9 @@ options: Options,
 
 pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     self.* = .{
+        .tasks = undefined,
+        .loop = undefined,
         .options = options,
-        .scheduler = undefined,
         .notifications = undefined,
         .entities = undefined,
         .observers = undefined,
@@ -78,16 +98,17 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     try self.listeners.init(self.chunks.allocator());
     try self.entities.init(arena, 100);
     try self.notifications.init(self.chunks.allocator());
+    try self.tasks.init(arena, self.chunks.allocator(), io);
 
     try self.background_scheduler.init(arena, io);
     errdefer self.background_scheduler.deinit();
 
-    try self.scheduler.init(options, arena, self.chunks.allocator(), io);
-    errdefer self.scheduler.deinit();
+    try self.loop.init(io);
+    errdefer self.loop.deinit();
 }
 
 pub fn deinit(self: *App) void {
-    self.scheduler.deinit();
+    self.loop.deinit();
     self.background_scheduler.deinit();
     self.events.deinit(self.gpa);
     self.arena.deinit();
@@ -171,18 +192,10 @@ pub fn end_update(self: *App) void {
 }
 
 pub fn flush(self: *App) void {
-    self.scheduler.run() catch @panic("Scheduler run Error");
+    self.loop.run(.no_wait) catch @panic("Loop run Error");
     self.destroy_dropped_entities();
     self.flush_notifications();
     self.flush_events();
-}
-
-pub fn @"defer"(self: *App, function: anytype, args: anytype) Scheduler.Cancelation {
-    return self.scheduler.@"defer"(function, args);
-}
-
-pub fn await(self: *App, function: anytype, args: anytype) !Waker {
-    return try self.scheduler.await(function, args);
 }
 
 pub fn flush_notifications(self: *App) void {
@@ -435,7 +448,7 @@ pub fn Context(comptime T: type) type {
             return try self.app.observe(entity, TypeErased.callback, .{ self.entity.any, args });
         }
 
-        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) Scheduler.Cancelation {
+        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) App.Cancelation {
             const Args = @TypeOf(args);
             const TypeErased = struct {
                 pub fn @"defer"(any: AnyEntity, app: *App, _args: Args, res: anyerror!void) bool {
@@ -482,6 +495,50 @@ pub fn Context(comptime T: type) type {
         }
     };
 }
+
+pub fn @"defer"(
+    self: *App,
+    function: anytype,
+    context: anytype,
+) Cancelation {
+    const task = self.tasks.create();
+    task.@"defer"(function, context);
+
+    self.loop.complete(&task.completion);
+
+    return .{ .id = task.id, .app = self };
+}
+
+pub fn await(
+    self: *App,
+    function: anytype,
+    context: anytype,
+) !Waker {
+    const task = self.tasks.create();
+    const waker = try task.await(function, context);
+
+    self.loop.submit(&task.completion);
+
+    return .{
+        .waker = waker,
+        .options = self.options,
+        .cancelation = .{
+            .id = task.id,
+            .app = self,
+        },
+    };
+}
+
+pub const Cancelation = struct {
+    id: TaskId,
+    app: *App,
+
+    pub fn cancel(self: *const Cancelation) void {
+        if (self.app.tasks.cancelation(self.id)) |can| {
+            self.app.loop.cancel(&can.completion);
+        }
+    }
+};
 
 test "creates/drops entities" {
     const testing = std.testing;

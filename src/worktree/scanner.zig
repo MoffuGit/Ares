@@ -134,7 +134,7 @@ pub fn clearUpdates(self: *Scanner) void {
 pub fn handleActions(
     self: *Scanner,
     ctx: Context,
-    waker: sch.Waker,
+    waker: App.Waker,
     res: anyerror!void,
 ) bool {
     res catch {
@@ -153,7 +153,7 @@ pub fn handleActions(
 fn _handleActions(
     self: *Scanner,
     ctx: Context,
-    waker: sch.Waker,
+    waker: App.Waker,
 ) !void {
     while (self.workers.popEntry()) |entry| {
         self.snapshot.insert(entry.path, entry.meta);
@@ -186,7 +186,7 @@ fn _handleActions(
 
 fn initialScan(
     self: *Scanner,
-    waker: sch.Waker,
+    waker: App.Waker,
     ctx: Context,
 ) !void {
     const stat = try Io.Dir.statFile(
@@ -232,7 +232,7 @@ fn initialScan(
     }
 }
 
-fn timerCallback(self: *Scanner, waker: sch.Waker, res: anyerror!void) bool {
+fn timerCallback(self: *Scanner, waker: App.Waker, res: anyerror!void) bool {
     res catch return false;
 
     if (!self.workers.working) return false;
@@ -245,7 +245,7 @@ fn timerCallback(self: *Scanner, waker: sch.Waker, res: anyerror!void) bool {
     return true;
 }
 
-fn _timerCallback(self: *Scanner, waker: sch.Waker) !void {
+fn _timerCallback(self: *Scanner, waker: App.Waker) !void {
     try self.updates.putOne(self.io, .{
         .updated = .{
             .scanning = true,

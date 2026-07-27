@@ -12,7 +12,6 @@ const Context = App.Context;
 const sch = @import("scheduler.zig");
 const BackgroundScheduler = sch.BackgroundScheduler;
 const Executor = BackgroundScheduler.Executor;
-const Scheduler = sch.Scheduler;
 const Scanner = @import("worktree/scanner.zig");
 const Updates = Scanner.Updates;
 const Snapshot = @import("worktree/snapshot.zig");
@@ -28,7 +27,7 @@ gpa: Allocator,
 scanning: bool,
 snapshot: Snapshot,
 scanner: Executor(Scanner),
-waker: sch.Waker,
+waker: App.Waker,
 
 pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !void {
     self.* = .{
