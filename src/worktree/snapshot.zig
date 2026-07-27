@@ -9,8 +9,8 @@ const chunk_pool = @import("../chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const ChunkedPathStore = @import("../chunked_path.zig");
 const ChunkedPath = ChunkedPathStore.ChunkedPath;
-const contants = @import("../contants.zig");
-const MAX_PATH_LEN = contants.MAX_PATH_LEN;
+const constants = @import("../constants.zig");
+const MAX_PATH_LEN = constants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
 const btree = datastruct.btree;
 

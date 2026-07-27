@@ -7,7 +7,7 @@ const math = std.math;
 
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkPool = chunk_pool.ChunkPool;
-const constans = @import("contants.zig");
+const constans = @import("constants.zig");
 const SIMD_CHUNK_BYTES = constans.SIMD_CHUNK_BYTES;
 const MAX_PATH_LEN = constans.MAX_PATH_LEN;
 const datastruct = @import("datastruct.zig");
@@ -568,7 +568,7 @@ test "cmp matches std.mem.order on random paths" {
         "0123456789abcdef" ++ "GHIJKLMNOPQRSTUV" ++ "WXYZabcdefghijkl" ++ "mnopqrstuvwxyzAB" ++ "cDEFGHIJKLMNOPQR",
         "src/chunked_string.zig",
         "src/chunk_pool.zig",
-        "src/contants.zig",
+        "src/constants.zig",
         "build.zig",
         "z",
         "src/worktree/snapshot.zig",

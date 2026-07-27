@@ -9,8 +9,8 @@ const zlob = @import("zlob");
 
 const App = @import("../app.zig");
 const Entity = App.Entity;
-const contants = @import("../contants.zig");
-const MAX_PATH_LEN = contants.MAX_PATH_LEN;
+const constants = @import("../constants.zig");
+const MAX_PATH_LEN = constants.MAX_PATH_LEN;
 const global = @import("../global.zig");
 const Worktree = @import("../worktree.zig");
 const Snapshot = @import("../worktree/snapshot.zig");

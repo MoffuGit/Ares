@@ -5,7 +5,7 @@ const assert = debug.assert;
 const panic = debug.panic;
 
 const ChunkAllocator = @import("chunk_pool.zig").ChunkAllocator;
-const constants = @import("contants.zig");
+const constants = @import("constants.zig");
 const MAX_ALIGN = constants.MAX_ALIGN;
 const MAX_SIZE = constants.MAX_SIZE;
 const datastruct = @import("datastruct.zig");

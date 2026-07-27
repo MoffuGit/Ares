@@ -1,7 +1,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
-const constants = @import("contants.zig");
+const constants = @import("constants.zig");
 const MAX_ALIGN = constants.MAX_ALIGN;
 
 pub const TypeInfo = struct {

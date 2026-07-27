@@ -4,7 +4,7 @@ const Io = std.Io;
 
 const zqlite = @import("zqlite");
 
-const constanst = @import("contants.zig");
+const constanst = @import("constants.zig");
 const DB_NAME = constanst.DB_NAME;
 const global = @import("global.zig");
 const os = @import("os.zig");

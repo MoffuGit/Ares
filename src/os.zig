@@ -5,7 +5,7 @@ const builtin = @import("builtin");
 
 const objc = @import("objc");
 
-const constants = @import("contants.zig");
+const constants = @import("constants.zig");
 const BUNDLE_ID = constants.BUNDLE_ID;
 
 //Source: https://github.com/ghostty-org/ghostty.git

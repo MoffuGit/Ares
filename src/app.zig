@@ -8,7 +8,7 @@ const heap = std.heap;
 
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
-const constants = @import("contants.zig");
+const constants = @import("constants.zig");
 const MAX_SIZE = constants.MAX_SIZE;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;

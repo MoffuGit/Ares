@@ -8,7 +8,7 @@ const panic = debug.panic;
 const atomic = std.atomic;
 const builtin = @import("builtin");
 
-const constans = @import("contants.zig");
+const constans = @import("constants.zig");
 const MAX_ALIGN = constans.MAX_ALIGN;
 
 const Chunk = opaque {
