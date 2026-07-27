@@ -79,7 +79,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     try self.entities.init(arena, 100);
     try self.notifications.init(self.chunks.allocator());
 
-    try self.background_scheduler.init(options, arena, io);
+    try self.background_scheduler.init(arena, io);
     errdefer self.background_scheduler.deinit();
 
     try self.scheduler.init(options, arena, self.chunks.allocator(), io);

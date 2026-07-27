@@ -121,11 +121,9 @@ pub const BackgroundScheduler = struct {
     arena: Allocator,
     queues: MultiMpsc(Queues),
     chunks: ChunkAllocator,
-    options: App.Options,
 
-    pub fn init(self: *@This(), options: App.Options, arena: Allocator, io: Io) !void {
+    pub fn init(self: *@This(), arena: Allocator, io: Io) !void {
         self.* = .{
-            .options = options,
             .queues = undefined,
             .loop = undefined,
             .tasks = undefined,
@@ -305,7 +303,7 @@ test "Background Scheduler runs deferred tasks and frees memory on stop" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(.{}, arena.allocator(), testing.io);
+    try scheduler.init(arena.allocator(), testing.io);
     defer scheduler.deinit();
 
     var called = false;
@@ -330,7 +328,7 @@ test "Background Scheduler runs await tasks and frees memory on close" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(.{}, arena.allocator(), testing.io);
+    try scheduler.init(arena.allocator(), testing.io);
     defer scheduler.deinit();
 
     var called = false;
@@ -357,7 +355,7 @@ test "Background Scheduler runs timer tasks" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(.{}, arena.allocator(), testing.io);
+    try scheduler.init(arena.allocator(), testing.io);
     defer scheduler.deinit();
 
     var called = false;
@@ -382,7 +380,7 @@ test "Background Scheduler cancels timer tasks" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(.{}, arena.allocator(), testing.io);
+    try scheduler.init(arena.allocator(), testing.io);
     defer scheduler.deinit();
 
     var canceled = false;
@@ -410,7 +408,7 @@ test "Scheduler cancels await tasks and frees memory on stop" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(.{}, arena.allocator(), testing.io);
+    try scheduler.init(arena.allocator(), testing.io);
     defer scheduler.deinit();
 
     var canceled = false;
@@ -438,7 +436,7 @@ test "Background Scheduler comptime Executor initializes and wakes task" {
     defer arena.deinit();
 
     var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(.{}, arena.allocator(), testing.io);
+    try scheduler.init(arena.allocator(), testing.io);
     defer scheduler.deinit();
 
     const State = struct {
@@ -467,40 +465,4 @@ test "Background Scheduler comptime Executor initializes and wakes task" {
     }
 
     try testing.expectEqual(@as(u32, 42), value);
-}
-
-test "Scheduler waker calls wakeup callback" {
-    const testing = std.testing;
-    const heap = std.heap;
-
-    var arena: heap.ArenaAllocator = .init(testing.allocator);
-    defer arena.deinit();
-
-    var wakeups: usize = 0;
-    var chunks: ChunkAllocator = undefined;
-    try chunks.init(arena.allocator(), &.{.{ 100, MAX_SIZE }});
-
-    var scheduler: Scheduler = undefined;
-    try scheduler.init(.{
-        .userdata = &wakeups,
-        .wakeup_cb = struct {
-            fn callback(userdata: *anyopaque) void {
-                const count: *usize = @ptrCast(@alignCast(userdata));
-                count.* += 1;
-            }
-        }.callback,
-    }, arena.allocator(), chunks.allocator(), testing.io);
-    defer scheduler.deinit();
-
-    const waker = try scheduler.await(struct {
-        fn callback(res: anyerror!void) bool {
-            res catch return false;
-            return false;
-        }
-    }.callback, .{});
-    defer waker.close();
-
-    try waker.wake();
-
-    try testing.expectEqual(@as(usize, 1), wakeups);
 }

@@ -33,7 +33,6 @@ const GlobalState = struct {
         const threaded: std.Io.Threaded = .init(gpa, .{
             .argv0 = .init(.{ .vector = args }),
             .environ = .{ .block = environ },
-            .concurrent_limit = Io.Limit.limited(cpu_count * 2),
         });
 
         std.log.info("odyssey zig version={}", .{builtin.zig_version});
