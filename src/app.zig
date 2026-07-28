@@ -110,6 +110,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
 }
 
 pub fn deinit(self: *App) void {
+    self.flush();
     self.loop.deinit();
     self.executors.deinit();
     self.events.deinit(self.gpa);

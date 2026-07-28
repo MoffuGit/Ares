@@ -83,6 +83,8 @@ pub const Executors = struct {
         }
 
         self.destroyDroppedEntities();
+        self.flush();
+        self.loop.run(.no_wait) catch return;
     }
 
     fn flush(self: *@This()) void {

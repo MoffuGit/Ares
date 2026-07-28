@@ -15,6 +15,7 @@ pub fn build(b: *std.Build) void {
             optimize,
             "src/test.zig",
         ),
+        .filters = b.args orelse &.{},
     });
     exe_tests.step.dependOn(clone_chromium);
     b.step("test", "Run tests").dependOn(&b.addRunArtifact(exe_tests).step);
