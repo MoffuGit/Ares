@@ -76,10 +76,6 @@ pub fn Entity(comptime T: type) type {
             return .{ .any = .init(store, new_id, TypeInfo.init(T)) };
         }
 
-        pub fn clone(self: @This()) @This() {
-            return .{ .any = self.any.clone() };
-        }
-
         pub fn id(self: *const @This()) EntityId {
             return self.any.id;
         }

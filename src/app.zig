@@ -18,8 +18,8 @@ const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
 const sch = @import("scheduler.zig");
-const BackgroundScheduler = sch.BackgroundScheduler;
-const Executor = BackgroundScheduler.Executor;
+const Executors = sch.Executors;
+const schExecutor = sch.Executor;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
@@ -65,7 +65,7 @@ peding_updates: u16,
 tasks: Tasks,
 loop: Loop,
 
-background_scheduler: BackgroundScheduler,
+executors: Executors,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
@@ -83,7 +83,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .observers = undefined,
         .listeners = undefined,
         .chunks = undefined,
-        .background_scheduler = undefined,
+        .executors = undefined,
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
@@ -93,15 +93,15 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
 
-    try self.chunks.init(arena, &.{ .{ 50, MAX_SIZE }, .{ 50, Observers.NODE_SIZE } });
+    try self.chunks.init(arena, &.{ .{ 50, MAX_SIZE }, .{ 50, Observers.NODE_SIZE }, .{ 50, 2048 } });
     try self.observers.init(self.chunks.allocator());
     try self.listeners.init(self.chunks.allocator());
     try self.entities.init(arena, 100);
     try self.notifications.init(self.chunks.allocator());
     try self.tasks.init(arena, self.chunks.allocator(), io);
 
-    try self.background_scheduler.init(arena, io);
-    errdefer self.background_scheduler.deinit();
+    try self.executors.init(arena, self.chunks.allocator(), io);
+    errdefer self.executors.deinit();
 
     try self.loop.init(io);
     errdefer self.loop.deinit();
@@ -109,7 +109,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
 
 pub fn deinit(self: *App) void {
     self.loop.deinit();
-    self.background_scheduler.deinit();
+    self.executors.deinit();
     self.events.deinit(self.gpa);
     self.arena.deinit();
 }
@@ -136,8 +136,8 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     return entity;
 }
 
-pub fn executor(self: *App, T: type, function: anytype, args: anytype) !Executor(T) {
-    return try self.background_scheduler.executor(T, function, args);
+pub fn executor(self: *App, comptime T: type, args: anytype) !schExecutor(T) {
+    return try schExecutor(T).new(&self.executors, args);
 }
 
 pub const UpdateFrame = struct {
@@ -482,16 +482,11 @@ pub fn Context(comptime T: type) type {
         pub fn executor(
             self: *const @This(),
             E: type,
-            function: anytype,
             args: anytype,
-        ) !Executor(E) {
+        ) !schExecutor(E) {
             return try self
                 .app
-                .executor(E, function, args);
-        }
-
-        pub fn scheduler(self: *const @This()) *BackgroundScheduler {
-            return &self.app.background_scheduler;
+                .executor(E, args);
         }
     };
 }

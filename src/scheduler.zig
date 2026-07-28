@@ -5,6 +5,8 @@ const atomic = std.atomic;
 const builtin = std.builtin;
 const posix = std.posix;
 const system = posix.system;
+const debug = std.debug;
+const assert = debug.assert;
 
 const App = @import("app.zig");
 const chunks_pool = @import("chunk_pool.zig");
@@ -18,6 +20,13 @@ const Completion = Loop.Completion;
 const Tasks = @import("tasks.zig");
 const Task = Tasks.Task;
 const TaskId = Tasks.TaskId;
+const ent = @import("entity.zig");
+const EntityStore = ent.EntityStore;
+const AnyEntity = ent.AnyEntity;
+const typeId = @import("typeId.zig");
+const TypeInfo = typeId.TypeInfo;
+const slotmap = datastruct.slotmap;
+pub const ExecutorId = slotmap.Key;
 
 const Queues = union(enum) {
     cancelations: Tasks.Cancelation,
@@ -26,36 +35,37 @@ const Queues = union(enum) {
     submissions: Completion,
 };
 
-pub const BackgroundScheduler = struct {
+pub const Executors = struct {
+    mutex: Io.Mutex,
+    entities: EntityStore,
+    io: Io,
     tasks: Tasks,
     loop: Loop,
-
-    io: Io,
     future: Io.Future(void),
     stop: atomic.Value(bool) = .init(false),
     stopped: atomic.Value(bool) = .init(false),
-    arena: Allocator,
     queues: MultiMpsc(Queues),
-    chunks: ChunkAllocator,
+    chunks: Allocator,
 
-    pub fn init(self: *@This(), arena: Allocator, io: Io) !void {
+    pub fn init(self: *@This(), arena: Allocator, chunks: Allocator, io: Io) !void {
         self.* = .{
+            .mutex = .init,
+            .entities = undefined,
             .queues = undefined,
             .loop = undefined,
             .tasks = undefined,
             .io = io,
             .future = undefined,
-            .arena = arena,
-            .chunks = undefined,
+            .chunks = chunks,
         };
 
-        self.queues.init();
-        try self.chunks.init(self.arena, &.{ .{ 50, MAX_SIZE }, .{ 10, 4096 } });
-        try self.tasks.init(arena, self.chunks.allocator(), io);
+        try self.entities.init(arena, 100);
+        try self.tasks.init(arena, self.chunks, io);
         try self.loop.init(io);
         errdefer self.loop.deinit();
 
-        self.future = try io.concurrent(BackgroundScheduler.run, .{self});
+        self.future = try io.concurrent(Executors.run, .{self});
+        self.queues.init();
     }
 
     pub fn deinit(self: *@This()) void {
@@ -73,11 +83,14 @@ pub const BackgroundScheduler = struct {
         while (!self.stop.load(.acquire)) {
             self.flush();
             self.loop.run(.no_wait) catch return;
+            self.destroy_dropped_entities();
             self.io.sleep(.fromNanoseconds(100), .real) catch {};
         }
 
+        self.destroy_dropped_entities();
         self.flush();
-        self.loop.run(.until_done) catch return;
+        self.loop.run(.no_wait) catch {};
+        self.loop.run(.until_done) catch {};
         self.stopped.store(true, .release);
     }
 
@@ -110,7 +123,7 @@ pub const BackgroundScheduler = struct {
         task.@"defer"(function, context);
         self.queues.push(.completions, &task.completion);
 
-        return .{ .scheduler = self, .id = task.id };
+        return .{ .executor = self, .id = task.id };
     }
 
     pub fn await(
@@ -124,7 +137,7 @@ pub const BackgroundScheduler = struct {
         self.queues.push(.submissions, &task.completion);
 
         return .{
-            Cancelation{ .id = task.id, .scheduler = self },
+            Cancelation{ .id = task.id, .executor = self },
             waker,
         };
     }
@@ -140,245 +153,170 @@ pub const BackgroundScheduler = struct {
         task.timer(function, context, ms);
         self.queues.push(.timers, &task.completion);
 
-        return .{ .scheduler = self, .id = task.id };
+        return .{ .executor = self, .id = task.id };
     }
 
     pub const Cancelation = struct {
         id: TaskId,
-        scheduler: *BackgroundScheduler,
+        executor: *Executors,
 
         pub fn cancel(self: *const Cancelation) void {
-            if (self.scheduler.tasks.cancelation(self.id)) |can| {
-                self.scheduler.queues.push(.cancelations, can);
+            if (self.executor.tasks.cancelation(self.id)) |can| {
+                self.executor.queues.push(.cancelations, can);
             }
         }
     };
 
-    pub fn Executor(T: type) type {
-        return struct {
-            ptr: *T,
-            waker: Tasks.Waker,
-            cancelation: Cancelation,
+    pub fn new(self: *Executors, comptime T: type, function: anytype, args: anytype) !Executor(T) {
+        const ptr = try self.chunks.create(T);
+        errdefer self.chunks.destroy(ptr);
 
-            pub fn init(self: *@This(), args: anytype) !void {
-                try @call(.always_inline, T.init, .{ self.ptr, self.waker } ++ args);
-            }
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
 
-            pub fn stop(self: *@This()) void {
-                self.cancelation.cancel();
-            }
-        };
+        const id = self.entities.insert(ptr);
+        errdefer self.entities.recycle(id);
+
+        const executor: Executor(T) = .init(self, &self.entities, id, ptr);
+        const ctx: Context(T) = .new(self, executor);
+
+        try @call(.always_inline, function, .{ ptr, ctx } ++ args);
+
+        return executor;
     }
 
-    pub const Context = struct {
-        waker: Tasks.Waker,
-        scheduler: *BackgroundScheduler,
-    };
+    pub fn get(self: *Executors, comptime T: type, executor: Executor(T)) !*T {
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
 
-    pub fn executor(self: *@This(), T: type, function: anytype, args: anytype) !Executor(T) {
-        const Args = @TypeOf(args);
+        return self.entities.get(T, executor.id());
+    }
 
-        const alloc = self.chunks.allocator();
+    fn destroy_dropped_entities(self: *Executors) void {
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
 
-        const ptr = try alloc.create(T);
-        errdefer alloc.destroy(ptr);
-
-        const task = self.tasks.create();
-
-        const TypeErased = struct {
-            fn callback(scheduler: *BackgroundScheduler, _ptr: *T, _task: *Task, _args: Args, res: anyerror!void) bool {
-                const port = _task.completion.operation.machport.port;
-                const rearm = @call(.always_inline, function, .{ _ptr, Context{ .scheduler = scheduler, .waker = .{ .port = port } } } ++ _args ++ .{res});
-                if (!rearm) {
-                    const _alloc = scheduler.chunks.allocator();
-                    _alloc.destroy(_ptr);
-                    _ = system.mach_port_deallocate(system.mach_task_self(), port);
-                }
-                return rearm;
-            }
-        };
-        const waker = try task.await(TypeErased.callback, .{ self, ptr, task, args });
-        self.queues.push(.submissions, &task.completion);
-
-        return .{
-            .ptr = ptr,
-            .waker = waker,
-            .cancelation = .{
-                .scheduler = self,
-                .id = task.id,
-            },
-        };
+        while (self.entities.popDrop()) |drop| {
+            const ptr, const key, const type_info = drop;
+            type_info.deinit(ptr);
+            type_info.destroy(ptr, self.chunks);
+            self.entities.recycle(key);
+        }
     }
 };
 
-test "Background Scheduler runs deferred tasks and frees memory on stop" {
-    const testing = std.testing;
-    const heap = std.heap;
+pub fn Executor(comptime T: type) type {
+    return struct {
+        pub const EntityType = T;
 
-    var arena: heap.ArenaAllocator = .init(testing.allocator);
-    defer arena.deinit();
+        any: AnyEntity,
+        mutex: *Io.Mutex,
+        ptr: *T,
 
-    var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(arena.allocator(), testing.io);
-    defer scheduler.deinit();
-
-    var called = false;
-    _ = try scheduler.@"defer"(struct {
-        fn callback(_called: *bool, res: anyerror!void) bool {
-            res catch return false;
-            _called.* = true;
-            return false;
+        pub fn new(executors: *Executors, args: anytype) !@This() {
+            return try executors.new(T, T.init, args);
         }
-    }.callback, .{&called});
 
-    while (!called) {
-        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
-    }
-}
+        pub fn from(any: AnyEntity, executors: *Executors) ?@This() {
+            assert(any.type_id == TypeInfo.init(T));
+            if (!any.store.entities.contains(any.id)) return null;
 
-test "Background Scheduler runs await tasks and frees memory on close" {
-    const testing = std.testing;
-    const heap = std.heap;
-
-    var arena: heap.ArenaAllocator = .init(testing.allocator);
-    defer arena.deinit();
-
-    var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(arena.allocator(), testing.io);
-    defer scheduler.deinit();
-
-    var called = false;
-    _, const waker = try scheduler.await(struct {
-        fn callback(_called: *bool, res: anyerror!void) bool {
-            res catch return false;
-            _called.* = true;
-            return false;
+            const ptr = any.store.get(T, any.id);
+            return .{
+                .any = any,
+                .mutex = &executors.mutex,
+                .ptr = ptr,
+            };
         }
-    }.callback, .{&called});
 
-    try waker.wake();
-    while (!called) {
-        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
-    }
-    waker.close();
-}
-
-test "Background Scheduler runs timer tasks" {
-    const testing = std.testing;
-    const heap = std.heap;
-
-    var arena: heap.ArenaAllocator = .init(testing.allocator);
-    defer arena.deinit();
-
-    var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(arena.allocator(), testing.io);
-    defer scheduler.deinit();
-
-    var called = false;
-    _ = try scheduler.timer(struct {
-        fn callback(_called: *bool, res: anyerror!void) bool {
-            res catch return false;
-            _called.* = true;
-            return false;
+        pub fn get(self: @This(), executors: *Executors) !*T {
+            return try executors.get(T, self);
         }
-    }.callback, .{&called}, 0);
 
-    while (!called) {
-        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
-    }
-}
-
-test "Background Scheduler cancels timer tasks" {
-    const testing = std.testing;
-    const heap = std.heap;
-
-    var arena: heap.ArenaAllocator = .init(testing.allocator);
-    defer arena.deinit();
-
-    var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(arena.allocator(), testing.io);
-    defer scheduler.deinit();
-
-    var canceled = false;
-    const cancelation = try scheduler.timer(struct {
-        fn callback(_canceled: *bool, res: anyerror!void) bool {
-            if (res == error.Canceled) {
-                _canceled.* = true;
-            }
-            return false;
+        pub fn init(executors: *Executors, store: *EntityStore, new_id: ExecutorId, ptr: *T) @This() {
+            return .{
+                .any = .init(store, new_id, TypeInfo.init(T)),
+                .mutex = &executors.mutex,
+                .ptr = ptr,
+            };
         }
-    }.callback, .{&canceled}, std.time.ms_per_s);
 
-    cancelation.cancel();
-
-    while (!canceled) {
-        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
-    }
-}
-
-test "Scheduler cancels await tasks and frees memory on stop" {
-    const testing = std.testing;
-    const heap = std.heap;
-
-    var arena: heap.ArenaAllocator = .init(testing.allocator);
-    defer arena.deinit();
-
-    var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(arena.allocator(), testing.io);
-    defer scheduler.deinit();
-
-    var canceled = false;
-    const cancel, const waker = try scheduler.await(struct {
-        fn callback(_canceled: *bool, res: anyerror!void) bool {
-            if (res == error.Canceled) {
-                _canceled.* = true;
-            }
-            return false;
+        pub fn id(self: *const @This()) ExecutorId {
+            return self.any.id;
         }
-    }.callback, .{&canceled});
 
-    waker.close();
-    cancel.cancel();
-    while (!canceled) {
-        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
-    }
-}
+        pub fn drop(self: @This(), io: Io) !void {
+            try self.mutex.lock(io);
+            defer self.mutex.unlock(io);
 
-test "Background Scheduler comptime Executor initializes and wakes task" {
-    const testing = std.testing;
-    const heap = std.heap;
-
-    var arena: heap.ArenaAllocator = .init(testing.allocator);
-    defer arena.deinit();
-
-    var scheduler: BackgroundScheduler = undefined;
-    try scheduler.init(arena.allocator(), testing.io);
-    defer scheduler.deinit();
-
-    const State = struct {
-        value: u32,
-
-        fn init(self: *@This(), _: Tasks.Waker, value: u32) !void {
-            self.value = value;
+            self.any.drop();
         }
     };
+}
 
-    var called = false;
-    var value: u32 = 0;
-    var executor = try scheduler.executor(State, struct {
-        fn callback(state: *State, _: BackgroundScheduler.Context, _called: *bool, _value: *u32, res: anyerror!void) bool {
-            res catch return false;
-            _value.* = state.value;
-            _called.* = true;
-            return false;
+pub fn Context(comptime T: type) type {
+    return struct {
+        const _Executor = Executor(T);
+
+        executors: *Executors,
+        executor: _Executor,
+
+        pub fn new(executors: *Executors, executor: _Executor) @This() {
+            return .{ .executors = executors, .executor = executor };
         }
-    }.callback, .{ &called, &value });
 
-    try executor.init(.{42});
-    try executor.waker.wake();
-    while (!called) {
-        testing.io.sleep(.fromNanoseconds(100), .real) catch {};
-    }
+        pub fn drop(self: *const @This()) !void {
+            try self.executor.drop(self.executors.io);
+        }
 
-    try testing.expectEqual(@as(u32, 42), value);
+        pub fn get(self: *const @This()) !*T {
+            return try self.executor.get(self.executors);
+        }
+
+        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) !Executors.Cancelation {
+            const Args = @TypeOf(args);
+            const TypeErased = struct {
+                pub fn @"defer"(any: AnyEntity, executors: *Executors, _args: Args, res: anyerror!void) bool {
+                    res catch return false;
+                    const _executor = _Executor.from(any, executors) orelse return false;
+
+                    const ctx: Context(T) = .new(executors, _executor);
+
+                    return @call(.always_inline, function, .{ctx} ++ _args);
+                }
+            };
+            return self.executors.@"defer"(TypeErased.@"defer", .{ self.executor.any, self.executors, args });
+        }
+
+        pub fn await(self: *const @This(), function: anytype, args: anytype) !struct { Executors.Cancelation, Tasks.Waker } {
+            const Args = @TypeOf(args);
+            const TypeErased = struct {
+                pub fn async(any: AnyEntity, executors: *Executors, _args: Args, res: anyerror!void) bool {
+                    res catch return false;
+                    const _executor = _Executor.from(any, executors) orelse return false;
+
+                    const ctx: Context(T) = .new(executors, _executor);
+
+                    return @call(.always_inline, function, .{ctx} ++ _args);
+                }
+            };
+
+            return self.executors.await(TypeErased.async, .{ self.executor.any, self.executors, args });
+        }
+
+        pub fn timer(self: *const @This(), function: anytype, args: anytype, ms: u64) !Executors.Cancelation {
+            const Args = @TypeOf(args);
+            const TypeErased = struct {
+                pub fn timer(any: AnyEntity, executors: *Executors, _args: Args, res: anyerror!void) bool {
+                    res catch return false;
+                    const _executor = _Executor.from(any, executors) orelse return false;
+
+                    const ctx: Context(T) = .new(executors, _executor);
+
+                    return @call(.always_inline, function, .{ctx} ++ _args);
+                }
+            };
+            return self.executors.timer(TypeErased.timer, .{ self.executor.any, self.executors, args }, ms);
+        }
+    };
 }

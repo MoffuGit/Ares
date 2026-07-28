@@ -24,10 +24,8 @@ const Mpsc = datastruct.Mpsc;
 const StealingQueue = datastruct.StealingQueue;
 const global = @import("../global.zig");
 const sch = @import("../scheduler.zig");
-const BackgroundScheduler = sch.BackgroundScheduler;
-const Executor = BackgroundScheduler.Executor;
-const Context = BackgroundScheduler.Context;
-const Scheduler = sch.Scheduler;
+const Executors = sch.Executors;
+const Context = sch.Context;
 const tsk = @import("../tasks.zig");
 const attr = @import("attr.zig");
 const BulkAttr = attr.BulkAttr;
@@ -58,8 +56,10 @@ pub const Action = union(enum) {
 io: Io,
 gpa: Allocator,
 snapshot: Snapshot,
-timer: ?BackgroundScheduler.Cancelation,
+timer: ?Executors.Cancelation,
 workers: Workers,
+action_waker: tsk.Waker,
+action_cancelation: Executors.Cancelation,
 action_buffer: [8]Action,
 actions: Action.Queue,
 updates_buffer: [8]Updates,
@@ -68,7 +68,8 @@ chunks: ChunkAllocator,
 
 pub fn init(
     self: *Scanner,
-    waker: tsk.Waker,
+    ctx: Context(Scanner),
+    waker: App.Waker,
     abs_path: []const u8,
     gpa: Allocator,
     io: Io,
@@ -83,6 +84,8 @@ pub fn init(
         .snapshot = undefined,
         .workers = undefined,
         .timer = null,
+        .action_waker = undefined,
+        .action_cancelation = undefined,
         .chunks = undefined,
     };
 
@@ -99,14 +102,20 @@ pub fn init(
 
     try self.snapshot.init(abs_path, gpa, io);
 
+    const action_cancel, const action_waker = try ctx.await(handleActions, .{waker});
+    self.action_waker = action_waker;
+    self.action_cancelation = action_cancel;
+
     try self.actions.putOne(self.io, .initial_scan);
-    try waker.wake();
+    try action_waker.wake();
 }
 
 pub fn deinit(self: *Scanner) void {
     if (self.timer) |timer| {
         timer.cancel();
     }
+    self.action_cancelation.cancel();
+    self.action_waker.close();
     self.workers.deinit();
     self.updates.close(self.io);
     self.actions.close(self.io);
@@ -132,16 +141,10 @@ pub fn clearUpdates(self: *Scanner) void {
 }
 
 pub fn handleActions(
-    self: *Scanner,
-    ctx: Context,
+    ctx: Context(Scanner),
     waker: App.Waker,
-    res: anyerror!void,
 ) bool {
-    res catch {
-        self.deinit();
-        return false;
-    };
-
+    const self = ctx.get() catch return false;
     self._handleActions(ctx, waker) catch |err| {
         std.log.err("Worktree Scanner err={}", .{err});
         return true;
@@ -152,7 +155,7 @@ pub fn handleActions(
 
 fn _handleActions(
     self: *Scanner,
-    ctx: Context,
+    ctx: Context(Scanner),
     waker: App.Waker,
 ) !void {
     while (self.workers.popEntry()) |entry| {
@@ -162,7 +165,7 @@ fn _handleActions(
     var buffer: [8]Action = undefined;
     for (0..try self.actions.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
-            .initial_scan => try self.initialScan(waker, ctx),
+            .initial_scan => try self.initialScan(ctx, waker),
             .scan_end => {
                 if (self.timer) |timer| {
                     self.timer = null;
@@ -186,8 +189,8 @@ fn _handleActions(
 
 fn initialScan(
     self: *Scanner,
+    ctx: Context(Scanner),
     waker: App.Waker,
-    ctx: Context,
 ) !void {
     const stat = try Io.Dir.statFile(
         .cwd(),
@@ -218,7 +221,7 @@ fn initialScan(
     try self.workers.start(self.gpa, @intCast(state.cpu_count));
     errdefer self.workers.deinit();
 
-    self.timer = try ctx.scheduler.timer(timerCallback, .{ self, waker }, @intCast(UPDATE_INTERVAL.toMilliseconds()));
+    self.timer = try ctx.timer(timerCallback, .{waker}, @intCast(UPDATE_INTERVAL.toMilliseconds()));
 
     const root_job = self.workers.createJob(path, null, null);
     self.workers.pushJob(0, root_job);
@@ -227,13 +230,13 @@ fn initialScan(
         try self.workers.group.concurrent(
             self.io,
             Scanner.scan,
-            .{ self, @as(u32, @intCast(i)), ctx },
+            .{ self, @as(u32, @intCast(i)) },
         );
     }
 }
 
-fn timerCallback(self: *Scanner, waker: App.Waker, res: anyerror!void) bool {
-    res catch return false;
+fn timerCallback(ctx: Context(Scanner), waker: App.Waker) bool {
+    const self = ctx.get() catch return false;
 
     if (!self.workers.working) return false;
 
@@ -435,9 +438,8 @@ const Workers = struct {
 pub fn scan(
     self: *Scanner,
     worker_id: u32,
-    ctx: Context,
 ) void {
-    self._scan(worker_id, ctx) catch |err| {
+    self._scan(worker_id) catch |err| {
         std.log.err("worker err: {}", .{err});
     };
 }
@@ -445,7 +447,6 @@ pub fn scan(
 pub fn _scan(
     self: *Scanner,
     worker_id: u32,
-    ctx: Context,
 ) !void {
     var buffer: [64 * 1024]u8 = undefined;
 
@@ -459,7 +460,7 @@ pub fn _scan(
             try self.actions.putOne(self.io, .scan_end);
         }
 
-        try ctx.waker.wake();
+        try self.action_waker.wake();
     }
 }
 

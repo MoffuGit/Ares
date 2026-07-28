@@ -10,8 +10,7 @@ const App = @import("app.zig");
 const Entity = App.Entity;
 const Context = App.Context;
 const sch = @import("scheduler.zig");
-const BackgroundScheduler = sch.BackgroundScheduler;
-const Executor = BackgroundScheduler.Executor;
+const Executor = sch.Executor;
 const Scanner = @import("worktree/scanner.zig");
 const Updates = Scanner.Updates;
 const Snapshot = @import("worktree/snapshot.zig");
@@ -42,20 +41,14 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
     self.waker = try ctx.await(handleUpdates, .{});
     errdefer self.waker.close();
 
-    self.scanner = try ctx.executor(Scanner, Scanner.handleActions, .{self.waker});
-    errdefer self.scanner.stop();
-    try self.scanner.init(.{
-        opts.abs_path,
-        ctx.gpa(),
-        io,
-    });
+    self.scanner = try ctx.executor(Scanner, .{ self.waker, opts.abs_path, ctx.gpa(), io });
 
     self.snapshot = try self.scanner.ptr.snapshot.clone(ctx.gpa());
 }
 
 pub fn deinit(self: *Worktree) void {
     self.waker.close();
-    self.scanner.stop();
+    self.scanner.drop(self.io) catch {};
     self.snapshot.deinit();
 }
 
