@@ -1,14 +1,12 @@
 const std = @import("std");
 const XCFrameworkStep = @import("build/XCFrameworkStep.zig");
 const LibtoolStep = @import("build/LibtoolStep.zig");
-const @"test" = @import("test/build.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const test_opts = @"test".options(b);
 
-    const clone_chromium = @"test".cloneChromiumStep(b);
+    const clone_chromium = cloneChromiumStep(b);
 
     const exe_tests = b.addTest(.{
         .root_module = rootModule(
@@ -16,7 +14,6 @@ pub fn build(b: *std.Build) void {
             target,
             optimize,
             "src/test.zig",
-            test_opts,
         ),
     });
     exe_tests.step.dependOn(clone_chromium);
@@ -27,7 +24,6 @@ pub fn build(b: *std.Build) void {
         target,
         optimize,
         "src/lib.zig",
-        null,
     );
 
     // if (b.lazyDependency("macos", .{
@@ -97,7 +93,6 @@ fn rootModule(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     root_source: []const u8,
-    test_opts: ?@"test".Options,
 ) *std.Build.Module {
     const zqlite = b.dependency("zqlite", .{
         .target = target,
@@ -132,6 +127,68 @@ fn rootModule(
     });
     mod.addIncludePath(b.path("lib"));
 
-    if (test_opts) |opts| @"test".addOptions(mod, b, opts);
+    addTestOptions(mod, b);
+
     return mod;
+}
+
+const TestPath = "test";
+const ChromiumPath = TestPath ++ "/chromium";
+const ChromiumUrl = "https://github.com/chromium/chromium.git";
+
+pub fn cloneChromiumStep(b: *std.Build) *std.Build.Step {
+    const step = b.allocator.create(std.Build.Step) catch @panic("OOM");
+    step.* = std.Build.Step.init(.{
+        .id = .custom,
+        .name = "clone chromium",
+        .owner = b,
+        .makeFn = cloneChromiumMake,
+    });
+    return step;
+}
+
+pub fn addTestOptions(mod: *std.Build.Module, b: *std.Build) void {
+    const test_options = b.addOptions();
+    test_options.addOption([]const u8, "chromium_path", ChromiumPath);
+    test_options.addOption(bool, "benchmark", for (b.args orelse &.{}) |arg| {
+        if (std.mem.indexOf(u8, arg, "benchmark") != null) break true;
+    } else false);
+
+    mod.addOptions("test_options", test_options);
+}
+
+fn cloneChromiumMake(step: *std.Build.Step, opts: std.Build.Step.MakeOptions) anyerror!void {
+    const b = step.owner;
+    const io = b.graph.io;
+    const dest = b.pathFromRoot(ChromiumPath);
+    const git_dir = b.pathJoin(&.{ dest, ".git" });
+
+    if (std.Io.Dir.accessAbsolute(io, git_dir, .{})) |_| return else |_| {}
+
+    std.Io.Dir.cwd().createDirPath(io, b.pathFromRoot(TestPath)) catch |e|
+        return step.fail("unable to create testdata dir: {s}", .{@errorName(e)});
+
+    var node = opts.progress_node.start("git clone chromium", 0);
+    defer node.end();
+
+    var child = try std.process.spawn(io, .{
+        .argv = &.{
+            "git",                "clone",
+            "--depth",            "1",
+            "--filter=blob:none", ChromiumUrl,
+            dest,
+        },
+        .stdin = .pipe,
+        .stdout = .pipe,
+        .stderr = .pipe,
+    });
+
+    const term = child.wait(io) catch |e|
+        return step.fail("failed to spawn git: {s}", .{@errorName(e)});
+
+    switch (term) {
+        .exited => |code| if (code != 0)
+            return step.fail("git clone exited with code {d}", .{code}),
+        else => return step.fail("git clone terminated unexpectedly", .{}),
+    }
 }
