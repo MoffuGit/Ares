@@ -95,13 +95,14 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     errdefer self.arena.deinit();
 
     try self.chunks.init(arena, &.{ .{ 50, MAX_SIZE }, .{ 50, Observers.NODE_SIZE }, .{ 50, 2048 } });
-    try self.observers.init(self.chunks.allocator());
-    try self.listeners.init(self.chunks.allocator());
-    try self.entities.init(arena, 100);
-    try self.notifications.init(self.chunks.allocator());
-    try self.tasks.init(arena, self.chunks.allocator(), io);
+    const chunks = self.chunks.allocator();
 
-    try self.executors.init(arena, self.chunks.allocator(), io);
+    try self.tasks.init(arena, chunks, io);
+    try self.observers.init(chunks);
+    try self.listeners.init(chunks);
+    try self.notifications.init(chunks);
+    try self.entities.init(arena, 100);
+    try self.executors.init(arena, chunks, io);
     errdefer self.executors.deinit();
 
     try self.loop.init(io);

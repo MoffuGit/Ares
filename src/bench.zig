@@ -93,15 +93,16 @@ pub fn stop(bench: *Bench, io: Io) Duration {
     return elapsed;
 }
 
-// // Sort the durations and return the third-fastest sample (discarding the two fastest outliers)
-// // to get a more stable estimate, assuming benchmark timings are roughly log-normal.
-// // E.g. see https://lemire.me/blog/2018/01/16/microbenchmarking-calls-for-idealized-conditions/
-// pub fn estimate(durations: []Duration) Duration {
-//     assert(durations.len >= 8); // Ensure that we have enough samples to get a meaningful result.
-//     std.sort.block(stdx.Duration, durations, {}, stdx.Duration.sort.asc);
-//     return durations[2];
-// }
-//
+pub fn estimate(durations: []Duration) Duration {
+    assert(durations.len >= 8); // Ensure that we have enough samples to get a meaningful result.
+    std.sort.block(Duration, durations, {}, asc);
+    return durations[2];
+}
+
+fn asc(_: void, a: Duration, b: Duration) bool {
+    return a.nanoseconds < b.nanoseconds;
+}
+
 pub fn report(comptime fmt: []const u8, args: anytype) void {
     switch (mode) {
         .smoke => {},

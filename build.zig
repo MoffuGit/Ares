@@ -149,7 +149,7 @@ pub fn cloneChromiumStep(b: *std.Build) *std.Build.Step {
 
 pub fn addTestOptions(mod: *std.Build.Module, b: *std.Build) void {
     const test_options = b.addOptions();
-    test_options.addOption([]const u8, "chromium_path", ChromiumPath);
+    test_options.addOption([]const u8, "chromium_path", b.pathFromRoot(ChromiumPath));
     test_options.addOption(bool, "benchmark", for (b.args orelse &.{}) |arg| {
         if (std.mem.indexOf(u8, arg, "benchmark") != null) break true;
     } else false);

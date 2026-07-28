@@ -1,0 +1,141 @@
+const std = @import("std");
+const Io = std.Io;
+const testing = std.testing;
+const Allocator = std.mem.Allocator;
+
+const chromium_path = @import("test_options").chromium_path;
+const zlob = @import("zlob");
+
+const App = @import("../app.zig");
+const Entity = App.Entity;
+const constants = @import("../constants.zig");
+const MAX_PATH_LEN = constants.MAX_PATH_LEN;
+const global = @import("../global.zig");
+const Worktree = @import("../worktree.zig");
+const Snapshot = @import("../worktree/snapshot.zig");
+const Bench = @import("../bench.zig");
+
+const mode: enum { smoke, benchmark } =
+    if (@import("test_options").benchmark) .benchmark else .smoke;
+
+pub fn observe(_: *App, worktree: Entity(Worktree), scanning: *bool) bool {
+    scanning.* = worktree.read().scanning;
+    return scanning.*;
+}
+
+test "benchmark: Worktree initial scan" {
+    if (mode == .smoke) return;
+
+    try global.state.init(&.{}, .empty);
+    defer global.state.deinit();
+
+    const gpa = global.state.gpa;
+    const io = global.state.threaded.io();
+
+    var app: App = undefined;
+    try app.init(.{}, gpa, io);
+    defer app.deinit();
+
+    var bench: Bench = .init();
+    defer bench.deinit();
+
+    Bench.report("Worktree Scanned Path={s}", .{chromium_path});
+    var durations: [25]Io.Duration = undefined;
+
+    for (0..durations.len) |idx| {
+        bench.start(io);
+        defer durations[idx] = bench.stop(io);
+
+        const worktree: Entity(Worktree) = try .new(
+            &app,
+            .{
+                io,
+                Worktree.Options{
+                    .abs_path = chromium_path,
+                },
+            },
+        );
+        defer worktree.drop();
+
+        var scanning = true;
+
+        _ = try app.observe(worktree, observe, .{&scanning});
+
+        while (scanning) {
+            app.flush();
+        }
+    }
+
+    try verifyWorktree(&app, io);
+
+    const estimate = Bench.estimate(&durations);
+    Bench.report("Worktree Scanner={}ns", .{estimate.toMilliseconds()});
+}
+
+fn verifyWorktree(app: *App, io: Io) !void {
+    const worktree: Entity(Worktree) = try .new(
+        app,
+        .{ io, Worktree.Options{ .abs_path = chromium_path } },
+    );
+    defer worktree.drop();
+
+    var scanning = true;
+
+    _ = try app.observe(worktree, observe, .{&scanning});
+
+    while (scanning) {
+        app.flush();
+    }
+
+    var arena = std.heap.ArenaAllocator.init(app.gpa);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const snap = worktree.read().snapshot;
+
+    var zlob_res = try zlob.walk.collect(alloc, chromium_path, .{
+        .include_hidden = false,
+        .respect_git = true,
+        .report_dirs = true,
+    });
+    defer zlob_res.deinit();
+
+    var zlob_set = std.StringHashMap(void).init(alloc);
+    defer zlob_set.deinit();
+    for (zlob_res.entries) |e| {
+        try zlob_set.put(try alloc.dupe(u8, e.relativePath()), {});
+    }
+
+    const root_name = snap.root_name;
+    const prefix_len = root_name.len + 1;
+    var ody_set = std.StringHashMap(void).init(alloc);
+    defer ody_set.deinit();
+
+    var it = snap.entries.iter();
+    while (it.next()) |kv| {
+        const entry = kv.value;
+        if (entry.meta.hidden or entry.meta.ignored) continue;
+
+        var buf: [MAX_PATH_LEN]u8 = undefined;
+        const len = entry.path.read(&buf);
+        const full = buf[0..len];
+
+        if (len == root_name.len and std.mem.eql(u8, full, root_name)) continue;
+
+        if (full.len < prefix_len or full[root_name.len] != '/') {
+            std.debug.print("verifyWorktreeScan: unexpected path shape: '{s}'\n", .{full});
+            return error.WorktreeSnapshotMismatch;
+        }
+        const rel = full[prefix_len..];
+        try ody_set.put(try alloc.dupe(u8, rel), {});
+    }
+
+    const ody_count = ody_set.count();
+    const zlob_count = zlob_set.count();
+
+    if (ody_count == zlob_count) return;
+
+    std.debug.print("odyssey visible entries: {d}\n", .{ody_count});
+    std.debug.print("zlob    visible entries: {d}\n", .{zlob_count});
+    std.debug.print("===================================\n", .{});
+}

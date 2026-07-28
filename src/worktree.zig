@@ -3,6 +3,7 @@ const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const atomic = std.atomic;
+const bench = @import("worktree/bench.zig");
 
 const App = @import("app.zig");
 const Entity = App.Entity;
@@ -85,4 +86,9 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
     }
 
     ctx.notify();
+}
+
+test {
+    _ = Scanner;
+    _ = bench;
 }

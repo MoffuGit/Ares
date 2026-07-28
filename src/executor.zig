@@ -70,11 +70,6 @@ pub const Executors = struct {
 
     pub fn deinit(self: *@This()) void {
         self.stop.store(true, .release);
-
-        while (!self.stopped.load(.acquire)) {
-            self.io.sleep(.fromNanoseconds(100), .real) catch {};
-        }
-
         _ = self.future.await(self.io);
         self.loop.deinit();
     }
@@ -88,10 +83,6 @@ pub const Executors = struct {
         }
 
         self.destroyDroppedEntities();
-        self.flush();
-        self.loop.run(.no_wait) catch {};
-        self.loop.run(.until_done) catch {};
-        self.stopped.store(true, .release);
     }
 
     fn flush(self: *@This()) void {
