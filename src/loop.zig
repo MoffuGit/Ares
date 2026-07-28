@@ -1,7 +1,7 @@
 //This event loop use as refence libxev and tigerbeetle implementations
 //Sources:
-// - TigerBeetle: https://github.com/tigerbeetle/tigerbeetle/tree/main [LIBXEV]
-// - Libxev: https://github.com/mitchellh/libxev [TIGERBEETLE]
+// - TigerBeetle: https://github.com/tigerbeetle/tigerbeetle/tree/main [TIGERBEETLE]
+// - Libxev: https://github.com/mitchellh/libxev [LIBXEV]
 
 const std = @import("std");
 const assert = std.debug.assert;

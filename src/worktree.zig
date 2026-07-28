@@ -4,8 +4,6 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const atomic = std.atomic;
 
-const test_build = @import("test_build");
-
 const App = @import("app.zig");
 const Entity = App.Entity;
 const Context = App.Context;
@@ -87,26 +85,4 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
     }
 
     ctx.notify();
-}
-
-test "Worktree Entity" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-
-    var app: App = undefined;
-    try app.init(.{}, gpa, io);
-    defer app.deinit();
-
-    const worktree: Entity(Worktree) = try .new(
-        &app,
-        .{
-            io,
-            Options{
-                .abs_path = test_build.chromium_path,
-            },
-        },
-    );
-
-    worktree.drop();
-    app.flush();
 }

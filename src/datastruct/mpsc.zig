@@ -1,4 +1,4 @@
-// - Libxev: https://github.com/mitchellh/libxev [TIGERBEETLE]
+// - Libxev: https://github.com/mitchellh/libxev [LIBXEV]
 const std = @import("std");
 const assert = std.debug.assert;
 

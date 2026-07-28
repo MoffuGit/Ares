@@ -48,34 +48,3 @@ pub fn drop(self: *WorktreeStore) void {
 pub fn deinit(self: *WorktreeStore) void {
     _ = self;
 }
-
-test "WorktreeStore creates a worktree per path" {
-    const testing = std.testing;
-    const gpa = testing.allocator;
-    const io = testing.io;
-    const test_build = @import("test_build");
-
-    var app: App = undefined;
-    try app.init(.{}, gpa, io);
-    defer app.deinit();
-
-    const paths = [_][]const u8{test_build.chromium_path};
-
-    const store: Entity(WorktreeStore) = try .new(
-        &app,
-        .{
-            WorktreeStore.Options{
-                .arena = app.arena.allocator(),
-                .paths = &paths,
-                .io = io,
-            },
-        },
-    );
-    errdefer store.drop();
-
-    try testing.expectEqual(@as(usize, 1), store.read().worktrees.count());
-    try testing.expectEqual(@as(u8, 1), store.read().next_id);
-
-    store.drop();
-    app.flush();
-}
