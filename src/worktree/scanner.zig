@@ -102,7 +102,7 @@ pub fn init(
 
     try self.snapshot.init(abs_path, gpa, io);
 
-    const action_cancel, const action_waker = try ctx.await(handleActions, .{waker});
+    const action_cancel, const action_waker = try ctx.await(handleActions, .{ waker, io });
     self.action_waker = action_waker;
     self.action_cancelation = action_cancel;
 
@@ -143,8 +143,9 @@ pub fn clearUpdates(self: *Scanner) void {
 pub fn handleActions(
     ctx: Context(Scanner),
     waker: App.Waker,
+    io: Io,
 ) bool {
-    const self = ctx.get() catch return false;
+    const self = ctx.get(io) catch return false;
     self._handleActions(ctx, waker) catch |err| {
         std.log.err("Worktree Scanner err={}", .{err});
         return true;
@@ -221,7 +222,7 @@ fn initialScan(
     try self.workers.start(self.gpa, @intCast(state.cpu_count));
     errdefer self.workers.deinit();
 
-    self.timer = try ctx.timer(timerCallback, .{waker}, @intCast(UPDATE_INTERVAL.toMilliseconds()));
+    self.timer = try ctx.timer(timerCallback, .{ waker, self.io }, @intCast(UPDATE_INTERVAL.toMilliseconds()));
 
     const root_job = self.workers.createJob(path, null, null);
     self.workers.pushJob(0, root_job);
@@ -235,8 +236,8 @@ fn initialScan(
     }
 }
 
-fn timerCallback(ctx: Context(Scanner), waker: App.Waker) bool {
-    const self = ctx.get() catch return false;
+fn timerCallback(ctx: Context(Scanner), waker: App.Waker, io: Io) bool {
+    const self = ctx.get(io) catch return false;
 
     if (!self.workers.working) return false;
 

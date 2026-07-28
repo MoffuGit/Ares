@@ -154,21 +154,11 @@ pub const UpdateFrame = struct {
     }
 };
 
-pub fn updateFrame(self: *App, comptime T: type, entity: Entity(T)) struct { *T, UpdateFrame } {
+pub fn updateFrame(self: *App, any: AnyEntity) UpdateFrame {
     self.startUpdate();
-    self.entities.startUpdate(entity.any.id);
+    self.entities.startUpdate(any.id);
 
-    const ptr = self.entities.get(T, entity.id());
-
-    return .{ ptr, .{ .any = entity.any, .app = self } };
-}
-
-pub fn readEntity(self: *App, comptime T: type, entity: Entity(T)) *const T {
-    return self.entities.get(T, entity.id());
-}
-
-pub fn tryReadEntity(self: *App, comptime T: type, entity: Entity(T)) ?*const T {
-    return self.entities.tryGet(T, entity.id());
+    return .{ .any = any, .app = self };
 }
 
 pub fn notify(self: *App, entity: anytype) void {
@@ -383,11 +373,11 @@ pub fn Context(comptime T: type) type {
         }
 
         pub fn read(self: *const @This()) *const T {
-            return self.entity.read(self.app);
+            return self.entity.read();
         }
 
         pub fn tryRead(self: *const @This()) ?*const T {
-            return self.entity.tryRead(self.app);
+            return self.entity.tryRead();
         }
 
         pub fn notify(self: *const @This()) void {
@@ -583,7 +573,7 @@ test "creates/drops entities" {
             ptr.inc();
         }
 
-        try testing.expectEqual(index + 1, entity.read(&app).index);
+        try testing.expectEqual(index + 1, entity.read().index);
     }
 
     for (entities) |entity| {
@@ -646,7 +636,7 @@ test "Observe entities" {
         ptr.set_index(index);
         ptr.inc();
     }
-    try testing.expectEqual(index + 1, observed.read(&app).index);
+    try testing.expectEqual(index + 1, observed.read().index);
     observed.notify(&app);
 
     try testing.expect(!context);
@@ -662,7 +652,7 @@ test "Observe entities" {
         ptr.set_index(index);
         ptr.inc();
     }
-    try testing.expectEqual(index + 1, observed.read(&app).index);
+    try testing.expectEqual(index + 1, observed.read().index);
     observed.notify(&app);
 
     app.flush();
@@ -783,7 +773,7 @@ test "Context listen entities events" {
 
     app.flush();
 
-    try testing.expectEqual(listener.read(&app).index, 35);
+    try testing.expectEqual(listener.read().index, 35);
 
     listened.drop();
     listener.drop();
@@ -815,9 +805,9 @@ test "Context observes entities" {
             self.* = .{ .observed_updates = 0, .last_observed_index = 0 };
         }
 
-        pub fn observe(self: *@This(), observed: Entity(Observed), ctx: Context(@This())) void {
+        pub fn observe(self: *@This(), observed: Entity(Observed), _: Context(@This())) void {
             self.observed_updates += 1;
-            self.last_observed_index = observed.read(ctx.app).index;
+            self.last_observed_index = observed.read().index;
         }
 
         pub fn get_last_observed_index(self: *const @This()) usize {
@@ -844,8 +834,8 @@ test "Context observes entities" {
     observed.notify(&app);
     app.flush();
 
-    try testing.expectEqual(1, observer.read(&app).observed_updates);
-    try testing.expectEqual(42, observer.read(&app).last_observed_index);
+    try testing.expectEqual(1, observer.read().observed_updates);
+    try testing.expectEqual(42, observer.read().last_observed_index);
 
     observer.drop();
     observed.drop();
@@ -893,12 +883,12 @@ test "Context defer runs on foreground executor with entity context" {
     var context = Context(State).new(&app, entity);
     var handler = context.@"defer"(State.deferred, .{42});
 
-    try testing.expectEqual(0, entity.read(&app).calls);
+    try testing.expectEqual(0, entity.read().calls);
 
     app.flush();
 
-    try testing.expectEqual(1, entity.read(&app).calls);
-    try testing.expectEqual(42, entity.read(&app).last_value);
+    try testing.expectEqual(1, entity.read().calls);
+    try testing.expectEqual(42, entity.read().last_value);
 
     handler.cancel();
     entity.drop();
@@ -941,14 +931,14 @@ test "Context async runs on foreground executor with entity context" {
     var context = Context(State).new(&app, entity);
     const waker = try context.await(State.await, .{42});
 
-    try testing.expectEqual(0, entity.read(&app).calls);
+    try testing.expectEqual(0, entity.read().calls);
 
     try waker.wake();
 
     app.flush();
 
-    try testing.expectEqual(1, entity.read(&app).calls);
-    try testing.expectEqual(42, entity.read(&app).last_value);
+    try testing.expectEqual(1, entity.read().calls);
+    try testing.expectEqual(42, entity.read().last_value);
 
     waker.close();
     entity.drop();
@@ -1083,7 +1073,7 @@ test "Observe entities drop before enable" {
         ptr.set_index(index);
         ptr.inc();
     }
-    try testing.expectEqual(index + 1, observed.read(&app).index);
+    try testing.expectEqual(index + 1, observed.read().index);
     observed.notify(&app);
 
     try testing.expect(!context);
@@ -1100,7 +1090,7 @@ test "Observe entities drop before enable" {
         ptr.set_index(index);
         ptr.inc();
     }
-    try testing.expectEqual(index + 1, observed.read(&app).index);
+    try testing.expectEqual(index + 1, observed.read().index);
     observed.notify(&app);
 
     app.flush();

@@ -73,8 +73,8 @@ test "WorktreeStore creates a worktree per path" {
     );
     errdefer store.drop();
 
-    try testing.expectEqual(@as(usize, 1), store.read(&app).worktrees.count());
-    try testing.expectEqual(@as(u8, 1), store.read(&app).next_id);
+    try testing.expectEqual(@as(usize, 1), store.read().worktrees.count());
+    try testing.expectEqual(@as(u8, 1), store.read().next_id);
 
     store.drop();
     app.flush();

@@ -29,6 +29,14 @@ pub const AnyEntity = struct {
         return .{ .store = store, .id = id, .type_id = type_id };
     }
 
+    pub fn get(self: *const @This()) *anyopaque {
+        return self.store.get(self.id);
+    }
+
+    pub fn tryGet(self: *const @This()) ?*anyopaque {
+        return self.store.tryGet(self.id);
+    }
+
     pub fn drop(self: @This()) void {
         if (self.store.entities.get(self.id)) |ptr| {
             self.type_id.drop(ptr.*);
@@ -57,15 +65,20 @@ pub fn Entity(comptime T: type) type {
         }
 
         pub fn update(self: @This(), app: *App) struct { *T, UpdateFrame } {
-            return app.updateFrame(T, self);
+            const frame = app.updateFrame(self.any);
+            const ptr = self.any.get();
+
+            return .{ @ptrCast(@alignCast(ptr)), frame };
         }
 
-        pub fn read(self: @This(), app: *App) *const T {
-            return app.readEntity(T, self);
+        pub fn read(self: @This()) *const T {
+            const ptr = self.any.get();
+            return @ptrCast(@alignCast(ptr));
         }
 
-        pub fn tryRead(self: @This(), app: *App) ?*const T {
-            return app.tryReadEntity(T, self);
+        pub fn tryRead(self: @This()) ?*const T {
+            const ptr = self.any.tryGet() orelse return null;
+            return @ptrCast(@alignCast(ptr));
         }
 
         pub fn notify(self: @This(), app: *App) void {
@@ -120,14 +133,14 @@ pub const EntityStore = struct {
         return self.entities.put(ptr) catch @panic("Entities Overflow");
     }
 
-    pub fn get(self: *@This(), comptime T: type, id: EntityId) *T {
+    pub fn get(self: *@This(), id: EntityId) *anyopaque {
         const ptr = self.entities.get(id) orelse @panic("Reading non existing entity");
-        return @ptrCast(@alignCast(ptr.*));
+        return ptr.*;
     }
 
-    pub fn tryGet(self: *@This(), comptime T: type, id: EntityId) ?*T {
+    pub fn tryGet(self: *@This(), id: EntityId) ?*anyopaque {
         const ptr = self.entities.get(id) orelse return null;
-        return @ptrCast(@alignCast(ptr.*));
+        return ptr.*;
     }
 
     pub fn startUpdate(self: *@This(), id: EntityId) void {
@@ -184,8 +197,8 @@ test "entity store returns inserted data and rejects wrong type" {
     const id = store.insert(ptr);
     const entity: Entity(A) = .init(&store, id);
 
-    try std.testing.expectEqual(ptr, store.get(A, entity.id()));
-    try std.testing.expectEqual(@as(u32, 42), store.get(A, entity.id()).value);
+    try std.testing.expectEqualDeep(@intFromPtr(ptr), @intFromPtr(store.get(entity.id())));
+    try std.testing.expectEqual(@as(u32, 42), entity.read().value);
 }
 
 test "closing entity records id and type when ref count reaches zero" {

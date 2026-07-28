@@ -15,8 +15,8 @@ const global = @import("../global.zig");
 const Worktree = @import("../worktree.zig");
 const Snapshot = @import("../worktree/snapshot.zig");
 
-pub fn observe(app: *App, worktree: Entity(Worktree), scanning: *bool) bool {
-    scanning.* = worktree.read(app).scanning;
+pub fn observe(_: *App, worktree: Entity(Worktree), scanning: *bool) bool {
+    scanning.* = worktree.read().scanning;
     return scanning.*;
 }
 
@@ -85,7 +85,7 @@ fn verifyWorktree(app: *App, io: Io) !void {
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    const snap = worktree.read(app).snapshot;
+    const snap = worktree.read().snapshot;
 
     var zlob_res = try zlob.walk.collect(alloc, test_build.chromium_path, .{
         .include_hidden = false,

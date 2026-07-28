@@ -177,19 +177,12 @@ pub const Executors = struct {
         const id = self.entities.insert(ptr);
         errdefer self.entities.recycle(id);
 
-        const executor: Executor(T) = .init(self, &self.entities, id, ptr);
+        const executor: Executor(T) = .init(self, &self.entities, id);
         const ctx: Context(T) = .new(self, executor);
 
         try @call(.always_inline, function, .{ ptr, ctx } ++ args);
 
         return executor;
-    }
-
-    pub fn get(self: *Executors, comptime T: type, executor: Executor(T)) !*T {
-        try self.mutex.lock(self.io);
-        defer self.mutex.unlock(self.io);
-
-        return self.entities.get(T, executor.id());
     }
 
     fn destroyDroppedEntities(self: *Executors) void {
@@ -211,7 +204,6 @@ pub fn Executor(comptime T: type) type {
 
         any: AnyEntity,
         mutex: *Io.Mutex,
-        ptr: *T,
 
         pub fn new(executors: *Executors, args: anytype) !@This() {
             return try executors.new(T, T.init, args);
@@ -221,23 +213,24 @@ pub fn Executor(comptime T: type) type {
             assert(any.type_id == TypeInfo.init(T));
             if (!any.store.entities.contains(any.id)) return null;
 
-            const ptr = any.store.get(T, any.id);
             return .{
                 .any = any,
                 .mutex = &executors.mutex,
-                .ptr = ptr,
             };
         }
 
-        pub fn get(self: @This(), executors: *Executors) !*T {
-            return try executors.get(T, self);
+        pub fn get(self: @This(), io: Io) !*T {
+            try self.mutex.lock(io);
+            defer self.mutex.unlock(io);
+
+            const ptr = self.any.get();
+            return @ptrCast(@alignCast(ptr));
         }
 
-        pub fn init(executors: *Executors, store: *EntityStore, new_id: ExecutorId, ptr: *T) @This() {
+        pub fn init(executors: *Executors, store: *EntityStore, new_id: ExecutorId) @This() {
             return .{
                 .any = .init(store, new_id, TypeInfo.init(T)),
                 .mutex = &executors.mutex,
-                .ptr = ptr,
             };
         }
 
@@ -269,8 +262,8 @@ pub fn Context(comptime T: type) type {
             try self.executor.drop(self.executors.io);
         }
 
-        pub fn get(self: *const @This()) !*T {
-            return try self.executor.get(self.executors);
+        pub fn get(self: *const @This(), io: Io) !*T {
+            return try self.executor.get(io);
         }
 
         pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) !Executors.Cancelation {
