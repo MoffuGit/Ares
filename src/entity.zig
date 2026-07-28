@@ -57,11 +57,15 @@ pub fn Entity(comptime T: type) type {
         }
 
         pub fn update(self: @This(), app: *App) struct { *T, UpdateFrame } {
-            return app.update_frame(T, self);
+            return app.updateFrame(T, self);
         }
 
         pub fn read(self: @This(), app: *App) *const T {
-            return app.read_entity(T, self);
+            return app.readEntity(T, self);
+        }
+
+        pub fn tryRead(self: @This(), app: *App) ?*const T {
+            return app.tryReadEntity(T, self);
         }
 
         pub fn notify(self: @This(), app: *App) void {
@@ -121,11 +125,16 @@ pub const EntityStore = struct {
         return @ptrCast(@alignCast(ptr.*));
     }
 
-    pub fn start_update(self: *@This(), id: EntityId) void {
+    pub fn tryGet(self: *@This(), comptime T: type, id: EntityId) ?*T {
+        const ptr = self.entities.get(id) orelse return null;
+        return @ptrCast(@alignCast(ptr.*));
+    }
+
+    pub fn startUpdate(self: *@This(), id: EntityId) void {
         if (self.updates.put(id, true) orelse false) @panic("Double Started Update");
     }
 
-    pub fn end_update(self: *@This(), id: EntityId) void {
+    pub fn endUpdate(self: *@This(), id: EntityId) void {
         if (!(self.updates.put(id, false) orelse true)) @panic("Double Ended Update");
     }
 

@@ -91,12 +91,12 @@ pub fn stop(self: *Loop) void {
 }
 
 pub fn flush(self: *Loop, _: bool) !void {
-    self.flush_cancellations();
-    self.flush_timers();
+    self.flushCancelations();
+    self.flushTimers();
 
     var events: [256]Kevent = undefined;
 
-    const canceled = self.flush_canceled(&events);
+    const canceled = self.flushCanceled(&events);
     const active = if (canceled < events.len)
         self.flush_submissions(events[canceled..])
     else
@@ -128,10 +128,10 @@ pub fn flush(self: *Loop, _: bool) !void {
         }
     }
 
-    self.flush_completions();
+    self.flushCompletions();
 }
 
-pub fn flush_timers(self: *Loop) void {
+pub fn flushTimers(self: *Loop) void {
     while (self.queues.pop(.timers)) |completion| {
         if (completion.state == .completed) {
             continue;
@@ -160,7 +160,7 @@ pub fn flush_timers(self: *Loop) void {
     }
 }
 
-pub fn flush_completions(self: *Loop) void {
+pub fn flushCompletions(self: *Loop) void {
     var defered: datastruct.Queue(Completion) = .{};
 
     while (self.queues.pop(.completions)) |completion| {
@@ -187,13 +187,13 @@ pub fn flush_completions(self: *Loop) void {
     }
 }
 
-pub fn flush_cancellations(self: *Loop) void {
+pub fn flushCancelations(self: *Loop) void {
     while (self.queues.pop(.cancellations)) |c| {
         _ = c.callback(self, c);
     }
 }
 
-pub fn flush_canceled(self: *Loop, kevents: []Kevent) usize {
+pub fn flushCanceled(self: *Loop, kevents: []Kevent) usize {
     var submitted: usize = 0;
 
     while (submitted < kevents.len) {

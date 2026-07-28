@@ -115,8 +115,8 @@ pub fn deinit(self: *App) void {
 }
 
 pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Entity(T) {
-    self.start_update();
-    defer self.end_update();
+    self.startUpdate();
+    defer self.endUpdate();
 
     const alloc = self.chunks.allocator();
     const ptr = try alloc.create(T);
@@ -128,8 +128,8 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     const entity: Entity(T) = .init(&self.entities, id);
     const ctx: Context(T) = .new(self, entity);
 
-    self.entities.start_update(id);
-    defer self.entities.end_update(id);
+    self.entities.startUpdate(id);
+    defer self.entities.endUpdate(id);
 
     try @call(.always_inline, function, .{ ptr, ctx } ++ args);
 
@@ -149,22 +149,26 @@ pub const UpdateFrame = struct {
 
         assert(self.any.type_id == TypeInfo.init(@typeInfo(T).pointer.child));
 
-        self.app.entities.end_update(self.any.id);
-        self.app.end_update();
+        self.app.entities.endUpdate(self.any.id);
+        self.app.endUpdate();
     }
 };
 
-pub fn update_frame(self: *App, comptime T: type, entity: Entity(T)) struct { *T, UpdateFrame } {
-    self.start_update();
-    self.entities.start_update(entity.any.id);
+pub fn updateFrame(self: *App, comptime T: type, entity: Entity(T)) struct { *T, UpdateFrame } {
+    self.startUpdate();
+    self.entities.startUpdate(entity.any.id);
 
     const ptr = self.entities.get(T, entity.id());
 
     return .{ ptr, .{ .any = entity.any, .app = self } };
 }
 
-pub fn read_entity(self: *App, comptime T: type, entity: Entity(T)) *const T {
+pub fn readEntity(self: *App, comptime T: type, entity: Entity(T)) *const T {
     return self.entities.get(T, entity.id());
+}
+
+pub fn tryReadEntity(self: *App, comptime T: type, entity: Entity(T)) ?*const T {
+    return self.entities.tryGet(T, entity.id());
 }
 
 pub fn notify(self: *App, entity: anytype) void {
@@ -178,11 +182,11 @@ pub fn notify(self: *App, entity: anytype) void {
     };
 }
 
-pub fn start_update(self: *App) void {
+pub fn startUpdate(self: *App) void {
     self.peding_updates += 1;
 }
 
-pub fn end_update(self: *App) void {
+pub fn endUpdate(self: *App) void {
     if (!self.flushing and self.peding_updates == 1) {
         self.flushing = true;
         self.flush();
@@ -193,12 +197,12 @@ pub fn end_update(self: *App) void {
 
 pub fn flush(self: *App) void {
     self.loop.run(.no_wait) catch @panic("Loop run Error");
-    self.destroy_dropped_entities();
-    self.flush_notifications();
-    self.flush_events();
+    self.destroyDroppedEntities();
+    self.flushNotifications();
+    self.flushEvents();
 }
 
-pub fn flush_notifications(self: *App) void {
+pub fn flushNotifications(self: *App) void {
     var iter = self.notifications.iter();
     while (iter.next()) |id| {
         self.observers.notify(id, .{ self, id });
@@ -207,7 +211,7 @@ pub fn flush_notifications(self: *App) void {
     self.notifications.clear(self.chunks.allocator());
 }
 
-pub fn flush_events(self: *App) void {
+pub fn flushEvents(self: *App) void {
     const chunk = self.chunks.allocator();
     while (self.events.popFront()) |event| {
         self.listeners.notify(
@@ -219,7 +223,7 @@ pub fn flush_events(self: *App) void {
     }
 }
 
-pub fn destroy_dropped_entities(self: *App) void {
+pub fn destroyDroppedEntities(self: *App) void {
     const alloc = self.chunks.allocator();
 
     while (self.entities.popDrop()) |drop| {

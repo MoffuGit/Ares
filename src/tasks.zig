@@ -100,7 +100,7 @@ fn destroy(self: *Tasks, id: TaskId) void {
     self.chunks.destroy(task);
 }
 
-pub fn destroy_cancelation(self: *Tasks, cancel: *Cancelation) void {
+pub fn destroyCancelation(self: *Tasks, cancel: *Cancelation) void {
     self.chunks.destroy(cancel);
 }
 

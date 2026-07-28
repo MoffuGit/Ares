@@ -1,4 +1,5 @@
 const App = @import("app.zig");
+const buffer = @import("buffer.zig");
 const chunk_pool = @import("chunk_pool.zig");
 const chunked_path = @import("chunked_path.zig");
 const datastruct = @import("datastruct.zig");
@@ -14,6 +15,7 @@ const Workspace = @import("workspace.zig");
 const Worktree = @import("worktree.zig");
 
 test {
+    _ = buffer;
     _ = App;
     _ = chunk_pool;
     _ = chunked_path;

@@ -83,11 +83,11 @@ pub const Executors = struct {
         while (!self.stop.load(.acquire)) {
             self.flush();
             self.loop.run(.no_wait) catch return;
-            self.destroy_dropped_entities();
+            self.destroyDroppedEntities();
             self.io.sleep(.fromNanoseconds(100), .real) catch {};
         }
 
-        self.destroy_dropped_entities();
+        self.destroyDroppedEntities();
         self.flush();
         self.loop.run(.no_wait) catch {};
         self.loop.run(.until_done) catch {};
@@ -99,7 +99,7 @@ pub const Executors = struct {
             if (self.tasks.contains(cancelation.id)) {
                 cancelation.cancel(&self.loop);
             } else {
-                self.tasks.destroy_cancelation(cancelation);
+                self.tasks.destroyCancelation(cancelation);
             }
         }
         while (self.queues.pop(.completions)) |completion| {
@@ -192,7 +192,7 @@ pub const Executors = struct {
         return self.entities.get(T, executor.id());
     }
 
-    fn destroy_dropped_entities(self: *Executors) void {
+    fn destroyDroppedEntities(self: *Executors) void {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
 
