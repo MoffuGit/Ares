@@ -386,6 +386,10 @@ pub fn Context(comptime T: type) type {
             return self.entity.read(self.app);
         }
 
+        pub fn tryRead(self: *const @This()) ?*const T {
+            return self.entity.tryRead(self.app);
+        }
+
         pub fn notify(self: *const @This()) void {
             self.entity.notify(self.app);
         }
