@@ -122,12 +122,12 @@ extension Odyssey {
 
         static func getBySession(app: Odyssey.App, session: Odyssey.Session) -> SerializedWorkspaces
         {
-            guard let odysseyApp = app.app, let sessionEntity = session.entity else {
+            guard let sessionEntity = session.entity else {
                 logger.critical("odyssey_workspace_get_by_session failed: app or session is nil")
                 return SerializedWorkspaces(odyssey_workspace_list_s(ptr: nil, len: 0))
             }
 
-            return SerializedWorkspaces(odyssey_workspace_get_by_session(odysseyApp, sessionEntity))
+            return SerializedWorkspaces(odyssey_workspace_get_by_session(sessionEntity))
         }
 
         deinit {
@@ -179,18 +179,18 @@ extension Odyssey {
         }
 
         func markForRestoration() {
-            guard let odysseyApp = app.app, let entity = entity else {
+            guard let entity = entity else {
                 logger.critical(
                     "odyssey_workspace_mark_for_restoration failed: app or entity is nil")
                 return
             }
 
-            odyssey_workspace_mark_for_restoration(odysseyApp, entity)
+            odyssey_workspace_mark_for_restoration(entity)
             app.enqueueFlush()
         }
 
         func setBounds(window: NSRect, leftDock: Double?, rightDock: Double?) {
-            guard let odysseyApp = app.app, let entity = entity else {
+            guard let entity = entity else {
                 logger.critical("odyssey_workspace_set_bounds failed: app or entity is nil")
                 return
             }
@@ -206,12 +206,12 @@ extension Odyssey {
                 width: rightDock ?? 0, valid: rightDock != nil)
 
             odyssey_workspace_set_bounds(
-                odysseyApp, entity, maybeWindow, maybeLeftDock, maybeRigthDock)
+                entity, maybeWindow, maybeLeftDock, maybeRigthDock)
         }
 
         var Id: Int64 {
-            guard let odysseyApp = app.app, let entity = entity else { return -1 }
-            return odyssey_workspace_get_id(odysseyApp, entity)
+            guard let entity = entity else { return -1 }
+            return odyssey_workspace_get_id(entity)
         }
 
         static func normalizedPaths(_ paths: [String]) -> [String] {

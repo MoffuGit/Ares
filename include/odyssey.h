@@ -122,21 +122,20 @@ typedef struct {
 } odyssey_workspace_list_s;
 
 odyssey_workspace_list_s odyssey_workspace_get_all_metadata_and_validate(void);
-odyssey_workspace_list_s odyssey_workspace_get_by_session(odyssey_app_t app, odyssey_entity_s session);
+odyssey_workspace_list_s odyssey_workspace_get_by_session(odyssey_entity_s session);
 void odyssey_workspace_list_free(odyssey_workspace_list_s list);
 int odyssey_workspace_delete_by_id(int64_t id);
 
 typedef odyssey_maybe_entity_s odyssey_workspace_creation_t;
 odyssey_workspace_creation_t odyssey_workspace_new(odyssey_app_t app, odyssey_entity_s session, odyssey_workspace_paths_s paths);
-void odyssey_workspace_mark_for_restoration(odyssey_app_t app, odyssey_entity_s workspace);
+void odyssey_workspace_mark_for_restoration(odyssey_entity_s workspace);
 void odyssey_workspace_set_bounds(
-    odyssey_app_t app,
     odyssey_entity_s workspace,
     odyssey_maybe_workspace_window_bounds_s bounds,
     odyssey_maybe_workspace_dock_width_s left_dock,
     odyssey_maybe_workspace_dock_width_s right_dock
 );
-int64_t odyssey_workspace_get_id(odyssey_app_t app, odyssey_entity_s workspace);
+int64_t odyssey_workspace_get_id(odyssey_entity_s workspace);
 
 /////////////////
 //~ Session Types

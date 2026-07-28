@@ -288,7 +288,7 @@ pub export fn odyssey_drop_entity(entity: ExternEntity) void {
 }
 
 pub export fn odyssey_workspace_new(app: *App, extern_entity: ExternEntity, paths: Slice(String)) MaybeEntity {
-    const session = extern_entity.any().into(Session) orelse @panic("Missing Session Entity");
+    const session = ent.Entity(Session).from(extern_entity.any()) orelse @panic("Missing Session Entity");
 
     const workspace = workspace_new(app, session, paths) catch |err| {
         std.log.err("error creating workspace={}", .{err});
@@ -299,7 +299,7 @@ pub export fn odyssey_workspace_new(app: *App, extern_entity: ExternEntity, path
 }
 
 fn workspace_new(app: *App, session: ent.Entity(Session), extern_paths: Slice(String)) !ent.Entity(Workspace) {
-    const id = session.read(app).id;
+    const id = session.read().id;
 
     var buffer: [1024][]const u8 = undefined;
 
@@ -331,18 +331,18 @@ fn workspace_new(app: *App, session: ent.Entity(Session), extern_paths: Slice(St
     return workspace;
 }
 
-pub export fn odyssey_workspace_mark_for_restoration(app: *App, extern_entity: ExternEntity) void {
-    const workspace = extern_entity.any().into(Workspace) orelse @panic("Missing Workspace Entity");
-    const ptr = workspace.read(app);
+pub export fn odyssey_workspace_mark_for_restoration(extern_entity: ExternEntity) void {
+    const workspace = ent.Entity(Workspace).from(extern_entity.any()) orelse @panic("Missing Workspace Entity");
+    const ptr = workspace.read();
 
-    ptr.markForRestoration(app.gpa) catch |err| {
+    ptr.markForRestoration(state.gpa) catch |err| {
         std.log.warn("Workspace would not restore={}", .{err});
     };
 }
 
-pub export fn odyssey_workspace_set_bounds(app: *App, extern_entity: ExternEntity, extern_bounds: Option(ExternSerializedWindowBounds), left_dock: Option(f64), right_dock: Option(f64)) void {
-    const workspace = extern_entity.any().into(Workspace) orelse @panic("Missing Workspace Entity");
-    const ptr = workspace.read(app);
+pub export fn odyssey_workspace_set_bounds(extern_entity: ExternEntity, extern_bounds: Option(ExternSerializedWindowBounds), left_dock: Option(f64), right_dock: Option(f64)) void {
+    const workspace = ent.Entity(Workspace).from(extern_entity.any()) orelse @panic("Missing Workspace Entity");
+    const ptr = workspace.read();
 
     const bounds = if (extern_bounds.into()) |n| n.into() else null;
 
@@ -351,9 +351,9 @@ pub export fn odyssey_workspace_set_bounds(app: *App, extern_entity: ExternEntit
     };
 }
 
-pub export fn odyssey_workspace_get_id(app: *App, extern_entity: ExternEntity) i64 {
-    const workspace_entity = extern_entity.any().into(Workspace) orelse return -1;
-    return workspace_entity.read(app).id;
+pub export fn odyssey_workspace_get_id(extern_entity: ExternEntity) i64 {
+    const workspace = ent.Entity(Workspace).from(extern_entity.any()) orelse @panic("Missing Workspace Entity");
+    return workspace.read().id;
 }
 
 pub export fn odyssey_remove_observer(observer: ExternObserver) void {
@@ -406,16 +406,16 @@ fn workspace_get_all_metadata_and_validate() !ExternSerializedWorkspaces {
     return try ExternSerializedWorkspaces.init(workspaces, gpa);
 }
 
-pub export fn odyssey_workspace_get_by_session(app: *App, session_entity: ExternEntity) ExternSerializedWorkspaces {
-    return workspace_get_by_session(app, session_entity) catch |err| {
+pub export fn odyssey_workspace_get_by_session(session_entity: ExternEntity) ExternSerializedWorkspaces {
+    return workspace_get_by_session(session_entity) catch |err| {
         std.log.err("error getting workspaces by session={}", .{err});
         return .empty;
     };
 }
 
-fn workspace_get_by_session(app: *App, session_entity: ExternEntity) !ExternSerializedWorkspaces {
-    const session = session_entity.any().into(Session) orelse return error.InvalidSessionEntity;
-    const old_id = session.read(app).old_id orelse return .empty;
+fn workspace_get_by_session(session_entity: ExternEntity) !ExternSerializedWorkspaces {
+    const session = ent.Entity(Session).from(session_entity.any()) orelse @panic("Missing Session Entity");
+    const old_id = session.read().old_id orelse return .empty;
 
     const io = state.threaded.io();
     const gpa = state.gpa;
