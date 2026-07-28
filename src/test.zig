@@ -13,8 +13,10 @@ const subscription = @import("subscription.zig");
 const tasks = @import("tasks.zig");
 const Workspace = @import("workspace.zig");
 const Worktree = @import("worktree.zig");
+const bench = @import("bench.zig");
 
 test {
+    _ = bench;
     _ = buffer;
     _ = App;
     _ = chunk_pool;
