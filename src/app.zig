@@ -17,9 +17,9 @@ pub const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
-const sch = @import("scheduler.zig");
-const Executors = sch.Executors;
-const schExecutor = sch.Executor;
+const ect = @import("executor.zig");
+const Executors = ect.Executors;
+const Executor = ect.Executor;
 const Subscriptions = @import("subscription.zig").Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
@@ -136,8 +136,8 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     return entity;
 }
 
-pub fn executor(self: *App, comptime T: type, args: anytype) !schExecutor(T) {
-    return try schExecutor(T).new(&self.executors, args);
+pub fn executor(self: *App, comptime T: type, args: anytype) !Executor(T) {
+    return try Executor(T).new(&self.executors, args);
 }
 
 pub const UpdateFrame = struct {
@@ -483,7 +483,7 @@ pub fn Context(comptime T: type) type {
             self: *const @This(),
             E: type,
             args: anytype,
-        ) !schExecutor(E) {
+        ) !Executor(E) {
             return try self
                 .app
                 .executor(E, args);

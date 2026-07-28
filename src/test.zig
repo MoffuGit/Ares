@@ -6,7 +6,7 @@ const entity = @import("entity.zig");
 const Loop = @import("loop.zig");
 const Project = @import("project.zig");
 const WorktreeStore = @import("project/worktree_store.zig");
-const scheduler = @import("scheduler.zig");
+const executor = @import("executor.zig");
 const Session = @import("session.zig");
 const subscription = @import("subscription.zig");
 const tasks = @import("tasks.zig");
@@ -20,7 +20,7 @@ test {
     _ = datastruct;
     _ = entity;
     _ = Loop;
-    _ = scheduler;
+    _ = executor;
     _ = Project;
     _ = WorktreeStore;
     _ = Session;
