@@ -69,7 +69,7 @@ test "benchmark: Worktree initial scan" {
     try verifyWorktree(&app, io);
 
     const estimate = Bench.estimate(&durations);
-    Bench.report("Worktree Scanner={}ns", .{estimate.toMilliseconds()});
+    Bench.report("Worktree Scanner={}ms", .{estimate.toMilliseconds()});
 }
 
 fn verifyWorktree(app: *App, io: Io) !void {
