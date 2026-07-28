@@ -15,18 +15,18 @@ const constants = @import("constants.zig");
 const MAX_SIZE = constants.MAX_SIZE;
 const datastruct = @import("datastruct.zig");
 const MultiMpsc = datastruct.MultiMpsc;
+const slotmap = datastruct.slotmap;
+pub const ExecutorId = slotmap.Key;
+const ent = @import("entity.zig");
+const EntityStore = ent.EntityStore;
+const AnyEntity = ent.AnyEntity;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const Tasks = @import("tasks.zig");
 const Task = Tasks.Task;
 const TaskId = Tasks.TaskId;
-const ent = @import("entity.zig");
-const EntityStore = ent.EntityStore;
-const AnyEntity = ent.AnyEntity;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
-const slotmap = datastruct.slotmap;
-pub const ExecutorId = slotmap.Key;
 
 const Queues = union(enum) {
     cancelations: Tasks.Cancelation,

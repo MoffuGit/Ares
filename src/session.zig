@@ -1,12 +1,14 @@
-const zqlite = @import("zqlite");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
+
+const zqlite = @import("zqlite");
+
 const App = @import("app.zig");
 const Context = App.Context;
-const uuid = @import("uuid.zig");
 const db = @import("db.zig");
 const KVS = db.KVS;
+const uuid = @import("uuid.zig");
 
 const SESSION_KEY = "session_id";
 

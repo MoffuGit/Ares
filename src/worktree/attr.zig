@@ -2,9 +2,9 @@
 //LICENSE: [ZLOB]
 
 const std = @import("std");
-const builtin = @import("builtin");
 const Io = std.Io;
 const File = Io.File;
+const builtin = @import("builtin");
 
 pub const supported = builtin.os.tag == .macos and builtin.link_libc;
 pub const AttrList = extern struct {

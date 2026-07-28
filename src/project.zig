@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
+
 const App = @import("app.zig");
 const Entity = App.Entity;
 const Context = App.Context;

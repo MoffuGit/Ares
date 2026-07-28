@@ -1,10 +1,10 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
+const heap = std.heap;
 const builtin = @import("builtin");
 
 const App = @import("app.zig");
-const heap = std.heap;
 const db = @import("db.zig");
 const ent = @import("entity.zig");
 const global = @import("global.zig");

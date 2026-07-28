@@ -12,21 +12,21 @@ const constants = @import("constants.zig");
 const MAX_SIZE = constants.MAX_SIZE;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
+const ect = @import("executor.zig");
+const Executors = ect.Executors;
+const Executor = ect.Executor;
 const ent = @import("entity.zig");
 pub const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
-const ect = @import("executor.zig");
-const Executors = ect.Executors;
-const Executor = ect.Executor;
+const Loop = @import("loop.zig");
 const Subscriptions = @import("subscription.zig").Subscriptions;
+const Tasks = @import("tasks.zig");
+const TaskId = Tasks.TaskId;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
-const Loop = @import("loop.zig");
-const Tasks = @import("tasks.zig");
-const TaskId = Tasks.TaskId;
 
 pub const Waker = struct {
     waker: Tasks.Waker,
