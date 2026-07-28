@@ -20,6 +20,8 @@ pub const TaskId = slotmap.Key;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 
+const log = std.log.scoped(.tasks);
+
 pub const Tasks = @This();
 
 io: Io,
@@ -214,7 +216,7 @@ pub const Task = struct {
                         .SUCCESS => {},
                         .RCV_TOO_LARGE => {},
                         else => |err| {
-                            std.log.warn("mach msg drain err, may duplicate async wakeups err={}", .{err});
+                            log.warn("mach msg drain err, may duplicate async wakeups err={}", .{err});
                             return;
                         },
                     }
@@ -332,10 +334,10 @@ pub const Waker = struct {
             .SEND_NO_BUFFER => {},
             .SEND_TIMED_OUT => {},
             .SEND_INVALID_DEST => |e| {
-                std.log.debug("mach msg err={}", .{e});
+                log.debug("mach msg err={}", .{e});
             },
             else => |e| {
-                std.log.warn("mach msg err={}", .{e});
+                log.warn("mach msg err={}", .{e});
                 return error.MachMsgFailed;
             },
         }

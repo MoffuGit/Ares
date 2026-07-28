@@ -15,6 +15,8 @@ const mem_map = datastruct.mem_map;
 const MemMap = mem_map.MemMap;
 const MemMapRng = mem_map.MemMapRng;
 
+const log = std.log.scoped(.chunked_path);
+
 pub const Chunk = [SIMD_CHUNK_BYTES]u8;
 pub const RANGE_NODE_SIZE = @sizeOf(MemMapRng);
 pub const CHUNKS_SIZE = @sizeOf(Chunk);
@@ -584,7 +586,7 @@ test "cmp matches std.mem.order on random paths" {
             const actual = cs_a.cmp(cs_b);
 
             if (actual != expected) {
-                std.debug.print(
+                log.info(
                     "cmp mismatch at ({d},\"{s}\") vs ({d},\"{s}\"): expected {}, got {}\n",
                     .{ i, path_a, j, path_b, expected, actual },
                 );

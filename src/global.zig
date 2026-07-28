@@ -4,6 +4,8 @@ const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 
+const log = std.log.scoped(.global);
+
 pub var state: GlobalState = undefined;
 
 const use_safe_allocator = switch (builtin.mode) {
@@ -35,8 +37,8 @@ const GlobalState = struct {
             .environ = .{ .block = environ },
         });
 
-        std.log.info("odyssey zig version={}", .{builtin.zig_version});
-        std.log.info("odyssey build optimize={}", .{builtin.mode});
+        log.info("odyssey zig version={}", .{builtin.zig_version});
+        log.info("odyssey build optimize={}", .{builtin.mode});
 
         self.* = .{
             .gpa = gpa,

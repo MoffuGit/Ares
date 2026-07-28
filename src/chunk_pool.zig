@@ -11,6 +11,8 @@ const builtin = @import("builtin");
 const constans = @import("constants.zig");
 const MAX_ALIGN = constans.MAX_ALIGN;
 
+const log = std.log.scoped(.chunk_pool);
+
 const Chunk = opaque {
     pub const Index = enum(u32) {
         none = std.math.maxInt(u32),
@@ -69,7 +71,7 @@ pub const ChunkPool = struct {
             @returnAddress(),
         ) orelse return error.OutOfMemory)[0..len];
 
-        std.log.debug("ChunkPool size={} capacity={} | Chunk size={}", .{ buffer.len, capacity, size });
+        log.debug("ChunkPool size={} capacity={} | Chunk size={}", .{ buffer.len, capacity, size });
 
         self.* = .{
             .buffer = buffer,
@@ -230,7 +232,7 @@ pub const ChunkAllocator = struct {
             const buffer = pool.alloc() orelse return null;
             if (builtin.mode == .Debug and !builtin.is_test) {
                 if (len < buffer.len >> 1) {
-                    std.log.warn("Mostly unused chunk size={} used={}", .{ buffer.len, len });
+                    log.warn("Mostly unused chunk size={} used={}", .{ buffer.len, len });
                 }
             }
             return buffer.ptr;

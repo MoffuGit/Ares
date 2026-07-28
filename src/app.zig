@@ -28,6 +28,7 @@ const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
 
+const log = std.log.scoped(.app);
 pub const Waker = struct {
     waker: Tasks.Waker,
     options: App.Options,
@@ -168,7 +169,7 @@ pub fn notify(self: *App, entity: anytype) void {
     }
 
     _ = self.notifications.insert(self.chunks.allocator(), entity.id()) catch |err| {
-        std.log.err("We cannot notify, err: {}", .{err});
+        log.err("We cannot notify, err: {}", .{err});
     };
 }
 

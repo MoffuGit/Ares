@@ -13,6 +13,8 @@ const Session = @import("session.zig");
 const uuid = @import("uuid.zig");
 const Workspace = @import("workspace.zig");
 
+const log = std.log.scoped(.lib);
+
 const state = &@import("global.zig").state;
 
 const ExternAppOptions = extern struct {
@@ -218,7 +220,7 @@ pub export fn odyssey_init(c_argc: c_int, c_argv: [*][*:0]c_char) c_int {
     } else .global;
 
     global.state.init(argv, environ) catch |err| {
-        std.log.err("Global state err={}", .{err});
+        log.err("Global state err={}", .{err});
         return 1;
     };
 
@@ -231,7 +233,7 @@ pub export fn odyssey_deinit() void {
 
 pub export fn odyssey_db_start() c_int {
     db.init(global.state.gpa) catch |err| {
-        std.log.err("error starting zqlite pool: {}", .{err});
+        log.err("error starting zqlite pool: {}", .{err});
         return 1;
     };
     return 0;
@@ -243,7 +245,7 @@ pub export fn odyssey_db_stop() void {
 
 pub export fn odyssey_app_new(options: *const ExternAppOptions) ?*App {
     return app_new(options) catch |err| {
-        std.log.err("error initializing app: {}", .{err});
+        log.err("error initializing app: {}", .{err});
         return null;
     };
 }
@@ -291,7 +293,7 @@ pub export fn odyssey_workspace_new(app: *App, extern_entity: ExternEntity, path
     const session = ent.Entity(Session).from(extern_entity.any()) orelse @panic("Missing Session Entity");
 
     const workspace = workspace_new(app, session, paths) catch |err| {
-        std.log.err("error creating workspace={}", .{err});
+        log.err("error creating workspace={}", .{err});
         return .none;
     };
 
@@ -336,7 +338,7 @@ pub export fn odyssey_workspace_mark_for_restoration(extern_entity: ExternEntity
     const ptr = workspace.read();
 
     ptr.markForRestoration(state.gpa) catch |err| {
-        std.log.warn("Workspace would not restore={}", .{err});
+        log.warn("Workspace would not restore={}", .{err});
     };
 }
 
@@ -347,7 +349,7 @@ pub export fn odyssey_workspace_set_bounds(extern_entity: ExternEntity, extern_b
     const bounds = if (extern_bounds.into()) |n| n.into() else null;
 
     ptr.setBounds(bounds, left_dock.into(), right_dock.into()) catch |err| {
-        std.log.warn("Workspace window would not restore={}", .{err});
+        log.warn("Workspace window would not restore={}", .{err});
     };
 }
 
@@ -359,13 +361,13 @@ pub export fn odyssey_workspace_get_id(extern_entity: ExternEntity) i64 {
 pub export fn odyssey_remove_observer(observer: ExternObserver) void {
     const sub = observer.subscription();
     sub.unsubscribe() catch |err| {
-        std.log.err("unsubscribe err={}", .{err});
+        log.err("unsubscribe err={}", .{err});
     };
 }
 
 pub export fn odyssey_session_new(app: *App) MaybeEntity {
     const session = session_new(app) catch |err| {
-        std.log.err("error creating session={}", .{err});
+        log.err("error creating session={}", .{err});
         return .none;
     };
 
@@ -389,7 +391,7 @@ fn session_new(app: *App) !ent.Entity(Session) {
 
 pub export fn odyssey_workspace_get_all_metadata_and_validate() ExternSerializedWorkspaces {
     return workspace_get_all_metadata_and_validate() catch |err| {
-        std.log.err("error getting workspace metadata={}", .{err});
+        log.err("error getting workspace metadata={}", .{err});
         return .empty;
     };
 }
@@ -408,7 +410,7 @@ fn workspace_get_all_metadata_and_validate() !ExternSerializedWorkspaces {
 
 pub export fn odyssey_workspace_get_by_session(session_entity: ExternEntity) ExternSerializedWorkspaces {
     return workspace_get_by_session(session_entity) catch |err| {
-        std.log.err("error getting workspaces by session={}", .{err});
+        log.err("error getting workspaces by session={}", .{err});
         return .empty;
     };
 }
@@ -439,7 +441,7 @@ pub export fn odyssey_workspace_list_free(list: ExternSerializedWorkspaces) void
 
 pub export fn odyssey_workspace_delete_by_id(id: i64) c_int {
     workspace_delete_by_id(id) catch |err| {
-        std.log.err("error deleting workspace by id={}", .{err});
+        log.err("error deleting workspace by id={}", .{err});
         return 1;
     };
     return 0;

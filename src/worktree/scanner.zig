@@ -31,6 +31,8 @@ const attr = @import("attr.zig");
 const BulkAttr = attr.BulkAttr;
 const Snapshot = @import("snapshot.zig");
 
+const log = std.log.scoped(.scanner);
+
 const state = &global.state;
 const UPDATE_INTERVAL: Io.Duration = .fromMilliseconds(100);
 
@@ -147,7 +149,7 @@ pub fn handleActions(
 ) bool {
     const self = ctx.get(io) catch return false;
     self._handleActions(ctx, waker) catch |err| {
-        std.log.err("Worktree Scanner err={}", .{err});
+        log.err("Worktree Scanner err={}", .{err});
         return true;
     };
 
@@ -242,7 +244,7 @@ fn timerCallback(ctx: Context(Scanner), waker: App.Waker, io: Io) bool {
     if (!self.workers.working) return false;
 
     self._timerCallback(waker) catch |err| {
-        std.log.err("Scanner Timer err={}", .{err});
+        log.err("Scanner Timer err={}", .{err});
         return false;
     };
 
@@ -349,7 +351,7 @@ const Workers = struct {
         self.queue.wakeAll(self.io);
 
         self.group.await(self.io) catch |err| {
-            std.log.err("Workers stop err={}", .{err});
+            log.err("Workers stop err={}", .{err});
         };
 
         for (self.queue.queues) |*local| {
@@ -441,7 +443,7 @@ pub fn scan(
     worker_id: u32,
 ) void {
     self._scan(worker_id) catch |err| {
-        std.log.err("worker err: {}", .{err});
+        log.err("worker err: {}", .{err});
     };
 }
 

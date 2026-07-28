@@ -1,5 +1,4 @@
 const std = @import("std");
-const log = std.log;
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 
@@ -8,6 +7,7 @@ const objc = @import("objc");
 const constants = @import("constants.zig");
 const BUNDLE_ID = constants.BUNDLE_ID;
 
+const log = std.log.scoped(.os);
 //Source: https://github.com/ghostty-org/ghostty.git
 //LICENSE: [GHOSTTY]
 

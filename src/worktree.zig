@@ -15,6 +15,8 @@ const Scanner = @import("worktree/scanner.zig");
 const Updates = Scanner.Updates;
 const Snapshot = @import("worktree/snapshot.zig");
 
+const log = std.log.scoped(.worktree);
+
 pub const Worktree = @This();
 
 pub const Options = struct {
@@ -68,7 +70,7 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
     for (0..try ptr.updates.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
             .started => {
-                std.log.debug("scanner for path \"{s}\" started", .{self.snapshot.abs_root});
+                log.debug("scanner for path \"{s}\" started", .{self.snapshot.abs_root});
                 self.scanning = true;
             },
             .updated => |updated| {
@@ -76,9 +78,9 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
                 self.snapshot = updated.snapshot;
                 self.scanning = updated.scanning;
 
-                std.log.debug("scanner for path \"{s}\" update", .{self.snapshot.abs_root});
+                log.debug("scanner for path \"{s}\" update", .{self.snapshot.abs_root});
                 if (!self.scanning) {
-                    std.log.debug("scanner for path \"{s}\" ended", .{self.snapshot.abs_root});
+                    log.debug("scanner for path \"{s}\" ended", .{self.snapshot.abs_root});
                 }
             },
         }

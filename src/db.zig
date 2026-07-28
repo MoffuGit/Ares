@@ -9,6 +9,8 @@ const DB_NAME = constanst.DB_NAME;
 const global = @import("global.zig");
 const os = @import("os.zig");
 
+const log = std.log.scoped(.database);
+
 const WORKSPACE_SCHEMA = @embedFile("db/workspace.sql");
 const KEY_VALUE_STORE = @embedFile("db/key_value_store.sql");
 
@@ -21,7 +23,7 @@ fn onFirstConnection(_conn: zqlite.Conn, _: ?*anyopaque) !void {
 
 pub fn init(gpa: Allocator) !void {
     const path = os.appSupportPath(gpa, DB_NAME) catch |err| {
-        std.log.err("error resolving db path: {}", .{err});
+        log.err("error resolving db path: {}", .{err});
         return err;
     };
     defer gpa.free(path);
@@ -31,7 +33,7 @@ pub fn init(gpa: Allocator) !void {
     const slice = try gpa.dupeSentinel(u8, path, 0);
     defer gpa.free(slice);
 
-    std.log.debug("DB PATH={s}", .{slice});
+    log.debug("DB PATH={s}", .{slice});
 
     pool = try zqlite.Pool.init(gpa, .{
         .size = 100,

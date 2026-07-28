@@ -10,6 +10,8 @@ const db = @import("db.zig");
 const KVS = db.KVS;
 const uuid = @import("uuid.zig");
 
+const log = std.log.scoped(.session);
+
 const SESSION_KEY = "session_id";
 
 pub const Session = @This();
@@ -45,7 +47,7 @@ pub fn init(
         .old_id = old,
     };
 
-    std.log.debug("Current Session: {}\nOld Session: {?}", .{ self.id, self.old_id });
+    log.debug("Current Session: {}\nOld Session: {?}", .{ self.id, self.old_id });
 }
 
 test "Session init stores current id and reads previous id" {
