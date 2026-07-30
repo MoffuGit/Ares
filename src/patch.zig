@@ -4,6 +4,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
+const heap = std.heap;
 
 const Buffer = @import("buffer.zig");
 const Info = Buffer.Info;
@@ -125,13 +126,18 @@ pub const Patched = struct {
     memmap: MemMap,
     size: u64,
 
-    pub fn init(buffer: []u8, info: Info, patch_list: PatchList, arena: Allocator) !Patched {
+    pub fn init(buffer: []u8, info: Info, patch_list: PatchList, alloc: Allocator) !Patched {
         var last_memmap: MemMap = .{};
         var last_linemap: LineMap = .{};
         var last_size: u64 = buffer.len;
 
-        try last_memmap.push(.new(0, buffer.len), buffer.ptr, arena);
-        try last_linemap.push(.new(info.line_ranges, .new(1, info.line_count + 1), 0), arena);
+        try last_memmap.push(.new(0, buffer.len), buffer.ptr, alloc);
+        try last_linemap.push(.new(info.line_ranges, .new(1, info.line_count + 1), 0), alloc);
+
+        const patched_buffer = try alloc.alloc(u8, 1024);
+        defer alloc.free(patched_buffer);
+        var fixed = heap.FixedBufferAllocator.init(patched_buffer);
+        const temp = fixed.allocator();
 
         var patch_node = patch_list.list.head;
 
@@ -161,7 +167,7 @@ pub const Patched = struct {
 
             for (patch.replace, 0..) |c, idx| {
                 if (c == '\n') {
-                    const new_range_node = try arena.create(math.Rngu64Node);
+                    const new_range_node = try temp.create(math.Rngu64Node);
                     new_range_node.* = .{ .range = .new(last_line_start_off, idx) };
                     replace_line_range.push(new_range_node);
 
@@ -171,7 +177,7 @@ pub const Patched = struct {
                 }
             }
 
-            const new_range_node = try arena.create(math.Rngu64Node);
+            const new_range_node = try temp.create(math.Rngu64Node);
             new_range_node.* = .{ .range = .new(last_line_start_off, patch.replace.len) };
             replace_line_range.push(new_range_node);
 
@@ -184,7 +190,7 @@ pub const Patched = struct {
                 const range_x_post: Rngu64 = .intersect(post_range, range);
 
                 if (!range_x_pre.empty()) {
-                    try next_memmap.push(range_x_pre, map.base + (range_x_pre.min - range.min), arena);
+                    try next_memmap.push(range_x_pre, map.base + (range_x_pre.min - range.min), temp);
                 }
 
                 if (!range_x_post.empty()) {
@@ -195,7 +201,7 @@ pub const Patched = struct {
                     try next_memmap.push(
                         range_x_post_shifted,
                         map.base + (range_x_post.min - range.min),
-                        arena,
+                        temp,
                     );
                 }
             }
@@ -204,7 +210,7 @@ pub const Patched = struct {
                 try next_memmap.push(
                     .new(patch.range.min, patch.range.min + patch.replace.len),
                     patch.replace.ptr,
-                    arena,
+                    temp,
                 );
             }
 
@@ -222,7 +228,7 @@ pub const Patched = struct {
                             range_x_pre,
                             line.delta,
                         ),
-                        arena,
+                        temp,
                     );
                 }
 
@@ -238,12 +244,12 @@ pub const Patched = struct {
                             range_x_post_shifted,
                             line.delta + size_delta,
                         ),
-                        arena,
+                        temp,
                     );
                 }
             }
 
-            const affected_lines_ranges = try arena.alloc(Rngu64, replaced_lines_count);
+            const affected_lines_ranges = try temp.alloc(Rngu64, replaced_lines_count);
             var range_node = replace_line_range.head;
             var affected_idx: u64 = 0;
 
@@ -275,7 +281,7 @@ pub const Patched = struct {
                     .new(replaced_lines_range.min, replaced_lines_range.min + replaced_lines_count),
                     0,
                 ),
-                arena,
+                temp,
             );
 
             last_memmap = next_memmap;
@@ -283,10 +289,26 @@ pub const Patched = struct {
             last_linemap = next_linemap;
         }
 
+        var res_memmap: MemMap = .{};
+        var res_linemap: LineMap = .{};
+
+        var memmap_node = last_memmap.ranges.head;
+        while (memmap_node) |map| : (memmap_node = map.next) {
+            try res_memmap.push(map.vaddr_range, map.base, alloc);
+        }
+
+        var linemap_node = last_linemap.lines.head;
+        while (linemap_node) |map| : (linemap_node = map.next) {
+            try res_linemap.push(
+                .{ .delta = map.delta, .range = map.range, .memmap_ranges = map.memmap_ranges },
+                alloc,
+            );
+        }
+
         return .{
             .size = last_size,
-            .linemap = last_linemap,
-            .memmap = last_memmap,
+            .linemap = res_linemap,
+            .memmap = res_memmap,
         };
     }
 };
@@ -302,7 +324,7 @@ test "Basic Patch Operations" {
 
     const text = line1 ++ line2 ++ line3 ++ line4 ++ line5;
 
-    var a: std.heap.ArenaAllocator = .init(gpa);
+    var a: heap.ArenaAllocator = .init(gpa);
     defer a.deinit();
 
     const arena = a.allocator();
