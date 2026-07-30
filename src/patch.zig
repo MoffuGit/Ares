@@ -56,12 +56,8 @@ pub const LineMap = struct {
     lines: Queue(Line) = .{},
     total: u64 = 0,
 
-    pub fn push(
-        self: *LineMap,
-        line: Line,
-        arena: Allocator,
-    ) !void {
-        const l = try arena.create(Line);
+    pub fn push(self: *LineMap, line: Line, alloc: Allocator) !void {
+        const l = try alloc.create(Line);
         l.* = line;
 
         self.total += l.range.dim();
@@ -91,15 +87,17 @@ pub const LineMap = struct {
             while (node) |n| : (node = n.next) {
                 if (n.range.empty()) continue;
 
+                const dim = n.range.dim();
+
                 const off_range: Rngu64 = .new(
                     delta(n.memmap_ranges[0].min, n.delta),
-                    delta(n.memmap_ranges[n.range.max - n.range.min - 1].max, n.delta),
+                    delta(n.memmap_ranges[dim - 1].max, n.delta),
                 );
 
                 if (!off_range.contains(off)) continue;
 
                 var min_idx: u64 = 0;
-                var max_idx = n.range.dim() - 1;
+                var max_idx = dim - 1;
 
                 while (min_idx <= max_idx) {
                     const mid_idx = (max_idx + min_idx) / 2;
@@ -130,146 +128,159 @@ pub const Patched = struct {
     pub fn init(buffer: []u8, info: Info, patch_list: PatchList, arena: Allocator) !Patched {
         var last_memmap: MemMap = .{};
         var last_linemap: LineMap = .{};
-        var last_size: usize = buffer.len;
+        var last_size: u64 = buffer.len;
 
         try last_memmap.push(.new(0, buffer.len), buffer.ptr, arena);
         try last_linemap.push(.new(info.line_ranges, .new(1, info.line_count + 1), 0), arena);
 
-        var node = patch_list.list.head;
+        var patch_node = patch_list.list.head;
 
-        while (node) |n| : (node = n.next) {
-            var next_memory_map: MemMap = .{};
-            var next_line_map: LineMap = .{};
+        while (patch_node) |patch| : (patch_node = patch.next) {
+            var next_memmap: MemMap = .{};
+            var next_linemap: LineMap = .{};
 
-            const pre_range: Rngu64 = .new(0, n.range.min);
-            const post_range: Rngu64 = .new(n.range.max, last_size);
+            const pre_range: Rngu64 = .new(0, patch.range.min);
+            const post_range: Rngu64 = .new(patch.range.max, last_size);
 
-            var replace_line_num_range: Rngu64 = .new(
-                last_linemap.lineFromOffset(n.range.min),
-                last_linemap.lineFromOffset(n.range.max),
+            var replaced_lines_range: Rngu64 = .new(
+                last_linemap.lineFromOffset(patch.range.min),
+                last_linemap.lineFromOffset(patch.range.max),
             );
+            const pre_lines_range: Rngu64 = .new(1, replaced_lines_range.min);
+            const post_lines_range: Rngu64 = .new(replaced_lines_range.max + 1, last_linemap.total + 1);
 
-            const pre_line_num_range: Rngu64 = .new(1, replace_line_num_range.min);
-            const post_line_num_range: Rngu64 = .new(replace_line_num_range.max + 1, last_linemap.total + 1);
-            const size_delta: i64 = @as(i64, @intCast(n.replace.len)) - @as(i64, @intCast(n.range.dim()));
-            const next_size: usize = @intCast(@as(i64, @intCast(last_size)) + size_delta);
+            const size_delta = @as(i64, @intCast(patch.replace.len)) - @as(i64, @intCast(patch.range.dim()));
+            const next_size = delta(last_size, size_delta);
 
             var line_delta: i64 = 0;
+            line_delta -= @intCast(replaced_lines_range.dim());
+
             var replace_line_range: Queue(math.Rngu64Node) = .{};
             var replaced_lines_count: u64 = 0;
             var last_line_start_off: u64 = 0;
-            line_delta -= @intCast(replace_line_num_range.dim());
-            for (n.replace, 0..) |c, idx| {
+
+            for (patch.replace, 0..) |c, idx| {
                 if (c == '\n') {
-                    line_delta += 1;
-                    const line_range: Rngu64 = .new(last_line_start_off, idx);
                     const new_range_node = try arena.create(math.Rngu64Node);
-                    new_range_node.range = line_range;
-                    last_line_start_off += 1;
+                    new_range_node.* = .{ .range = .new(last_line_start_off, idx) };
                     replace_line_range.push(new_range_node);
+
+                    line_delta += 1;
+                    last_line_start_off += 1;
                     replaced_lines_count += 1;
                 }
             }
-            const new_range_node = try arena.create(math.Rngu64Node);
-            new_range_node.* = .{ .range = .new(last_line_start_off, n.replace.len) };
 
+            const new_range_node = try arena.create(math.Rngu64Node);
+            new_range_node.* = .{ .range = .new(last_line_start_off, patch.replace.len) };
             replace_line_range.push(new_range_node);
+
             replaced_lines_count += 1;
 
             var map_node = last_memmap.ranges.head;
-            while (map_node) |map_n| : (map_node = map_n.next) {
-                const range_x_pre: Rngu64 = .intersect(pre_range, map_n.vaddr_range);
-                const range_x_post: Rngu64 = .intersect(post_range, map_n.vaddr_range);
+            while (map_node) |map| : (map_node = map.next) {
+                const range = map.vaddr_range;
+                const range_x_pre: Rngu64 = .intersect(pre_range, range);
+                const range_x_post: Rngu64 = .intersect(post_range, range);
 
-                if (range_x_pre.max > range_x_pre.min) {
-                    const off: usize = @intCast(range_x_pre.min - map_n.vaddr_range.min);
-                    try next_memory_map.push(range_x_pre, map_n.base + off, arena);
+                if (!range_x_pre.empty()) {
+                    try next_memmap.push(range_x_pre, map.base + (range_x_pre.min - range.min), arena);
                 }
 
-                if (range_x_post.max > range_x_post.min) {
+                if (!range_x_post.empty()) {
                     const range_x_post_shifted: Rngu64 = .new(
                         delta(range_x_post.min, size_delta),
                         delta(range_x_post.max, size_delta),
                     );
-                    const off: usize = @intCast(range_x_post.min - map_n.vaddr_range.min);
-                    try next_memory_map.push(range_x_post_shifted, map_n.base + off, arena);
+                    try next_memmap.push(
+                        range_x_post_shifted,
+                        map.base + (range_x_post.min - range.min),
+                        arena,
+                    );
                 }
             }
 
-            if (n.replace.len != 0) {
-                try next_memory_map.push(.new(n.range.min, n.range.min + n.replace.len), n.replace.ptr, arena);
+            if (patch.replace.len != 0) {
+                try next_memmap.push(
+                    .new(patch.range.min, patch.range.min + patch.replace.len),
+                    patch.replace.ptr,
+                    arena,
+                );
             }
 
-            {
-                var line_map_node = last_linemap.lines.head;
-                while (line_map_node) |line_map_n| : (line_map_node = line_map_n.next) {
-                    const num_range = line_map_n.range;
-                    const range_x_pre: Rngu64 = .intersect(pre_line_num_range, num_range);
-                    const range_x_post: Rngu64 = .intersect(post_line_num_range, num_range);
+            var line_node = last_linemap.lines.head;
+            while (line_node) |line| : (line_node = line.next) {
+                const range = line.range;
+                const range_x_pre: Rngu64 = .intersect(pre_lines_range, range);
+                const range_x_post: Rngu64 = .intersect(post_lines_range, range);
 
-                    if (!range_x_pre.empty()) {
-                        const off: usize = @intCast(range_x_pre.min - num_range.min);
-                        const dim: usize = @intCast(range_x_pre.max - range_x_pre.min);
-                        try next_line_map.push(
-                            .new(line_map_n.memmap_ranges[off .. off + dim], range_x_pre, line_map_n.delta),
-                            arena,
-                        );
-                    }
+                if (!range_x_pre.empty()) {
+                    const off = range_x_pre.min - range.min;
+                    try next_linemap.push(
+                        .new(
+                            line.memmap_ranges[off .. off + (range_x_pre.max - range_x_pre.min)],
+                            range_x_pre,
+                            line.delta,
+                        ),
+                        arena,
+                    );
+                }
 
-                    if (!range_x_post.empty()) {
-                        const range_x_post_shifted: Rngu64 = .new(
-                            delta(range_x_post.min, line_delta),
-                            delta(range_x_post.max, line_delta),
-                        );
-                        const off: usize = @intCast(range_x_post.min - num_range.min);
-                        const dim: usize = @intCast(range_x_post.max - range_x_post.min);
-                        try next_line_map.push(
-                            .new(line_map_n.memmap_ranges[off .. off + dim], range_x_post_shifted, line_map_n.delta + size_delta),
-                            arena,
-                        );
-                    }
+                if (!range_x_post.empty()) {
+                    const range_x_post_shifted: Rngu64 = .new(
+                        delta(range_x_post.min, line_delta),
+                        delta(range_x_post.max, line_delta),
+                    );
+                    const off = range_x_post.min - range.min;
+                    try next_linemap.push(
+                        .new(
+                            line.memmap_ranges[off .. off + (range_x_post.max - range_x_post.min)],
+                            range_x_post_shifted,
+                            line.delta + size_delta,
+                        ),
+                        arena,
+                    );
                 }
             }
 
             const affected_lines_ranges = try arena.alloc(Rngu64, replaced_lines_count);
-            var line_node = replace_line_range.head;
+            var range_node = replace_line_range.head;
+            var affected_idx: u64 = 0;
 
-            var affected_line_idx: u64 = 0;
-            while (line_node) |line_n| : ({
-                line_node = line_n.next;
-                affected_line_idx += 1;
-            }) {
-                var affected_line_range: Rngu64 = .new(
-                    line_n.range.min + n.range.min,
-                    line_n.range.max + n.range.min,
+            while (range_node) |range| {
+                var affected_range: Rngu64 = .new(
+                    range.range.min + patch.range.min,
+                    range.range.max + patch.range.min,
                 );
 
-                // first line in the range -> take min from original line map
-                if (affected_line_idx == 0) {
-                    const og_line_range = last_linemap.rngForLine(replace_line_num_range.min);
-                    affected_line_range.min = og_line_range.min;
+                if (affected_idx == 0) {
+                    affected_range.min = last_linemap.rngForLine(replaced_lines_range.min).min;
                 }
 
-                // last line in the range -> take remaining suffix from original line map
-                const clamped_line_delta: u64 = @intCast(@max(@as(i64, 0), line_delta));
-                if (affected_line_idx == replaced_lines_count - 1 and affected_line_idx >= clamped_line_delta) {
-                    const og_line_range = last_linemap.rngForLine(replace_line_num_range.max);
-                    if (og_line_range.max > n.range.max) {
-                        affected_line_range.max += og_line_range.max - n.range.max;
+                if (affected_idx == replaced_lines_count - 1 and affected_idx >= math.clamp(0, line_delta)) {
+                    const original_range = last_linemap.rngForLine(replaced_lines_range.max);
+                    if (original_range.max > patch.range.max) {
+                        affected_range.max += original_range.max - patch.range.max;
                     }
                 }
 
-                affected_lines_ranges[@intCast(affected_line_idx)] = affected_line_range;
+                affected_lines_ranges[affected_idx] = affected_range;
+                range_node = range.next;
+                affected_idx += 1;
             }
 
-            try next_line_map.push(
-                .new(affected_lines_ranges, .new(replace_line_num_range.min, replace_line_num_range.min + replaced_lines_count), 0),
+            try next_linemap.push(
+                .new(
+                    affected_lines_ranges,
+                    .new(replaced_lines_range.min, replaced_lines_range.min + replaced_lines_count),
+                    0,
+                ),
                 arena,
             );
 
-            last_memmap = next_memory_map;
+            last_memmap = next_memmap;
             last_size = next_size;
-            last_linemap = next_line_map;
+            last_linemap = next_linemap;
         }
 
         return .{

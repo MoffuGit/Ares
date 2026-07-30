@@ -1,6 +1,8 @@
 const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
+const patch = @import("patch.zig");
+const PatchList = patch.PatchList;
 
 const math = @import("math.zig");
 const Rngu64 = math.Rngu64;
@@ -9,11 +11,13 @@ pub const Buffer = @This();
 
 data: []u8,
 info: Info,
+patchs: PatchList,
 
 pub fn init(self: *Buffer, data: []u8, alloc: Allocator) !void {
     self.* = .{
         .data = data,
         .info = undefined,
+        .patchs = .{},
     };
 
     try self.info.init(data, alloc);
