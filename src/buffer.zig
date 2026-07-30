@@ -8,10 +8,10 @@ const testing = std.testing;
 const datastruct = @import("datastruct.zig");
 const mem_map = datastruct.mem_map;
 const MemMap = mem_map.MemMap;
-const DoublyLinkedList = datastruct.DoublyLinkedList;
+const Queue = datastruct.Queue;
 const math = @import("math.zig");
 const Rngu64 = math.Rngu64;
-const Queue = datastruct.Queue;
+
 const log = std.log.scoped(.patch);
 
 pub inline fn delta(a: u64, d: i64) u64 {
@@ -97,8 +97,8 @@ pub const Patched = struct {
 
             var map_node = last_memmap.ranges.head;
             while (map_node) |map_n| : (map_node = map_n.next) {
-                const range_x_pre = Rngu64.intersect(pre_range, map_n.vaddr_range);
-                const range_x_post = Rngu64.intersect(post_range, map_n.vaddr_range);
+                const range_x_pre: Rngu64 = .intersect(pre_range, map_n.vaddr_range);
+                const range_x_post: Rngu64 = .intersect(post_range, map_n.vaddr_range);
 
                 if (range_x_pre.max > range_x_pre.min) {
                     const off: usize = @intCast(range_x_pre.min - map_n.vaddr_range.min);
@@ -106,7 +106,7 @@ pub const Patched = struct {
                 }
 
                 if (range_x_post.max > range_x_post.min) {
-                    const range_x_post_shifted = Rngu64.new(
+                    const range_x_post_shifted: Rngu64 = .new(
                         delta(range_x_post.min, size_delta),
                         delta(range_x_post.max, size_delta),
                     );
@@ -123,8 +123,8 @@ pub const Patched = struct {
                 var line_map_node = last_linemap.lines.head;
                 while (line_map_node) |line_map_n| : (line_map_node = line_map_n.next) {
                     const num_range = line_map_n.range;
-                    const range_x_pre = Rngu64.intersect(pre_line_num_range, num_range);
-                    const range_x_post = Rngu64.intersect(post_line_num_range, num_range);
+                    const range_x_pre: Rngu64 = .intersect(pre_line_num_range, num_range);
+                    const range_x_post: Rngu64 = .intersect(post_line_num_range, num_range);
 
                     if (!range_x_pre.empty()) {
                         const off: usize = @intCast(range_x_pre.min - num_range.min);
@@ -136,7 +136,7 @@ pub const Patched = struct {
                     }
 
                     if (!range_x_post.empty()) {
-                        const range_x_post_shifted = Rngu64.new(
+                        const range_x_post_shifted: Rngu64 = .new(
                             delta(range_x_post.min, line_delta),
                             delta(range_x_post.max, line_delta),
                         );
