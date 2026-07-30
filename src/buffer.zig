@@ -163,14 +163,14 @@ pub const Patched = struct {
 
                 // first line in the range -> take min from original line map
                 if (affected_line_idx == 0) {
-                    const og_line_range = last_linemap.srcRngFromLine(replace_line_num_range.min);
+                    const og_line_range = last_linemap.rngForLine(replace_line_num_range.min);
                     affected_line_range.min = og_line_range.min;
                 }
 
                 // last line in the range -> take remaining suffix from original line map
                 const clamped_line_delta: u64 = @intCast(@max(@as(i64, 0), line_delta));
                 if (affected_line_idx == replaced_lines_count - 1 and affected_line_idx >= clamped_line_delta) {
-                    const og_line_range = last_linemap.srcRngFromLine(replace_line_num_range.max);
+                    const og_line_range = last_linemap.rngForLine(replace_line_num_range.max);
                     if (og_line_range.max > n.range.max) {
                         affected_line_range.max += og_line_range.max - n.range.max;
                     }
@@ -225,7 +225,7 @@ pub const LineMap = struct {
         self.lines.push(l);
     }
 
-    pub fn srcRngFromLine(self: *const LineMap, line: u64) Rngu64 {
+    pub fn rngForLine(self: *const LineMap, line: u64) Rngu64 {
         var res: Rngu64 = undefined;
         var node = self.lines.head;
         while (node) |n| : (node = n.next) {
@@ -353,7 +353,7 @@ test "Basic Patch Operations" {
     try testing.expectEqual(3, patched.linemap.lineFromOffset(70));
     try testing.expectEqual(2, patched.linemap.lineFromOffset(69));
 
-    const src_range = patched.linemap.srcRngFromLine(2);
+    const src_range = patched.linemap.rngForLine(2);
     const slice_line_2 = try patched.memmap.slice(src_range, arena);
     try testing.expectEqualStrings(line2[0 .. line2.len - 1], slice_line_2);
 }
