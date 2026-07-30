@@ -23,11 +23,10 @@ pub const Patch = struct {
     range: Rngu64,
 
     next: ?*Patch = null,
-    prev: ?*Patch = null,
 };
 
 pub const PatchList = struct {
-    list: DoublyLinkedList(Patch) = .{},
+    list: Queue(Patch) = .{},
     count: u64 = 0,
 
     pub fn push(self: *PatchList, range: Rngu64, replace: []const u8, arena: Allocator) !void {
@@ -37,7 +36,7 @@ pub const PatchList = struct {
             .range = range,
             .replace = copy,
         };
-        self.list.append(patch);
+        self.list.push(patch);
         self.count += 1;
     }
 };
@@ -55,7 +54,7 @@ pub const Patched = struct {
         try last_memmap.push(.new(0, buffer.len), buffer.ptr, arena);
         try last_linemap.push(.new(info.lines_ranges, .new(1, info.lines_count + 1), 0), arena);
 
-        var node = patch_list.list.first;
+        var node = patch_list.list.head;
 
         while (node) |n| : (node = n.next) {
             var next_memory_map: MemMap = .{};
