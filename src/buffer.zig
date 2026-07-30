@@ -27,7 +27,6 @@ pub const Patch = struct {
 
 pub const PatchList = struct {
     list: Queue(Patch) = .{},
-    count: u64 = 0,
 
     pub fn push(self: *PatchList, range: Rngu64, replace: []const u8, arena: Allocator) !void {
         const patch = try arena.create(Patch);
@@ -37,7 +36,6 @@ pub const PatchList = struct {
             .replace = copy,
         };
         self.list.push(patch);
-        self.count += 1;
     }
 };
 
