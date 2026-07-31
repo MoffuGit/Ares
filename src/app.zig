@@ -180,13 +180,15 @@ pub fn startUpdate(self: *App) void {
 }
 
 pub fn endUpdate(self: *App) void {
-    if (!self.flushing and self.peding_updates == 1) {
+    if (self.peding_updates == 1) {
         self.flush();
     }
     self.peding_updates -= 1;
 }
 
 pub fn flush(self: *App) void {
+    if (self.flushing) return;
+
     self.flushing = true;
     defer self.flushing = false;
 
