@@ -12,7 +12,7 @@ const Project = @import("project.zig");
 const WorktreeStore = @import("project/worktree_store.zig");
 const Session = @import("session.zig");
 const subscription = @import("subscription.zig");
-const tasks = @import("tasks.zig");
+const Runner = @import("runner.zig");
 const Workspace = @import("workspace.zig");
 const Worktree = @import("worktree.zig");
 
@@ -31,7 +31,7 @@ test {
     _ = WorktreeStore;
     _ = Session;
     _ = subscription;
-    _ = tasks;
+    _ = Runner;
     _ = Workspace;
     _ = Worktree;
 }

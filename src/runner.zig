@@ -1,6 +1,6 @@
 const std = @import("std");
-const Io = std.Io;
 const Allocator = std.mem.Allocator;
+const atomic = std.atomic;
 const posix = std.posix;
 const system = posix.system;
 const testing = std.testing;
@@ -13,86 +13,106 @@ const ChunkAllocator = chunk_pool.ChunkAllocator;
 const constants = @import("constants.zig");
 const MAX_SIZE = constants.MAX_SIZE;
 const MAX_ALIGN = constants.MAX_ALIGN;
-const datastruct = @import("datastruct.zig");
-const slotmap = datastruct.slotmap;
-const multi_mpsc = datastruct.multi_mpsc;
-pub const TaskId = slotmap.Key;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
+pub const RunMode = Loop.RunMode;
+
+pub const TaskId = u64;
 
 const log = std.log.scoped(.tasks);
+const max_tasks = 100;
 
-pub const Tasks = @This();
+pub const Runner = @This();
 
-io: Io,
-mutex: Io.Mutex,
-active: slotmap.SlotMap(*Task),
+next_id: atomic.Value(TaskId),
+active: std.AutoHashMap(TaskId, *Task),
 chunks: Allocator,
+loop: Loop,
 
-pub fn init(self: *Tasks, arena: Allocator, chunks: Allocator, io: Io) !void {
+pub fn init(self: *Runner, arena: Allocator, chunks: Allocator, io: std.Io) !void {
     self.* = .{
         .chunks = chunks,
-        .mutex = .init,
-        .active = undefined,
-        .io = io,
+        .next_id = .init(0),
+        .active = .init(arena),
+        .loop = undefined,
     };
-    self.active = try .init(arena, 100);
+    try self.active.ensureTotalCapacity(max_tasks);
+    try self.loop.init(io);
 }
 
-pub fn create(self: *Tasks) *Task {
-    self.lock();
-    defer self.unlock();
+pub fn deinit(self: *Runner) void {
+    self.loop.deinit();
+}
 
-    const context = self.chunks.rawAlloc(
-        MAX_SIZE,
-        MAX_ALIGN,
-        @returnAddress(),
-    ) orelse @panic("Task Context Overflow");
+pub fn run(self: *Runner, mode: RunMode) !void {
+    try self.loop.run(mode);
+}
+
+pub fn create(self: *Runner) *Task {
+    const context = self.chunks.rawAlloc(MAX_SIZE, MAX_ALIGN, @returnAddress()) orelse
+        @panic("Task Context Overflow");
 
     const task = self.chunks.create(Task) catch @panic("Task Overflow");
-    const id = self.active.put(task) catch @panic("Task Overflow");
-    task.* = .{ .pool = self, .id = id, .context = context };
+    const id = self.next_id.fetchAdd(1, .monotonic);
+    task.* = .{ .runner = self, .id = id, .context = context };
 
     return task;
 }
 
-pub fn contains(self: *Tasks, id: TaskId) bool {
-    self.lock();
-    defer self.unlock();
-
-    return self.active.contains(id);
+fn add(self: *Runner, task: *Task) void {
+    self.active.putAssumeCapacityNoClobber(task.id, task);
 }
 
-pub fn cancelation(self: *Tasks, id: TaskId) ?*Cancelation {
-    self.lock();
-    defer self.unlock();
+pub fn complete(self: *Runner, task: *Task) void {
+    self.add(task);
+    self.loop.complete(&task.completion);
+}
 
-    const task = (self.active.get(id) orelse return null).*;
-    const cancel = self.chunks.create(Cancelation) catch @panic("Cancel Overflow");
-    cancel.* = .{
-        .id = id,
-        .pool = self,
+pub fn submit(self: *Runner, task: *Task) void {
+    self.add(task);
+    self.loop.submit(&task.completion);
+}
+
+pub fn submitTimer(self: *Runner, task: *Task) void {
+    self.add(task);
+    self.loop.submit_timer(&task.completion);
+}
+
+pub fn createCancelation(self: *Runner, id: TaskId) *Cancelation {
+    const request = self.chunks.create(Cancelation) catch @panic("Cancel Overflow");
+    request.* = .{ .id = id, .runner = self };
+    return request;
+}
+
+pub fn cancel(self: *Runner, request: *Cancelation) void {
+    const task = self.active.get(request.id) orelse {
+        self.chunks.destroy(request);
+        return;
     };
 
-    cancel.completion.cancel(
+    request.completion.cancel(
         &task.completion,
         struct {
             fn _cancel(c: *Cancelation, _: *Completion) void {
-                const pool = c.pool;
-                pool.chunks.destroy(c);
+                c.runner.chunks.destroy(c);
             }
         }._cancel,
-        cancel,
+        request,
     );
-    return cancel;
+    self.loop.cancel(&request.completion);
 }
 
-fn destroy(self: *Tasks, id: TaskId) void {
-    self.lock();
-    defer self.unlock();
+fn destroy(self: *Runner, id: TaskId) void {
+    const task = (self.active.fetchRemove(id) orelse @panic("Destroy non-active Task")).value;
 
-    const task = self.active.remove(id) orelse @panic("Destroy non-active Task");
+    self.free(task);
+}
 
+pub fn destroyUnregistered(self: *Runner, task: *Task) void {
+    self.free(task);
+}
+
+fn free(self: *Runner, task: *Task) void {
     self.chunks.rawFree(
         @as([*]u8, @ptrCast(task.context))[0..MAX_SIZE],
         MAX_ALIGN,
@@ -102,36 +122,20 @@ fn destroy(self: *Tasks, id: TaskId) void {
     self.chunks.destroy(task);
 }
 
-pub fn destroyCancelation(self: *Tasks, cancel: *Cancelation) void {
-    self.chunks.destroy(cancel);
-}
-
-pub fn lock(self: *Tasks) void {
-    self.mutex.lockUncancelable(self.io);
-}
-pub fn unlock(self: *Tasks) void {
-    self.mutex.unlock(self.io);
-}
-
 pub const Cancelation = struct {
     id: TaskId,
     completion: Completion = .noop,
-    pool: *Tasks,
-    next: ?*Cancelation = null,
-
-    pub fn cancel(self: *Cancelation, loop: *Loop) void {
-        loop.cancel(&self.completion);
-    }
+    runner: *Runner,
 };
 
 pub const Task = struct {
     id: TaskId,
-    pool: *Tasks,
+    runner: *Runner,
     completion: Completion = .noop,
     context: *anyopaque,
 
     pub fn destroy(self: *Task) void {
-        self.pool.destroy(self.id);
+        self.runner.destroy(self.id);
     }
 
     pub fn assertContext(context: anytype) void {
@@ -360,8 +364,9 @@ test "Task defer allocates and copies context" {
     try chunks.init(std.testing.allocator, &.{.{ 100, MAX_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
-    var pool: Tasks = undefined;
-    try pool.init(arena.allocator(), chunks.allocator(), testing.io);
+    var runner: Runner = undefined;
+    try runner.init(arena.allocator(), chunks.allocator(), testing.io);
+    defer runner.deinit();
 
     const Context = struct {
         value: u64,
@@ -369,7 +374,8 @@ test "Task defer allocates and copies context" {
     };
 
     var original = Context{ .value = 0x1234_5678_9abc_def0, .other = 0xfeed_beef };
-    const task = pool.create();
+    const task = runner.create();
+    runner.add(task);
     defer task.destroy();
     task.@"defer"(struct {
         fn callback(_: Context, res: anyerror!void) bool {
@@ -394,8 +400,9 @@ test "Task await allocates and copies context" {
     try chunks.init(std.testing.allocator, &.{.{ 100, MAX_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
-    var pool: Tasks = undefined;
-    try pool.init(arena.allocator(), chunks.allocator(), testing.io);
+    var runner: Runner = undefined;
+    try runner.init(arena.allocator(), chunks.allocator(), testing.io);
+    defer runner.deinit();
 
     const Context = struct {
         value: u64,
@@ -403,7 +410,8 @@ test "Task await allocates and copies context" {
     };
 
     var original = Context{ .value = 0x1234_5678_9abc_def0, .other = 0xfeed_beef };
-    const task = pool.create();
+    const task = runner.create();
+    runner.add(task);
     defer task.destroy();
     const port = try task.await(struct {
         fn callback(_: Context, res: anyerror!void) bool {
@@ -429,11 +437,15 @@ test "Cancelations" {
     try chunks.init(std.testing.allocator, &.{.{ 100, MAX_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
-    var pool: Tasks = undefined;
-    try pool.init(arena.allocator(), chunks.allocator(), testing.io);
+    var runner: Runner = undefined;
+    try runner.init(arena.allocator(), chunks.allocator(), testing.io);
+    defer runner.deinit();
 
-    const task = pool.create();
+    const task = runner.create();
+    runner.add(task);
     defer task.destroy();
 
-    try testing.expect(pool.cancelation(task.id) != null);
+    const request = runner.createCancelation(task.id);
+    try testing.expectEqual(task.id, request.id);
+    runner.chunks.destroy(request);
 }

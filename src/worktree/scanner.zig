@@ -26,7 +26,7 @@ const exc = @import("../executor.zig");
 const Executors = exc.Executors;
 const Context = exc.Context;
 const global = @import("../global.zig");
-const tsk = @import("../tasks.zig");
+const Runner = @import("../runner.zig");
 const attr = @import("attr.zig");
 const BulkAttr = attr.BulkAttr;
 const Snapshot = @import("snapshot.zig");
@@ -60,7 +60,7 @@ gpa: Allocator,
 snapshot: Snapshot,
 timer: ?Executors.Cancelation,
 workers: Workers,
-action_waker: tsk.Waker,
+action_waker: Runner.Waker,
 action_cancelation: Executors.Cancelation,
 action_buffer: [8]Action,
 actions: Action.Queue,

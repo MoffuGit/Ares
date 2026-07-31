@@ -22,14 +22,14 @@ const EntityStore = ent.EntityStore;
 const AnyEntity = ent.AnyEntity;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
-const Tasks = @import("tasks.zig");
-const Task = Tasks.Task;
-const TaskId = Tasks.TaskId;
+const Runner = @import("runner.zig");
+const Task = Runner.Task;
+const TaskId = Runner.TaskId;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 
 const Queues = union(enum) {
-    cancelations: Tasks.Cancelation,
+    cancelations: Completion,
     completions: Completion,
     timers: Completion,
     submissions: Completion,
@@ -39,8 +39,7 @@ pub const Executors = struct {
     mutex: Io.Mutex,
     entities: EntityStore,
     io: Io,
-    tasks: Tasks,
-    loop: Loop,
+    runner: Runner,
     future: Io.Future(void),
     stop: atomic.Value(bool) = .init(false),
     stopped: atomic.Value(bool) = .init(false),
@@ -52,17 +51,15 @@ pub const Executors = struct {
             .mutex = .init,
             .entities = undefined,
             .queues = undefined,
-            .loop = undefined,
-            .tasks = undefined,
+            .runner = undefined,
             .io = io,
             .future = undefined,
             .chunks = chunks,
         };
 
         try self.entities.init(arena, 100);
-        try self.tasks.init(arena, self.chunks, io);
-        try self.loop.init(io);
-        errdefer self.loop.deinit();
+        try self.runner.init(arena, self.chunks, io);
+        errdefer self.runner.deinit();
 
         self.future = try io.concurrent(Executors.run, .{self});
         self.queues.init();
@@ -71,38 +68,50 @@ pub const Executors = struct {
     pub fn deinit(self: *@This()) void {
         self.stop.store(true, .release);
         _ = self.future.await(self.io);
-        self.loop.deinit();
+        self.runner.deinit();
     }
 
     fn run(self: *@This()) void {
         while (!self.stop.load(.acquire)) {
             self.flush();
-            self.loop.run(.no_wait) catch return;
+            self.runner.run(.no_wait) catch return;
             self.destroyDroppedEntities();
             self.io.sleep(.fromNanoseconds(100), .real) catch {};
         }
 
         self.destroyDroppedEntities();
         self.flush();
-        self.loop.run(.no_wait) catch return;
+        self.runner.run(.no_wait) catch return;
+    }
+
+    fn addQueuedTasks(self: *@This()) void {
+        while (self.queues.pop(.completions)) |completion| {
+            const task: *Task = @fieldParentPtr("completion", completion);
+            self.runner.complete(task);
+        }
+        while (self.queues.pop(.timers)) |completion| {
+            const task: *Task = @fieldParentPtr("completion", completion);
+            self.runner.submitTimer(task);
+        }
+        while (self.queues.pop(.submissions)) |completion| {
+            const task: *Task = @fieldParentPtr("completion", completion);
+            self.runner.submit(task);
+        }
     }
 
     fn flush(self: *@This()) void {
-        while (self.queues.pop(.cancelations)) |cancelation| {
-            if (self.tasks.contains(cancelation.id)) {
-                cancelation.cancel(&self.loop);
-            } else {
-                self.tasks.destroyCancelation(cancelation);
-            }
+        self.addQueuedTasks();
+
+        var cancelations: datastruct.Queue(Completion) = .{};
+        while (self.queues.pop(.cancelations)) |completion| {
+            cancelations.push(completion);
         }
-        while (self.queues.pop(.completions)) |completion| {
-            self.loop.complete(completion);
-        }
-        while (self.queues.pop(.timers)) |completion| {
-            self.loop.submit_timer(completion);
-        }
-        while (self.queues.pop(.submissions)) |completion| {
-            self.loop.submit(completion);
+
+        self.addQueuedTasks();
+
+        while (cancelations.pop()) |completion| {
+            const cancelation: *Runner.Cancelation = @fieldParentPtr("completion", completion);
+            self.runner.cancel(cancelation);
         }
     }
 
@@ -111,7 +120,7 @@ pub const Executors = struct {
         function: anytype,
         context: anytype,
     ) !Cancelation {
-        const task = self.tasks.create();
+        const task = self.runner.create();
 
         task.@"defer"(function, context);
         self.queues.push(.completions, &task.completion);
@@ -123,8 +132,9 @@ pub const Executors = struct {
         self: *@This(),
         function: anytype,
         context: anytype,
-    ) !struct { Cancelation, Tasks.Waker } {
-        const task = self.tasks.create();
+    ) !struct { Cancelation, Runner.Waker } {
+        const task = self.runner.create();
+        errdefer self.runner.destroyUnregistered(task);
         const waker = try task.await(function, context);
 
         self.queues.push(.submissions, &task.completion);
@@ -141,7 +151,7 @@ pub const Executors = struct {
         context: anytype,
         ms: u64,
     ) !Cancelation {
-        const task = self.tasks.create();
+        const task = self.runner.create();
 
         task.timer(function, context, ms);
         self.queues.push(.timers, &task.completion);
@@ -154,9 +164,8 @@ pub const Executors = struct {
         executor: *Executors,
 
         pub fn cancel(self: *const Cancelation) void {
-            if (self.executor.tasks.cancelation(self.id)) |can| {
-                self.executor.queues.push(.cancelations, can);
-            }
+            const cancelation = self.executor.runner.createCancelation(self.id);
+            self.executor.queues.push(.cancelations, &cancelation.completion);
         }
     };
 
@@ -274,7 +283,7 @@ pub fn Context(comptime T: type) type {
             return self.executors.@"defer"(TypeErased.@"defer", .{ self.executor.any, self.executors, args });
         }
 
-        pub fn await(self: *const @This(), function: anytype, args: anytype) !struct { Executors.Cancelation, Tasks.Waker } {
+        pub fn await(self: *const @This(), function: anytype, args: anytype) !struct { Executors.Cancelation, Runner.Waker } {
             const Args = @TypeOf(args);
             const TypeErased = struct {
                 pub fn async(any: AnyEntity, executors: *Executors, _args: Args, res: anyerror!void) bool {

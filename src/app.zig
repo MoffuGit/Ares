@@ -20,17 +20,16 @@ pub const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
-const Loop = @import("loop.zig");
+const Runner = @import("runner.zig");
+const TaskId = Runner.TaskId;
 const Subscriptions = @import("subscription.zig").Subscriptions;
-const Tasks = @import("tasks.zig");
-const TaskId = Tasks.TaskId;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
 
 const log = std.log.scoped(.app);
 pub const Waker = struct {
-    waker: Tasks.Waker,
+    waker: Runner.Waker,
     options: App.Options,
     cancelation: App.Cancelation,
 
@@ -63,8 +62,7 @@ observers: Observers,
 chunks: ChunkAllocator,
 peding_updates: u16,
 
-tasks: Tasks,
-loop: Loop,
+runner: Runner,
 
 executors: Executors,
 
@@ -76,8 +74,7 @@ options: Options,
 
 pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     self.* = .{
-        .tasks = undefined,
-        .loop = undefined,
+        .runner = undefined,
         .options = options,
         .notifications = undefined,
         .entities = undefined,
@@ -97,21 +94,19 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     try self.chunks.init(arena, &.{ .{ 50, MAX_SIZE }, .{ 50, Observers.NODE_SIZE }, .{ 50, 2048 } });
     const chunks = self.chunks.allocator();
 
-    try self.tasks.init(arena, chunks, io);
+    try self.runner.init(arena, chunks, io);
+    errdefer self.runner.deinit();
     try self.observers.init(chunks);
     try self.listeners.init(chunks);
     try self.notifications.init(chunks);
     try self.entities.init(arena, 100);
     try self.executors.init(arena, chunks, io);
     errdefer self.executors.deinit();
-
-    try self.loop.init(io);
-    errdefer self.loop.deinit();
 }
 
 pub fn deinit(self: *App) void {
     self.flush();
-    self.loop.deinit();
+    self.runner.deinit();
     self.executors.deinit();
     self.events.deinit(self.gpa);
     self.arena.deinit();
@@ -192,7 +187,7 @@ pub fn flush(self: *App) void {
     self.flushing = true;
     defer self.flushing = false;
 
-    self.loop.run(.no_wait) catch @panic("Loop run Error");
+    self.runner.run(.no_wait) catch @panic("Loop run Error");
     self.destroyDroppedEntities();
     self.flushNotifications();
     self.flushEvents();
@@ -500,10 +495,10 @@ pub fn @"defer"(
     function: anytype,
     context: anytype,
 ) Cancelation {
-    const task = self.tasks.create();
+    const task = self.runner.create();
     task.@"defer"(function, context);
 
-    self.loop.complete(&task.completion);
+    self.runner.complete(task);
 
     return .{ .id = task.id, .app = self };
 }
@@ -513,10 +508,11 @@ pub fn await(
     function: anytype,
     context: anytype,
 ) !Waker {
-    const task = self.tasks.create();
+    const task = self.runner.create();
+    errdefer self.runner.destroyUnregistered(task);
     const waker = try task.await(function, context);
 
-    self.loop.submit(&task.completion);
+    self.runner.submit(task);
 
     return .{
         .waker = waker,
@@ -533,9 +529,8 @@ pub const Cancelation = struct {
     app: *App,
 
     pub fn cancel(self: *const Cancelation) void {
-        if (self.app.tasks.cancelation(self.id)) |can| {
-            self.app.loop.cancel(&can.completion);
-        }
+        const cancelation = self.app.runner.createCancelation(self.id);
+        self.app.runner.cancel(cancelation);
     }
 };
 
