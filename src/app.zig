@@ -181,14 +181,15 @@ pub fn startUpdate(self: *App) void {
 
 pub fn endUpdate(self: *App) void {
     if (!self.flushing and self.peding_updates == 1) {
-        self.flushing = true;
         self.flush();
-        self.flushing = false;
     }
-    self.peding_updates += 1;
+    self.peding_updates -= 1;
 }
 
 pub fn flush(self: *App) void {
+    self.flushing = true;
+    defer self.flushing = false;
+
     self.loop.run(.no_wait) catch @panic("Loop run Error");
     self.destroyDroppedEntities();
     self.flushNotifications();
