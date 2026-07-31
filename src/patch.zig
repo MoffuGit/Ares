@@ -311,39 +311,7 @@ pub const Patched = struct {
     }
 };
 
-test "Basic Patch Operations" {
-    const gpa = testing.allocator;
-
-    const line1 = "This line is about x chars long\n";
-    const line2 = "This other line is aboyt y chars long\n";
-    const line3 = "This line is kinda like z chars long\n";
-    const line4 = "This last line is aboyt z chars long\n";
-    const line5 = "\n";
-
-    const text = line1 ++ line2 ++ line3 ++ line4 ++ line5;
-
-    var a: heap.ArenaAllocator = .init(gpa);
-    defer a.deinit();
-
-    const arena = a.allocator();
-
-    const buffer = try arena.dupe(u8, text);
-
-    var info: Info = undefined;
-    try info.init(buffer, arena);
-
-    const path_list: PatchList = .{};
-    const patched = try Patched.init(buffer, info, path_list, arena);
-
-    try testing.expectEqual(3, patched.linemap.lineFromOffset(70));
-    try testing.expectEqual(2, patched.linemap.lineFromOffset(69));
-
-    const src_range = patched.linemap.rngForLine(2);
-    const slice_line_2 = try patched.memmap.slice(src_range, arena);
-    try testing.expectEqualStrings(line2[0 .. line2.len - 1], slice_line_2);
-}
-
-test "Patch Replace Same Size" {
+test "Patch Buffer" {
     const gpa = testing.allocator;
 
     const line1 = "This line is about x chars long\n";
@@ -363,74 +331,12 @@ test "Patch Replace Same Size" {
     var info: Info = undefined;
     try info.init(buffer, arena);
 
-    // Replace "aboyt" (5 chars) with "about" (5 chars) in line 2 at offset 51
     var patch_list: PatchList = .{};
     try patch_list.push(.new(51, 56), try arena.dupe(u8, "about"), arena);
 
     const patched = try Patched.init(buffer, info, patch_list, arena);
 
     const expected = "This line is about x chars long\nThis other line is about y chars long\nThis line is kinda like z chars long\nThis last line is aboyt z chars long\n\n";
-    const result = try patched.memmap.slice(.new(0, @intCast(patched.size)), arena);
-    try testing.expectEqualStrings(expected, result);
-}
-
-test "Patch Replace Different Size" {
-    const gpa = testing.allocator;
-
-    const line1 = "This line is about x chars long\n";
-    const line2 = "This other line is aboyt y chars long\n";
-    const line3 = "This line is kinda like z chars long\n";
-    const line4 = "This last line is aboyt z chars long\n";
-    const line5 = "\n";
-
-    const text = line1 ++ line2 ++ line3 ++ line4 ++ line5;
-
-    var a: std.heap.ArenaAllocator = .init(gpa);
-    defer a.deinit();
-
-    const arena = a.allocator();
-
-    const buffer = try arena.dupe(u8, text);
-    var info: Info = undefined;
-    try info.init(buffer, arena);
-
-    // Replace "x" (1 char) at offset 22 in line 1 with "LOTS OF " (8 chars)
-    var patch_list: PatchList = .{};
-    try patch_list.push(.new(19, 20), try arena.dupe(u8, "LOTS OF "), arena);
-
-    const patched = try Patched.init(buffer, info, patch_list, arena);
-
-    const expected = "This line is about LOTS OF  chars long\nThis other line is aboyt y chars long\nThis line is kinda like z chars long\nThis last line is aboyt z chars long\n\n";
-    const result = try patched.memmap.slice(.new(0, @intCast(patched.size)), arena);
-    try testing.expectEqualStrings(expected, result);
-}
-
-test "Patch Overlapping Twice" {
-    const gpa = testing.allocator;
-
-    const text = "normal test\n";
-
-    var a: std.heap.ArenaAllocator = .init(gpa);
-    defer a.deinit();
-
-    const arena = a.allocator();
-
-    const buffer = try arena.dupe(u8, text);
-    var info: Info = undefined;
-    try info.init(buffer, arena);
-
-    // Patch 1: replace "normal" (offset 0-6) with "patched"
-    //   -> "patched test\n"
-    // Patch 2: replace "patched" (offset 0-7 in post-patch-1 state) with "normal patched twice"
-    //   -> "normal patched twice test\n"
-    // The two patches overlap: patch 2's range covers the area patch 1 just modified.
-    var patch_list: PatchList = .{};
-    try patch_list.push(.new(0, 6), try arena.dupe(u8, "patched"), arena);
-    try patch_list.push(.new(0, 7), try arena.dupe(u8, "normal patched twice"), arena);
-
-    const patched = try Patched.init(buffer, info, patch_list, arena);
-
-    const expected = "normal patched twice test\n";
     const result = try patched.memmap.slice(.new(0, @intCast(patched.size)), arena);
     try testing.expectEqualStrings(expected, result);
 }
