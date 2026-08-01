@@ -7,7 +7,8 @@ const chromium_path = @import("test_options").chromium_path;
 const zlob = @import("zlob");
 
 const App = @import("../app.zig");
-const Entity = App.Entity;
+const ent = @import("../entity.zig");
+const Entity = ent.Entity;
 const constants = @import("../constants.zig");
 const MAX_PATH_LEN = constants.MAX_PATH_LEN;
 const global = @import("../global.zig");
