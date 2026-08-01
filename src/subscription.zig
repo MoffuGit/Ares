@@ -11,11 +11,13 @@ const MAX_SIZE = constants.MAX_SIZE;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 
-pub fn Subscriptions(Key: type, comptime types: []const type, comptime comp: *const fn (Key, Key) std.math.Order) type {
+pub fn Subscriptions(
+    Key: type,
+    Args: type,
+    comptime comp: *const fn (Key, Key) std.math.Order,
+) type {
     return struct {
         const Self = @This();
-
-        const Args = @Tuple(types);
 
         const Callback = *const fn (Subscriber, Args) bool;
 
@@ -268,7 +270,7 @@ test "Subscriptions" {
         }
     };
 
-    const Subs = Subscriptions(Key, &.{ bool, bool }, Order.order);
+    const Subs = Subscriptions(Key, @Tuple(&.{ bool, bool }), Order.order);
 
     var chunks: ChunkAllocator = undefined;
     try chunks.init(std.testing.allocator, &.{.{ 100, Subs.NODE_SIZE }});

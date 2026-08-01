@@ -22,7 +22,8 @@ const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
 const Runner = @import("runner.zig");
 const TaskId = Runner.TaskId;
-const Subscriptions = @import("subscription.zig").Subscriptions;
+const subs = @import("subscription.zig");
+const Subscriptions = subs.Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
@@ -243,7 +244,7 @@ pub const Event = struct {
 
 pub const Listeners = Subscriptions(
     EntityId,
-    &.{ *App, *anyopaque, TypeId },
+    @Tuple(&.{ *App, *anyopaque, TypeId }),
     ent.entityOrder,
 );
 
@@ -305,7 +306,11 @@ pub fn nevent(self: *App, entity: anytype, comptime E: type) !*E {
     return ptr;
 }
 
-pub const Observers = Subscriptions(EntityId, &.{ *App, EntityId }, ent.entityOrder);
+pub const Observers = Subscriptions(
+    EntityId,
+    @Tuple(&.{ *App, EntityId }),
+    ent.entityOrder,
+);
 
 pub fn observe(
     self: *App,
