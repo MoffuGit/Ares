@@ -59,6 +59,7 @@ gpa: Allocator,
 arena: heap.ArenaAllocator,
 entities: EntityStore,
 events: std.Deque(Event),
+dispatched: std.Deque(Dispatched),
 listeners: Listeners,
 receivers: Receivers,
 observers: Observers,
@@ -91,6 +92,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .gpa = gpa,
         .arena = .init(gpa),
         .events = .empty,
+        .dispatched = .empty,
     };
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
@@ -119,6 +121,7 @@ pub fn deinit(self: *App) void {
     self.runner.deinit();
     self.executors.deinit();
     self.events.deinit(self.gpa);
+    self.dispatched.deinit(self.gpa);
     self.arena.deinit();
 }
 
@@ -214,18 +217,23 @@ pub fn flushNotifications(self: *App) void {
 
 pub fn flushEvents(self: *App) void {
     const chunk = self.chunks.allocator();
-    while (self.events.popFront()) |event| {
-        switch (event.kind) {
-            .emitter => |id| self.listeners.notifyAll(
-                id,
+    while (self.events.len != 0 or self.dispatched.len != 0) {
+        while (self.events.popFront()) |event| {
+            self.listeners.notifyAll(
+                event.id,
                 .{ self, event.ptr, event.type },
-            ),
-            .subscription => |sub| sub.notify(
-                .{ self, event.ptr, event.type },
-            ),
+            );
+
+            event.destroy(chunk);
         }
 
-        event.destroy(chunk);
+        while (self.dispatched.popFront()) |event| {
+            event.subscription.notify(
+                .{ self, event.ptr, event.type },
+            );
+
+            event.destroy(chunk);
+        }
     }
 }
 
@@ -246,17 +254,23 @@ pub fn destroyDroppedEntities(self: *App) void {
     }
 }
 
-pub const EventKind = union(enum) {
-    emitter: EntityId,
-    subscription: Receivers.Subscription,
-};
-
 pub const Event = struct {
-    kind: EventKind,
+    id: EntityId,
     type: TypeId,
     ptr: *anyopaque,
 
     pub fn destroy(self: *const Event, chunk: Allocator) void {
+        self.type.deinit(self.ptr);
+        self.type.destroy(self.ptr, chunk);
+    }
+};
+
+pub const Dispatched = struct {
+    subscription: Receivers.Subscription,
+    type: TypeId,
+    ptr: *anyopaque,
+
+    pub fn destroy(self: *const Dispatched, chunk: Allocator) void {
         self.type.deinit(self.ptr);
         self.type.destroy(self.ptr, chunk);
     }
@@ -366,7 +380,7 @@ pub fn nevent(self: *App, entity: anytype, comptime E: type) !*E {
 
     try self.events.pushBack(
         self.gpa,
-        .{ .kind = .{ .emitter = entity.id() }, .ptr = ptr, .type = TypeInfo.init(E) },
+        .{ .id = entity.id(), .ptr = ptr, .type = TypeInfo.init(E) },
     );
 
     return ptr;
@@ -377,9 +391,9 @@ pub fn send(self: *App, subscription: Receivers.Subscription, comptime E: type) 
     const ptr = try chunk.create(E);
     errdefer chunk.destroy(ptr);
 
-    try self.events.pushBack(
+    try self.dispatched.pushBack(
         self.gpa,
-        .{ .kind = .{ .subscription = subscription }, .ptr = ptr, .type = TypeInfo.init(E) },
+        .{ .subscription = subscription, .ptr = ptr, .type = TypeInfo.init(E) },
     );
 
     return ptr;
