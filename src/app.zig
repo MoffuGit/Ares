@@ -27,6 +27,7 @@ const Subscriptions = subs.Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
+const Queue = datastruct.Queue;
 
 const log = std.log.scoped(.app);
 
@@ -58,8 +59,8 @@ pub const App = @This();
 gpa: Allocator,
 arena: heap.ArenaAllocator,
 entities: EntityStore,
-events: std.Deque(Event),
-dispatched: std.Deque(Dispatched),
+events: Queue(Event),
+dispatched: Queue(Dispatched),
 listeners: Listeners,
 receivers: Receivers,
 observers: Observers,
@@ -91,8 +92,8 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .flushing = false,
         .gpa = gpa,
         .arena = .init(gpa),
-        .events = .empty,
-        .dispatched = .empty,
+        .events = .{},
+        .dispatched = .{},
     };
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
@@ -120,8 +121,6 @@ pub fn deinit(self: *App) void {
     self.receivers.deinit();
     self.runner.deinit();
     self.executors.deinit();
-    self.events.deinit(self.gpa);
-    self.dispatched.deinit(self.gpa);
     self.arena.deinit();
 }
 
@@ -217,22 +216,24 @@ pub fn flushNotifications(self: *App) void {
 
 pub fn flushEvents(self: *App) void {
     const chunk = self.chunks.allocator();
-    while (self.events.len != 0 or self.dispatched.len != 0) {
-        while (self.events.popFront()) |event| {
+    while (!self.events.empty() or !self.dispatched.empty()) {
+        while (self.events.pop()) |event| {
             self.listeners.notifyAll(
                 event.id,
                 .{ self, event.ptr, event.type },
             );
 
             event.destroy(chunk);
+            chunk.destroy(event);
         }
 
-        while (self.dispatched.popFront()) |event| {
+        while (self.dispatched.pop()) |event| {
             event.subscription.notify(
                 .{ self, event.ptr, event.type },
             );
 
             event.destroy(chunk);
+            chunk.destroy(event);
         }
     }
 }
@@ -259,6 +260,8 @@ pub const Event = struct {
     type: TypeId,
     ptr: *anyopaque,
 
+    next: ?*Event = null,
+
     pub fn destroy(self: *const Event, chunk: Allocator) void {
         self.type.deinit(self.ptr);
         self.type.destroy(self.ptr, chunk);
@@ -269,6 +272,8 @@ pub const Dispatched = struct {
     subscription: Receivers.Subscription,
     type: TypeId,
     ptr: *anyopaque,
+
+    next: ?*Dispatched = null,
 
     pub fn destroy(self: *const Dispatched, chunk: Allocator) void {
         self.type.deinit(self.ptr);
@@ -378,10 +383,14 @@ pub fn nevent(self: *App, entity: anytype, comptime E: type) !*E {
     const ptr = try chunk.create(E);
     errdefer chunk.destroy(ptr);
 
-    try self.events.pushBack(
-        self.gpa,
-        .{ .id = entity.id(), .ptr = ptr, .type = TypeInfo.init(E) },
-    );
+    const event = try chunk.create(Event);
+    event.* = .{
+        .id = entity.id(),
+        .ptr = ptr,
+        .type = TypeInfo.init(E),
+    };
+
+    self.events.push(event);
 
     return ptr;
 }
@@ -391,10 +400,15 @@ pub fn send(self: *App, subscription: Receivers.Subscription, comptime E: type) 
     const ptr = try chunk.create(E);
     errdefer chunk.destroy(ptr);
 
-    try self.dispatched.pushBack(
-        self.gpa,
-        .{ .subscription = subscription, .ptr = ptr, .type = TypeInfo.init(E) },
-    );
+    const dispatch = try chunk.create(Dispatched);
+
+    dispatch.* = .{
+        .subscription = subscription,
+        .ptr = ptr,
+        .type = TypeInfo.init(E),
+    };
+
+    self.dispatched.push(dispatch);
 
     return ptr;
 }
