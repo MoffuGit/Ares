@@ -59,6 +59,10 @@ pub fn Subscriptions(
                 self.subscriptions.enable(self);
             }
 
+            pub fn notify(self: *const Subscription, args: Args) void {
+                self.subscriptions.notify(self, args);
+            }
+
             pub fn unsubscribe(self: *const Subscription) !void {
                 try self.subscriptions.unsubscribe(self);
             }
@@ -171,7 +175,7 @@ pub fn Subscriptions(
             }
         }
 
-        pub fn notify(self: *Self, key: Key, args: Args) void {
+        pub fn notifyAll(self: *Self, key: Key, args: Args) void {
             const maybe_subscribers = self.subscribers.get_ref(key) orelse return;
             var subscribers = maybe_subscribers.* orelse return;
 
@@ -182,6 +186,20 @@ pub fn Subscriptions(
                         debug.panic("Drop subscriber err: {}", .{err});
                     };
                 }
+            }
+
+            self.clearDrops();
+        }
+
+        pub fn notify(self: *Self, sub: *const Subscription, args: Args) void {
+            const maybe_subscribers = self.subscribers.get_ref(sub.key) orelse return;
+            var subscribers = maybe_subscribers.* orelse return;
+            const subscriber = subscribers.get(sub.id) orelse return;
+
+            if (subscriber.active and !subscriber.callback(subscriber, args)) {
+                _ = self.dropped.insert(self.chunk, .{ .key = sub.key, .id = sub.id }) catch |err| {
+                    debug.panic("Drop subscriber err: {}", .{err});
+                };
             }
 
             self.clearDrops();
@@ -293,15 +311,59 @@ test "Subscriptions" {
     const subscriber = subscribers.*.?.get(0).?;
     try std.testing.expect(!subscriber.active);
 
-    subscriptions.notify(42, .{ true, true });
+    subscriptions.notifyAll(42, .{ true, true });
     try std.testing.expect(!context);
 
     sub.enable();
 
-    subscriptions.notify(42, .{ true, true });
-    subscriptions.notify(24, .{ false, false });
+    subscriptions.notifyAll(42, .{ true, true });
+    subscriptions.notifyAll(24, .{ false, false });
     try std.testing.expect(context);
 
-    subscriptions.notify(42, .{ false, false });
+    subscriptions.notifyAll(42, .{ false, false });
     try std.testing.expect(subscriptions.subscribers.get_ref(42) == null);
+}
+
+test "Subscription notifies only its subscriber" {
+    const Key = u32;
+    const Order = struct {
+        pub fn order(a: Key, b: Key) std.math.Order {
+            return std.math.order(a, b);
+        }
+    };
+
+    const Callback = struct {
+        fn notify(value: u32, keep: bool, result: *u32) bool {
+            result.* = value;
+            return keep;
+        }
+    };
+
+    const Subs = Subscriptions(Key, @Tuple(&.{ u32, bool }), Order.order);
+
+    var chunks: ChunkAllocator = undefined;
+    try chunks.init(std.testing.allocator, &.{.{ 100, Subs.NODE_SIZE }});
+    defer chunks.deinit(std.testing.allocator);
+
+    var subscriptions: Subs = undefined;
+    try subscriptions.init(chunks.allocator());
+    defer subscriptions.deinit();
+
+    var first_result: u32 = 0;
+    var second_result: u32 = 0;
+    var first = try subscriptions.insert(42, Callback.notify, .{&first_result});
+    var second = try subscriptions.insert(42, Callback.notify, .{&second_result});
+    first.enable();
+    second.enable();
+
+    first.notify(.{ 35, true });
+
+    try std.testing.expectEqual(@as(u32, 35), first_result);
+    try std.testing.expectEqual(@as(u32, 0), second_result);
+
+    first.notify(.{ 70, false });
+
+    try std.testing.expectEqual(@as(u32, 70), first_result);
+    try std.testing.expect(subscriptions.subscribers.get_ref(42).?.*.?.get(first.id) == null);
+    try std.testing.expect(subscriptions.subscribers.get_ref(42).?.*.?.get(second.id) != null);
 }

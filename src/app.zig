@@ -198,7 +198,7 @@ pub fn flush(self: *App) void {
 pub fn flushNotifications(self: *App) void {
     var iter = self.notifications.iter();
     while (iter.next()) |id| {
-        self.observers.notify(id, .{ self, id });
+        self.observers.notifyAll(id, .{ self, id });
     }
 
     self.notifications.clear(self.chunks.allocator());
@@ -207,7 +207,7 @@ pub fn flushNotifications(self: *App) void {
 pub fn flushEvents(self: *App) void {
     const chunk = self.chunks.allocator();
     while (self.events.popFront()) |event| {
-        self.listeners.notify(
+        self.listeners.notifyAll(
             event.id,
             .{ self, event.ptr, event.type },
         );
