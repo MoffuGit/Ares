@@ -60,6 +60,7 @@ arena: heap.ArenaAllocator,
 entities: EntityStore,
 events: std.Deque(Event),
 listeners: Listeners,
+receivers: Receivers,
 observers: Observers,
 chunks: ChunkAllocator,
 peding_updates: u16,
@@ -82,6 +83,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .entities = undefined,
         .observers = undefined,
         .listeners = undefined,
+        .receivers = undefined,
         .chunks = undefined,
         .executors = undefined,
         .peding_updates = 0,
@@ -93,13 +95,18 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
 
-    try self.chunks.init(arena, &.{ .{ 50, MAX_SIZE }, .{ 50, Observers.NODE_SIZE }, .{ 50, 2048 } });
+    try self.chunks.init(arena, &.{
+        .{ 50, MAX_SIZE },
+        .{ 50, @max(Observers.NODE_SIZE, Receivers.NODE_SIZE, Listeners.NODE_SIZE) },
+        .{ 50, 2048 },
+    });
     const chunks = self.chunks.allocator();
 
     try self.runner.init(arena, chunks, io);
     errdefer self.runner.deinit();
     try self.observers.init(chunks);
     try self.listeners.init(chunks);
+    try self.receivers.init(chunks);
     try self.notifications.init(chunks);
     try self.entities.init(arena, 100);
     try self.executors.init(arena, chunks, io);
@@ -108,6 +115,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
 
 pub fn deinit(self: *App) void {
     self.flush();
+    self.receivers.deinit();
     self.runner.deinit();
     self.executors.deinit();
     self.events.deinit(self.gpa);
@@ -248,6 +256,53 @@ pub const Listeners = Subscriptions(
     @Tuple(&.{ *App, *anyopaque, TypeId }),
     ent.entityOrder,
 );
+
+pub const Receivers = Subscriptions(
+    EntityId,
+    @Tuple(&.{ *App, *anyopaque, TypeId }),
+    ent.entityOrder,
+);
+
+pub fn receive(
+    self: *App,
+    receiver: anytype,
+    comptime E: type,
+    function: anytype,
+    args: anytype,
+) !Receivers.Subscription {
+    const _Entity = @TypeOf(receiver);
+
+    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
+        @compileError("receiver must be an Entity(T)");
+    }
+
+    const Args = @TypeOf(args);
+
+    const TypeErased = struct {
+        fn _callback(app: *App, ptr: *anyopaque, _type: TypeId, _args: Args) bool {
+            if (TypeInfo.init(E) != _type) @panic("Receiver subscription event type mismatch");
+            const event: *E = @ptrCast(@alignCast(ptr));
+            @call(.always_inline, function, .{ app, event } ++ _args);
+            return false;
+        }
+
+        fn enable(sub: Receivers.Subscription, res: anyerror!void) bool {
+            res catch @panic("Deferred Subscription Error");
+            sub.enable();
+            return false;
+        }
+    };
+
+    const sub = try self.receivers.insert(
+        receiver.id(),
+        TypeErased._callback,
+        .{args},
+    );
+
+    _ = self.@"defer"(TypeErased.enable, .{sub});
+
+    return sub;
+}
 
 pub fn listen(
     self: *App,
@@ -393,6 +448,30 @@ pub fn Context(comptime T: type) type {
 
         pub fn nevent(self: *const @This(), comptime E: type) !*E {
             return try self.entity.nevent(self.app, E);
+        }
+
+        pub fn receive(self: *const @This(), comptime E: type, function: anytype, args: anytype) !Receivers.Subscription {
+            const Args = @TypeOf(args);
+
+            const TypeErased = struct {
+                pub fn callback(
+                    app: *App,
+                    event: *E,
+                    any: AnyEntity,
+                    _args: Args,
+                ) void {
+                    const _entity = _Entity.from(any) orelse return;
+
+                    const ctx: Context(T) = .new(app, _entity);
+
+                    const ptr, const _update = _entity.update(app);
+                    defer _update.end(ptr);
+
+                    @call(.always_inline, function, .{ ptr, event, ctx } ++ _args);
+                }
+            };
+
+            return try self.app.receive(self.entity, E, TypeErased.callback, .{ self.entity.any, args });
         }
 
         pub fn listen(self: *const @This(), comptime E: type, entity: anytype, function: anytype, args: anytype) !Listeners.Subscription {
@@ -727,6 +806,84 @@ test "Listen entities events" {
     try testing.expectEqual(context, 35);
 
     listened.drop();
+    app.flush();
+}
+
+test "Receive targets a typed receiver subscription" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+
+    const TestEvent = struct {
+        value: usize,
+    };
+
+    const TestStruct = struct {
+        pub fn init(_: *@This(), _: Context(@This())) !void {}
+    };
+
+    var app: App = undefined;
+    try app.init(.{}, allocator, io);
+    defer app.deinit();
+
+    const receiver = try Entity(TestStruct).new(&app, .{});
+    var received: usize = 0;
+
+    const Receiver = struct {
+        pub fn callback(_: *App, event: *TestEvent, value: *usize) void {
+            value.* = event.value;
+        }
+    };
+
+    var sub = try app.receive(receiver, TestEvent, Receiver.callback, .{&received});
+    app.flush();
+
+    var event: TestEvent = .{ .value = 35 };
+    sub.notify(.{ &app, &event, TypeInfo.init(TestEvent) });
+
+    try testing.expectEqual(@as(usize, 35), received);
+    try testing.expectEqual(null, app.receivers.subscribers.get_ref(receiver.id()));
+
+    receiver.drop();
+    app.flush();
+}
+
+test "Context receive updates the receiver entity" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+
+    const TestEvent = struct {
+        value: usize,
+    };
+
+    const TestStruct = struct {
+        value: usize,
+
+        pub fn init(self: *@This(), _: Context(@This())) !void {
+            self.* = .{ .value = 0 };
+        }
+
+        pub fn receive(self: *@This(), event: *TestEvent, _: Context(@This())) void {
+            self.value = event.value;
+        }
+    };
+
+    var app: App = undefined;
+    try app.init(.{}, allocator, io);
+    defer app.deinit();
+
+    const receiver = try Entity(TestStruct).new(&app, .{});
+    const ctx = receiver.ctx(&app);
+    var sub = try ctx.receive(TestEvent, TestStruct.receive, .{});
+    app.flush();
+
+    var event: TestEvent = .{ .value = 35 };
+    sub.notify(.{ &app, &event, TypeInfo.init(TestEvent) });
+
+    try testing.expectEqual(@as(usize, 35), receiver.read().value);
+
+    receiver.drop();
     app.flush();
 }
 
