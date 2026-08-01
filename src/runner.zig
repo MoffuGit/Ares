@@ -15,7 +15,7 @@ const MAX_SIZE = constants.MAX_SIZE;
 const MAX_ALIGN = constants.MAX_ALIGN;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
-pub const RunMode = Loop.RunMode;
+const RunMode = Loop.RunMode;
 
 pub const TaskId = u64;
 
