@@ -104,7 +104,7 @@ pub fn init(
 
     try self.snapshot.init(abs_path, gpa, io);
 
-    const action_cancel, const action_waker = try ctx.await(handleActions, .{ waker, io });
+    const action_cancel, const action_waker = try ctx.await(handleActions, .{waker});
     self.action_waker = action_waker;
     self.action_cancelation = action_cancel;
 
@@ -112,12 +112,15 @@ pub fn init(
     try action_waker.wake();
 }
 
-pub fn deinit(self: *Scanner) void {
+pub fn drop(self: *Scanner) void {
     if (self.timer) |timer| {
         timer.cancel();
     }
     self.action_cancelation.cancel();
     self.action_waker.close();
+}
+
+pub fn deinit(self: *Scanner) void {
     self.workers.deinit();
     self.updates.close(self.io);
     self.actions.close(self.io);
@@ -145,9 +148,8 @@ pub fn clearUpdates(self: *Scanner) void {
 pub fn handleActions(
     ctx: Context(Scanner),
     waker: App.Waker,
-    io: Io,
 ) bool {
-    const self = ctx.get(io) catch return false;
+    const self = ctx.get();
     self._handleActions(ctx, waker) catch |err| {
         log.err("Worktree Scanner err={}", .{err});
         return true;
@@ -224,7 +226,7 @@ fn initialScan(
     try self.workers.start(self.gpa, @intCast(state.cpu_count));
     errdefer self.workers.deinit();
 
-    self.timer = try ctx.timer(timerCallback, .{ waker, self.io }, @intCast(UPDATE_INTERVAL.toMilliseconds()));
+    self.timer = try ctx.timer(timerCallback, .{waker}, @intCast(UPDATE_INTERVAL.toMilliseconds()));
 
     const root_job = self.workers.createJob(path, null, null);
     self.workers.pushJob(0, root_job);
@@ -238,8 +240,8 @@ fn initialScan(
     }
 }
 
-fn timerCallback(ctx: Context(Scanner), waker: App.Waker, io: Io) bool {
-    const self = ctx.get(io) catch return false;
+fn timerCallback(ctx: Context(Scanner), waker: App.Waker) bool {
+    const self = ctx.get();
 
     if (!self.workers.working) return false;
 

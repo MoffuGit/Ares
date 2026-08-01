@@ -44,13 +44,13 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
 
     self.scanner = try ctx.executor(Scanner, .{ self.waker, opts.abs_path, ctx.gpa(), io });
 
-    const ptr = try self.scanner.get(io);
+    const ptr = self.scanner.ptr;
     self.snapshot = try ptr.snapshot.clone(ctx.gpa());
 }
 
 pub fn deinit(self: *Worktree) void {
     self.waker.close();
-    self.scanner.drop(self.io) catch {};
+    self.scanner.drop();
     self.snapshot.deinit();
 }
 
@@ -65,7 +65,7 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
     defer update.end(self);
 
     var buffer: [8]Updates = undefined;
-    const ptr = try self.scanner.get(self.io);
+    const ptr = self.scanner.get();
     for (0..try ptr.updates.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
             .started => {
