@@ -71,7 +71,6 @@ chunks: ChunkAllocator,
 pub fn init(
     self: *Scanner,
     ctx: Context(Scanner),
-    waker: App.Waker,
     abs_path: []const u8,
     gpa: Allocator,
     io: Io,
@@ -104,7 +103,7 @@ pub fn init(
 
     try self.snapshot.init(abs_path, gpa, io);
 
-    const action_cancel, const action_waker = try ctx.await(handleActions, .{waker});
+    const action_cancel, const action_waker = try ctx.await(handleActions, .{});
     self.action_waker = action_waker;
     self.action_cancelation = action_cancel;
 
@@ -147,10 +146,9 @@ pub fn clearUpdates(self: *Scanner) void {
 
 pub fn handleActions(
     ctx: Context(Scanner),
-    waker: App.Waker,
 ) bool {
     const self = ctx.get();
-    self._handleActions(ctx, waker) catch |err| {
+    self._handleActions(ctx) catch |err| {
         log.err("Worktree Scanner err={}", .{err});
         return true;
     };
@@ -161,7 +159,6 @@ pub fn handleActions(
 fn _handleActions(
     self: *Scanner,
     ctx: Context(Scanner),
-    waker: App.Waker,
 ) !void {
     while (self.workers.popEntry()) |entry| {
         self.snapshot.insert(entry.path, entry.meta);
@@ -170,7 +167,7 @@ fn _handleActions(
     var buffer: [8]Action = undefined;
     for (0..try self.actions.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
-            .initial_scan => try self.initialScan(ctx, waker),
+            .initial_scan => try self.initialScan(ctx),
             .scan_end => {
                 if (self.timer) |timer| {
                     self.timer = null;
@@ -185,8 +182,6 @@ fn _handleActions(
                         .snapshot = try self.snapshot.clone(self.gpa),
                     },
                 });
-
-                try waker.wake();
             },
         }
     }
@@ -195,7 +190,6 @@ fn _handleActions(
 fn initialScan(
     self: *Scanner,
     ctx: Context(Scanner),
-    waker: App.Waker,
 ) !void {
     const stat = try Io.Dir.statFile(
         .cwd(),
@@ -221,12 +215,11 @@ fn initialScan(
     if (stat.kind != .directory) return;
 
     try self.updates.putOne(self.io, .started);
-    try waker.wake();
 
     try self.workers.start(self.gpa, @intCast(state.cpu_count));
     errdefer self.workers.deinit();
 
-    self.timer = try ctx.timer(timerCallback, .{waker}, @intCast(UPDATE_INTERVAL.toMilliseconds()));
+    self.timer = try ctx.timer(timerCallback, .{}, @intCast(UPDATE_INTERVAL.toMilliseconds()));
 
     const root_job = self.workers.createJob(path, null, null);
     self.workers.pushJob(0, root_job);
@@ -240,12 +233,12 @@ fn initialScan(
     }
 }
 
-fn timerCallback(ctx: Context(Scanner), waker: App.Waker) bool {
+fn timerCallback(ctx: Context(Scanner)) bool {
     const self = ctx.get();
 
     if (!self.workers.working) return false;
 
-    self._timerCallback(waker) catch |err| {
+    self._timerCallback() catch |err| {
         log.err("Scanner Timer err={}", .{err});
         return false;
     };
@@ -253,15 +246,13 @@ fn timerCallback(ctx: Context(Scanner), waker: App.Waker) bool {
     return true;
 }
 
-fn _timerCallback(self: *Scanner, waker: App.Waker) !void {
+fn _timerCallback(self: *Scanner) !void {
     try self.updates.putOne(self.io, .{
         .updated = .{
             .scanning = true,
             .snapshot = try self.snapshot.clone(self.gpa),
         },
     });
-
-    try waker.wake();
 }
 
 const IgnoreNode = struct {

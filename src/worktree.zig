@@ -27,7 +27,6 @@ gpa: Allocator,
 scanning: bool,
 snapshot: Snapshot,
 scanner: Executor(Scanner),
-waker: App.Waker,
 
 pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !void {
     self.* = .{
@@ -36,20 +35,15 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
         .scanning = false,
         .snapshot = undefined,
         .scanner = undefined,
-        .waker = undefined,
     };
 
-    self.waker = try ctx.await(handleUpdates, .{});
-    errdefer self.waker.close();
-
-    self.scanner = try ctx.executor(Scanner, .{ self.waker, opts.abs_path, ctx.gpa(), io });
+    self.scanner = try ctx.executor(Scanner, .{ opts.abs_path, ctx.gpa(), io });
 
     const ptr = self.scanner.ptr;
     self.snapshot = try ptr.snapshot.clone(ctx.gpa());
 }
 
 pub fn deinit(self: *Worktree) void {
-    self.waker.close();
     self.scanner.drop();
     self.snapshot.deinit();
 }

@@ -21,8 +21,6 @@ const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
-const Runner = @import("runner.zig");
-const TaskId = Runner.TaskId;
 const subs = @import("subscription.zig");
 const Subscriptions = subs.Subscriptions;
 const typeId = @import("typeId.zig");
@@ -31,22 +29,6 @@ const TypeId = typeId.TypeId;
 const Queue = datastruct.Queue;
 
 const log = std.log.scoped(.app);
-
-pub const Waker = struct {
-    waker: Runner.Waker,
-    options: App.Options,
-    cancelation: App.Cancelation,
-
-    pub fn wake(self: *const Waker) !void {
-        try self.waker.wake();
-        self.options.wakeup_cb(self.options.userdata);
-    }
-
-    pub fn close(self: *const Waker) void {
-        self.cancelation.cancel();
-        self.waker.close();
-    }
-};
 
 pub const Options = struct {
     fn noop(_: *anyopaque) void {}
@@ -69,8 +51,6 @@ observers: Observers,
 chunks: ChunkAllocator,
 peding_updates: u16,
 
-runner: Runner,
-
 executors: Executors,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
@@ -81,7 +61,6 @@ options: Options,
 
 pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     self.* = .{
-        .runner = undefined,
         .options = options,
         .notifications = undefined,
         .entities = undefined,
@@ -108,8 +87,6 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     });
     const chunks = self.chunks.allocator();
 
-    try self.runner.init(arena, chunks, io);
-    errdefer self.runner.deinit();
     try self.observers.init(chunks);
     try self.listeners.init(chunks);
     try self.receivers.init(chunks);
@@ -122,7 +99,6 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
 pub fn deinit(self: *App) void {
     self.flush();
     self.receivers.deinit();
-    self.runner.deinit();
     self.executors.deinit();
     self.arena.deinit();
 }
@@ -202,7 +178,6 @@ pub fn flush(self: *App) void {
     self.flushing = true;
     defer self.flushing = false;
 
-    self.runner.run(.no_wait) catch @panic("Loop run Error");
     self.flush_deferred();
     self.destroyDroppedEntities();
     self.flushNotifications();
@@ -615,22 +590,6 @@ pub fn Context(comptime T: type) type {
             self.app.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
         }
 
-        pub fn await(self: *const @This(), function: anytype, args: anytype) !Waker {
-            const Args = @TypeOf(args);
-            const TypeErased = struct {
-                pub fn async(any: AnyEntity, app: *App, _args: Args, res: anyerror!void) bool {
-                    res catch return false;
-                    const _entity = _Entity.from(any) orelse return false;
-
-                    const ctx: Context(T) = .new(app, _entity);
-
-                    return @call(.always_inline, function, .{ctx} ++ _args);
-                }
-            };
-
-            return try self.app.await(TypeErased.async, .{ self.entity.any, self.app, args });
-        }
-
         pub fn executor(
             self: *const @This(),
             E: type,
@@ -670,37 +629,6 @@ pub fn @"defer"(
 
     self.deferred.push(deferred);
 }
-
-pub fn await(
-    self: *App,
-    function: anytype,
-    context: anytype,
-) !Waker {
-    const task = self.runner.create();
-    errdefer self.runner.destroyUnregistered(task);
-    const waker = try task.await(function, context);
-
-    self.runner.submit(task);
-
-    return .{
-        .waker = waker,
-        .options = self.options,
-        .cancelation = .{
-            .id = task.id,
-            .app = self,
-        },
-    };
-}
-
-pub const Cancelation = struct {
-    id: TaskId,
-    app: *App,
-
-    pub fn cancel(self: *const Cancelation) void {
-        const cancelation = self.app.runner.createCancelation(self.id);
-        self.app.runner.cancel(cancelation);
-    }
-};
 
 test "creates/drops entities" {
     const testing = std.testing;
@@ -1194,56 +1122,6 @@ test "Context defer runs on foreground executor with entity context" {
     try testing.expectEqual(1, entity.read().calls);
     try testing.expectEqual(42, entity.read().last_value);
 
-    entity.drop();
-    app.flush();
-}
-
-test "Context async runs on foreground executor with entity context" {
-    const testing = std.testing;
-    const allocator = testing.allocator;
-    const io = testing.io;
-
-    const State = struct {
-        calls: usize,
-        last_value: usize,
-
-        pub fn init(self: *@This(), _: Context(@This())) !void {
-            self.* = .{ .calls = 0, .last_value = 0 };
-        }
-
-        pub fn await(ctx: Context(@This()), value: usize) bool {
-            const ptr, const update = ctx.update();
-            defer update.end(ptr);
-
-            ptr.set(value);
-            return false;
-        }
-
-        pub fn set(self: *@This(), value: usize) void {
-            self.calls += 1;
-            self.last_value = value;
-        }
-    };
-
-    var app: App = undefined;
-    try app.init(.{}, allocator, io);
-    defer app.deinit();
-
-    const entity = try Entity(State).new(&app, .{});
-
-    var context = Context(State).new(&app, entity);
-    const waker = try context.await(State.await, .{42});
-
-    try testing.expectEqual(0, entity.read().calls);
-
-    try waker.wake();
-
-    app.flush();
-
-    try testing.expectEqual(1, entity.read().calls);
-    try testing.expectEqual(42, entity.read().last_value);
-
-    waker.close();
     entity.drop();
     app.flush();
 }
