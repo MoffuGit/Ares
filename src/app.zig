@@ -16,7 +16,7 @@ const ect = @import("executor.zig");
 const Executors = ect.Executors;
 const Executor = ect.Executor;
 const ent = @import("entity.zig");
-pub const Entity = ent.Entity;
+const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
@@ -29,6 +29,7 @@ const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
 
 const log = std.log.scoped(.app);
+
 pub const Waker = struct {
     waker: Runner.Waker,
     options: App.Options,
