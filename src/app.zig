@@ -236,6 +236,7 @@ pub fn destroyDroppedEntities(self: *App) void {
         const ptr, const key, const type_info = drop;
 
         self.listeners.remove(key);
+        self.receivers.remove(key);
         self.observers.remove(key);
 
         type_info.deinit(ptr);
@@ -919,6 +920,53 @@ test "Context receive updates the receiver entity" {
 
     receiver.drop();
     app.flush();
+}
+
+test "Dropping a receiver removes subscriptions before queued delivery" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+
+    const TestEvent = struct {
+        deinit_called: *bool,
+
+        pub fn deinit(self: *@This()) void {
+            self.deinit_called.* = true;
+        }
+    };
+
+    const TestStruct = struct {
+        pub fn init(_: *@This(), _: Context(@This())) !void {}
+    };
+
+    var app: App = undefined;
+    try app.init(.{}, allocator, io);
+    defer app.deinit();
+
+    const receiver = try Entity(TestStruct).new(&app, .{});
+    var callback_called = false;
+    var deinit_called = false;
+
+    const Receiver = struct {
+        pub fn callback(_: *App, _: *TestEvent, called: *bool) bool {
+            called.* = true;
+            return true;
+        }
+    };
+
+    const sub = try app.receive(receiver, TestEvent, Receiver.callback, .{&callback_called});
+    app.flush();
+
+    const event = try app.send(sub, TestEvent);
+    event.* = .{ .deinit_called = &deinit_called };
+
+    const receiver_id = receiver.id();
+    receiver.drop();
+    app.flush();
+
+    try testing.expect(!callback_called);
+    try testing.expect(deinit_called);
+    try testing.expectEqual(null, app.receivers.subscribers.get_ref(receiver_id));
 }
 
 test "Context listen entities events" {
