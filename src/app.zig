@@ -10,6 +10,7 @@ const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const constants = @import("constants.zig");
 const MAX_SIZE = constants.MAX_SIZE;
+const MAX_ALIGN = constants.MAX_ALIGN;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 const ect = @import("executor.zig");
@@ -61,6 +62,7 @@ arena: heap.ArenaAllocator,
 entities: EntityStore,
 events: Queue(Event),
 dispatched: Queue(Dispatched),
+deferred: Queue(Deferred),
 listeners: Listeners,
 receivers: Receivers,
 observers: Observers,
@@ -94,6 +96,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .arena = .init(gpa),
         .events = .{},
         .dispatched = .{},
+        .deferred = .{},
     };
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
@@ -200,6 +203,7 @@ pub fn flush(self: *App) void {
     defer self.flushing = false;
 
     self.runner.run(.no_wait) catch @panic("Loop run Error");
+    self.flush_deferred();
     self.destroyDroppedEntities();
     self.flushNotifications();
     self.flushEvents();
@@ -212,6 +216,19 @@ pub fn flushNotifications(self: *App) void {
     }
 
     self.notifications.clear(self.chunks.allocator());
+}
+
+pub fn flush_deferred(self: *App) void {
+    const chunks = self.chunks.allocator();
+    while (self.deferred.pop()) |deferred| {
+        deferred.callback(deferred.ptr);
+        chunks.rawFree(
+            @as([*]u8, @ptrCast(deferred.ptr))[0..MAX_SIZE],
+            MAX_ALIGN,
+            @returnAddress(),
+        );
+        chunks.destroy(deferred);
+    }
 }
 
 pub fn flushEvents(self: *App) void {
@@ -281,6 +298,13 @@ pub const Dispatched = struct {
     }
 };
 
+pub const Deferred = struct {
+    ptr: *anyopaque,
+    callback: *const fn (*anyopaque) void,
+
+    next: ?*Deferred = null,
+};
+
 pub const Listeners = Subscriptions(
     EntityId,
     @Tuple(&.{ *App, *anyopaque, TypeId }),
@@ -315,10 +339,8 @@ pub fn receive(
             return @call(.always_inline, function, .{ app, event } ++ _args);
         }
 
-        fn enable(sub: Receivers.Subscription, res: anyerror!void) bool {
-            res catch @panic("Deferred Subscription Error");
+        fn enable(sub: Receivers.Subscription) void {
             sub.enable();
-            return false;
         }
     };
 
@@ -355,10 +377,8 @@ pub fn listen(
             return @call(.always_inline, function, .{ app, event } ++ _args);
         }
 
-        fn enable(sub: Listeners.Subscription, res: anyerror!void) bool {
-            res catch @panic("Deferred Subscription Error");
+        fn enable(sub: Listeners.Subscription) void {
             sub.enable();
-            return false;
         }
     };
 
@@ -440,10 +460,8 @@ pub fn observe(
             return @call(.always_inline, function, .{ app, _entity } ++ _args);
         }
 
-        fn enable(sub: Observers.Subscription, res: anyerror!void) bool {
-            res catch @panic("Deferred Subscription Error");
+        fn enable(sub: Observers.Subscription) void {
             sub.enable();
-            return false;
         }
     };
 
@@ -583,19 +601,18 @@ pub fn Context(comptime T: type) type {
             return try self.app.observe(entity, TypeErased.callback, .{ self.entity.any, args });
         }
 
-        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) App.Cancelation {
+        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) void {
             const Args = @TypeOf(args);
             const TypeErased = struct {
-                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args, res: anyerror!void) bool {
-                    res catch return false;
-                    const _entity = _Entity.from(any) orelse return false;
+                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args) void {
+                    const _entity = _Entity.from(any) orelse return;
 
                     const ctx: Context(T) = .new(app, _entity);
 
-                    return @call(.always_inline, function, .{ctx} ++ _args);
+                    @call(.always_inline, function, .{ctx} ++ _args);
                 }
             };
-            return self.app.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
+            self.app.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
         }
 
         pub fn await(self: *const @This(), function: anytype, args: anytype) !Waker {
@@ -629,14 +646,29 @@ pub fn Context(comptime T: type) type {
 pub fn @"defer"(
     self: *App,
     function: anytype,
-    context: anytype,
-) Cancelation {
-    const task = self.runner.create();
-    task.@"defer"(function, context);
+    args: anytype,
+) void {
+    const Args = @TypeOf(args);
 
-    self.runner.complete(task);
+    const chunks = self.chunks.allocator();
+    const deferred = chunks.create(Deferred) catch @panic("Deferred Overflow");
 
-    return .{ .id = task.id, .app = self };
+    const TypeErased = struct {
+        fn complete(ptr: *anyopaque) void {
+            const _args: *Args = @ptrCast(@alignCast(ptr));
+
+            @call(.always_inline, function, _args.*);
+        }
+    };
+
+    const ptr = chunks.rawAlloc(MAX_SIZE, MAX_ALIGN, @returnAddress()) orelse
+        @panic("Deferred Context Overflow");
+
+    const clone: *Args = @ptrCast(@alignCast(ptr));
+    clone.* = args;
+    deferred.* = .{ .ptr = clone, .callback = TypeErased.complete };
+
+    self.deferred.push(deferred);
 }
 
 pub fn await(
@@ -1129,13 +1161,11 @@ test "Context defer runs on foreground executor with entity context" {
             self.* = .{ .calls = 0, .last_value = 0 };
         }
 
-        pub fn deferred(ctx: Context(@This()), value: usize) bool {
+        pub fn deferred(ctx: Context(@This()), value: usize) void {
             const ptr, const update = ctx.update();
             defer update.end(ptr);
 
             ptr.set(value);
-
-            return false;
         }
 
         pub fn set(self: *@This(), value: usize) void {
@@ -1155,7 +1185,7 @@ test "Context defer runs on foreground executor with entity context" {
     const entity = try Entity(State).new(&app, .{});
 
     var context = Context(State).new(&app, entity);
-    var handler = context.@"defer"(State.deferred, .{42});
+    context.@"defer"(State.deferred, .{42});
 
     try testing.expectEqual(0, entity.read().calls);
 
@@ -1164,7 +1194,6 @@ test "Context defer runs on foreground executor with entity context" {
     try testing.expectEqual(1, entity.read().calls);
     try testing.expectEqual(42, entity.read().last_value);
 
-    handler.cancel();
     entity.drop();
     app.flush();
 }
