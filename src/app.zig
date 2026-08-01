@@ -292,8 +292,7 @@ pub fn receive(
         fn _callback(app: *App, ptr: *anyopaque, _type: TypeId, _args: Args) bool {
             if (TypeInfo.init(E) != _type) @panic("Receiver subscription event type mismatch");
             const event: *E = @ptrCast(@alignCast(ptr));
-            @call(.always_inline, function, .{ app, event } ++ _args);
-            return false;
+            return @call(.always_inline, function, .{ app, event } ++ _args);
         }
 
         fn enable(sub: Receivers.Subscription, res: anyerror!void) bool {
@@ -367,6 +366,19 @@ pub fn nevent(self: *App, entity: anytype, comptime E: type) !*E {
     try self.events.pushBack(
         self.gpa,
         .{ .kind = .{ .emitter = entity.id() }, .ptr = ptr, .type = TypeInfo.init(E) },
+    );
+
+    return ptr;
+}
+
+pub fn send(self: *App, subscription: Receivers.Subscription, comptime E: type) !*E {
+    const chunk = self.chunks.allocator();
+    const ptr = try chunk.create(E);
+    errdefer chunk.destroy(ptr);
+
+    try self.events.pushBack(
+        self.gpa,
+        .{ .kind = .{ .subscription = subscription }, .ptr = ptr, .type = TypeInfo.init(E) },
     );
 
     return ptr;
@@ -469,15 +481,15 @@ pub fn Context(comptime T: type) type {
                     event: *E,
                     any: AnyEntity,
                     _args: Args,
-                ) void {
-                    const _entity = _Entity.from(any) orelse return;
+                ) bool {
+                    const _entity = _Entity.from(any) orelse return false;
 
                     const ctx: Context(T) = .new(app, _entity);
 
                     const ptr, const _update = _entity.update(app);
                     defer _update.end(ptr);
 
-                    @call(.always_inline, function, .{ ptr, event, ctx } ++ _args);
+                    return @call(.always_inline, function, .{ ptr, event, ctx } ++ _args);
                 }
             };
 
@@ -840,20 +852,17 @@ test "Queued receiver event targets a typed subscription" {
     var received: usize = 0;
 
     const Receiver = struct {
-        pub fn callback(_: *App, event: *TestEvent, value: *usize) void {
+        pub fn callback(_: *App, event: *TestEvent, value: *usize) bool {
             value.* = event.value;
+            return false;
         }
     };
 
     const sub = try app.receive(receiver, TestEvent, Receiver.callback, .{&received});
     app.flush();
 
-    const event = try app.chunks.allocator().create(TestEvent);
+    const event = try app.send(sub, TestEvent);
     event.* = .{ .value = 35 };
-    try app.events.pushBack(
-        app.gpa,
-        .{ .kind = .{ .subscription = sub }, .ptr = event, .type = TypeInfo.init(TestEvent) },
-    );
     app.flush();
 
     try testing.expectEqual(@as(usize, 35), received);
@@ -879,8 +888,9 @@ test "Context receive updates the receiver entity" {
             self.* = .{ .value = 0 };
         }
 
-        pub fn receive(self: *@This(), event: *TestEvent, _: Context(@This())) void {
+        pub fn receive(self: *@This(), event: *TestEvent, _: Context(@This())) bool {
             self.value = event.value;
+            return true;
         }
     };
 
@@ -890,13 +900,22 @@ test "Context receive updates the receiver entity" {
 
     const receiver = try Entity(TestStruct).new(&app, .{});
     const ctx = receiver.ctx(&app);
-    var sub = try ctx.receive(TestEvent, TestStruct.receive, .{});
+    const sub = try ctx.receive(TestEvent, TestStruct.receive, .{});
     app.flush();
 
-    var event: TestEvent = .{ .value = 35 };
-    sub.notify(.{ &app, &event, TypeInfo.init(TestEvent) });
+    const first = try app.send(sub, TestEvent);
+    first.* = .{ .value = 35 };
+    app.flush();
 
     try testing.expectEqual(@as(usize, 35), receiver.read().value);
+    try testing.expect(app.receivers.subscribers.get_ref(receiver.id()).?.*.?.get(sub.id) != null);
+
+    const second = try app.send(sub, TestEvent);
+    second.* = .{ .value = 70 };
+    app.flush();
+
+    try testing.expectEqual(@as(usize, 70), receiver.read().value);
+    try sub.unsubscribe();
 
     receiver.drop();
     app.flush();
