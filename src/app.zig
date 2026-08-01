@@ -215,10 +215,15 @@ pub fn flushNotifications(self: *App) void {
 pub fn flushEvents(self: *App) void {
     const chunk = self.chunks.allocator();
     while (self.events.popFront()) |event| {
-        self.listeners.notifyAll(
-            event.id,
-            .{ self, event.ptr, event.type },
-        );
+        switch (event.kind) {
+            .emitter => |id| self.listeners.notifyAll(
+                id,
+                .{ self, event.ptr, event.type },
+            ),
+            .subscription => |sub| sub.notify(
+                .{ self, event.ptr, event.type },
+            ),
+        }
 
         event.destroy(chunk);
     }
@@ -240,8 +245,13 @@ pub fn destroyDroppedEntities(self: *App) void {
     }
 }
 
+pub const EventKind = union(enum) {
+    emitter: EntityId,
+    subscription: Receivers.Subscription,
+};
+
 pub const Event = struct {
-    id: EntityId,
+    kind: EventKind,
     type: TypeId,
     ptr: *anyopaque,
 
@@ -356,7 +366,7 @@ pub fn nevent(self: *App, entity: anytype, comptime E: type) !*E {
 
     try self.events.pushBack(
         self.gpa,
-        .{ .id = entity.id(), .ptr = ptr, .type = TypeInfo.init(E) },
+        .{ .kind = .{ .emitter = entity.id() }, .ptr = ptr, .type = TypeInfo.init(E) },
     );
 
     return ptr;
@@ -809,7 +819,7 @@ test "Listen entities events" {
     app.flush();
 }
 
-test "Receive targets a typed receiver subscription" {
+test "Queued receiver event targets a typed subscription" {
     const testing = std.testing;
     const allocator = testing.allocator;
     const io = testing.io;
@@ -835,11 +845,16 @@ test "Receive targets a typed receiver subscription" {
         }
     };
 
-    var sub = try app.receive(receiver, TestEvent, Receiver.callback, .{&received});
+    const sub = try app.receive(receiver, TestEvent, Receiver.callback, .{&received});
     app.flush();
 
-    var event: TestEvent = .{ .value = 35 };
-    sub.notify(.{ &app, &event, TypeInfo.init(TestEvent) });
+    const event = try app.chunks.allocator().create(TestEvent);
+    event.* = .{ .value = 35 };
+    try app.events.pushBack(
+        app.gpa,
+        .{ .kind = .{ .subscription = sub }, .ptr = event, .type = TypeInfo.init(TestEvent) },
+    );
+    app.flush();
 
     try testing.expectEqual(@as(usize, 35), received);
     try testing.expectEqual(null, app.receivers.subscribers.get_ref(receiver.id()));
