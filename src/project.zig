@@ -3,8 +3,9 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 
 const App = @import("app.zig");
-const Entity = App.Entity;
 const Context = App.Context;
+const ent = @import("entity.zig");
+const Entity = ent.Entity;
 const WorktreeStore = @import("project/worktree_store.zig");
 
 const Project = @This();

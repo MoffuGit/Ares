@@ -210,7 +210,7 @@ pub fn Context(comptime T: type) type {
         }
 
         pub fn get(self: *const @This()) *T {
-            return self.executor.get();
+            return self.executor.ptr;
         }
 
         pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) !Executors.Cancelation {

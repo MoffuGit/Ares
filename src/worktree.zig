@@ -65,7 +65,7 @@ fn _handleUpdates(ctx: Context(Worktree)) !void {
     defer update.end(self);
 
     var buffer: [8]Updates = undefined;
-    const ptr = self.scanner.get();
+    const ptr = self.scanner.ptr;
     for (0..try ptr.updates.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
             .started => {

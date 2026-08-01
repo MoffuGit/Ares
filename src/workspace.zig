@@ -7,7 +7,8 @@ const zqlite = @import("zqlite");
 
 const App = @import("app.zig");
 const Context = App.Context;
-const Entity = App.Entity;
+const ent = @import("entity.zig");
+const Entity = ent.Entity;
 const db = @import("db.zig");
 const Project = @import("project.zig");
 const uuid = @import("uuid.zig");
