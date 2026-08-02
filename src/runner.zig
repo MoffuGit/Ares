@@ -28,7 +28,7 @@ const TypeId = typeId.TypeId;
 
 const Dropped = struct { ptr: *anyopaque, type_id: TypeId, next: ?*Dropped = null };
 
-const log = std.log.scoped(.tasks);
+const log = std.log.scoped(.runner);
 
 pub const TaskId = u64;
 pub const Batch = Queue(Batched);
