@@ -94,7 +94,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     try self.notifications.init(chunks);
     try self.entities.init(arena, 100);
 
-    try self.executors.init(arena, chunks, io);
+    try self.executors.init(arena, chunks, io, options);
     errdefer self.executors.deinit();
 }
 
@@ -1305,5 +1305,75 @@ test "Observe entities drop before enable" {
         entity.drop();
     }
 
+    app.flush();
+}
+
+test "Executor batch wakes the app" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const io = testing.io;
+
+    const TestEvent = struct {
+        value: usize,
+    };
+
+    const TestEntity = struct {
+        pub fn init(_: *@This(), _: Context(@This())) !void {}
+    };
+
+    const Wakeup = struct {
+        fn callback(userdata: *anyopaque) void {
+            const count: *std.atomic.Value(usize) = @ptrCast(@alignCast(userdata));
+            _ = count.fetchAdd(1, .release);
+        }
+    };
+
+    var wakeups: std.atomic.Value(usize) = .init(0);
+    var app: App = undefined;
+    try app.init(.{ .userdata = &wakeups, .wakeup_cb = Wakeup.callback }, allocator, io);
+    defer app.deinit();
+
+    const receiver = try Entity(TestEntity).new(&app, .{});
+    var received: usize = 0;
+
+    const Receiver = struct {
+        fn callback(_: *App, event: *TestEvent, value: *usize) bool {
+            value.* = event.value;
+            return true;
+        }
+    };
+
+    const subscription = try app.receive(receiver, TestEvent, Receiver.callback, .{&received});
+    app.flush();
+
+    const TestExecutor = struct {
+        initialized: bool,
+
+        pub fn init(self: *@This(), ctx: ect.Context(@This()), sub: Receivers.Subscription) !void {
+            self.* = .{ .initialized = true };
+            _ = try ctx.@"defer"(@This().sendEvent, .{sub});
+        }
+
+        fn sendEvent(ctx: ect.Context(@This()), sub: Receivers.Subscription) bool {
+            const event = ctx.dispatch(sub, TestEvent) catch return false;
+            event.* = .{ .value = 35 };
+            return false;
+        }
+    };
+
+    const test_executor = try app.executor(TestExecutor, .{subscription});
+    defer test_executor.drop();
+
+    for (0..1000) |_| {
+        if (wakeups.load(.acquire) != 0) break;
+        io.sleep(.fromMilliseconds(1), .real) catch {};
+    }
+
+    try testing.expectEqual(@as(usize, 1), wakeups.load(.acquire));
+
+    app.flush();
+    try testing.expectEqual(@as(usize, 35), received);
+
+    receiver.drop();
     app.flush();
 }

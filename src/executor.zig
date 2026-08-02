@@ -66,6 +66,7 @@ pub const Executors = struct {
     stop: atomic.Value(bool) = .init(false),
     queues: MultiMpsc(Queues),
     chunks: Allocator,
+    options: App.Options,
     batcher: Batcher,
     batch: Batch = .{},
 
@@ -74,6 +75,7 @@ pub const Executors = struct {
         arena: Allocator,
         chunks: Allocator,
         io: Io,
+        options: App.Options,
     ) !void {
         self.* = .{
             .queues = undefined,
@@ -81,6 +83,7 @@ pub const Executors = struct {
             .io = io,
             .future = undefined,
             .chunks = chunks,
+            .options = options,
             .batcher = undefined,
         };
 
@@ -124,6 +127,7 @@ pub const Executors = struct {
         }
 
         self.batch = .{};
+        self.options.wakeup_cb(self.options.userdata);
     }
 
     fn addQueuedTasks(self: *@This()) void {
