@@ -55,7 +55,7 @@ pub fn deinit(self: *Worktree) void {
     self.snapshot.deinit();
 }
 
-fn handleUpdates(self: *Worktree, updates: *Scanner.Updates, _: Context(Worktree)) bool {
+fn handleUpdates(self: *Worktree, updates: *Scanner.Updates, ctx: Context(Worktree)) bool {
     switch (updates.*) {
         .started => {
             log.debug("scanner for path \"{s}\" started", .{self.snapshot.abs_root});
@@ -72,6 +72,8 @@ fn handleUpdates(self: *Worktree, updates: *Scanner.Updates, _: Context(Worktree
             }
         },
     }
+
+    ctx.notify();
 
     return true;
 }

@@ -41,7 +41,7 @@ test "benchmark: Worktree initial scan" {
     defer bench.deinit();
 
     Bench.report("Worktree Scanned Path={s}", .{chromium_path});
-    var durations: [1]Io.Duration = undefined;
+    var durations: [8]Io.Duration = undefined;
 
     for (0..durations.len) |idx| {
         bench.start(io);
@@ -62,10 +62,12 @@ test "benchmark: Worktree initial scan" {
 
         _ = try app.observe(worktree, observe, .{&scanning});
 
-        app.run(&scanning);
+        while (scanning) app.flush();
     }
 
     try verifyWorktree(&app, io);
+    const estimate = Bench.estimate(&durations);
+    Bench.report("{}ms", .{estimate.toMilliseconds()});
 }
 
 fn verifyWorktree(app: *App, io: Io) !void {
