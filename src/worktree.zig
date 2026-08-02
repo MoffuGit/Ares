@@ -14,6 +14,7 @@ const bench = @import("worktree/bench.zig");
 const Scanner = @import("worktree/scanner.zig");
 const Updates = Scanner.Updates;
 const Snapshot = @import("worktree/snapshot.zig");
+const Entry = Snapshot.Entry;
 
 const log = std.log.scoped(.worktree);
 
@@ -43,8 +44,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
     self.update_subscription = try ctx.receive(Scanner.Updates, handleUpdates, .{});
     errdefer self.update_subscription.unsubscribe() catch {};
 
-    const chunks = ctx.chunks();
-    self.scanner = try chunks.create(Scanner);
+    self.scanner = try ctx.runner().create(Scanner);
     try self.scanner.init(ctx.runner(), self.update_subscription, opts.abs_path, ctx.gpa(), io);
 
     self.snapshot = try self.scanner.snapshot.clone(ctx.gpa());

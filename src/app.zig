@@ -1360,9 +1360,7 @@ test "Batch wakes the app" {
         }
     };
 
-    const chunks = app.chunks.allocator();
-
-    const test_executor = try chunks.create(TestExecutor);
+    const test_executor = try app.runner.create(TestExecutor);
     try test_executor.init(&app.runner, subscription);
     defer app.runner.drop(test_executor);
 

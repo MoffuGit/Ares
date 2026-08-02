@@ -227,6 +227,10 @@ pub fn timer(
     return task.id;
 }
 
+pub fn create(self: *Runner, T: type) !*T {
+    return try self.chunks.create(T);
+}
+
 pub fn drop(self: *Runner, ptr: anytype) void {
     const Ptr = @TypeOf(ptr);
     const Info = @typeInfo(Ptr);
