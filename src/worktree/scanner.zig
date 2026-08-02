@@ -63,14 +63,15 @@ pub const Action = union(enum) {
 io: Io,
 gpa: Allocator,
 snapshot: Snapshot,
-timer: ?Runner.TaskId,
 workers: Workers,
-action_waker: Runner.Waker,
-action_task: Runner.TaskId,
 action_buffer: [8]Action,
 actions: Action.Queue,
 chunks: ChunkAllocator,
 runner: *Runner,
+
+waker: Runner.Waker,
+await: Runner.TaskId,
+timer: ?Runner.TaskId,
 
 subscription: Receivers.Subscription,
 
@@ -92,8 +93,8 @@ pub fn init(
         .snapshot = undefined,
         .workers = undefined,
         .timer = null,
-        .action_waker = undefined,
-        .action_task = undefined,
+        .waker = undefined,
+        .await = undefined,
         .chunks = undefined,
     };
 
@@ -109,18 +110,18 @@ pub fn init(
 
     try self.snapshot.init(abs_path, gpa, io);
 
-    self.action_task, self.action_waker = try runner.await(handleActions, .{self});
+    self.await, self.waker = try runner.await(handleActions, .{self});
 
     try self.actions.putOne(self.io, .initial_scan);
-    try self.action_waker.wake();
+    try self.waker.wake();
 }
 
 pub fn drop(self: *Scanner) void {
     if (self.timer) |timer| {
         self.runner.cancel(timer);
     }
-    self.runner.cancel(self.action_task);
-    self.action_waker.close();
+    self.runner.cancel(self.await);
+    self.waker.close();
     self.runner.drop(self);
 }
 
@@ -443,7 +444,7 @@ pub fn _scan(
             try self.actions.putOne(self.io, .scan_end);
         }
 
-        try self.action_waker.wake();
+        try self.waker.wake();
     }
 }
 

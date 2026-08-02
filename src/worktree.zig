@@ -44,8 +44,9 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
     self.update_subscription = try ctx.receive(Scanner.Updates, handleUpdates, .{});
     errdefer self.update_subscription.unsubscribe() catch {};
 
-    self.scanner = try ctx.runner().create(Scanner);
-    try self.scanner.init(ctx.runner(), self.update_subscription, opts.abs_path, ctx.gpa(), io);
+    const runner = ctx.runner();
+    self.scanner = try runner.create(Scanner);
+    try self.scanner.init(runner, self.update_subscription, opts.abs_path, ctx.gpa(), io);
 
     self.snapshot = try self.scanner.snapshot.clone(ctx.gpa());
 }
