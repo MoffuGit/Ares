@@ -37,6 +37,7 @@ pub fn Queue(comptime T: type) type {
         }
 
         pub fn concat(self: *Self, other: *Self) void {
+            assert(self != other);
             const v = other.head orelse return;
 
             if (self.tail) |tail| {
