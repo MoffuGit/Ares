@@ -20,7 +20,7 @@ const GlobalState = struct {
 
     gpa: Allocator,
     threaded: Io.Threaded,
-    cpu_count: usize,
+    cpu_count: usize = 2,
 
     pub fn init(self: *Self, args: process.Args.Vector, environ: process.Environ.Block) !void {
         const gpa = if (use_safe_allocator)

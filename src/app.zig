@@ -201,7 +201,8 @@ fn flushBatched(self: *App) void {
     }
 
     while (batch.pop()) |b| {
-        b.subscription.notify(.{ self, b.ptr, b.type });
+        const reach = b.subscription.notify(.{ self, b.ptr, b.type });
+        if (!reach) b.deinit();
         b.destroy(chunks);
         chunks.destroy(b);
     }
@@ -243,9 +244,11 @@ pub fn flushEvents(self: *App) void {
         }
 
         while (self.dispatched.pop()) |event| {
-            event.subscription.notify(
+            const reach = event.subscription.notify(
                 .{ self, event.ptr, event.type },
             );
+
+            if (!reach) event.deinit();
 
             event.destroy(chunk);
             chunk.destroy(event);
@@ -290,8 +293,11 @@ pub const Dispatched = struct {
 
     next: ?*Dispatched = null,
 
-    pub fn destroy(self: *const Dispatched, chunk: Allocator) void {
+    pub fn deinit(self: *const Dispatched) void {
         self.type.deinit(self.ptr);
+    }
+
+    pub fn destroy(self: *const Dispatched, chunk: Allocator) void {
         self.type.destroy(self.ptr, chunk);
     }
 };

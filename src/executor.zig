@@ -35,8 +35,11 @@ pub const Batched = struct {
 
     next: ?*Batched = null,
 
-    pub fn destroy(self: *const Batched, chunk: Allocator) void {
+    pub fn deinit(self: *const Batched) void {
         self.type.deinit(self.ptr);
+    }
+
+    pub fn destroy(self: *const Batched, chunk: Allocator) void {
         self.type.destroy(self.ptr, chunk);
     }
 };

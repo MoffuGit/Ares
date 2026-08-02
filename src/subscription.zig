@@ -59,8 +59,8 @@ pub fn Subscriptions(
                 self.subscriptions.enable(self);
             }
 
-            pub fn notify(self: *const Subscription, args: Args) void {
-                self.subscriptions.notify(self, args);
+            pub fn notify(self: *const Subscription, args: Args) bool {
+                return self.subscriptions.notify(self, args);
             }
 
             pub fn unsubscribe(self: *const Subscription) !void {
@@ -191,18 +191,19 @@ pub fn Subscriptions(
             self.clearDrops();
         }
 
-        pub fn notify(self: *Self, sub: *const Subscription, args: Args) void {
-            const maybe_subscribers = self.subscribers.get_ref(sub.key) orelse return;
-            var subscribers = maybe_subscribers.* orelse return;
-            const subscriber = subscribers.get(sub.id) orelse return;
+        pub fn notify(self: *Self, sub: *const Subscription, args: Args) bool {
+            defer self.clearDrops();
+            const maybe_subscribers = self.subscribers.get_ref(sub.key) orelse return false;
+            var subscribers = maybe_subscribers.* orelse return false;
+            const subscriber = subscribers.get(sub.id) orelse return false;
 
             if (subscriber.active and !subscriber.callback(subscriber, args)) {
                 _ = self.dropped.insert(self.chunk, .{ .key = sub.key, .id = sub.id }) catch |err| {
                     debug.panic("Drop subscriber err: {}", .{err});
                 };
+                return true;
             }
-
-            self.clearDrops();
+            return false;
         }
 
         pub fn clearDrops(self: *Self) void {
@@ -356,12 +357,12 @@ test "Subscription notifies only its subscriber" {
     first.enable();
     second.enable();
 
-    first.notify(.{ 35, true });
+    _ = first.notify(.{ 35, true });
 
     try std.testing.expectEqual(@as(u32, 35), first_result);
     try std.testing.expectEqual(@as(u32, 0), second_result);
 
-    first.notify(.{ 70, false });
+    _ = first.notify(.{ 70, false });
 
     try std.testing.expectEqual(@as(u32, 70), first_result);
     try std.testing.expect(subscriptions.subscribers.get_ref(42).?.*.?.get(first.id) == null);

@@ -5,7 +5,8 @@ const Io = std.Io;
 const atomic = std.atomic;
 
 const App = @import("app.zig");
-const Entity = App.Entity;
+const ent = @import("entity.zig");
+const Entity = ent.Entity;
 const Context = App.Context;
 const Receivers = App.Receivers;
 const ect = @import("executor.zig");
@@ -78,4 +79,25 @@ fn handleUpdates(self: *Worktree, updates: *Scanner.Updates, _: Context(Worktree
 test {
     _ = Scanner;
     _ = bench;
+
+    const gpa = testing.allocator;
+    const io = testing.io;
+    const chromium_path = @import("test_options").chromium_path;
+
+    var app: App = undefined;
+    try app.init(.{}, gpa, io);
+    defer app.deinit();
+
+    const worktree: Entity(Worktree) = try .new(
+        &app,
+        .{
+            io,
+            Worktree.Options{
+                .abs_path = chromium_path,
+            },
+        },
+    );
+    defer worktree.drop();
+
+    try testing.expectEqualStrings(worktree.read().snapshot.abs_root, chromium_path);
 }
