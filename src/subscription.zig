@@ -197,13 +197,15 @@ pub fn Subscriptions(
             var subscribers = maybe_subscribers.* orelse return false;
             const subscriber = subscribers.get(sub.id) orelse return false;
 
-            if (subscriber.active and !subscriber.callback(subscriber, args)) {
+            if (!subscriber.active) return false;
+
+            if (!subscriber.callback(subscriber, args)) {
                 _ = self.dropped.insert(self.chunk, .{ .key = sub.key, .id = sub.id }) catch |err| {
                     debug.panic("Drop subscriber err: {}", .{err});
                 };
-                return true;
             }
-            return false;
+
+            return true;
         }
 
         pub fn clearDrops(self: *Self) void {
