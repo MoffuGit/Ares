@@ -11,6 +11,7 @@ const builtin = @import("builtin");
 const GitIgnore = @import("zlob").GitIgnore;
 
 const App = @import("../app.zig");
+const Receivers = App.Receivers;
 const chunk_pool = @import("../chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const ChunkedPath = @import("../chunked_path.zig");
@@ -39,13 +40,20 @@ const UPDATE_INTERVAL: Io.Duration = .fromMilliseconds(100);
 const Scanner = @This();
 
 pub const Updates = union(enum) {
-    pub const Queue = Io.Queue(Updates);
-
     started: void,
     updated: struct {
         snapshot: Snapshot,
         scanning: bool,
     },
+
+    pub fn deinit(self: *Updates) void {
+        switch (self.*) {
+            .updated => |*updated| {
+                updated.snapshot.deinit();
+            },
+            else => {},
+        }
+    }
 };
 
 pub const Action = union(enum) {
@@ -64,13 +72,12 @@ action_waker: Runner.Waker,
 action_cancelation: Executors.Cancelation,
 action_buffer: [8]Action,
 actions: Action.Queue,
-updates_buffer: [8]Updates,
-updates: Updates.Queue,
 chunks: ChunkAllocator,
 
 pub fn init(
     self: *Scanner,
     ctx: Context(Scanner),
+    update_subscription: Receivers.Subscription,
     abs_path: []const u8,
     gpa: Allocator,
     io: Io,
@@ -80,8 +87,6 @@ pub fn init(
         .gpa = gpa,
         .action_buffer = undefined,
         .actions = undefined,
-        .updates = undefined,
-        .updates_buffer = undefined,
         .snapshot = undefined,
         .workers = undefined,
         .timer = null,
@@ -93,7 +98,6 @@ pub fn init(
     self.workers.init(io);
 
     self.actions = .init(&self.action_buffer);
-    self.updates = .init(&self.updates_buffer);
 
     try self.chunks.init(gpa, &.{
         .{ 1024 * 1024 * 1024, RANGE_NODE_SIZE },
@@ -103,7 +107,7 @@ pub fn init(
 
     try self.snapshot.init(abs_path, gpa, io);
 
-    const action_cancel, const action_waker = try ctx.await(handleActions, .{});
+    const action_cancel, const action_waker = try ctx.await(handleActions, .{update_subscription});
     self.action_waker = action_waker;
     self.action_cancelation = action_cancel;
 
@@ -121,34 +125,17 @@ pub fn drop(self: *Scanner) void {
 
 pub fn deinit(self: *Scanner) void {
     self.workers.deinit();
-    self.updates.close(self.io);
     self.actions.close(self.io);
-    self.clearUpdates();
     self.snapshot.deinit();
     self.chunks.deinit(self.gpa);
 }
 
-pub fn clearUpdates(self: *Scanner) void {
-    var buffer: [8]Updates = undefined;
-    const updates = &self.updates;
-    const len = updates.get(self.io, &buffer, 0) catch 0;
-    if (len == 0) return;
-
-    for (0..len) |idx| {
-        switch (buffer[idx]) {
-            .updated => |*updated| {
-                updated.snapshot.deinit();
-            },
-            else => {},
-        }
-    }
-}
-
 pub fn handleActions(
     ctx: Context(Scanner),
+    update_subscription: Receivers.Subscription,
 ) bool {
     const self = ctx.get();
-    self._handleActions(ctx) catch |err| {
+    self._handleActions(ctx, update_subscription) catch |err| {
         log.err("Worktree Scanner err={}", .{err});
         return true;
     };
@@ -159,6 +146,7 @@ pub fn handleActions(
 fn _handleActions(
     self: *Scanner,
     ctx: Context(Scanner),
+    update_subscription: Receivers.Subscription,
 ) !void {
     while (self.workers.popEntry()) |entry| {
         self.snapshot.insert(entry.path, entry.meta);
@@ -167,7 +155,7 @@ fn _handleActions(
     var buffer: [8]Action = undefined;
     for (0..try self.actions.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
-            .initial_scan => try self.initialScan(ctx),
+            .initial_scan => try self.initialScan(ctx, update_subscription),
             .scan_end => {
                 if (self.timer) |timer| {
                     self.timer = null;
@@ -176,12 +164,13 @@ fn _handleActions(
 
                 self.workers.deinit();
 
-                try self.updates.putOne(self.io, .{
+                const update = try ctx.dispatch(update_subscription, Updates);
+                update.* = .{
                     .updated = .{
                         .scanning = false,
                         .snapshot = try self.snapshot.clone(self.gpa),
                     },
-                });
+                };
             },
         }
     }
@@ -190,6 +179,7 @@ fn _handleActions(
 fn initialScan(
     self: *Scanner,
     ctx: Context(Scanner),
+    update_subscription: Receivers.Subscription,
 ) !void {
     const stat = try Io.Dir.statFile(
         .cwd(),
@@ -214,12 +204,13 @@ fn initialScan(
 
     if (stat.kind != .directory) return;
 
-    try self.updates.putOne(self.io, .started);
+    const update = try ctx.dispatch(update_subscription, Updates);
+    update.* = .started;
 
     try self.workers.start(self.gpa, @intCast(state.cpu_count));
     errdefer self.workers.deinit();
 
-    self.timer = try ctx.timer(timerCallback, .{}, @intCast(UPDATE_INTERVAL.toMilliseconds()));
+    self.timer = try ctx.timer(timerCallback, .{update_subscription}, @intCast(UPDATE_INTERVAL.toMilliseconds()));
 
     const root_job = self.workers.createJob(path, null, null);
     self.workers.pushJob(0, root_job);
@@ -233,12 +224,12 @@ fn initialScan(
     }
 }
 
-fn timerCallback(ctx: Context(Scanner)) bool {
+fn timerCallback(ctx: Context(Scanner), update_subscription: Receivers.Subscription) bool {
     const self = ctx.get();
 
     if (!self.workers.working) return false;
 
-    self._timerCallback() catch |err| {
+    self._timerCallback(ctx, update_subscription) catch |err| {
         log.err("Scanner Timer err={}", .{err});
         return false;
     };
@@ -246,13 +237,14 @@ fn timerCallback(ctx: Context(Scanner)) bool {
     return true;
 }
 
-fn _timerCallback(self: *Scanner) !void {
-    try self.updates.putOne(self.io, .{
+fn _timerCallback(self: *Scanner, ctx: Context(Scanner), update_subscription: Receivers.Subscription) !void {
+    const update = try ctx.dispatch(update_subscription, Updates);
+    update.* = .{
         .updated = .{
             .scanning = true,
             .snapshot = try self.snapshot.clone(self.gpa),
         },
-    });
+    };
 }
 
 const IgnoreNode = struct {

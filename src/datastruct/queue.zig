@@ -36,6 +36,21 @@ pub fn Queue(comptime T: type) type {
             }
         }
 
+        pub fn concat(self: *Self, other: *Self) void {
+            const v = other.head orelse return;
+
+            if (self.tail) |tail| {
+                tail.next = v;
+            } else {
+                self.head = v;
+            }
+
+            self.tail = other.tail;
+
+            other.head = null;
+            other.tail = null;
+        }
+
         /// Dequeue the next element from the queue.
         pub fn pop(self: *Self) ?*T {
             // The next element is in "head".

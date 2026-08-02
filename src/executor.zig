@@ -3,8 +3,11 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const atomic = std.atomic;
 
+const App = @import("app.zig");
+const Receivers = App.Receivers;
 const datastruct = @import("datastruct.zig");
 const MultiMpsc = datastruct.MultiMpsc;
+const Queue = datastruct.Queue;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const Runner = @import("runner.zig");
@@ -24,6 +27,37 @@ const Queues = union(enum) {
     submissions: Completion,
 };
 
+pub const Batched = struct {
+    subscription: Receivers.Subscription,
+    type: TypeId,
+    ptr: *anyopaque,
+
+    next: ?*Batched = null,
+
+    pub fn destroy(self: *const Batched, chunk: Allocator) void {
+        self.type.deinit(self.ptr);
+        self.type.destroy(self.ptr, chunk);
+    }
+};
+pub const Batch = Queue(Batched);
+
+pub const Batcher = struct {
+    mutex: Io.Mutex,
+    batches: std.Deque(Batch),
+
+    pub fn init(self: *Batcher, arena: Allocator) !void {
+        self.* = .{ .mutex = .init, .batches = try .initCapacity(arena, 100) };
+    }
+
+    pub fn lock(self: *Batcher, io: Io) !void {
+        try self.mutex.lock(io);
+    }
+
+    pub fn unlock(self: *Batcher, io: Io) void {
+        self.mutex.unlock(io);
+    }
+};
+
 pub const Executors = struct {
     io: Io,
     runner: Runner,
@@ -31,15 +65,25 @@ pub const Executors = struct {
     stop: atomic.Value(bool) = .init(false),
     queues: MultiMpsc(Queues),
     chunks: Allocator,
+    batcher: Batcher,
+    batch: Batch = .{},
 
-    pub fn init(self: *@This(), arena: Allocator, chunks: Allocator, io: Io) !void {
+    pub fn init(
+        self: *@This(),
+        arena: Allocator,
+        chunks: Allocator,
+        io: Io,
+    ) !void {
         self.* = .{
             .queues = undefined,
             .runner = undefined,
             .io = io,
             .future = undefined,
             .chunks = chunks,
+            .batcher = undefined,
         };
+
+        try self.batcher.init(arena);
 
         try self.runner.init(arena, self.chunks, io);
         errdefer self.runner.deinit();
@@ -56,6 +100,7 @@ pub const Executors = struct {
 
     fn run(self: *@This()) void {
         while (!self.stop.load(.acquire)) {
+            self.publishBatch() catch return;
             self.flush();
             self.runner.run(.no_wait) catch return;
             self.destroyDroppedExecutors() catch return;
@@ -65,6 +110,19 @@ pub const Executors = struct {
         self.flush();
         self.runner.run(.no_wait) catch return;
         self.destroyDroppedExecutors() catch return;
+    }
+
+    fn publishBatch(self: *@This()) !void {
+        if (self.batch.empty()) return;
+
+        {
+            try self.batcher.lock(self.io);
+            defer self.batcher.unlock(self.io);
+
+            try self.batcher.batches.pushBackBounded(self.batch);
+        }
+
+        self.batch = .{};
     }
 
     fn addQueuedTasks(self: *@This()) void {
@@ -251,6 +309,23 @@ pub fn Context(comptime T: type) type {
                 }
             };
             return self.executors.timer(TypeErased.timer, .{ self.executor, self.executors, args }, ms);
+        }
+
+        pub fn dispatch(self: *const @This(), subscription: Receivers.Subscription, comptime E: type) !*E {
+            const chunks = self.executors.chunks;
+            const ptr = try chunks.create(E);
+            errdefer chunks.destroy(ptr);
+
+            const batched = try chunks.create(Batched);
+            batched.* = .{
+                .subscription = subscription,
+                .type = TypeInfo.init(E),
+                .ptr = ptr,
+            };
+
+            self.executors.batch.push(batched);
+
+            return ptr;
         }
     };
 }

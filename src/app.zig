@@ -13,6 +13,7 @@ const MAX_SIZE = constants.MAX_SIZE;
 const MAX_ALIGN = constants.MAX_ALIGN;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
+const Queue = datastruct.Queue;
 const ect = @import("executor.zig");
 const Executors = ect.Executors;
 const Executor = ect.Executor;
@@ -26,7 +27,6 @@ const Subscriptions = subs.Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
-const Queue = datastruct.Queue;
 
 const log = std.log.scoped(.app);
 
@@ -85,6 +85,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .{ 50, @max(Observers.NODE_SIZE, Receivers.NODE_SIZE, Listeners.NODE_SIZE) },
         .{ 50, 2048 },
     });
+
     const chunks = self.chunks.allocator();
 
     try self.observers.init(chunks);
@@ -92,6 +93,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     try self.receivers.init(chunks);
     try self.notifications.init(chunks);
     try self.entities.init(arena, 100);
+
     try self.executors.init(arena, chunks, io);
     errdefer self.executors.deinit();
 }
@@ -178,10 +180,31 @@ pub fn flush(self: *App) void {
     self.flushing = true;
     defer self.flushing = false;
 
-    self.flush_deferred();
     self.destroyDroppedEntities();
+    self.flushDeferred();
     self.flushNotifications();
+    self.flushBatched();
     self.flushEvents();
+}
+
+fn flushBatched(self: *App) void {
+    const chunks = self.chunks.allocator();
+    var batch: ect.Batch = .{};
+    {
+        self.executors.batcher.lock(self.executors.io) catch return;
+        defer self.executors.batcher.unlock(self.executors.io);
+
+        while (self.executors.batcher.batches.popFront()) |b| {
+            var other = b;
+            batch.concat(&other);
+        }
+    }
+
+    while (batch.pop()) |b| {
+        b.subscription.notify(.{ self, b.ptr, b.type });
+        b.destroy(chunks);
+        chunks.destroy(b);
+    }
 }
 
 pub fn flushNotifications(self: *App) void {
@@ -193,7 +216,7 @@ pub fn flushNotifications(self: *App) void {
     self.notifications.clear(self.chunks.allocator());
 }
 
-pub fn flush_deferred(self: *App) void {
+pub fn flushDeferred(self: *App) void {
     const chunks = self.chunks.allocator();
     while (self.deferred.pop()) |deferred| {
         deferred.callback(deferred.ptr);
@@ -390,20 +413,20 @@ pub fn nevent(self: *App, entity: anytype, comptime E: type) !*E {
     return ptr;
 }
 
-pub fn send(self: *App, subscription: Receivers.Subscription, comptime E: type) !*E {
+pub fn dispatch(self: *App, subscription: Receivers.Subscription, comptime E: type) !*E {
     const chunk = self.chunks.allocator();
     const ptr = try chunk.create(E);
     errdefer chunk.destroy(ptr);
 
-    const dispatch = try chunk.create(Dispatched);
+    const _dispatch = try chunk.create(Dispatched);
 
-    dispatch.* = .{
+    _dispatch.* = .{
         .subscription = subscription,
         .ptr = ptr,
         .type = TypeInfo.init(E),
     };
 
-    self.dispatched.push(dispatch);
+    self.dispatched.push(_dispatch);
 
     return ptr;
 }
@@ -850,7 +873,7 @@ test "Queued receiver event targets a typed subscription" {
     const sub = try app.receive(receiver, TestEvent, Receiver.callback, .{&received});
     app.flush();
 
-    const event = try app.send(sub, TestEvent);
+    const event = try app.dispatch(sub, TestEvent);
     event.* = .{ .value = 35 };
     app.flush();
 
@@ -892,14 +915,14 @@ test "Context receive updates the receiver entity" {
     const sub = try ctx.receive(TestEvent, TestStruct.receive, .{});
     app.flush();
 
-    const first = try app.send(sub, TestEvent);
+    const first = try app.dispatch(sub, TestEvent);
     first.* = .{ .value = 35 };
     app.flush();
 
     try testing.expectEqual(@as(usize, 35), receiver.read().value);
     try testing.expect(app.receivers.subscribers.get_ref(receiver.id()).?.*.?.get(sub.id) != null);
 
-    const second = try app.send(sub, TestEvent);
+    const second = try app.dispatch(sub, TestEvent);
     second.* = .{ .value = 70 };
     app.flush();
 
@@ -945,7 +968,7 @@ test "Dropping a receiver removes subscriptions before queued delivery" {
     const sub = try app.receive(receiver, TestEvent, Receiver.callback, .{&callback_called});
     app.flush();
 
-    const event = try app.send(sub, TestEvent);
+    const event = try app.dispatch(sub, TestEvent);
     event.* = .{ .deinit_called = &deinit_called };
 
     const receiver_id = receiver.id();
