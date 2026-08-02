@@ -8,75 +8,66 @@ import Foundation
 import OdysseyKit
 import os
 
-extension Odyssey {
-    actor FlushQueueState {
-        private var isQueued = false
-        
-        func markQueued() -> Bool {
-            guard !isQueued else { return false }
-            isQueued = true
-            return true
-        }
-        
-        func markFinished() {
-            isQueued = false
+private final class OdysseyWakeContext: @unchecked Sendable {
+    weak var app: Odyssey.App?
+
+    init(app: Odyssey.App) {
+        self.app = app
+    }
+
+    nonisolated func wake() {
+        Task { @MainActor [weak self] in
+            self?.app?.flush()
         }
     }
-    
+}
+
+extension Odyssey {
     class App {
-        private let flushQueueState = FlushQueueState()
-        
-        var app: odyssey_app_t? {
+        var app: odyssey_app_t? = nil {
             didSet {
                 guard let old = oldValue else { return }
                 odyssey_app_free(old)
             }
         }
-        
+
+        private var wakeContext: UnsafeMutableRawPointer? = nil
+
         init() {
+            wakeContext = Unmanaged.passRetained(OdysseyWakeContext(app: self)).toOpaque()
             var options = odyssey_options_s(
-                userdata: Unmanaged.passUnretained(self).toOpaque(),
+                userdata: wakeContext,
                 wakeup_cb: { userdata in
                     App.wakeup(userdata)
                 }
             )
-            
+
             guard let app = odyssey_app_new(&options) else {
+                Unmanaged<OdysseyWakeContext>.fromOpaque(wakeContext!).release()
+                wakeContext = nil
                 logger.critical("odyssey_app_new failed")
                 return
             }
-            
+
             self.app = app
         }
-        
+
         deinit {
             self.app = nil
-        }
-        
-        func enqueueFlush() {
-            Task { [weak self] in
-                guard let self else { return }
-                
-                let shouldFlush = await flushQueueState.markQueued() 
-                guard shouldFlush else { return }
-                
-                DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
-                    
-                    Task {
-                        await self.flushQueueState.markFinished()
-                    }
-                    
-                    odyssey_app_flush(self.app)
-                }
+            if let wakeContext {
+                Unmanaged<OdysseyWakeContext>.fromOpaque(wakeContext).release()
             }
         }
-        
-        static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
-            let state = Unmanaged<App>.fromOpaque(userdata!)
+
+        fileprivate func flush() {
+            odyssey_app_flush(app)
+        }
+
+        nonisolated static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
+            let state = Unmanaged<OdysseyWakeContext>.fromOpaque(userdata!)
                 .takeUnretainedValue()
-            
-            state.enqueueFlush()
+
+            state.wake()
         }
     }
 }

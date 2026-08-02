@@ -186,7 +186,6 @@ extension Odyssey {
             }
 
             odyssey_workspace_mark_for_restoration(entity)
-            app.enqueueFlush()
         }
 
         func setBounds(window: NSRect, leftDock: Double?, rightDock: Double?) {

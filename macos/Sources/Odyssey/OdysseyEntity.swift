@@ -21,7 +21,6 @@ extension Odyssey {
         deinit {
             if let entity {
                 odyssey_drop_entity(entity)
-                app.enqueueFlush()
             }
         }
     }
