@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const atomic = std.atomic;
+const panic = std.debug.panic;
 
 const App = @import("app.zig");
 const Receivers = App.Receivers;
@@ -100,10 +101,10 @@ pub const Executors = struct {
 
     fn run(self: *@This()) void {
         while (!self.stop.load(.acquire)) {
-            self.publishBatch() catch return;
+            self.publishBatch() catch |err| panic("{}", .{err});
             self.flush();
-            self.runner.run(.no_wait) catch return;
-            self.destroyDroppedExecutors() catch return;
+            self.runner.run(.no_wait) catch |err| panic("{}", .{err});
+            self.destroyDroppedExecutors() catch |err| panic("{}", .{err});
             self.io.sleep(.fromNanoseconds(100), .real) catch {};
         }
 
