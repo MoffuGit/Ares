@@ -5,7 +5,6 @@ const chunk_pool = @import("chunk_pool.zig");
 const chunked_path = @import("chunked_path.zig");
 const datastruct = @import("datastruct.zig");
 const entity = @import("entity.zig");
-const executor = @import("executor.zig");
 const Loop = @import("loop.zig");
 const patch = @import("patch.zig");
 const Project = @import("project.zig");
@@ -26,7 +25,6 @@ test {
     _ = datastruct;
     _ = entity;
     _ = Loop;
-    _ = executor;
     _ = Project;
     _ = WorktreeStore;
     _ = Session;

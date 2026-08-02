@@ -23,9 +23,6 @@ const datastruct = @import("../datastruct.zig");
 const Queue = datastruct.Queue;
 const Mpsc = datastruct.Mpsc;
 const StealingQueue = datastruct.StealingQueue;
-const exc = @import("../executor.zig");
-const Executors = exc.Executors;
-const Context = exc.Context;
 const global = @import("../global.zig");
 const Runner = @import("../runner.zig");
 const attr = @import("attr.zig");
@@ -66,23 +63,28 @@ pub const Action = union(enum) {
 io: Io,
 gpa: Allocator,
 snapshot: Snapshot,
-timer: ?Executors.Cancelation,
+timer: ?Runner.TaskId,
 workers: Workers,
 action_waker: Runner.Waker,
-action_cancelation: Executors.Cancelation,
+action_task: Runner.TaskId,
 action_buffer: [8]Action,
 actions: Action.Queue,
 chunks: ChunkAllocator,
+runner: *Runner,
+
+subscription: Receivers.Subscription,
 
 pub fn init(
     self: *Scanner,
-    ctx: Context(Scanner),
-    update_subscription: Receivers.Subscription,
+    runner: *Runner,
+    subscription: Receivers.Subscription,
     abs_path: []const u8,
     gpa: Allocator,
     io: Io,
 ) !void {
     self.* = .{
+        .subscription = subscription,
+        .runner = runner,
         .io = io,
         .gpa = gpa,
         .action_buffer = undefined,
@@ -91,7 +93,7 @@ pub fn init(
         .workers = undefined,
         .timer = null,
         .action_waker = undefined,
-        .action_cancelation = undefined,
+        .action_task = undefined,
         .chunks = undefined,
     };
 
@@ -107,20 +109,19 @@ pub fn init(
 
     try self.snapshot.init(abs_path, gpa, io);
 
-    const action_cancel, const action_waker = try ctx.await(handleActions, .{update_subscription});
-    self.action_waker = action_waker;
-    self.action_cancelation = action_cancel;
+    self.action_task, self.action_waker = try runner.await(handleActions, .{self});
 
     try self.actions.putOne(self.io, .initial_scan);
-    try action_waker.wake();
+    try self.action_waker.wake();
 }
 
 pub fn drop(self: *Scanner) void {
     if (self.timer) |timer| {
-        timer.cancel();
+        self.runner.cancel(timer);
     }
-    self.action_cancelation.cancel();
+    self.runner.cancel(self.action_task);
     self.action_waker.close();
+    self.runner.drop(self);
 }
 
 pub fn deinit(self: *Scanner) void {
@@ -130,12 +131,10 @@ pub fn deinit(self: *Scanner) void {
     self.chunks.deinit(self.gpa);
 }
 
-pub fn handleActions(
-    ctx: Context(Scanner),
-    update_subscription: Receivers.Subscription,
-) bool {
-    const self = ctx.get();
-    self._handleActions(ctx, update_subscription) catch |err| {
+pub fn handleActions(self: *Scanner, res: anyerror!void) bool {
+    res catch return false;
+
+    self._handleActions() catch |err| {
         log.err("Worktree Scanner err={}", .{err});
         return true;
     };
@@ -145,8 +144,6 @@ pub fn handleActions(
 
 fn _handleActions(
     self: *Scanner,
-    ctx: Context(Scanner),
-    update_subscription: Receivers.Subscription,
 ) !void {
     while (self.workers.popEntry()) |entry| {
         self.snapshot.insert(entry.path, entry.meta);
@@ -155,16 +152,16 @@ fn _handleActions(
     var buffer: [8]Action = undefined;
     for (0..try self.actions.get(self.io, &buffer, 0)) |idx| {
         switch (buffer[idx]) {
-            .initial_scan => try self.initialScan(ctx, update_subscription),
+            .initial_scan => try self.initialScan(),
             .scan_end => {
                 if (self.timer) |timer| {
+                    self.runner.cancel(timer);
                     self.timer = null;
-                    timer.cancel();
                 }
 
                 self.workers.deinit();
 
-                const update = try ctx.dispatch(update_subscription, Updates);
+                const update = try self.runner.dispatch(self.subscription, Updates);
                 update.* = .{
                     .updated = .{
                         .scanning = false,
@@ -178,8 +175,6 @@ fn _handleActions(
 
 fn initialScan(
     self: *Scanner,
-    ctx: Context(Scanner),
-    update_subscription: Receivers.Subscription,
 ) !void {
     const stat = try Io.Dir.statFile(
         .cwd(),
@@ -204,13 +199,13 @@ fn initialScan(
 
     if (stat.kind != .directory) return;
 
-    const update = try ctx.dispatch(update_subscription, Updates);
+    const update = try self.runner.dispatch(self.subscription, Updates);
     update.* = .started;
 
     try self.workers.start(self.gpa, @intCast(state.cpu_count));
     errdefer self.workers.deinit();
 
-    self.timer = try ctx.timer(timerCallback, .{update_subscription}, @intCast(UPDATE_INTERVAL.toMilliseconds()));
+    self.timer = try self.runner.timer(timerCallback, .{self}, @intCast(UPDATE_INTERVAL.toMilliseconds()));
 
     const root_job = self.workers.createJob(path, null, null);
     self.workers.pushJob(0, root_job);
@@ -224,12 +219,12 @@ fn initialScan(
     }
 }
 
-fn timerCallback(ctx: Context(Scanner), update_subscription: Receivers.Subscription) bool {
-    const self = ctx.get();
+fn timerCallback(self: *Scanner, res: anyerror!void) bool {
+    res catch return false;
 
     if (!self.workers.working) return false;
 
-    self._timerCallback(ctx, update_subscription) catch |err| {
+    self._timerCallback() catch |err| {
         log.err("Scanner Timer err={}", .{err});
         return false;
     };
@@ -237,8 +232,8 @@ fn timerCallback(ctx: Context(Scanner), update_subscription: Receivers.Subscript
     return true;
 }
 
-fn _timerCallback(self: *Scanner, ctx: Context(Scanner), update_subscription: Receivers.Subscription) !void {
-    const update = try ctx.dispatch(update_subscription, Updates);
+fn _timerCallback(self: *Scanner) !void {
+    const update = try self.runner.dispatch(self.subscription, Updates);
     update.* = .{
         .updated = .{
             .scanning = true,

@@ -14,14 +14,12 @@ const MAX_ALIGN = constants.MAX_ALIGN;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 const Queue = datastruct.Queue;
-const ect = @import("executor.zig");
-const Executors = ect.Executors;
-const Executor = ect.Executor;
 const ent = @import("entity.zig");
 const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
+const Runner = @import("runner.zig");
 const subs = @import("subscription.zig");
 const Subscriptions = subs.Subscriptions;
 const typeId = @import("typeId.zig");
@@ -51,7 +49,7 @@ observers: Observers,
 chunks: ChunkAllocator,
 peding_updates: u16,
 
-executors: Executors,
+runner: Runner,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
@@ -68,7 +66,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .listeners = undefined,
         .receivers = undefined,
         .chunks = undefined,
-        .executors = undefined,
+        .runner = undefined,
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
@@ -94,14 +92,14 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     try self.notifications.init(chunks);
     try self.entities.init(arena, 100);
 
-    try self.executors.init(arena, chunks, io, options);
-    errdefer self.executors.deinit();
+    try self.runner.init(arena, chunks, io, options);
+    errdefer self.runner.deinit();
 }
 
 pub fn deinit(self: *App) void {
     self.flush();
     self.receivers.deinit();
-    self.executors.deinit();
+    self.runner.deinit();
     self.arena.deinit();
 }
 
@@ -125,10 +123,6 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     try @call(.always_inline, function, .{ ptr, ctx } ++ args);
 
     return entity;
-}
-
-pub fn executor(self: *App, comptime T: type, args: anytype) !Executor(T) {
-    return try Executor(T).new(&self.executors, args);
 }
 
 pub const UpdateFrame = struct {
@@ -189,12 +183,12 @@ pub fn flush(self: *App) void {
 
 fn flushBatched(self: *App) void {
     const chunks = self.chunks.allocator();
-    var batch: ect.Batch = .{};
+    var batch: Runner.Batch = .{};
     {
-        self.executors.batcher.lock(self.executors.io) catch return;
-        defer self.executors.batcher.unlock(self.executors.io);
+        self.runner.batcher.lock(self.runner.io) catch return;
+        defer self.runner.batcher.unlock(self.runner.io);
 
-        while (self.executors.batcher.batches.popFront()) |b| {
+        while (self.runner.batcher.batches.popFront()) |b| {
             var other = b;
             batch.concat(&other);
         }
@@ -503,6 +497,10 @@ pub fn Context(comptime T: type) type {
             return self.app.arena.allocator();
         }
 
+        pub fn chunks(self: *const @This()) Allocator {
+            return self.app.chunks.allocator();
+        }
+
         pub fn update(self: *const @This()) struct { *T, UpdateFrame } {
             return self.entity.update(self.app);
         }
@@ -619,14 +617,8 @@ pub fn Context(comptime T: type) type {
             self.app.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
         }
 
-        pub fn executor(
-            self: *const @This(),
-            E: type,
-            args: anytype,
-        ) !Executor(E) {
-            return try self
-                .app
-                .executor(E, args);
+        pub fn runner(self: *const @This()) *Runner {
+            return &self.app.runner;
         }
     };
 }
@@ -1314,7 +1306,7 @@ test "Observe entities drop before enable" {
     app.flush();
 }
 
-test "Executor batch wakes the app" {
+test "Batch wakes the app" {
     const testing = std.testing;
     const allocator = testing.allocator;
     const io = testing.io;
@@ -1355,20 +1347,24 @@ test "Executor batch wakes the app" {
     const TestExecutor = struct {
         initialized: bool,
 
-        pub fn init(self: *@This(), ctx: ect.Context(@This()), sub: Receivers.Subscription) !void {
+        pub fn init(self: *@This(), runner: *Runner, sub: Receivers.Subscription) !void {
             self.* = .{ .initialized = true };
-            _ = try ctx.@"defer"(@This().sendEvent, .{sub});
+            _ = try runner.@"defer"(sendEvent, .{ self, runner, sub });
         }
 
-        fn sendEvent(ctx: ect.Context(@This()), sub: Receivers.Subscription) bool {
-            const event = ctx.dispatch(sub, TestEvent) catch return false;
+        fn sendEvent(_: *@This(), runner: *Runner, sub: Receivers.Subscription, res: anyerror!void) bool {
+            res catch return false;
+            const event = runner.dispatch(sub, TestEvent) catch return false;
             event.* = .{ .value = 35 };
             return false;
         }
     };
 
-    const test_executor = try app.executor(TestExecutor, .{subscription});
-    defer test_executor.drop();
+    const chunks = app.chunks.allocator();
+
+    const test_executor = try chunks.create(TestExecutor);
+    try test_executor.init(&app.runner, subscription);
+    defer app.runner.drop(test_executor);
 
     for (0..1000) |_| {
         if (wakeups.load(.acquire) != 0) break;

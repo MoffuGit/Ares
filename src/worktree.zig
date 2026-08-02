@@ -9,8 +9,7 @@ const ent = @import("entity.zig");
 const Entity = ent.Entity;
 const Context = App.Context;
 const Receivers = App.Receivers;
-const ect = @import("executor.zig");
-const Executor = ect.Executor;
+const Runner = @import("runner.zig");
 const bench = @import("worktree/bench.zig");
 const Scanner = @import("worktree/scanner.zig");
 const Updates = Scanner.Updates;
@@ -28,7 +27,7 @@ io: Io,
 gpa: Allocator,
 scanning: bool,
 snapshot: Snapshot,
-scanner: Executor(Scanner),
+scanner: *Scanner,
 update_subscription: Receivers.Subscription,
 
 pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !void {
@@ -43,10 +42,12 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
 
     self.update_subscription = try ctx.receive(Scanner.Updates, handleUpdates, .{});
     errdefer self.update_subscription.unsubscribe() catch {};
-    self.scanner = try ctx.executor(Scanner, .{ self.update_subscription, opts.abs_path, ctx.gpa(), io });
 
-    const ptr = self.scanner.ptr;
-    self.snapshot = try ptr.snapshot.clone(ctx.gpa());
+    const chunks = ctx.chunks();
+    self.scanner = try chunks.create(Scanner);
+    try self.scanner.init(ctx.runner(), self.update_subscription, opts.abs_path, ctx.gpa(), io);
+
+    self.snapshot = try self.scanner.snapshot.clone(ctx.gpa());
 }
 
 pub fn deinit(self: *Worktree) void {

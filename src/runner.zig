@@ -7,48 +7,255 @@ const testing = std.testing;
 const heap = std.heap;
 const debug = std.debug;
 const panic = debug.panic;
+const Io = std.Io;
 
+const App = @import("app.zig");
+const Receivers = App.Receivers;
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const constants = @import("constants.zig");
 const MAX_SIZE = constants.MAX_SIZE;
 const MAX_ALIGN = constants.MAX_ALIGN;
+const datastruct = @import("datastruct.zig");
+const MultiMpsc = datastruct.MultiMpsc;
+const Queue = datastruct.Queue;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const RunMode = Loop.RunMode;
+const typeId = @import("typeId.zig");
+const TypeInfo = typeId.TypeInfo;
+const TypeId = typeId.TypeId;
 
-pub const TaskId = u64;
+const Dropped = struct { ptr: *anyopaque, type_id: TypeId, next: ?*Dropped = null };
 
 const log = std.log.scoped(.tasks);
-const max_tasks = 100;
+
+pub const TaskId = u64;
+pub const Batch = Queue(Batched);
+pub const Batched = struct {
+    subscription: Receivers.Subscription,
+    type: TypeId,
+    ptr: *anyopaque,
+
+    next: ?*Batched = null,
+
+    pub fn deinit(self: *const Batched) void {
+        self.type.deinit(self.ptr);
+    }
+
+    pub fn destroy(self: *const Batched, chunk: Allocator) void {
+        self.type.destroy(self.ptr, chunk);
+    }
+};
 
 pub const Runner = @This();
 
+const Batcher = struct {
+    mutex: Io.Mutex,
+    batches: std.Deque(Batch),
+
+    pub fn init(self: *Batcher, arena: Allocator) !void {
+        self.* = .{ .mutex = .init, .batches = try .initCapacity(arena, 100) };
+    }
+
+    pub fn lock(self: *Batcher, io: Io) !void {
+        try self.mutex.lock(io);
+    }
+
+    pub fn unlock(self: *Batcher, io: Io) void {
+        self.mutex.unlock(io);
+    }
+};
+
+io: Io,
 next_id: atomic.Value(TaskId),
 active: std.AutoHashMap(TaskId, *Task),
-chunks: Allocator,
 loop: Loop,
+future: Io.Future(void),
+stop: atomic.Value(bool) = .init(false),
+queues: MultiMpsc(union(enum) {
+    cancelations: Completion,
+    completions: Completion,
+    dropped: Dropped,
+    timers: Completion,
+    submissions: Completion,
+}),
+chunks: Allocator,
+options: App.Options,
+batcher: Batcher,
+batch: Batch = .{},
 
-pub fn init(self: *Runner, arena: Allocator, chunks: Allocator, io: std.Io) !void {
+pub fn init(
+    self: *Runner,
+    arena: Allocator,
+    chunks: Allocator,
+    io: std.Io,
+    options: App.Options,
+) !void {
     self.* = .{
         .chunks = chunks,
         .next_id = .init(0),
         .active = .init(arena),
         .loop = undefined,
+        .queues = undefined,
+        .io = io,
+        .future = undefined,
+        .options = options,
+        .batcher = undefined,
     };
-    try self.active.ensureTotalCapacity(max_tasks);
+
+    self.queues.init();
+
+    try self.active.ensureTotalCapacity(100);
     try self.loop.init(io);
+    try self.batcher.init(arena);
+
+    self.future = try io.concurrent(Runner.run, .{self});
 }
 
 pub fn deinit(self: *Runner) void {
+    self.stop.store(true, .release);
+    _ = self.future.await(self.io);
     self.loop.deinit();
 }
-
-pub fn run(self: *Runner, mode: RunMode) !void {
-    try self.loop.run(mode);
+fn run(self: *Runner) void {
+    self._run() catch |err| log.err("Runner err={}", .{err});
 }
 
-pub fn create(self: *Runner) *Task {
+pub fn _run(self: *Runner) !void {
+    while (!self.stop.load(.acquire)) {
+        try self.flush();
+        try self.loop.run(.no_wait);
+        try self.io.sleep(.fromNanoseconds(100), .real);
+    }
+
+    try self.flush();
+    try self.loop.run(.no_wait);
+}
+
+fn flush(self: *@This()) !void {
+    if (!self.batch.empty()) {
+        try self.batcher.lock(self.io);
+        defer self.batcher.unlock(self.io);
+
+        try self.batcher.batches.pushBackBounded(self.batch);
+
+        self.batch = .{};
+        self.options.wakeup_cb(self.options.userdata);
+    }
+
+    while (self.queues.pop(.dropped)) |dropped| {
+        dropped.type_id.deinit(dropped.ptr);
+        dropped.type_id.destroy(dropped.ptr, self.chunks);
+        self.chunks.destroy(dropped);
+    }
+
+    while (self.queues.pop(.completions)) |completion| {
+        const task: *Task = @fieldParentPtr("completion", completion);
+        self.complete(task);
+    }
+
+    while (self.queues.pop(.timers)) |completion| {
+        const task: *Task = @fieldParentPtr("completion", completion);
+        self.submitTimer(task);
+    }
+
+    while (self.queues.pop(.submissions)) |completion| {
+        const task: *Task = @fieldParentPtr("completion", completion);
+        self.submit(task);
+    }
+
+    while (self.queues.pop(.cancelations)) |completion| {
+        const cancelation: *Runner.Cancelation = @fieldParentPtr("completion", completion);
+        const task = self.active.get(cancelation.id) orelse {
+            self.chunks.destroy(cancelation);
+            return;
+        };
+
+        cancelation.completion.cancel(
+            &task.completion,
+            struct {
+                fn _cancel(c: *Cancelation, _: *Completion) void {
+                    c.runner.chunks.destroy(c);
+                }
+            }._cancel,
+            cancelation,
+        );
+        self.loop.cancel(&cancelation.completion);
+    }
+}
+
+pub fn @"defer"(
+    self: *@This(),
+    function: anytype,
+    context: anytype,
+) !TaskId {
+    const task = self.new();
+
+    task.@"defer"(function, context);
+    self.queues.push(.completions, &task.completion);
+
+    return task.id;
+}
+
+pub fn await(
+    self: *@This(),
+    function: anytype,
+    context: anytype,
+) !struct { TaskId, Runner.Waker } {
+    const task = self.new();
+    errdefer self.free(task);
+
+    const waker = try task.await(function, context);
+
+    self.queues.push(.submissions, &task.completion);
+
+    return .{ task.id, waker };
+}
+
+pub fn timer(
+    self: *@This(),
+    function: anytype,
+    context: anytype,
+    ms: u64,
+) !TaskId {
+    const task = self.new();
+
+    task.timer(function, context, ms);
+    self.queues.push(.timers, &task.completion);
+
+    return task.id;
+}
+
+pub fn drop(self: *Runner, ptr: anytype) void {
+    const Ptr = @TypeOf(ptr);
+    const Info = @typeInfo(Ptr);
+    const T = Info.pointer.child;
+    const type_id = TypeInfo.init(T);
+
+    const dropped = self.chunks.create(Dropped) catch @panic("Dropped Overflow");
+    dropped.* = .{ .ptr = ptr, .type_id = type_id };
+    self.queues.push(.dropped, dropped);
+}
+
+pub fn dispatch(self: *Runner, subscription: Receivers.Subscription, comptime E: type) !*E {
+    const chunks = self.chunks;
+    const ptr = try chunks.create(E);
+    errdefer chunks.destroy(ptr);
+
+    const batched = try chunks.create(Batched);
+    batched.* = .{
+        .subscription = subscription,
+        .type = TypeInfo.init(E),
+        .ptr = ptr,
+    };
+
+    self.batch.push(batched);
+
+    return ptr;
+}
+
+pub fn new(self: *Runner) *Task {
     const context = self.chunks.rawAlloc(MAX_SIZE, MAX_ALIGN, @returnAddress()) orelse
         @panic("Task Context Overflow");
 
@@ -78,37 +285,15 @@ pub fn submitTimer(self: *Runner, task: *Task) void {
     self.loop.submit_timer(&task.completion);
 }
 
-pub fn createCancelation(self: *Runner, id: TaskId) *Cancelation {
-    const request = self.chunks.create(Cancelation) catch @panic("Cancel Overflow");
-    request.* = .{ .id = id, .runner = self };
-    return request;
-}
-
-pub fn cancel(self: *Runner, request: *Cancelation) void {
-    const task = self.active.get(request.id) orelse {
-        self.chunks.destroy(request);
-        return;
-    };
-
-    request.completion.cancel(
-        &task.completion,
-        struct {
-            fn _cancel(c: *Cancelation, _: *Completion) void {
-                c.runner.chunks.destroy(c);
-            }
-        }._cancel,
-        request,
-    );
-    self.loop.cancel(&request.completion);
+pub fn cancel(self: *Runner, id: TaskId) void {
+    const cancelation = self.chunks.create(Cancelation) catch @panic("Cancel Overflow");
+    cancelation.* = .{ .id = id, .runner = self, .completion = .noop };
+    self.queues.push(.cancelations, &cancelation.completion);
 }
 
 fn destroy(self: *Runner, id: TaskId) void {
     const task = (self.active.fetchRemove(id) orelse @panic("Destroy non-active Task")).value;
 
-    self.free(task);
-}
-
-pub fn destroyUnregistered(self: *Runner, task: *Task) void {
     self.free(task);
 }
 
@@ -165,8 +350,7 @@ pub const Task = struct {
                 const rearm = @call(
                     .always_inline,
                     function,
-                    _context.* ++
-                        .{res.@"defer"},
+                    _context.* ++ .{res.@"defer"},
                 );
 
                 if (!rearm) task.destroy();
@@ -365,7 +549,7 @@ test "Task defer allocates and copies context" {
     defer chunks.deinit(std.testing.allocator);
 
     var runner: Runner = undefined;
-    try runner.init(arena.allocator(), chunks.allocator(), testing.io);
+    try runner.init(arena.allocator(), chunks.allocator(), testing.io, .{});
     defer runner.deinit();
 
     const Context = struct {
@@ -374,7 +558,7 @@ test "Task defer allocates and copies context" {
     };
 
     var original = Context{ .value = 0x1234_5678_9abc_def0, .other = 0xfeed_beef };
-    const task = runner.create();
+    const task = runner.new();
     runner.add(task);
     defer task.destroy();
     task.@"defer"(struct {
@@ -401,7 +585,7 @@ test "Task await allocates and copies context" {
     defer chunks.deinit(std.testing.allocator);
 
     var runner: Runner = undefined;
-    try runner.init(arena.allocator(), chunks.allocator(), testing.io);
+    try runner.init(arena.allocator(), chunks.allocator(), testing.io, .{});
     defer runner.deinit();
 
     const Context = struct {
@@ -410,7 +594,7 @@ test "Task await allocates and copies context" {
     };
 
     var original = Context{ .value = 0x1234_5678_9abc_def0, .other = 0xfeed_beef };
-    const task = runner.create();
+    const task = runner.new();
     runner.add(task);
     defer task.destroy();
     const port = try task.await(struct {
@@ -438,14 +622,11 @@ test "Cancelations" {
     defer chunks.deinit(std.testing.allocator);
 
     var runner: Runner = undefined;
-    try runner.init(arena.allocator(), chunks.allocator(), testing.io);
+    try runner.init(arena.allocator(), chunks.allocator(), testing.io, .{});
     defer runner.deinit();
 
-    const task = runner.create();
+    const task = runner.new();
     runner.add(task);
     defer task.destroy();
-
-    const request = runner.createCancelation(task.id);
-    try testing.expectEqual(task.id, request.id);
-    runner.chunks.destroy(request);
+    runner.cancel(task.id);
 }
