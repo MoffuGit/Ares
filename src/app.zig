@@ -183,8 +183,8 @@ pub fn flush(self: *App) void {
     self.destroyDroppedEntities();
     self.flushDeferred();
     self.flushNotifications();
-    self.flushBatched();
     self.flushEvents();
+    self.flushBatched();
 }
 
 fn flushBatched(self: *App) void {
