@@ -29,7 +29,7 @@ gpa: Allocator,
 scanning: bool,
 snapshot: Snapshot,
 scanner: *Scanner,
-update_subscription: Receivers.Subscription,
+subscription: Receivers.Subscription,
 
 pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !void {
     self.* = .{
@@ -38,21 +38,21 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
         .scanning = false,
         .snapshot = undefined,
         .scanner = undefined,
-        .update_subscription = undefined,
+        .subscription = undefined,
     };
 
-    self.update_subscription = try ctx.receive(Scanner.Updates, handleUpdates, .{});
-    errdefer self.update_subscription.unsubscribe() catch {};
+    self.subscription = try ctx.receive(Scanner.Updates, handleUpdates, .{});
+    errdefer self.subscription.unsubscribe() catch {};
 
     const runner = ctx.runner();
     self.scanner = try runner.create(Scanner);
-    try self.scanner.init(runner, self.update_subscription, opts.abs_path, ctx.gpa(), io);
+    try self.scanner.init(runner, self.subscription, opts.abs_path, ctx.gpa(), io);
 
     self.snapshot = try self.scanner.snapshot.clone(ctx.gpa());
 }
 
 pub fn deinit(self: *Worktree) void {
-    self.update_subscription.unsubscribe() catch {};
+    self.subscription.unsubscribe() catch {};
     self.scanner.drop();
     self.snapshot.deinit();
 }
