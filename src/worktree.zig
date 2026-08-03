@@ -81,17 +81,6 @@ fn handleUpdates(self: *Worktree, updates: *Scanner.Updates, ctx: Context(Worktr
     return true;
 }
 
-// pub fn loadFile(self: *Worktree, rel_path: []const u8) !void {
-//     const basename = std.fs.path.basename(rel_path);
-//     const chunks = self.scanner.chunks.allocator();
-//     var chunked_path: ChunkedPath = .new(rel_path, rel_path.len - basename.len, chunks);
-//     if (!self.scanner_producer.push(.{ .load_file = chunked_path })) {
-//         chunked_path.destroy(chunks);
-//         return error.ScannerActionQueueFull;
-//     }
-//     try self.scanner.waker.wake();
-// }
-
 test {
     _ = Scanner;
     _ = bench;

@@ -64,7 +64,6 @@ pub const Actions = MpscBounded(Action);
 pub const Action = union(enum) {
     initial_scan: void,
     scan_end: void,
-    load_file: ChunkedPath,
     new_entries: Queue(Entry),
 };
 
@@ -162,7 +161,6 @@ fn _handleActions(
     while (self.actions.pop()) |action| {
         switch (action) {
             .initial_scan => try self.initialScan(),
-            .load_file => |*path| try self.loadFile(path),
             .scan_end => scan_end = true,
             .new_entries => |b| batch.copy(&b),
         }
@@ -189,11 +187,6 @@ fn _handleActions(
             },
         };
     }
-}
-
-pub fn loadFile(self: *Scanner, path: *const ChunkedPath) !void {
-    const chunks = self.chunks.allocator();
-    path.free(chunks);
 }
 
 fn initialScan(
