@@ -19,6 +19,7 @@ const MAX_ALIGN = constants.MAX_ALIGN;
 const datastruct = @import("datastruct.zig");
 const MultiMpsc = datastruct.MultiMpsc;
 const Queue = datastruct.Queue;
+const SPSCBounded = datastruct.SPSCBounded;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const RunMode = Loop.RunMode;
@@ -50,23 +51,6 @@ pub const Batched = struct {
 
 pub const Runner = @This();
 
-const Batcher = struct {
-    mutex: Io.Mutex,
-    batches: std.Deque(Batch),
-
-    pub fn init(self: *Batcher, arena: Allocator) !void {
-        self.* = .{ .mutex = .init, .batches = try .initCapacity(arena, 100) };
-    }
-
-    pub fn lock(self: *Batcher, io: Io) !void {
-        try self.mutex.lock(io);
-    }
-
-    pub fn unlock(self: *Batcher, io: Io) void {
-        self.mutex.unlock(io);
-    }
-};
-
 io: Io,
 next_id: atomic.Value(TaskId),
 active: std.AutoHashMap(TaskId, *Task),
@@ -82,7 +66,7 @@ queues: MultiMpsc(union(enum) {
 }),
 chunks: Allocator,
 options: App.Options,
-batcher: Batcher,
+batches: SPSCBounded(Batch),
 batch: Batch = .{},
 
 pub fn init(
@@ -101,14 +85,13 @@ pub fn init(
         .io = io,
         .future = undefined,
         .options = options,
-        .batcher = undefined,
+        .batches = try .init(100, arena),
     };
 
     self.queues.init();
 
     try self.active.ensureTotalCapacity(100);
     try self.loop.init(io);
-    try self.batcher.init(arena);
 
     self.future = try io.concurrent(Runner.run, .{self});
 }
@@ -135,10 +118,7 @@ pub fn _run(self: *Runner) !void {
 
 fn flush(self: *@This()) !void {
     if (!self.batch.empty()) {
-        try self.batcher.lock(self.io);
-        defer self.batcher.unlock(self.io);
-
-        try self.batcher.batches.pushBackBounded(self.batch);
+        if (!self.batches.push(self.batch)) return error.BatchQueueFull;
 
         self.batch = .{};
         self.options.wakeup_cb(self.options.userdata);
