@@ -148,7 +148,7 @@ fn flush(self: *@This()) !void {
         const cancelation: *Runner.Cancelation = @fieldParentPtr("completion", completion);
         const task = self.active.get(cancelation.id) orelse {
             self.chunks.destroy(cancelation);
-            return;
+            continue;
         };
 
         cancelation.completion.cancel(

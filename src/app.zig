@@ -78,6 +78,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
 
+    try self.entities.init(arena, 100);
     try self.chunks.init(arena, &.{
         .{ 50, MAX_SIZE },
         .{ 50, @max(Observers.NODE_SIZE, Receivers.NODE_SIZE, Listeners.NODE_SIZE) },
@@ -90,7 +91,6 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     try self.listeners.init(chunks);
     try self.receivers.init(chunks);
     try self.notifications.init(chunks);
-    try self.entities.init(arena, 100);
 
     try self.runner.init(arena, chunks, io, options);
     errdefer self.runner.deinit();
