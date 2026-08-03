@@ -9,13 +9,14 @@ pub const mpsc = @import("datastruct/mpsc.zig");
 pub const Mpsc = mpsc.Mpsc;
 pub const multi_mpsc = @import("datastruct/multi_mpsc.zig");
 pub const MultiMpsc = multi_mpsc.MultiMpsc;
+pub const MpscBounded = mpsc.MpscBounded;
 pub const multi_queue = @import("datastruct/multi_queue.zig");
 pub const MultiQueue = multi_queue.MultiQueue;
 pub const queue = @import("datastruct/queue.zig");
 pub const Queue = queue.Queue;
 pub const slotmap = @import("datastruct/slotmap.zig");
 pub const spsc = @import("datastruct/spsc.zig");
-pub const SPSCBounded = spsc.SPSCBounded;
+pub const SpscBounded = spsc.SpscBounded;
 pub const stealing = @import("datastruct/stealing_queue.zig");
 pub const StealingQueue = stealing.StealingQueue;
 

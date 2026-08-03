@@ -7,7 +7,7 @@ const atomic = std.atomic;
 const math = std.math;
 const testing = std.testing;
 
-pub fn SPSCBounded(T: type) type {
+pub fn SpscBounded(T: type) type {
     return struct {
         const Self = @This();
         const Padding = (atomic.cache_line - 1) / @sizeOf(T) + 1;
@@ -93,7 +93,7 @@ pub fn SPSCBounded(T: type) type {
 }
 
 test "SPSC bounded pads both ends of its slots allocation" {
-    const Queue = SPSCBounded(u64);
+    const Queue = SpscBounded(u64);
     var queue = try Queue.init(10, testing.allocator);
     defer queue.deinit(testing.allocator);
 

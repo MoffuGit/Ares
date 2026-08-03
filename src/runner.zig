@@ -19,7 +19,7 @@ const MAX_ALIGN = constants.MAX_ALIGN;
 const datastruct = @import("datastruct.zig");
 const MultiMpsc = datastruct.MultiMpsc;
 const Queue = datastruct.Queue;
-const SPSCBounded = datastruct.SPSCBounded;
+const SpscBounded = datastruct.SpscBounded;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const RunMode = Loop.RunMode;
@@ -66,7 +66,7 @@ queues: MultiMpsc(union(enum) {
 }),
 chunks: Allocator,
 options: App.Options,
-batches: SPSCBounded(Batch),
+batches: SpscBounded(Batch),
 batch: Batch = .{},
 
 pub fn init(

@@ -1,6 +1,105 @@
 // - Libxev: https://github.com/mitchellh/libxev [LIBXEV]
 const std = @import("std");
 const assert = std.debug.assert;
+const Allocator = std.mem.Allocator;
+const testing = std.testing;
+
+const spsc = @import("spsc.zig");
+
+pub fn MpscBounded(comptime T: type) type {
+    return struct {
+        const Queue = spsc.SpscBounded(T);
+        const Self = @This();
+
+        const Slot = struct {
+            queue: Queue,
+            claimed: std.atomic.Value(bool),
+        };
+
+        pub const Producer = struct {
+            slot: ?*Slot,
+
+            pub fn push(self: *Producer, value: T) void {
+                const slot = self.slot orelse @panic("Producer Unregistered");
+                return slot.queue.push(value);
+            }
+
+            pub fn tryPush(self: *Producer, value: T) bool {
+                const slot = self.slot orelse @panic("Producer Unregistered");
+                return slot.queue.tryPush(value);
+            }
+
+            pub fn unregister(self: *Producer) void {
+                const slot = self.slot orelse @panic("Producer Unregistered");
+                self.slot = null;
+                assert(slot.claimed.swap(false, .release));
+            }
+        };
+
+        slots: []Slot,
+        next_channel: usize = 0,
+
+        pub fn init(
+            channel_count: usize,
+            channel_capacity: u16,
+            allocator: Allocator,
+        ) !Self {
+            const slots = try allocator.alloc(Slot, channel_count);
+            errdefer allocator.free(slots);
+
+            var initialized: usize = 0;
+            errdefer for (slots[0..initialized]) |*slot| {
+                slot.queue.deinit(allocator);
+            };
+
+            for (slots) |*slot| {
+                slot.* = .{
+                    .queue = try Queue.init(channel_capacity, allocator),
+                    .claimed = .init(false),
+                };
+                initialized += 1;
+            }
+
+            return .{ .slots = slots };
+        }
+
+        pub fn deinit(self: *Self, allocator: Allocator) void {
+            for (self.slots) |*slot| {
+                assert(!slot.claimed.load(.monotonic));
+                slot.queue.deinit(allocator);
+            }
+            allocator.free(self.slots);
+            self.* = undefined;
+        }
+
+        pub fn register(self: *Self) ?Producer {
+            for (self.slots) |*slot| {
+                if (slot.claimed.cmpxchgStrong(
+                    false,
+                    true,
+                    .acquire,
+                    .monotonic,
+                ) == null) return .{ .slot = slot };
+            }
+            return null;
+        }
+
+        pub fn pop(self: *Self) ?T {
+            if (self.slots.len == 0) return null;
+
+            for (0..self.slots.len) |offset| {
+                const index = (self.next_channel + offset) % self.slots.len;
+                const slot = &self.slots[index];
+                if (slot.queue.front()) |value| {
+                    defer slot.queue.pop();
+                    self.next_channel = (index + 1) % self.slots.len;
+                    return value.*;
+                }
+            }
+            return null;
+        }
+    };
+}
 
 /// An intrusive MPSC (multi-provider, single consumer) queue implementation.
 /// The type T must have a field "next" of type `?*T`.
@@ -87,8 +186,6 @@ pub fn Mpsc(comptime T: type) type {
 }
 
 test Mpsc {
-    const testing = std.testing;
-
     // Types
     const Elem = struct {
         const Self = @This();
@@ -122,4 +219,93 @@ test Mpsc {
     q.push(&elems[1]);
     try testing.expect(q.pop().? == &elems[1]);
     try testing.expect(q.pop() == null);
+}
+
+test "bounded MPSC registers producers and drains their SPSC channels" {
+    const Channel = MpscBounded(u32);
+    var channel = try Channel.init(2, 2, std.testing.allocator);
+    defer channel.deinit(std.testing.allocator);
+
+    var first = channel.register().?;
+    defer first.unregister();
+    var second = channel.register().?;
+    defer second.unregister();
+
+    try testing.expect(channel.register() == null);
+    try testing.expect(first.tryPush(1));
+    try testing.expect(first.tryPush(2));
+    try testing.expect(!first.tryPush(3));
+    try testing.expect(second.tryPush(10));
+
+    try testing.expectEqual(@as(?u32, 1), channel.pop());
+    try testing.expectEqual(@as(?u32, 10), channel.pop());
+    try testing.expectEqual(@as(?u32, 2), channel.pop());
+    try testing.expectEqual(@as(?u32, null), channel.pop());
+}
+
+test "bounded MPSC reuses unregistered producers without dropping values" {
+    const Channel = MpscBounded(u32);
+    var channel = try Channel.init(1, 2, std.testing.allocator);
+    defer channel.deinit(std.testing.allocator);
+
+    var first = channel.register().?;
+    try testing.expect(first.tryPush(1));
+    first.unregister();
+
+    var second = channel.register().?;
+    defer second.unregister();
+    try testing.expect(second.tryPush(2));
+
+    try testing.expectEqual(@as(?u32, 1), channel.pop());
+    try testing.expectEqual(@as(?u32, 2), channel.pop());
+    try testing.expectEqual(@as(?u32, null), channel.pop());
+}
+
+test "bounded MPSC supports concurrent producers" {
+    const Channel = MpscBounded(u32);
+    const values_per_producer = 100;
+    const producer_count = 2;
+    const total_values = values_per_producer * producer_count;
+
+    const ProducerContext = struct {
+        channel: *Channel,
+        first_value: u32,
+
+        fn run(context: *@This()) void {
+            var producer = context.channel.register().?;
+            defer producer.unregister();
+
+            for (0..values_per_producer) |offset| {
+                const value = context.first_value + @as(u32, @intCast(offset));
+                while (!producer.tryPush(value)) std.Thread.yield() catch {};
+            }
+        }
+    };
+
+    var channel = try Channel.init(producer_count, 7, testing.allocator);
+    defer channel.deinit(testing.allocator);
+
+    var contexts: [producer_count]ProducerContext = .{
+        .{ .channel = &channel, .first_value = 0 },
+        .{ .channel = &channel, .first_value = values_per_producer },
+    };
+    var threads: [producer_count]std.Thread = undefined;
+    for (&threads, &contexts) |*thread, *context| {
+        thread.* = try std.Thread.spawn(.{}, ProducerContext.run, .{context});
+    }
+
+    var seen: [total_values]bool = .{false} ** total_values;
+    var received: usize = 0;
+    while (received < total_values) {
+        if (channel.pop()) |value| {
+            try testing.expect(!seen[value]);
+            seen[value] = true;
+            received += 1;
+        } else {
+            std.Thread.yield() catch {};
+        }
+    }
+
+    for (threads) |thread| thread.join();
+    for (seen) |was_seen| try testing.expect(was_seen);
 }
