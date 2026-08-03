@@ -118,8 +118,7 @@ pub fn _run(self: *Runner) !void {
 
 fn flush(self: *@This()) !void {
     if (!self.batch.empty()) {
-        if (!self.batches.push(self.batch)) return error.BatchQueueFull;
-
+        self.batches.push(self.batch);
         self.batch = .{};
         self.options.wakeup_cb(self.options.userdata);
     }

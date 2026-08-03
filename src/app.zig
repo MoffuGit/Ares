@@ -184,9 +184,9 @@ pub fn flush(self: *App) void {
 fn flushBatched(self: *App) void {
     const chunks = self.chunks.allocator();
     var batch: Runner.Batch = .{};
-    while (self.runner.batches.pop()) |b| {
-        var other = b;
-        batch.concat(&other);
+
+    while (self.runner.batches.front()) |b| : (self.runner.batches.pop()) {
+        batch.concat(b);
     }
 
     while (batch.pop()) |b| {

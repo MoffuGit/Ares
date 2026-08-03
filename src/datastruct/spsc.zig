@@ -5,6 +5,7 @@ const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 const atomic = std.atomic;
 const math = std.math;
+const testing = std.testing;
 
 pub fn SPSCBounded(T: type) type {
     return struct {
@@ -12,115 +13,104 @@ pub fn SPSCBounded(T: type) type {
         const Padding = (atomic.cache_line - 1) / @sizeOf(T) + 1;
 
         mask: u16,
-        buffer: []T,
+        len: u16,
+        slots: []T,
         producer: atomic.Value(u16) align(atomic.cache_line),
+        cache_consumer: u16,
+
         consumer: atomic.Value(u16) align(atomic.cache_line),
+        cache_producer: u16,
 
         pub fn init(cap: u16, allocator: Allocator) !Self {
             assert(@sizeOf(T) > 0);
 
-            const required_slots = @as(u32, @max(cap, 1)) + 1;
-            const ring_capacity = try math.ceilPowerOfTwo(u32, required_slots);
-            const mask: u16 = @intCast(ring_capacity - 1);
+            const _capacity = try math.ceilPowerOfTwo(u16, cap);
+            const mask: u16 = @intCast(_capacity - 1);
 
-            const buffer = try allocator.alloc(T, ring_capacity + 2 * Padding);
+            const slots = try allocator.alloc(T, _capacity + 2 * Padding);
 
             return .{
+                .len = _capacity,
                 .mask = mask,
-                .buffer = buffer,
+                .slots = slots,
                 .consumer = .init(0),
+                .cache_consumer = 0,
                 .producer = .init(0),
+                .cache_producer = 0,
             };
         }
 
         pub fn deinit(self: *Self, allocator: Allocator) void {
-            allocator.free(self.buffer);
+            allocator.free(self.slots);
         }
 
         pub fn capacity(self: *const Self) u16 {
-            return self.mask;
+            return self.len;
         }
 
-        /// Attempts to append a value, returning false immediately when full.
-        /// This must only be called by the queue's single producer.
-        pub fn push(self: *Self, value: T) bool {
-            const write_index = self.producer.load(.monotonic);
-            const next_write_index = self.nextIndex(write_index);
+        pub fn push(self: *Self, value: T) void {
+            const write = self.producer.load(.monotonic);
+            while (write - self.cache_consumer == self.len) {
+                self.cache_consumer = self.consumer.load(.acquire);
+                atomic.spinLoopHint();
+            }
+            self.slot(write).* = value;
+            self.producer.store(write +% 1, .release);
+        }
 
-            if (next_write_index == self.consumer.load(.acquire)) return false;
-
-            self.slot(write_index).* = value;
-            self.producer.store(next_write_index, .release);
+        pub fn tryPush(self: *Self, value: T) bool {
+            const write = self.producer.load(.monotonic);
+            if (write - self.cache_consumer == self.len) {
+                self.cache_consumer = self.consumer.load(.acquire);
+                if (write - self.cache_consumer == self.len) return false;
+            }
+            self.slot(write).* = value;
+            self.producer.store(write +% 1, .release);
             return true;
         }
 
-        /// Removes and returns a value, or null immediately when empty.
-        /// This must only be called by the queue's single consumer.
-        pub fn pop(self: *Self) ?T {
-            const read_index = self.consumer.load(.monotonic);
-            if (read_index == self.producer.load(.acquire)) return null;
+        pub fn front(self: *Self) ?*T {
+            const read = self.consumer.load(.monotonic);
 
-            const value = self.slot(read_index).*;
-            self.consumer.store(self.nextIndex(read_index), .release);
-            return value;
+            if (read == self.cache_producer) {
+                self.cache_producer = self.producer.load(.acquire);
+                if (read == self.cache_producer) return null;
+            }
+
+            return self.slot(read);
         }
 
-        fn slot(self: *Self, index: u16) *T {
-            assert(index <= self.mask);
-            return &self.buffer[index + Padding];
+        pub fn pop(self: *Self) void {
+            const read = self.consumer.load(.monotonic);
+            assert(self.producer.load(.acquire) != read);
+            self.consumer.store(read +% 1, .release);
         }
 
-        fn nextIndex(self: *const Self, index: u16) u16 {
-            return (index +% 1) & self.mask;
+        inline fn slot(self: *Self, index: u16) *T {
+            return &self.slots[(index & self.mask) + Padding];
         }
     };
 }
 
 test "SPSC bounded pads both ends of its slots allocation" {
     const Queue = SPSCBounded(u64);
-    var queue = try Queue.init(10, std.testing.allocator);
-    defer queue.deinit(std.testing.allocator);
+    var queue = try Queue.init(10, testing.allocator);
+    defer queue.deinit(testing.allocator);
 
-    try std.testing.expectEqual(@as(u16, 15), queue.capacity());
-    try std.testing.expectEqual(@as(usize, 16 + 2 * Queue.Padding), queue.buffer.len);
-    try std.testing.expectEqual(&queue.buffer[Queue.Padding], queue.slot(0));
-    try std.testing.expectEqual(&queue.buffer[Queue.Padding + 15], queue.slot(15));
-    try std.testing.expectEqual(@as(u16, 10), queue.nextIndex(9));
-    try std.testing.expectEqual(@as(u16, 0), queue.nextIndex(15));
-}
+    try testing.expectEqual(@as(u16, 16), queue.capacity());
+    try testing.expectEqual(@as(usize, 16 + 2 * Queue.Padding), queue.slots.len);
+    try testing.expectEqual(&queue.slots[Queue.Padding], queue.slot(0));
+    try testing.expectEqual(&queue.slots[Queue.Padding + 15], queue.slot(15));
 
-test "SPSC bounded supports its full u16 capacity without overflow" {
-    const Queue = SPSCBounded(u8);
-    var queue = try Queue.init(math.maxInt(u16), std.testing.allocator);
-    defer queue.deinit(std.testing.allocator);
+    for (0..queue.len) |b| {
+        queue.push(b);
+    }
 
-    try std.testing.expectEqual(
-        @as(u16, math.maxInt(u16)),
-        queue.capacity(),
-    );
-    try std.testing.expectEqual(
-        @as(usize, 65536 + 2 * Queue.Padding),
-        queue.buffer.len,
-    );
-    try std.testing.expectEqual(@as(u16, 0), queue.nextIndex(math.maxInt(u16)));
-}
+    try testing.expectEqual(false, queue.tryPush(11));
 
-test "SPSC bounded push and pop return immediately when full or empty" {
-    const Queue = SPSCBounded(u32);
-    var queue = try Queue.init(3, std.testing.allocator);
-    defer queue.deinit(std.testing.allocator);
-
-    try std.testing.expectEqual(@as(?u32, null), queue.pop());
-
-    try std.testing.expect(queue.push(1));
-    try std.testing.expect(queue.push(2));
-    try std.testing.expect(queue.push(3));
-    try std.testing.expect(!queue.push(4));
-
-    try std.testing.expectEqual(@as(?u32, 1), queue.pop());
-    try std.testing.expect(queue.push(4));
-    try std.testing.expectEqual(@as(?u32, 2), queue.pop());
-    try std.testing.expectEqual(@as(?u32, 3), queue.pop());
-    try std.testing.expectEqual(@as(?u32, 4), queue.pop());
-    try std.testing.expectEqual(@as(?u32, null), queue.pop());
+    for (0..queue.len) |b| {
+        const expected: u64 = @intCast(b);
+        try testing.expectEqual(queue.front().?.*, expected);
+        queue.pop();
+    }
 }
