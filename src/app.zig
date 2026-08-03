@@ -1276,7 +1276,7 @@ test "Observe entities drop before enable" {
     try testing.expect(!context);
 
     const sub = try app.observe(observed, Observed.callback, .{&context});
-    try sub.unsubscribeApp();
+    try sub.unsubscribe();
 
     index = 1;
 

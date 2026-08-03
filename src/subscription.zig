@@ -66,10 +66,6 @@ pub fn Subscriptions(
             pub fn unsubscribe(self: *const Subscription) !void {
                 try self.subscriptions.unsubscribe(self);
             }
-
-            pub fn unsubscribeApp(self: *const Subscription) !void {
-                try self.subscriptions.unsubscribe(self);
-            }
         };
 
         subscribers: Subscribers,
