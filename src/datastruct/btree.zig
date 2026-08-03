@@ -721,12 +721,13 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
         }
 
         pub fn insert(self: *Self, alloc: Allocator, key: K, value: V) !?V {
-            defer self.count += 1;
             var node: Node = Node{ .Leaf = .{} };
 
             node.add_item(key, value);
 
-            return try self.root.append(node, alloc);
+            const res = try self.root.append(node, alloc);
+            if (res == null) self.count += 1;
+            return res;
         }
 
         pub fn get(self: *Self, key: K) ?V {
@@ -1083,9 +1084,7 @@ pub fn BPlusSet(comptime K: type, comptime comp: *const fn (a: K, b: K) std.math
         }
 
         pub fn insert(self: *Self, alloc: Allocator, key: K) !bool {
-            const replaced = (try self.tree.insert(alloc, key, {})) != null;
-            if (replaced) self.tree.count -= 1;
-            return !replaced;
+            return try self.tree.insert(alloc, key, {}) == null;
         }
 
         pub fn contains(self: *Self, key: K) bool {
