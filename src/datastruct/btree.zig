@@ -725,9 +725,12 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
 
             node.add_item(key, value);
 
-            const res = try self.root.append(node, alloc);
-            if (res == null) self.count += 1;
-            return res;
+            if (try self.root.append(node, alloc)) |old| {
+                return old;
+            }
+
+            self.count += 1;
+            return null;
         }
 
         pub fn get(self: *Self, key: K) ?V {
