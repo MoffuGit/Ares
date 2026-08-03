@@ -2,19 +2,20 @@ const std = @import("std");
 const Io = std.Io;
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
+const heap = std.heap;
 
 const chromium_path = @import("test_options").chromium_path;
 const zlob = @import("zlob");
 
 const App = @import("../app.zig");
-const ent = @import("../entity.zig");
-const Entity = ent.Entity;
+const Bench = @import("../bench.zig");
 const constants = @import("../constants.zig");
 const MAX_PATH_LEN = constants.MAX_PATH_LEN;
+const ent = @import("../entity.zig");
+const Entity = ent.Entity;
 const global = @import("../global.zig");
 const Worktree = @import("../worktree.zig");
 const Snapshot = @import("../worktree/snapshot.zig");
-const Bench = @import("../bench.zig");
 
 const mode: enum { smoke, benchmark } =
     if (@import("test_options").benchmark) .benchmark else .smoke;
@@ -37,15 +38,28 @@ test "benchmark: Worktree initial scan" {
     try app.init(.{}, gpa, io);
     defer app.deinit();
 
+    const arena = app.arena.allocator();
+
     var bench: Bench = .init();
     defer bench.deinit();
+
+    const zlob_res = try zlob.walk.collect(arena, chromium_path, .{
+        .include_hidden = false,
+        .respect_git = true,
+        .report_dirs = true,
+    });
+
+    var zlob_set = std.StringHashMap(void).init(arena);
+
+    for (zlob_res.entries) |e| {
+        try zlob_set.put(try arena.dupe(u8, e.relativePath()), {});
+    }
 
     Bench.report("Worktree Scanned Path={s}", .{chromium_path});
     var durations: [8]Io.Duration = undefined;
 
     for (0..durations.len) |idx| {
         bench.start(io);
-        defer durations[idx] = bench.stop(io);
 
         const worktree: Entity(Worktree) = try .new(
             &app,
@@ -63,46 +77,22 @@ test "benchmark: Worktree initial scan" {
         _ = try app.observe(worktree, observe, .{&scanning});
 
         while (scanning) app.flush();
+
+        durations[idx] = bench.stop(io);
+
+        try verify(&app, zlob_set, worktree);
     }
 
-    try verifyWorktree(&app, io);
     const estimate = Bench.estimate(&durations);
     Bench.report("{}ms", .{estimate.toMilliseconds()});
 }
 
-fn verifyWorktree(app: *App, io: Io) !void {
-    const worktree: Entity(Worktree) = try .new(
-        app,
-        .{ io, Worktree.Options{ .abs_path = chromium_path } },
-    );
-    defer worktree.drop();
-
-    var scanning = true;
-
-    _ = try app.observe(worktree, observe, .{&scanning});
-
-    while (scanning) {
-        app.flush();
-    }
-
+fn verify(app: *App, zlob_set: std.StringHashMap(void), worktree: Entity(Worktree)) !void {
     var arena = std.heap.ArenaAllocator.init(app.gpa);
     defer arena.deinit();
     const alloc = arena.allocator();
 
     const snap = worktree.read().snapshot;
-
-    var zlob_res = try zlob.walk.collect(alloc, chromium_path, .{
-        .include_hidden = false,
-        .respect_git = true,
-        .report_dirs = true,
-    });
-    defer zlob_res.deinit();
-
-    var zlob_set = std.StringHashMap(void).init(alloc);
-    defer zlob_set.deinit();
-    for (zlob_res.entries) |e| {
-        try zlob_set.put(try alloc.dupe(u8, e.relativePath()), {});
-    }
 
     const root_name = snap.root_name;
     const prefix_len = root_name.len + 1;

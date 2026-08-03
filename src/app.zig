@@ -186,7 +186,7 @@ fn flushBatched(self: *App) void {
     var batch: Runner.Batch = .{};
 
     while (self.runner.batches.front()) |b| : (self.runner.batches.pop()) {
-        batch.concat(b);
+        batch.copy(b);
     }
 
     while (batch.pop()) |b| {

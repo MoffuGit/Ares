@@ -36,7 +36,7 @@ pub fn Queue(comptime T: type) type {
             }
         }
 
-        pub fn concat(self: *Self, other: *Self) void {
+        pub fn copy(self: *Self, other: *const Self) void {
             assert(self != other);
             const v = other.head orelse return;
 
@@ -47,9 +47,6 @@ pub fn Queue(comptime T: type) type {
             }
 
             self.tail = other.tail;
-
-            other.head = null;
-            other.tail = null;
         }
 
         /// Dequeue the next element from the queue.

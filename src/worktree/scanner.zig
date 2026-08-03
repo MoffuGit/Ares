@@ -21,7 +21,7 @@ const constants = @import("../constants.zig");
 const MAX_PATH_LEN = constants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
 const Queue = datastruct.Queue;
-const Mpsc = datastruct.Mpsc;
+const MpscBounded = datastruct.MpscBounded;
 const StealingQueue = datastruct.StealingQueue;
 const global = @import("../global.zig");
 const Runner = @import("../runner.zig");
@@ -53,19 +53,26 @@ pub const Updates = union(enum) {
     }
 };
 
-pub const Action = union(enum) {
-    pub const Queue = Io.Queue(Action);
+pub const Entry = struct {
+    path: ChunkedPath,
+    meta: Snapshot.Meta,
+    next: ?*Entry = null,
+};
 
+pub const Actions = MpscBounded(Action);
+
+pub const Action = union(enum) {
     initial_scan: void,
     scan_end: void,
+    load_file: ChunkedPath,
+    new_entries: Queue(Entry),
 };
 
 io: Io,
 gpa: Allocator,
 snapshot: Snapshot,
 workers: Workers,
-action_buffer: [8]Action,
-actions: Action.Queue,
+actions: Actions,
 chunks: ChunkAllocator,
 runner: *Runner,
 
@@ -88,19 +95,19 @@ pub fn init(
         .runner = runner,
         .io = io,
         .gpa = gpa,
-        .action_buffer = undefined,
-        .actions = undefined,
         .snapshot = undefined,
         .workers = undefined,
         .timer = null,
         .waker = undefined,
         .await = undefined,
         .chunks = undefined,
+        .actions = undefined,
     };
 
     self.workers.init(io);
 
-    self.actions = .init(&self.action_buffer);
+    self.actions = try .init(state.cpu_count + 2, 128, gpa);
+    errdefer self.actions.deinit(gpa);
 
     try self.chunks.init(gpa, &.{
         .{ 1024 * 1024 * 1024, RANGE_NODE_SIZE },
@@ -112,7 +119,10 @@ pub fn init(
 
     self.await, self.waker = try runner.await(handleActions, .{self});
 
-    try self.actions.putOne(self.io, .initial_scan);
+    var producer = self.actions.register() orelse unreachable;
+    defer producer.unregister();
+
+    producer.push(.initial_scan);
     try self.waker.wake();
 }
 
@@ -127,7 +137,7 @@ pub fn drop(self: *Scanner) void {
 
 pub fn deinit(self: *Scanner) void {
     self.workers.deinit();
-    self.actions.close(self.io);
+    self.actions.deinit(self.gpa);
     self.snapshot.deinit();
     self.chunks.deinit(self.gpa);
 }
@@ -146,32 +156,44 @@ pub fn handleActions(self: *Scanner, res: anyerror!void) bool {
 fn _handleActions(
     self: *Scanner,
 ) !void {
-    while (self.workers.popEntry()) |entry| {
-        self.snapshot.insert(entry.path, entry.meta);
-    }
+    var batch: Queue(Entry) = .{};
+    var scan_end = false;
 
-    var buffer: [8]Action = undefined;
-    for (0..try self.actions.get(self.io, &buffer, 0)) |idx| {
-        switch (buffer[idx]) {
+    while (self.actions.pop()) |action| {
+        switch (action) {
             .initial_scan => try self.initialScan(),
-            .scan_end => {
-                if (self.timer) |timer| {
-                    self.runner.cancel(timer);
-                    self.timer = null;
-                }
-
-                self.workers.deinit();
-
-                const update = try self.runner.dispatch(self.subscription, Updates);
-                update.* = .{
-                    .updated = .{
-                        .scanning = false,
-                        .snapshot = try self.snapshot.clone(self.gpa),
-                    },
-                };
-            },
+            .load_file => |*path| try self.loadFile(path),
+            .scan_end => scan_end = true,
+            .new_entries => |b| batch.copy(&b),
         }
     }
+
+    while (batch.pop()) |entry| {
+        self.snapshot.insert(entry.path, entry.meta);
+        self.workers.chunks.allocator().destroy(entry);
+    }
+
+    if (scan_end) {
+        if (self.timer) |timer| {
+            self.runner.cancel(timer);
+            self.timer = null;
+        }
+
+        self.workers.deinit();
+
+        const update = try self.runner.dispatch(self.subscription, Updates);
+        update.* = .{
+            .updated = .{
+                .scanning = false,
+                .snapshot = try self.snapshot.clone(self.gpa),
+            },
+        };
+    }
+}
+
+pub fn loadFile(self: *Scanner, path: *const ChunkedPath) !void {
+    const chunks = self.chunks.allocator();
+    path.free(chunks);
 }
 
 fn initialScan(
@@ -277,18 +299,10 @@ const SharedFd = struct {
     }
 };
 
-pub const Entry = struct {
-    path: ChunkedPath,
-    meta: Snapshot.Meta,
-    next: ?*Entry = null,
-};
-
 const Workers = struct {
     io: Io,
     group: Io.Group,
     arena: heap.ArenaAllocator,
-    entries: Mpsc(Entry),
-
     chunks: ChunkAllocator,
     queue: StealingQueue(Job),
 
@@ -300,11 +314,9 @@ const Workers = struct {
             .working = false,
             .group = .init,
             .arena = undefined,
-            .entries = undefined,
             .chunks = undefined,
             .queue = .{},
         };
-        self.entries.init();
     }
 
     pub fn start(self: *Workers, gpa: Allocator, workers: u32) !void {
@@ -391,25 +403,6 @@ const Workers = struct {
         self.chunks.allocator().destroy(job);
     }
 
-    pub fn pushEntry(self: *Workers, path: ChunkedPath, meta: Snapshot.Meta) void {
-        const alloc = self.chunks.allocator();
-
-        const entry = alloc.create(Entry) catch @panic("Scanner Entry Overflow");
-        entry.* = .{
-            .path = path,
-            .meta = meta,
-        };
-        self.entries.push(entry);
-    }
-
-    pub fn popEntry(self: *Workers) ?Entry {
-        const pop = self.entries.pop() orelse return null;
-
-        defer self.chunks.allocator().destroy(pop);
-
-        return pop.*;
-    }
-
     pub fn done(self: *Workers) bool {
         return self.queue.taskDone(self.io);
     }
@@ -433,15 +426,25 @@ pub fn _scan(
     worker_id: u32,
 ) !void {
     var buffer: [64 * 1024]u8 = undefined;
+    var batch: Queue(Entry) = .{};
 
     while (self.workers.popJob(worker_id)) |job| {
         defer self.workers.finishJob(job);
 
-        try self.scanDir(job, worker_id, &buffer);
+        try self.scanDir(job, worker_id, &buffer, &batch);
+
+        var producer = self.actions.register() orelse unreachable;
+        defer producer.unregister();
+
+        if (!batch.empty()) {
+            @branchHint(.likely);
+            producer.push(.{ .new_entries = batch });
+            batch = .{};
+        }
 
         if (self.workers.done()) {
             @branchHint(.unlikely);
-            try self.actions.putOne(self.io, .scan_end);
+            producer.push(.scan_end);
         }
 
         try self.waker.wake();
@@ -453,6 +456,7 @@ fn scanDir(
     job: *Job,
     worker_id: u32,
     buffer: []u8,
+    batch: *Queue(Entry),
 ) !void {
     const dir = bkl: {
         if (job.fd) |fd| {
@@ -518,14 +522,19 @@ fn scanDir(
         const len = path.read(&path_buf);
         const ignored = isIgnored(effective_ignore, path_buf[0..len], name, is_dir);
 
-        self.workers.pushEntry(path, .{
-            .inode = entry.meta.inode,
-            .mtime = .fromNanoseconds(@intCast(entry.meta.mtime_ns)),
-            .size = entry.meta.size,
-            .kind = entry.kind,
-            .hidden = is_hidden,
-            .ignored = ignored,
-        });
+        const new_entry = try self.workers.chunks.allocator().create(Entry);
+        new_entry.* = .{
+            .path = path,
+            .meta = .{
+                .inode = entry.meta.inode,
+                .mtime = .fromNanoseconds(@intCast(entry.meta.mtime_ns)),
+                .size = entry.meta.size,
+                .kind = entry.kind,
+                .hidden = is_hidden,
+                .ignored = ignored,
+            },
+        };
+        batch.push(new_entry);
 
         if (is_hidden or ignored or !is_dir) continue;
 

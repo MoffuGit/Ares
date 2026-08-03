@@ -19,12 +19,12 @@ pub fn MpscBounded(comptime T: type) type {
         pub const Producer = struct {
             slot: ?*Slot,
 
-            pub fn push(self: *Producer, value: T) void {
+            pub fn push(self: *const Producer, value: T) void {
                 const slot = self.slot orelse @panic("Producer Unregistered");
                 return slot.queue.push(value);
             }
 
-            pub fn tryPush(self: *Producer, value: T) bool {
+            pub fn tryPush(self: *const Producer, value: T) bool {
                 const slot = self.slot orelse @panic("Producer Unregistered");
                 return slot.queue.tryPush(value);
             }

@@ -92,11 +92,14 @@ pub fn extend(
     };
 }
 
-pub fn destroy(self: *ChunkedPath, alloc: Allocator) void {
-    while (self.memmap.ranges.pop()) |range| {
+pub fn free(self: *const ChunkedPath, alloc: Allocator) void {
+    var node = self.memmap.ranges.head;
+    while (node) |range| {
+        const next = range.next;
         const chunk: *Chunk = @ptrCast(@alignCast(range.base));
         alloc.destroy(chunk);
         alloc.destroy(range);
+        node = next;
     }
 }
 
@@ -198,9 +201,7 @@ test "destroy frees owned chunks and range nodes" {
     const path = "0123456789abcdef" ++ "GHIJKLMNOPQRSTUV";
 
     var cs = new(path, 0, gpa);
-    cs.destroy(gpa);
-
-    try testing.expect(cs.memmap.ranges.empty());
+    cs.free(gpa);
 }
 
 test "multi-node path spans multiple ranges" {
