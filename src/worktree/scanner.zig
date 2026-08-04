@@ -320,8 +320,9 @@ const Workers = struct {
         const arena = self.arena.allocator();
 
         try self.chunks.init(arena, &.{
-            .{ 1024 * 1024, @max(@sizeOf(Entry), @sizeOf(SharedFd)) },
+            .{ 1024 * 1024, @sizeOf(Entry) },
             .{ 1024 * 1024, @sizeOf(Job) },
+            .{ 1024 * 1024, @sizeOf(SharedFd) },
         });
         errdefer self.chunks.deinit(arena);
 
