@@ -9,9 +9,6 @@ const atomic = std.atomic;
 const builtin = @import("builtin");
 const math = std.math;
 
-const constans = @import("constants.zig");
-const MAX_ALIGN = constans.MAX_ALIGN;
-
 const log = std.log.scoped(.chunk_pool);
 
 const Chunk = opaque {
