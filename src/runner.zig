@@ -87,9 +87,9 @@ pub fn init(
 }
 
 pub fn deinit(self: *Runner) void {
-    self.producer.unregister();
     self.stop.store(true, .release);
     _ = self.future.await(self.io);
+    self.producer.unregister();
     self.loop.deinit();
 }
 fn run(self: *Runner) void {
