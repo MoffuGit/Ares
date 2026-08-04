@@ -14,6 +14,7 @@ const MAX_ALIGN = constants.MAX_ALIGN;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 const Queue = datastruct.Queue;
+const MpscBounded = datastruct.MpscBounded;
 const ent = @import("entity.zig");
 const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
@@ -37,6 +38,7 @@ pub const Options = struct {
 
 pub const App = @This();
 
+io: Io,
 gpa: Allocator,
 arena: heap.ArenaAllocator,
 entities: EntityStore,
@@ -46,8 +48,10 @@ deferred: Queue(Deferred),
 listeners: Listeners,
 receivers: Receivers,
 observers: Observers,
+batches: Batches,
 chunks: ChunkAllocator,
 peding_updates: u16,
+group: Io.Group,
 
 runner: Runner,
 
@@ -59,6 +63,7 @@ options: Options,
 
 pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     self.* = .{
+        .io = io,
         .options = options,
         .notifications = undefined,
         .entities = undefined,
@@ -67,6 +72,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .receivers = undefined,
         .chunks = undefined,
         .runner = undefined,
+        .batches = undefined,
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
@@ -74,6 +80,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .events = .{},
         .dispatched = .{},
         .deferred = .{},
+        .group = .init,
     };
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
@@ -87,16 +94,28 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
 
     const chunks = self.chunks.allocator();
 
+    self.batches = try .init(16, 128, arena);
+
     try self.observers.init(chunks);
     try self.listeners.init(chunks);
     try self.receivers.init(chunks);
     try self.notifications.init(chunks);
 
-    try self.runner.init(arena, chunks, io, options);
+    try self.runner.init(
+        arena,
+        chunks,
+        self.batches.register() orelse unreachable,
+        .{
+            .userdata = options.userdata,
+            .wakeup_cb = options.wakeup_cb,
+        },
+        io,
+    );
     errdefer self.runner.deinit();
 }
 
 pub fn deinit(self: *App) void {
+    self.group.cancel(self.io);
     self.flush();
     self.receivers.deinit();
     self.runner.deinit();
@@ -183,9 +202,9 @@ pub fn flush(self: *App) void {
 
 fn flushBatched(self: *App) void {
     const chunks = self.chunks.allocator();
-    var batch: Runner.Batch = .{};
+    var batch: Batch = .{};
 
-    while (self.runner.batches.front()) |b| : (self.runner.batches.pop()) {
+    while (self.batches.pop()) |*b| {
         batch.copy(b);
     }
 
@@ -261,6 +280,39 @@ pub fn destroyDroppedEntities(self: *App) void {
         self.entities.recycle(key);
     }
 }
+
+pub const Waker = struct {
+    fn noop(_: *anyopaque) void {}
+
+    userdata: *anyopaque = undefined,
+    wakeup_cb: *const fn (*anyopaque) void = noop,
+
+    pub fn wake(self: *const @This()) void {
+        self.wakeup_cb(self.userdata);
+    }
+};
+
+pub const Batches = MpscBounded(Queue(Batched));
+
+pub const Producer = Batches.Producer;
+
+pub const Batch = Queue(Batched);
+
+pub const Batched = struct {
+    subscription: Receiver,
+    type: TypeId,
+    ptr: *anyopaque,
+
+    next: ?*Batched = null,
+
+    pub fn deinit(self: *const Batched) void {
+        self.type.deinit(self.ptr);
+    }
+
+    pub fn destroy(self: *const Batched, chunk: Allocator) void {
+        self.type.destroy(self.ptr, chunk);
+    }
+};
 
 pub const Event = struct {
     id: EntityId,

@@ -11,6 +11,10 @@ const Io = std.Io;
 
 const App = @import("app.zig");
 const Receiver = App.Receiver;
+const Batch = App.Batch;
+const Batched = App.Batched;
+const Producer = App.Producer;
+const AppWaker = App.Waker;
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const constants = @import("constants.zig");
@@ -32,22 +36,6 @@ const Dropped = struct { ptr: *anyopaque, type_id: TypeId, next: ?*Dropped = nul
 const log = std.log.scoped(.runner);
 
 pub const TaskId = u64;
-pub const Batch = Queue(Batched);
-pub const Batched = struct {
-    subscription: Receiver,
-    type: TypeId,
-    ptr: *anyopaque,
-
-    next: ?*Batched = null,
-
-    pub fn deinit(self: *const Batched) void {
-        self.type.deinit(self.ptr);
-    }
-
-    pub fn destroy(self: *const Batched, chunk: Allocator) void {
-        self.type.destroy(self.ptr, chunk);
-    }
-};
 
 pub const Runner = @This();
 
@@ -65,18 +53,21 @@ queues: MultiMpsc(union(enum) {
     submissions: Completion,
 }),
 chunks: Allocator,
-options: App.Options,
-batches: SpscBounded(Batch),
-batch: Batch = .{},
+producer: Producer,
+waker: AppWaker,
+batch: Batch,
 
 pub fn init(
     self: *Runner,
     arena: Allocator,
     chunks: Allocator,
+    producer: Producer,
+    waker: AppWaker,
     io: std.Io,
-    options: App.Options,
 ) !void {
     self.* = .{
+        .waker = waker,
+        .producer = producer,
         .chunks = chunks,
         .next_id = .init(0),
         .active = .init(arena),
@@ -84,8 +75,7 @@ pub fn init(
         .queues = undefined,
         .io = io,
         .future = undefined,
-        .options = options,
-        .batches = try .init(100, arena),
+        .batch = .{},
     };
 
     self.queues.init();
@@ -118,9 +108,9 @@ pub fn _run(self: *Runner) !void {
 
 fn flush(self: *@This()) !void {
     if (!self.batch.empty()) {
-        self.batches.push(self.batch);
+        self.producer.push(self.batch);
         self.batch = .{};
-        self.options.wakeup_cb(self.options.userdata);
+        self.waker.wake();
     }
 
     while (self.queues.pop(.dropped)) |dropped| {
@@ -532,7 +522,7 @@ test "Task defer allocates and copies context" {
     defer chunks.deinit(std.testing.allocator);
 
     var runner: Runner = undefined;
-    try runner.init(arena.allocator(), chunks.allocator(), testing.io, .{});
+    try runner.init(arena.allocator(), chunks.allocator(), undefined, .{}, testing.io);
     defer runner.deinit();
 
     const Context = struct {
@@ -568,7 +558,7 @@ test "Task await allocates and copies context" {
     defer chunks.deinit(std.testing.allocator);
 
     var runner: Runner = undefined;
-    try runner.init(arena.allocator(), chunks.allocator(), testing.io, .{});
+    try runner.init(arena.allocator(), chunks.allocator(), undefined, .{}, testing.io);
     defer runner.deinit();
 
     const Context = struct {
@@ -605,7 +595,7 @@ test "Cancelations" {
     defer chunks.deinit(std.testing.allocator);
 
     var runner: Runner = undefined;
-    try runner.init(arena.allocator(), chunks.allocator(), testing.io, .{});
+    try runner.init(arena.allocator(), chunks.allocator(), undefined, .{}, testing.io);
     defer runner.deinit();
 
     const task = runner.new();
