@@ -7,6 +7,7 @@ const testing = std.testing;
 const panic = debug.panic;
 const atomic = std.atomic;
 const builtin = @import("builtin");
+const math = std.math;
 
 const constans = @import("constants.zig");
 const MAX_ALIGN = constans.MAX_ALIGN;
@@ -15,7 +16,7 @@ const log = std.log.scoped(.chunk_pool);
 
 const Chunk = opaque {
     pub const Index = enum(u32) {
-        none = std.math.maxInt(u32),
+        none = math.maxInt(u32),
         _,
     };
 
@@ -58,7 +59,7 @@ pub const ChunkPool = struct {
     free_list: atomic.Value(u64) = .init(packFreeList(0, .none)),
 
     pub fn init(self: *ChunkPool, allocator: Allocator, capacity: u32, size: u32) !void {
-        assert(capacity < std.math.maxInt(u32));
+        assert(capacity < math.maxInt(u32));
         assert(size >= MAX_ALIGN.toByteUnits());
         assert(capacity > 0);
         assert(size > 0);
@@ -192,14 +193,19 @@ pub const ChunkAllocator = struct {
 
         var buffer: [100]PoolConfig = undefined;
         for (pool_configs, 0..) |config, index| {
-            buffer[index] = .{ config.@"0", std.math.ceilPowerOfTwoAssert(u32, config.@"1") };
+            buffer[index] = .{ config.@"0", math.ceilPowerOfTwoAssert(u32, config.@"1") };
         }
 
         const ordered_pools = buffer[0..pool_configs.len];
-        std.mem.sortUnstable(PoolConfig, buffer[0..pool_configs.len], {}, lessThan);
+        mem.sortUnstable(PoolConfig, buffer[0..pool_configs.len], {}, lessThan);
 
+        var last: u32 = 0;
         for (ordered_pools, 0..) |config, index| {
+            assert(last != config.@"1");
+
             try self.pools[index].init(child_alloc, config.@"0", config.@"1");
+
+            last = config.@"1";
             initialized += 1;
         }
     }
