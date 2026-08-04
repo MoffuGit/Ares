@@ -275,6 +275,29 @@ pub const Event = struct {
     }
 };
 
+pub const Deferred = struct {
+    ptr: *anyopaque,
+    callback: *const fn (*anyopaque) void,
+
+    next: ?*Deferred = null,
+};
+
+pub const Listeners = Subscriptions(
+    EntityId,
+    @Tuple(&.{ *App, *anyopaque, TypeId }),
+    ent.entityOrder,
+);
+
+pub const Listener = Listeners.Subscription;
+
+pub const Receivers = Subscriptions(
+    EntityId,
+    @Tuple(&.{ *App, *anyopaque, TypeId }),
+    ent.entityOrder,
+);
+
+pub const Receiver = Receivers.Subscription;
+
 pub const Dispatched = struct {
     subscription: Receivers.Subscription,
     type: TypeId,
@@ -291,32 +314,13 @@ pub const Dispatched = struct {
     }
 };
 
-pub const Deferred = struct {
-    ptr: *anyopaque,
-    callback: *const fn (*anyopaque) void,
-
-    next: ?*Deferred = null,
-};
-
-pub const Listeners = Subscriptions(
-    EntityId,
-    @Tuple(&.{ *App, *anyopaque, TypeId }),
-    ent.entityOrder,
-);
-
-pub const Receivers = Subscriptions(
-    EntityId,
-    @Tuple(&.{ *App, *anyopaque, TypeId }),
-    ent.entityOrder,
-);
-
 pub fn receive(
     self: *App,
     receiver: anytype,
     comptime E: type,
     function: anytype,
     args: anytype,
-) !Receivers.Subscription {
+) !Receiver {
     const _Entity = @TypeOf(receiver);
 
     if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
@@ -432,12 +436,14 @@ pub const Observers = Subscriptions(
     ent.entityOrder,
 );
 
+pub const Observer = Observers.Subscription;
+
 pub fn observe(
     self: *App,
     entity: anytype,
     function: anytype,
     args: anytype,
-) !Observers.Subscription {
+) !Observer {
     const _Entity = @TypeOf(entity);
     if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
         @compileError("entity must be an Entity(T)");
@@ -453,7 +459,7 @@ pub fn observe(
             return @call(.always_inline, function, .{ app, _entity } ++ _args);
         }
 
-        fn enable(sub: Observers.Subscription) void {
+        fn enable(sub: Observer) void {
             sub.enable();
         }
     };
@@ -516,7 +522,12 @@ pub fn Context(comptime T: type) type {
             return try self.entity.nevent(self.app, E);
         }
 
-        pub fn receive(self: *const @This(), comptime E: type, function: anytype, args: anytype) !Receivers.Subscription {
+        pub fn receive(
+            self: *const @This(),
+            comptime E: type,
+            function: anytype,
+            args: anytype,
+        ) !Receiver {
             const Args = @TypeOf(args);
 
             const TypeErased = struct {
@@ -540,7 +551,13 @@ pub fn Context(comptime T: type) type {
             return try self.app.receive(self.entity, E, TypeErased.callback, .{ self.entity.any, args });
         }
 
-        pub fn listen(self: *const @This(), comptime E: type, entity: anytype, function: anytype, args: anytype) !Listeners.Subscription {
+        pub fn listen(
+            self: *const @This(),
+            comptime E: type,
+            entity: anytype,
+            function: anytype,
+            args: anytype,
+        ) !Listener {
             const Args = @TypeOf(args);
 
             const TypeErased = struct {
@@ -571,7 +588,7 @@ pub fn Context(comptime T: type) type {
             entity: anytype,
             function: anytype,
             args: anytype,
-        ) !Observers.Subscription {
+        ) !Observer {
             const Args = @TypeOf(args);
             const Observed = @TypeOf(entity);
 
@@ -856,14 +873,14 @@ test "Queued receiver event targets a typed subscription" {
     const receiver = try Entity(TestStruct).new(&app, .{});
     var received: usize = 0;
 
-    const Receiver = struct {
+    const TestReceiver = struct {
         pub fn callback(_: *App, event: *TestEvent, value: *usize) bool {
             value.* = event.value;
             return false;
         }
     };
 
-    const sub = try app.receive(receiver, TestEvent, Receiver.callback, .{&received});
+    const sub = try app.receive(receiver, TestEvent, TestReceiver.callback, .{&received});
     app.flush();
 
     const event = try app.dispatch(sub, TestEvent);
@@ -951,14 +968,14 @@ test "Dropping a receiver removes subscriptions before queued delivery" {
     var callback_called = false;
     var deinit_called = false;
 
-    const Receiver = struct {
+    const TestReceiver = struct {
         pub fn callback(_: *App, _: *TestEvent, called: *bool) bool {
             called.* = true;
             return true;
         }
     };
 
-    const sub = try app.receive(receiver, TestEvent, Receiver.callback, .{&callback_called});
+    const sub = try app.receive(receiver, TestEvent, TestReceiver.callback, .{&callback_called});
     app.flush();
 
     const event = try app.dispatch(sub, TestEvent);
@@ -1329,25 +1346,25 @@ test "Batch wakes the app" {
     const receiver = try Entity(TestEntity).new(&app, .{});
     var received: usize = 0;
 
-    const Receiver = struct {
+    const TestReceiver = struct {
         fn callback(_: *App, event: *TestEvent, value: *usize) bool {
             value.* = event.value;
             return true;
         }
     };
 
-    const subscription = try app.receive(receiver, TestEvent, Receiver.callback, .{&received});
+    const subscription = try app.receive(receiver, TestEvent, TestReceiver.callback, .{&received});
     app.flush();
 
     const TestExecutor = struct {
         initialized: bool,
 
-        pub fn init(self: *@This(), runner: *Runner, sub: Receivers.Subscription) !void {
+        pub fn init(self: *@This(), runner: *Runner, sub: Receiver) !void {
             self.* = .{ .initialized = true };
             _ = try runner.@"defer"(sendEvent, .{ self, runner, sub });
         }
 
-        fn sendEvent(_: *@This(), runner: *Runner, sub: Receivers.Subscription, res: anyerror!void) bool {
+        fn sendEvent(_: *@This(), runner: *Runner, sub: Receiver, res: anyerror!void) bool {
             res catch return false;
             const event = runner.dispatch(sub, TestEvent) catch return false;
             event.* = .{ .value = 35 };

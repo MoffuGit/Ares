@@ -12,6 +12,7 @@ const os = @import("os.zig");
 const Session = @import("session.zig");
 const uuid = @import("uuid.zig");
 const Workspace = @import("workspace.zig");
+const Observer = App.Observer;
 
 const log = std.log.scoped(.lib);
 
@@ -102,13 +103,11 @@ const ExternEntity = extern struct {
 };
 
 const ExternObserver = extern struct {
-    const Observers = App.Observers;
-
     ptr: *anyopaque,
     key: u64,
     id: u32,
 
-    fn init(sub: *const Observers.Subscription) @This() {
+    fn init(sub: *const Observer) @This() {
         return .{
             .key = @bitCast(sub.key),
             .id = sub.id,
@@ -116,7 +115,7 @@ const ExternObserver = extern struct {
         };
     }
 
-    pub fn subscription(self: *const @This()) Observers.Subscription {
+    pub fn subscription(self: *const @This()) Observer {
         return .{
             .id = self.id,
             .key = @bitCast(self.key),

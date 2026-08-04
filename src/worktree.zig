@@ -6,7 +6,7 @@ const atomic = std.atomic;
 
 const App = @import("app.zig");
 const Context = App.Context;
-const Receivers = App.Receivers;
+const Receiver = App.Receiver;
 const ChunkedPath = @import("chunked_path.zig");
 const ent = @import("entity.zig");
 const Entity = ent.Entity;
@@ -30,7 +30,7 @@ gpa: Allocator,
 scanning: bool,
 snapshot: Snapshot,
 scanner: *Scanner,
-subscription: Receivers.Subscription,
+subscription: Receiver,
 
 pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !void {
     self.* = .{

@@ -10,7 +10,7 @@ const panic = debug.panic;
 const Io = std.Io;
 
 const App = @import("app.zig");
-const Receivers = App.Receivers;
+const Receiver = App.Receiver;
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const constants = @import("constants.zig");
@@ -34,7 +34,7 @@ const log = std.log.scoped(.runner);
 pub const TaskId = u64;
 pub const Batch = Queue(Batched);
 pub const Batched = struct {
-    subscription: Receivers.Subscription,
+    subscription: Receiver,
     type: TypeId,
     ptr: *anyopaque,
 
@@ -221,7 +221,7 @@ pub fn drop(self: *Runner, ptr: anytype) void {
     self.queues.push(.dropped, dropped);
 }
 
-pub fn dispatch(self: *Runner, subscription: Receivers.Subscription, comptime E: type) !*E {
+pub fn dispatch(self: *Runner, subscription: Receiver, comptime E: type) !*E {
     const chunks = self.chunks;
     const ptr = try chunks.create(E);
     errdefer chunks.destroy(ptr);

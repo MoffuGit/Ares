@@ -11,7 +11,7 @@ const builtin = @import("builtin");
 const GitIgnore = @import("zlob").GitIgnore;
 
 const App = @import("../app.zig");
-const Receivers = App.Receivers;
+const Receiver = App.Receiver;
 const chunk_pool = @import("../chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const ChunkedPath = @import("../chunked_path.zig");
@@ -79,12 +79,12 @@ waker: Runner.Waker,
 await: Runner.TaskId,
 timer: ?Runner.TaskId,
 
-subscription: Receivers.Subscription,
+subscription: Receiver,
 
 pub fn init(
     self: *Scanner,
     runner: *Runner,
-    subscription: Receivers.Subscription,
+    subscription: Receiver,
     abs_path: []const u8,
     gpa: Allocator,
     io: Io,
