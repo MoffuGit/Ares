@@ -13,7 +13,7 @@ const Entity = ent.Entity;
 const Runner = @import("runner.zig");
 const bench = @import("worktree/bench.zig");
 const Scanner = @import("worktree/scanner.zig");
-const Updates = Scanner.Updates;
+const Event = Scanner.Event;
 const Snapshot = @import("worktree/snapshot.zig");
 const Entry = Snapshot.Entry;
 
@@ -42,7 +42,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
         .subscription = undefined,
     };
 
-    self.subscription = try ctx.receive(Scanner.Updates, handleUpdates, .{});
+    self.subscription = try ctx.receive(Scanner.Event, handleUpdates, .{});
     errdefer self.subscription.unsubscribe() catch {};
 
     const runner = ctx.runner();
@@ -58,13 +58,13 @@ pub fn deinit(self: *Worktree) void {
     self.snapshot.deinit();
 }
 
-fn handleUpdates(self: *Worktree, updates: *Scanner.Updates, ctx: Context(Worktree)) bool {
+fn handleUpdates(self: *Worktree, updates: *Scanner.Event, ctx: Context(Worktree)) bool {
     switch (updates.*) {
         .started => {
             log.debug("scanner for path \"{s}\" started", .{self.snapshot.abs_root});
             self.scanning = true;
         },
-        .updated => |updated| {
+        .update => |updated| {
             self.snapshot.deinit();
             self.snapshot = updated.snapshot;
             self.scanning = updated.scanning;
