@@ -9,11 +9,10 @@ const spsc = @import("spsc.zig");
 
 pub fn MpscBounded(comptime T: type) type {
     return struct {
-        const Queue = spsc.SpscBounded(T);
         const Self = @This();
 
         const Slot = struct {
-            queue: Queue,
+            spsc: spsc.SpscBounded(T),
             claimed: std.atomic.Value(bool),
         };
 
@@ -22,12 +21,12 @@ pub fn MpscBounded(comptime T: type) type {
 
             pub fn push(self: *const Producer, value: T, io: Io) !void {
                 const slot = self.slot orelse @panic("Producer Unregistered");
-                return try slot.queue.push(value, io);
+                return try slot.spsc.push(value, io);
             }
 
             pub fn tryPush(self: *const Producer, value: T) bool {
                 const slot = self.slot orelse @panic("Producer Unregistered");
-                return slot.queue.tryPush(value);
+                return slot.spsc.tryPush(value);
             }
 
             pub fn unregister(self: *Producer) void {
@@ -50,12 +49,12 @@ pub fn MpscBounded(comptime T: type) type {
 
             var initialized: usize = 0;
             errdefer for (slots[0..initialized]) |*slot| {
-                slot.queue.deinit(allocator);
+                slot.spsc.deinit(allocator);
             };
 
             for (slots) |*slot| {
                 slot.* = .{
-                    .queue = try Queue.init(channel_capacity, allocator),
+                    .spsc = try .init(channel_capacity, allocator),
                     .claimed = .init(false),
                 };
                 initialized += 1;
@@ -67,7 +66,7 @@ pub fn MpscBounded(comptime T: type) type {
         pub fn deinit(self: *Self, allocator: Allocator) void {
             for (self.slots) |*slot| {
                 assert(!slot.claimed.load(.monotonic));
-                slot.queue.deinit(allocator);
+                slot.spsc.deinit(allocator);
             }
             allocator.free(self.slots);
             self.* = undefined;
@@ -91,8 +90,8 @@ pub fn MpscBounded(comptime T: type) type {
             for (0..self.slots.len) |offset| {
                 const index = (self.next_channel + offset) % self.slots.len;
                 const slot = &self.slots[index];
-                if (slot.queue.front()) |value| {
-                    defer slot.queue.pop();
+                if (slot.spsc.front()) |value| {
+                    defer slot.spsc.pop();
                     self.next_channel = (index + 1) % self.slots.len;
                     return value.*;
                 }
