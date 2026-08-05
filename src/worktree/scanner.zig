@@ -330,6 +330,8 @@ pub fn _scan(
     self: *Scanner,
     worker_id: u32,
 ) !void {
+    errdefer self.queue.closed.store(true, .release);
+
     const chunks = self.chunks.allocator();
     var buffer: [64 * 1024]u8 = undefined;
     var batch: Queue(NewEntry) = .{};
