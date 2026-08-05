@@ -110,7 +110,6 @@ pub fn drop(self: *Scanner) void {
 }
 
 pub fn deinit(self: *Scanner) void {
-    self.queue.closed.store(true, .release);
     self.group.cancel(self.io);
 
     for (self.queue.queues) |*local| {
@@ -327,7 +326,10 @@ pub fn scan(
     worker_id: u32,
 ) void {
     self._scan(worker_id) catch |err| {
-        log.err("worker err: {}", .{err});
+        switch (err) {
+            error.Closed, error.Canceled => {},
+            else => log.err("worker err: {}", .{err}),
+        }
     };
 }
 
@@ -339,7 +341,8 @@ pub fn _scan(
     var buffer: [64 * 1024]u8 = undefined;
     var batch: Queue(NewEntry) = .{};
 
-    while (self.queue.pop(self.io, worker_id)) |job| {
+    while (true) {
+        const job = try self.queue.pop(self.io, worker_id);
         defer job.finish(chunks, self.io);
 
         try self.scanDir(job, worker_id, &buffer, &batch);

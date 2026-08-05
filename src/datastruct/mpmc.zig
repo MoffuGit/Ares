@@ -8,6 +8,8 @@ const Allocator = std.mem.Allocator;
 
 const queue = @import("queue.zig");
 
+//Intrusive Mpmc queue
+//see Queue for more information
 pub fn MpmcBounded(T: type) type {
     return struct {
         const Self = @This();
@@ -55,16 +57,16 @@ pub fn MpmcBounded(T: type) type {
             if (queued_before < q.queues.len) try q.wakeOne(io);
         }
 
-        pub fn pop(q: *Self, io: Io, worker_id: u32) ?*T {
+        pub fn pop(q: *Self, io: Io, worker_id: u32) !*T {
             const home = q.localIndex(worker_id);
             while (true) {
                 if (q.popFrom(io, home)) |job| return job;
                 if (q.steal(io, home)) |job| return job;
-                if (q.closed.load(.acquire)) return null;
+                if (q.closed.load(.acquire)) return error.Closed;
 
-                q.wait_mutex.lock(io) catch return null;
+                try q.wait_mutex.lock(io);
                 while (q.queued.load(.acquire) == 0 and !q.closed.load(.acquire)) {
-                    q.cond.wait(io, &q.wait_mutex) catch return null;
+                    try q.cond.wait(io, &q.wait_mutex);
                 }
                 q.wait_mutex.unlock(io);
             }
