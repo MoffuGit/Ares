@@ -110,7 +110,6 @@ pub fn drop(self: *Scanner) void {
 }
 
 pub fn deinit(self: *Scanner) void {
-    self.queue.closed.store(true, .release);
     self.group.cancel(self.io);
 
     var iter = self.queue.iterator();
@@ -416,7 +415,7 @@ fn scanDir(
     while (try bulk.next()) |entry| {
         if (self.queue.closed.load(.acquire)) {
             @branchHint(.unlikely);
-            break;
+            return error.Closed;
         }
 
         const name = entry.name;

@@ -5,11 +5,10 @@ const std = @import("std");
 const Io = std.Io;
 const atomic = std.atomic;
 const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
 
 const queue = @import("queue.zig");
 
-//Intrusive Mpmc queue
-//see Queue for more information
 pub fn Dequeue(T: type) type {
     return struct {
         const Self = @This();
@@ -28,6 +27,7 @@ pub fn Dequeue(T: type) type {
         closed: atomic.Value(bool),
 
         pub fn init(q: *Self, alloc: Allocator, workers: u32) !void {
+            assert(workers > 0);
             q.* = .{
                 .closed = .init(false),
                 .cond = .init,
@@ -37,8 +37,7 @@ pub fn Dequeue(T: type) type {
                 .wait_mutex = .init,
             };
 
-            const n: usize = @max(1, @as(usize, @intCast(workers)));
-            q.queues = try alloc.alloc(Queue, n);
+            q.queues = try alloc.alloc(Queue, workers);
             for (q.queues) |*local| local.* = .{};
         }
 
@@ -48,12 +47,21 @@ pub fn Dequeue(T: type) type {
 
         pub fn push(q: *Self, io: Io, worker_id: u32, job: *T) !void {
             const local = &q.queues[q.localIndex(worker_id)];
-            try local.mutex.lock(io);
-            local.queue.push(job);
-            _ = local.approx_len.fetchAdd(1, .release);
-            _ = q.outstanding.fetchAdd(1, .release);
-            const queued_before = q.queued.fetchAdd(1, .release);
-            local.mutex.unlock(io);
+
+            var queued_before: usize = 0;
+
+            {
+                try local.mutex.lock(io);
+                defer local.mutex.unlock(io);
+
+                local.queue.push(job);
+
+                _ = local.approx_len.fetchAdd(1, .release);
+                _ = q.outstanding.fetchAdd(1, .release);
+
+                queued_before = q.queued.fetchAdd(1, .release);
+            }
+
             if (queued_before < q.queues.len) try q.wakeOne(io);
         }
 
@@ -65,10 +73,11 @@ pub fn Dequeue(T: type) type {
                 if (q.closed.load(.acquire)) return error.Closed;
 
                 try q.wait_mutex.lock(io);
+                defer q.wait_mutex.unlock(io);
+
                 while (q.queued.load(.acquire) == 0 and !q.closed.load(.acquire)) {
                     try q.cond.wait(io, &q.wait_mutex);
                 }
-                q.wait_mutex.unlock(io);
             }
         }
 
@@ -100,8 +109,10 @@ pub fn Dequeue(T: type) type {
         fn popFrom(q: *Self, io: Io, index: usize) ?*T {
             const local = &q.queues[index];
             if (local.approx_len.load(.acquire) == 0) return null;
+
             local.mutex.lock(io) catch return null;
             defer local.mutex.unlock(io);
+
             const job = local.queue.pop() orelse return null;
             _ = local.approx_len.fetchSub(1, .release);
             _ = q.queued.fetchSub(1, .acq_rel);
