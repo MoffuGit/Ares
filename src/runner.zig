@@ -522,8 +522,11 @@ test "Task defer allocates and copies context" {
     try chunks.init(std.testing.allocator, &.{.{ 100, MAX_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
+    var batches = try App.Batches.init(1, 1, gpa);
+    defer batches.deinit(gpa);
+
     var runner: Runner = undefined;
-    try runner.init(arena.allocator(), chunks.allocator(), undefined, .{}, testing.io);
+    try runner.init(arena.allocator(), chunks.allocator(), batches.register().?, .{}, testing.io);
     defer runner.deinit();
 
     const Context = struct {
@@ -558,8 +561,11 @@ test "Task await allocates and copies context" {
     try chunks.init(std.testing.allocator, &.{.{ 100, MAX_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
+    var batches = try App.Batches.init(1, 1, gpa);
+    defer batches.deinit(gpa);
+
     var runner: Runner = undefined;
-    try runner.init(arena.allocator(), chunks.allocator(), undefined, .{}, testing.io);
+    try runner.init(arena.allocator(), chunks.allocator(), batches.register().?, .{}, testing.io);
     defer runner.deinit();
 
     const Context = struct {
@@ -595,8 +601,11 @@ test "Cancelations" {
     try chunks.init(std.testing.allocator, &.{.{ 100, MAX_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
+    var batches = try App.Batches.init(1, 1, gpa);
+    defer batches.deinit(gpa);
+
     var runner: Runner = undefined;
-    try runner.init(arena.allocator(), chunks.allocator(), undefined, .{}, testing.io);
+    try runner.init(arena.allocator(), chunks.allocator(), batches.register().?, .{}, testing.io);
     defer runner.deinit();
 
     const task = runner.new();
