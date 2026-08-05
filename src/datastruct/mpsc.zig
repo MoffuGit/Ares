@@ -40,11 +40,11 @@ pub fn MpscBounded(comptime T: type) type {
         next_channel: usize = 0,
 
         pub fn init(
-            channel_count: usize,
-            channel_capacity: u16,
+            producers: usize,
+            buffer_size: u16,
             allocator: Allocator,
         ) !Self {
-            const slots = try allocator.alloc(Slot, channel_count);
+            const slots = try allocator.alloc(Slot, producers);
             errdefer allocator.free(slots);
 
             var initialized: usize = 0;
@@ -54,7 +54,7 @@ pub fn MpscBounded(comptime T: type) type {
 
             for (slots) |*slot| {
                 slot.* = .{
-                    .spsc = try .init(channel_capacity, allocator),
+                    .spsc = try .init(buffer_size, allocator),
                     .claimed = .init(false),
                 };
                 initialized += 1;

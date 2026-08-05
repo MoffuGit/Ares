@@ -117,5 +117,31 @@ pub fn Mpmc(T: type) type {
             }
             return null;
         }
+
+        pub const Iterator = struct {
+            channel: *Self,
+            index: u32,
+
+            pub fn next(self: *Iterator) ?*T {
+                while (true) {
+                    if (self.index >= self.channel.queues.len) return null;
+
+                    const slot = &self.channel.queues[self.index];
+
+                    if (slot.queue.pop()) |value| {
+                        return value;
+                    } else {
+                        self.index += 1;
+                    }
+                }
+            }
+        };
+
+        pub fn iterator(self: *Self) Iterator {
+            return .{
+                .channel = self,
+                .index = 0,
+            };
+        }
     };
 }

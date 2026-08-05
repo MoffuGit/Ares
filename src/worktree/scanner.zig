@@ -112,14 +112,9 @@ pub fn drop(self: *Scanner) void {
 pub fn deinit(self: *Scanner) void {
     self.group.cancel(self.io);
 
-    for (self.queue.queues) |*local| {
-        while (local.queue.pop()) |job| {
-            if (job.fd) |fd| {
-                const prev = fd.release();
-                assert(prev != 0);
-                if (prev == 1) fd.close(self.io);
-            }
-        }
+    var iter = self.queue.iterator();
+    while (iter.next()) |job| {
+        job.finish(self.chunks.allocator(), self.io);
     }
 
     self.snapshot.deinit();
