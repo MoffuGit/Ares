@@ -96,7 +96,7 @@ pub fn init(
     var producer = self.actions.register() orelse unreachable;
     defer producer.unregister();
 
-    producer.push(.initial_scan);
+    try producer.push(.initial_scan, self.io);
     try self.waker.wake();
 }
 
@@ -349,13 +349,13 @@ pub fn _scan(
 
         if (!batch.empty()) {
             @branchHint(.likely);
-            producer.push(.{ .new_entries = batch });
+            try producer.push(.{ .new_entries = batch }, self.io);
             batch = .{};
         }
 
         if (self.queue.taskDone(self.io)) {
             @branchHint(.unlikely);
-            producer.push(.scan_end);
+            try producer.push(.scan_end, self.io);
         }
 
         try self.waker.wake();

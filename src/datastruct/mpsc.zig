@@ -1,5 +1,6 @@
 // - Libxev: https://github.com/mitchellh/libxev [LIBXEV]
 const std = @import("std");
+const Io = std.Io;
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
@@ -19,9 +20,9 @@ pub fn MpscBounded(comptime T: type) type {
         pub const Producer = struct {
             slot: ?*Slot,
 
-            pub fn push(self: *const Producer, value: T) void {
+            pub fn push(self: *const Producer, value: T, io: Io) !void {
                 const slot = self.slot orelse @panic("Producer Unregistered");
-                return slot.queue.push(value);
+                return try slot.queue.push(value, io);
             }
 
             pub fn tryPush(self: *const Producer, value: T) bool {

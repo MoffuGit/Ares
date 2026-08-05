@@ -106,7 +106,7 @@ pub fn _run(self: *Runner) !void {
 
 fn flush(self: *@This()) !void {
     if (!self.batch.empty()) {
-        self.producer.push(self.batch);
+        try self.producer.push(self.batch, self.io);
         self.batch = .{};
         self.waker.wake();
     }
