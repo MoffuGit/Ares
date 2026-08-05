@@ -6,7 +6,7 @@ const builtin = @import("builtin");
 
 const log = std.log.scoped(.global);
 
-pub var state: GlobalState = undefined;
+pub var state: GlobalState = .{};
 
 const use_safe_allocator = switch (builtin.mode) {
     .Debug, .ReleaseSafe => true,
@@ -18,8 +18,8 @@ var safe_allocator: std.heap.DebugAllocator(.{}) = .init;
 const GlobalState = struct {
     const Self = @This();
 
-    gpa: Allocator,
-    threaded: Io.Threaded,
+    gpa: Allocator = undefined,
+    threaded: Io.Threaded = undefined,
     cpu_count: usize = 2,
 
     pub fn init(self: *Self, args: process.Args.Vector, environ: process.Environ.Block) !void {
