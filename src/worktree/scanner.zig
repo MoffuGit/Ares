@@ -22,7 +22,7 @@ const MAX_PATH_LEN = constants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
 const Queue = datastruct.Queue;
 const MpscBounded = datastruct.MpscBounded;
-const Mpmc = datastruct.Mpmc;
+const Dequeue = datastruct.Dequeue;
 const global = @import("../global.zig");
 const Runner = @import("../runner.zig");
 const attr = @import("attr.zig");
@@ -43,7 +43,7 @@ snapshot: Snapshot,
 actions: Actions,
 chunks: ChunkAllocator,
 runner: *Runner,
-queue: Mpmc(Job),
+queue: Dequeue(Job),
 
 waker: Runner.Waker,
 await: Runner.TaskId,
