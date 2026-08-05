@@ -115,8 +115,8 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
 }
 
 pub fn deinit(self: *App) void {
-    self.group.cancel(self.io);
     self.flush();
+    self.group.await(self.io) catch {};
     self.runner.deinit();
     self.receivers.deinit();
     self.arena.deinit();
