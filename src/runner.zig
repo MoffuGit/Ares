@@ -85,7 +85,7 @@ pub fn init(
 
 pub fn deinit(self: *Runner) void {
     self.stop.store(true, .release);
-    _ = self.future.await(self.io);
+    self.future.cancel(self.io);
     self.producer.unregister();
     self.loop.deinit();
 }
@@ -97,7 +97,6 @@ pub fn _run(self: *Runner) !void {
     while (!self.stop.load(.acquire)) {
         try self.flush();
         try self.loop.run(.no_wait);
-        try self.io.sleep(.fromNanoseconds(100), .real);
     }
 
     try self.flush();

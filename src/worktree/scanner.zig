@@ -111,7 +111,7 @@ pub fn drop(self: *Scanner) void {
 
 pub fn deinit(self: *Scanner) void {
     self.queue.closed.store(true, .release);
-    self.group.await(self.io) catch {};
+    self.group.cancel(self.io);
 
     for (self.queue.queues) |*local| {
         while (local.queue.pop()) |job| {
