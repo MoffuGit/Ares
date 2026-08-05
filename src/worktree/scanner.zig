@@ -248,8 +248,6 @@ fn initialScan(
 fn timerCallback(self: *Scanner, res: anyerror!void) bool {
     res catch return false;
 
-    if (self.queue.closed.load(.acquire)) return false;
-
     self._timerCallback() catch |err| {
         log.err("Scanner Timer err={}", .{err});
         return false;
