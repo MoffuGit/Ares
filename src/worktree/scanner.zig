@@ -110,6 +110,7 @@ pub fn drop(self: *Scanner) void {
 }
 
 pub fn deinit(self: *Scanner) void {
+    self.queue.closed.store(true, .release);
     self.group.cancel(self.io);
 
     var iter = self.queue.iterator();
