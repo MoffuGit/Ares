@@ -31,8 +31,6 @@ const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
 
-const Dropped = struct { ptr: *anyopaque, type_id: TypeId, next: ?*Dropped = null };
-
 const log = std.log.scoped(.runner);
 
 pub const TaskId = u64;
@@ -48,7 +46,6 @@ stop: atomic.Value(bool) = .init(false),
 queues: MultiMpsc(union(enum) {
     cancelations: Completion,
     completions: Completion,
-    dropped: Dropped,
     timers: Completion,
     submissions: Completion,
 }),
@@ -114,12 +111,6 @@ fn flush(self: *@This()) !void {
         self.waker.wake();
     }
 
-    while (self.queues.pop(.dropped)) |dropped| {
-        dropped.type_id.deinit(dropped.ptr);
-        dropped.type_id.destroy(dropped.ptr, self.chunks);
-        self.chunks.destroy(dropped);
-    }
-
     while (self.queues.pop(.completions)) |completion| {
         const task: *Task = @fieldParentPtr("completion", completion);
         self.complete(task);
@@ -159,7 +150,7 @@ pub fn @"defer"(
     self: *@This(),
     function: anytype,
     context: anytype,
-) !TaskId {
+) TaskId {
     const task = self.new();
 
     task.@"defer"(function, context);
@@ -202,14 +193,19 @@ pub fn create(self: *Runner, T: type) !*T {
 }
 
 pub fn drop(self: *Runner, ptr: anytype) void {
-    const Ptr = @TypeOf(ptr);
-    const Info = @typeInfo(Ptr);
-    const T = Info.pointer.child;
-    const type_id = TypeInfo.init(T);
+    const T = @typeInfo(@TypeOf(ptr)).pointer.child;
 
-    const dropped = self.chunks.create(Dropped) catch @panic("Dropped Overflow");
-    dropped.* = .{ .ptr = ptr, .type_id = type_id };
-    self.queues.push(.dropped, dropped);
+    const TypeErased = struct {
+        pub fn destroy(runner: *Runner, _ptr: *anyopaque, res: anyerror!void) bool {
+            res catch unreachable;
+            const info = TypeInfo.init(T);
+            info.deinit(_ptr);
+            info.destroy(_ptr, runner.chunks);
+            return false;
+        }
+    };
+
+    _ = self.@"defer"(TypeErased.destroy, .{ self, ptr });
 }
 
 pub fn dispatch(self: *Runner, subscription: Receiver, comptime E: type) !*E {

@@ -1413,7 +1413,7 @@ test "Batch wakes the app" {
 
         pub fn init(self: *@This(), runner: *Runner, sub: Receiver) !void {
             self.* = .{ .initialized = true };
-            _ = try runner.@"defer"(sendEvent, .{ self, runner, sub });
+            _ = runner.@"defer"(sendEvent, .{ self, runner, sub });
         }
 
         fn sendEvent(_: *@This(), runner: *Runner, sub: Receiver, res: anyerror!void) bool {
