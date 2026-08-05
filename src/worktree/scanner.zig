@@ -22,7 +22,7 @@ const MAX_PATH_LEN = constants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
 const Queue = datastruct.Queue;
 const MpscBounded = datastruct.MpscBounded;
-const StealingQueue = datastruct.StealingQueue;
+const MpmcBounded = datastruct.MpmcBounded;
 const global = @import("../global.zig");
 const Runner = @import("../runner.zig");
 const attr = @import("attr.zig");
@@ -43,7 +43,7 @@ snapshot: Snapshot,
 actions: Actions,
 chunks: ChunkAllocator,
 runner: *Runner,
-queue: StealingQueue(Job),
+queue: MpmcBounded(Job),
 
 waker: Runner.Waker,
 await: Runner.TaskId,
@@ -240,7 +240,7 @@ fn initialScan(
 
     const root_job = chunks.create(Job) catch unreachable;
     root_job.* = .{ .path = path, .fd = null, .ignore = null };
-    self.queue.push(self.io, 0, root_job);
+    try self.queue.push(self.io, 0, root_job);
 
     for (0..state.cpu_count) |i| {
         try self.group.concurrent(
@@ -470,7 +470,7 @@ fn scanDir(
 
         while (jobs.pop()) |j| {
             j.fd = shared;
-            self.queue.push(self.io, worker_id, j);
+            try self.queue.push(self.io, worker_id, j);
         }
     } else {
         dir.close(self.io);
