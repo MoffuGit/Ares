@@ -10,7 +10,7 @@ const queue = @import("queue.zig");
 
 //Intrusive Mpmc queue
 //see Queue for more information
-pub fn MpmcBounded(T: type) type {
+pub fn Mpmc(T: type) type {
     return struct {
         const Self = @This();
 

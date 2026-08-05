@@ -18,7 +18,7 @@ pub const slotmap = @import("datastruct/slotmap.zig");
 pub const spsc = @import("datastruct/spsc.zig");
 pub const SpscBounded = spsc.SpscBounded;
 pub const mpmc = @import("datastruct/mpmc.zig");
-pub const MpmcBounded = mpmc.MpmcBounded;
+pub const Mpmc = mpmc.Mpmc;
 
 test {
     _ = mpmc;
