@@ -36,16 +36,16 @@ const UPDATE_INTERVAL: Io.Duration = .fromMilliseconds(100);
 
 const Scanner = @This();
 
-pub const Updates = union(enum) {
+pub const Event = union(enum) {
     started: void,
-    updated: struct {
+    update: struct {
         snapshot: Snapshot,
         scanning: bool,
     },
 
-    pub fn deinit(self: *Updates) void {
+    pub fn deinit(self: *Event) void {
         switch (self.*) {
-            .updated => |*updated| {
+            .update => |*updated| {
                 updated.snapshot.deinit();
             },
             else => {},
@@ -179,9 +179,9 @@ fn _handleActions(
 
         self.workers.deinit();
 
-        const update = try self.runner.dispatch(self.subscription, Updates);
+        const update = try self.runner.dispatch(self.subscription, Event);
         update.* = .{
-            .updated = .{
+            .update = .{
                 .scanning = false,
                 .snapshot = try self.snapshot.clone(self.gpa),
             },
@@ -215,7 +215,7 @@ fn initialScan(
 
     if (stat.kind != .directory) return;
 
-    const update = try self.runner.dispatch(self.subscription, Updates);
+    const update = try self.runner.dispatch(self.subscription, Event);
     update.* = .started;
 
     try self.workers.start(self.gpa, @intCast(state.cpu_count));
@@ -249,9 +249,9 @@ fn timerCallback(self: *Scanner, res: anyerror!void) bool {
 }
 
 fn _timerCallback(self: *Scanner) !void {
-    const update = try self.runner.dispatch(self.subscription, Updates);
+    const update = try self.runner.dispatch(self.subscription, Event);
     update.* = .{
-        .updated = .{
+        .update = .{
             .scanning = true,
             .snapshot = try self.snapshot.clone(self.gpa),
         },
