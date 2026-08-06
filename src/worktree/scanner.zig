@@ -30,6 +30,8 @@ const Waker = Loop.Waker;
 const attr = @import("attr.zig");
 const BulkAttr = attr.BulkAttr;
 const Snapshot = @import("snapshot.zig");
+const Worktree = @import("../worktree.zig");
+const Event = Worktree.Event;
 
 const UPDATE_INTERVAL: Io.Duration = .fromMilliseconds(100);
 const state = &global.state;
@@ -39,44 +41,31 @@ const Scanner = @This();
 
 io: Io,
 gpa: Allocator,
-arena: heap.ArenaAllocator,
+arena: Allocator,
 group: Io.Group,
 snapshot: Snapshot,
 mutex: Io.Mutex,
-actions: Actions,
-events: MpscBounded(Event),
 chunks: ChunkAllocator,
 queue: Dequeue(Job),
-waker: Waker,
 
 pub fn init(
     self: *Scanner,
-    waker: Waker,
-    abs_path: []const u8,
     gpa: Allocator,
+    arena: Allocator,
     io: Io,
 ) !void {
     self.* = .{
-        .waker = waker,
-        .io = io,
         .gpa = gpa,
+        .arena = arena,
+        .io = io,
         .snapshot = undefined,
         .mutex = .init,
         .chunks = undefined,
-        .actions = undefined,
         .queue = undefined,
-        .arena = .init(gpa),
         .group = .init,
-        .events = undefined,
     };
 
-    const arena = self.arena.allocator();
-    errdefer self.arena.deinit();
-
-    self.events = try .init(state.cpu_count, 16, arena);
-    self.actions = try .init(state.cpu_count + 2, 128, arena);
-
-    try self.chunks.init(arena, &.{
+    try self.chunks.init(self.arena, &.{
         .{ 1024 * 1024 * 1024, RANGE_NODE_SIZE },
         .{ 1024 * 1024 * 1024, CHUNK_SIZE },
         .{ 1024 * 1024, @sizeOf(Entry) },
@@ -84,14 +73,11 @@ pub fn init(
         .{ 1024 * 1024, @sizeOf(SharedFd) },
     });
 
-    try self.queue.init(arena, @intCast(state.cpu_count));
-    try self.snapshot.init(abs_path, gpa, io);
+    try self.queue.init(self.arena, @intCast(state.cpu_count));
 
-    var producer = self.actions.register() orelse unreachable;
-    defer producer.unregister();
+    self.snapshot = try self.worktree().snapshot.clone(self.gpa);
 
-    try producer.push(.initial_scan, self.io);
-    try self.waker.wake();
+    try self.group.concurrent(self.io, initialScan, .{self});
 }
 
 pub fn deinit(self: *Scanner) void {
@@ -103,68 +89,30 @@ pub fn deinit(self: *Scanner) void {
     }
 
     self.snapshot.deinit();
-    self.arena.deinit();
 }
 
-pub const Event = union(enum) {
-    started: void,
-    update: struct {
-        snapshot: Snapshot,
-        scanning: bool,
-    },
+pub fn worktree(self: *Scanner) *Worktree {
+    return @fieldParentPtr("scanner", self);
+}
 
-    pub fn deinit(self: *Event) void {
-        switch (self.*) {
-            .update => |*updated| {
-                updated.snapshot.deinit();
-            },
-            else => {},
-        }
-    }
-};
+pub fn pushEvent(self: *Scanner, event: Event) !void {
+    var producer = self.worktree().events.register() orelse unreachable;
+    defer producer.unregister();
 
-pub const Actions = MpscBounded(Action);
+    try producer.push(event, self.io);
+}
 
-pub const Action = union(enum) {
-    initial_scan: void,
-    scan_end: void,
-};
+pub fn awake(self: *Scanner) !void {
+    try self.worktree().waker.wake();
+}
 
-pub fn handleActions(self: *Scanner, res: anyerror!void) bool {
-    res catch return false;
-
-    self._handleActions() catch |err| {
-        log.err("Worktree Scanner err={}", .{err});
-        return true;
+fn initialScan(self: *Scanner) !void {
+    self._initialScan() catch |err| {
+        log.err("Initial Scan err={}", .{err});
     };
-
-    return true;
 }
 
-fn _handleActions(
-    self: *Scanner,
-) !void {
-    while (self.actions.pop()) |action| {
-        switch (action) {
-            .initial_scan => try self.initialScan(),
-            .scan_end => {
-                // try self.mutex.lock(self.io);
-                // defer self.mutex.unlock(self.io);
-                //
-                // const snapshot = try self.snapshot.clone(self.gpa);
-                //
-                // update.* = .{
-                //     .update = .{
-                //         .scanning = false,
-                //         .snapshot = snapshot,
-                //     },
-                // };
-            },
-        }
-    }
-}
-
-fn initialScan(
+fn _initialScan(
     self: *Scanner,
 ) !void {
     const stat = try Io.Dir.statFile(
@@ -198,8 +146,8 @@ fn initialScan(
 
     if (stat.kind != .directory) return;
 
-    // const update = try self.runner.dispatch(self.subscription, Event);
-    // update.* = .started;
+    try self.pushEvent(.started);
+    try self.awake();
 
     const root_job = chunks.create(Job) catch unreachable;
     root_job.* = .{ .path = path, .fd = null, .ignore = null };
@@ -212,30 +160,6 @@ fn initialScan(
             .{ self, @as(u32, @intCast(i)) },
         );
     }
-}
-
-fn timerCallback(self: *Scanner, res: anyerror!void) bool {
-    res catch return false;
-
-    self._timerCallback() catch |err| {
-        log.err("Scanner Timer err={}", .{err});
-        return false;
-    };
-
-    return true;
-}
-
-fn _timerCallback(_: *Scanner) !void {
-    // const update = try self.runner.dispatch(self.subscription, Event);
-    // try self.mutex.lock(self.io);
-    // defer self.mutex.unlock(self.io);
-    //
-    // update.* = .{
-    //     .update = .{
-    //         .scanning = true,
-    //         .snapshot = try self.snapshot.clone(self.gpa),
-    //     },
-    // };
 }
 
 const IgnoreNode = struct {
@@ -323,11 +247,15 @@ pub fn _scan(
         if (self.queue.taskDone(self.io)) {
             @branchHint(.unlikely);
 
-            var producer = self.actions.register() orelse unreachable;
-            defer producer.unregister();
+            try self.mutex.lock(self.io);
+            defer self.mutex.unlock(self.io);
 
-            try producer.push(.scan_end, self.io);
-            try self.waker.wake();
+            try self.pushEvent(.{ .update = .{
+                .scanning = false,
+                .snapshot = try self.snapshot.clone(self.gpa),
+            } });
+
+            try self.awake();
         }
     }
 }
@@ -339,7 +267,6 @@ fn scanDir(
     buffer: []u8,
     batch: *Queue(Entry),
 ) !void {
-    const arena = self.arena.allocator();
     const chunks = self.chunks.allocator();
 
     const dir = bkl: {
@@ -357,8 +284,8 @@ fn scanDir(
         const content = dir.readFile(self.io, ".gitignore", buffer) catch null;
 
         if (content) |src| {
-            const gi = try GitIgnore.parse(arena, src);
-            const node = try arena.create(IgnoreNode);
+            const gi = try GitIgnore.parse(self.arena, src);
+            const node = try self.arena.create(IgnoreNode);
             node.* = .{
                 .parent = job.ignore,
                 .gi = gi,

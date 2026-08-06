@@ -10,8 +10,11 @@ const Context = App.Context;
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const ChunkedPath = @import("chunked_path.zig");
+const datastruct = @import("datastruct.zig");
+const MpscBounded = datastruct.MpscBounded;
 const ent = @import("entity.zig");
 const Entity = ent.Entity;
+const global = @import("global.zig");
 const Loop = @import("loop.zig");
 const Waker = Loop.Waker;
 const Completion = Loop.Completion;
@@ -20,7 +23,8 @@ const Scanner = @import("worktree/scanner.zig");
 const Snapshot = @import("worktree/snapshot.zig");
 const Entry = Snapshot.Entry;
 
-// const Event = Scanner.Event;
+const state = &global.state;
+
 const log = std.log.scoped(.worktree);
 
 pub const Worktree = @This();
@@ -31,10 +35,12 @@ pub const Options = struct {
 
 io: Io,
 gpa: Allocator,
+arena: heap.ArenaAllocator,
 ctx: Context(Worktree),
 scanning: bool,
 snapshot: Snapshot,
 scanner: Scanner,
+events: Events,
 
 waker: Waker,
 await: Completion,
@@ -46,6 +52,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
     self.* = .{
         .io = io,
         .gpa = gpa,
+        .arena = .init(gpa),
         .scanning = false,
         .snapshot = undefined,
         .scanner = undefined,
@@ -53,27 +60,57 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
         .await = .noop,
         .await_c = .noop,
         .waker = undefined,
+        .events = undefined,
     };
 
-    self.waker = try ctx.app.await(&self.await, handleUpdates, self);
+    try self.snapshot.init(opts.abs_path, gpa, io);
 
-    try self.scanner.init(self.waker, opts.abs_path, ctx.gpa(), io);
-    try self.snapshot.init(opts.abs_path, ctx.gpa(), io);
+    const arena = self.arena.allocator();
+    errdefer self.arena.deinit();
+
+    self.events = try .init(state.cpu_count, 16, arena);
+    self.waker = try ctx.await(&self.await, handleEvents, self);
+
+    try self.scanner.init(gpa, self.arena.allocator(), io);
 }
 
 pub fn deinit(self: *Worktree) void {
+    while (true) {
+        var event = self.events.pop() orelse break;
+        event.deinit();
+    }
     self.scanner.deinit();
     self.snapshot.deinit();
+    self.arena.deinit();
 }
 
 pub fn drop(self: *Worktree) void {
-    self.ctx.app.cancel(&self.await_c, &self.await);
+    self.ctx.cancel(&self.await_c, &self.await);
     self.waker.close();
 }
 
-fn handleUpdates(self: *Worktree, res: anyerror!void) bool {
+pub const Events = MpscBounded(Event);
+
+pub const Event = union(enum) {
+    started: void,
+    update: struct {
+        snapshot: Snapshot,
+        scanning: bool,
+    },
+
+    pub fn deinit(self: *Event) void {
+        switch (self.*) {
+            .update => |*updated| {
+                updated.snapshot.deinit();
+            },
+            else => {},
+        }
+    }
+};
+
+fn handleEvents(self: *Worktree, res: anyerror!void) bool {
     res catch return false;
-    while (self.scanner.events.pop()) |event| {
+    while (self.events.pop()) |event| {
         switch (event) {
             .started => {
                 log.debug("scanner for path \"{s}\" started", .{self.snapshot.abs_root});

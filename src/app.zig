@@ -617,6 +617,18 @@ pub fn Context(comptime T: type) type {
             };
             self.app.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
         }
+
+        pub fn await(self: *const @This(), c: *Completion, function: anytype, args: anytype) !Waker {
+            return try self.app.await(c, function, args);
+        }
+
+        pub fn timer(self: *const @This(), c: *Completion, function: anytype, context: anytype, ms: u64) void {
+            self.app.timer(c, function, context, ms);
+        }
+
+        pub fn cancel(self: *const @This(), completion: *Completion, target: *Completion) void {
+            self.app.cancel(completion, target);
+        }
     };
 }
 
@@ -628,11 +640,7 @@ pub fn timer(self: *App, c: *Completion, function: anytype, context: anytype, ms
     self.loop.timer(c, function, context, ms);
 }
 
-pub fn cancel(
-    self: *App,
-    completion: *Completion,
-    target: *Completion,
-) void {
+pub fn cancel(self: *App, completion: *Completion, target: *Completion) void {
     completion.cancel(target);
     self.loop.cancel(completion);
 }
