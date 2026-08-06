@@ -29,6 +29,11 @@ pub const Meta = struct {
     kind: File.Kind,
     hidden: bool,
     ignored: bool,
+    state: enum {
+        loaded,
+        pending,
+        unloaded,
+    },
 };
 
 pub const NODE_SIZE = Entries.NODE_SIZE;

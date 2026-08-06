@@ -94,7 +94,7 @@ pub fn Subscriptions(
         pub fn deinit(self: *Self) void {
             var outer = self.subscribers.iter();
             while (outer.next()) |entry| {
-                if (self.subscribers.get_ref(entry.key)) |maybe_subscribers| {
+                if (self.subscribers.get_mut(entry.key)) |maybe_subscribers| {
                     if (maybe_subscribers.*) |*subscribers| {
                         self.destroyContexts(subscribers);
                         subscribers.deinit(self.chunk);
@@ -148,7 +148,7 @@ pub fn Subscriptions(
                 .context = context_ptr,
             };
 
-            if (self.subscribers.get_ref(key)) |subs| {
+            if (self.subscribers.get_mut(key)) |subs| {
                 const old = try subs.*.?.insert(self.chunk, id, sub);
                 assert(old == null);
             } else {
@@ -164,15 +164,15 @@ pub fn Subscriptions(
         }
 
         pub fn enable(self: *Self, sub: *const Subscription) void {
-            const maybe_subscribers = self.subscribers.get_ref(sub.key) orelse return;
+            const maybe_subscribers = self.subscribers.get_mut(sub.key) orelse return;
             if (maybe_subscribers.*) |*subscribers| {
-                const subscriber = subscribers.get_ref(sub.id) orelse return;
+                const subscriber = subscribers.get_mut(sub.id) orelse return;
                 subscriber.active = true;
             }
         }
 
         pub fn notifyAll(self: *Self, key: Key, args: Args) void {
-            const maybe_subscribers = self.subscribers.get_ref(key) orelse return;
+            const maybe_subscribers = self.subscribers.get_mut(key) orelse return;
             var subscribers = maybe_subscribers.* orelse return;
 
             var iter = subscribers.iter();
@@ -189,7 +189,7 @@ pub fn Subscriptions(
 
         pub fn notify(self: *Self, sub: *const Subscription, args: Args) bool {
             defer self.clearDrops();
-            const maybe_subscribers = self.subscribers.get_ref(sub.key) orelse return false;
+            const maybe_subscribers = self.subscribers.get_mut(sub.key) orelse return false;
             var subscribers = maybe_subscribers.* orelse return false;
             const subscriber = subscribers.get(sub.id) orelse return false;
 
@@ -207,7 +207,7 @@ pub fn Subscriptions(
         pub fn clearDrops(self: *Self) void {
             var dropped = self.dropped.iter();
             while (dropped.next()) |drop| {
-                const maybe_dropped_subscribers = self.subscribers.get_ref(drop.key) orelse {
+                const maybe_dropped_subscribers = self.subscribers.get_mut(drop.key) orelse {
                     _ = self.dropped.remove(self.chunk, drop);
                     continue;
                 };
@@ -241,7 +241,7 @@ pub fn Subscriptions(
         }
 
         pub fn unsubscribe(self: *Self, sub: *const Subscription) !void {
-            const maybe_subscribers = self.subscribers.get_ref(sub.key) orelse return;
+            const maybe_subscribers = self.subscribers.get_mut(sub.key) orelse return;
             if (maybe_subscribers.*) |*subs| {
                 if (subs.remove(self.chunk, sub.id)) |removed| {
                     self.destroyContext(removed);
@@ -306,7 +306,7 @@ test "Subscriptions" {
     try std.testing.expectEqual(@as(u32, 0), sub.id);
     try std.testing.expectEqual(@as(u32, 1), subscriptions.next_id);
 
-    const subscribers = subscriptions.subscribers.get_ref(42).?;
+    const subscribers = subscriptions.subscribers.get_mut(42).?;
     const subscriber = subscribers.*.?.get(0).?;
     try std.testing.expect(!subscriber.active);
 
@@ -320,7 +320,7 @@ test "Subscriptions" {
     try std.testing.expect(context);
 
     subscriptions.notifyAll(42, .{ false, false });
-    try std.testing.expect(subscriptions.subscribers.get_ref(42) == null);
+    try std.testing.expect(subscriptions.subscribers.get_mut(42) == null);
 }
 
 test "Subscription notifies only its subscriber" {
@@ -363,6 +363,6 @@ test "Subscription notifies only its subscriber" {
     _ = first.notify(.{ 70, false });
 
     try std.testing.expectEqual(@as(u32, 70), first_result);
-    try std.testing.expect(subscriptions.subscribers.get_ref(42).?.*.?.get(first.id) == null);
-    try std.testing.expect(subscriptions.subscribers.get_ref(42).?.*.?.get(second.id) != null);
+    try std.testing.expect(subscriptions.subscribers.get_mut(42).?.*.?.get(first.id) == null);
+    try std.testing.expect(subscriptions.subscribers.get_mut(42).?.*.?.get(second.id) != null);
 }

@@ -746,7 +746,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             self.count = 0;
         }
 
-        pub fn get_ref(self: *Self, key: K) ?*V {
+        pub fn get_mut(self: *Self, key: K) ?*V {
             return self.root.find_mut(key);
         }
 
@@ -1204,7 +1204,7 @@ test "B+ Tree get ref operation" {
     }
 
     for (0..90) |key| {
-        const value = tree.get_ref(key).?;
+        const value = tree.get_mut(key).?;
         value.* = key * 4;
         try testing.expectEqual(key * 4, tree.get(key));
     }

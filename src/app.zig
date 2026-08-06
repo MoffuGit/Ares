@@ -940,7 +940,7 @@ test "Queued receiver event targets a typed subscription" {
     app.flush();
 
     try testing.expectEqual(@as(usize, 35), received);
-    try testing.expectEqual(null, app.receivers.subscribers.get_ref(receiver.id()));
+    try testing.expectEqual(null, app.receivers.subscribers.get_mut(receiver.id()));
 
     receiver.drop();
     app.flush();
@@ -982,7 +982,7 @@ test "Context receive updates the receiver entity" {
     app.flush();
 
     try testing.expectEqual(@as(usize, 35), receiver.read().value);
-    try testing.expect(app.receivers.subscribers.get_ref(receiver.id()).?.*.?.get(sub.id) != null);
+    try testing.expect(app.receivers.subscribers.get_mut(receiver.id()).?.*.?.get(sub.id) != null);
 
     const second = try app.dispatch(sub, TestEvent);
     second.* = .{ .value = 70 };
@@ -1039,7 +1039,7 @@ test "Dropping a receiver removes subscriptions before queued delivery" {
 
     try testing.expect(!callback_called);
     try testing.expect(deinit_called);
-    try testing.expectEqual(null, app.receivers.subscribers.get_ref(receiver_id));
+    try testing.expectEqual(null, app.receivers.subscribers.get_mut(receiver_id));
 }
 
 test "Context listen entities events" {

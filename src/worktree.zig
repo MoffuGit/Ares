@@ -49,7 +49,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
     self.scanner = try runner.create(Scanner);
     try self.scanner.init(runner, self.subscription, opts.abs_path, ctx.gpa(), io);
 
-    self.snapshot = try self.scanner.snapshot.clone(ctx.gpa());
+    try self.snapshot.init(opts.abs_path, ctx.gpa(), io);
 }
 
 pub fn deinit(self: *Worktree) void {

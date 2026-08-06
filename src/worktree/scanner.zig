@@ -40,6 +40,7 @@ gpa: Allocator,
 arena: heap.ArenaAllocator,
 group: Io.Group,
 snapshot: Snapshot,
+mutex: Io.Mutex,
 actions: Actions,
 chunks: ChunkAllocator,
 runner: *Runner,
@@ -65,6 +66,7 @@ pub fn init(
         .io = io,
         .gpa = gpa,
         .snapshot = undefined,
+        .mutex = .init,
         .timer = null,
         .waker = undefined,
         .await = undefined,
@@ -83,7 +85,7 @@ pub fn init(
     try self.chunks.init(arena, &.{
         .{ 1024 * 1024 * 1024, RANGE_NODE_SIZE },
         .{ 1024 * 1024 * 1024, CHUNK_SIZE },
-        .{ 1024 * 1024, @sizeOf(NewEntry) },
+        .{ 1024 * 1024, @sizeOf(Entry) },
         .{ 1024 * 1024, @sizeOf(Job) },
         .{ 1024 * 1024, @sizeOf(SharedFd) },
     });
@@ -138,18 +140,11 @@ pub const Event = union(enum) {
     }
 };
 
-pub const NewEntry = struct {
-    path: ChunkedPath,
-    meta: Snapshot.Meta,
-    next: ?*NewEntry = null,
-};
-
 pub const Actions = MpscBounded(Action);
 
 pub const Action = union(enum) {
     initial_scan: void,
     scan_end: void,
-    new_entries: Queue(NewEntry),
 };
 
 pub fn handleActions(self: *Scanner, res: anyerror!void) bool {
@@ -166,36 +161,29 @@ pub fn handleActions(self: *Scanner, res: anyerror!void) bool {
 fn _handleActions(
     self: *Scanner,
 ) !void {
-    const chunks = self.chunks.allocator();
-    var batch: Queue(NewEntry) = .{};
-    var scan_end = false;
-
     while (self.actions.pop()) |action| {
         switch (action) {
             .initial_scan => try self.initialScan(),
-            .scan_end => scan_end = true,
-            .new_entries => |b| batch.copy(&b),
-        }
-    }
+            .scan_end => {
+                if (self.timer) |timer| {
+                    self.runner.cancel(timer);
+                    self.timer = null;
+                }
+                const update = try self.runner.dispatch(self.subscription, Event);
 
-    while (batch.pop()) |entry| {
-        self.snapshot.insert(entry.path, entry.meta);
-        chunks.destroy(entry);
-    }
+                try self.mutex.lock(self.io);
+                defer self.mutex.unlock(self.io);
 
-    if (scan_end) {
-        if (self.timer) |timer| {
-            self.runner.cancel(timer);
-            self.timer = null;
-        }
+                const snapshot = try self.snapshot.clone(self.gpa);
 
-        const update = try self.runner.dispatch(self.subscription, Event);
-        update.* = .{
-            .update = .{
-                .scanning = false,
-                .snapshot = try self.snapshot.clone(self.gpa),
+                update.* = .{
+                    .update = .{
+                        .scanning = false,
+                        .snapshot = snapshot,
+                    },
+                };
             },
-        };
+        }
     }
 }
 
@@ -213,17 +201,23 @@ fn initialScan(
 
     const path: ChunkedPath = .new(self.snapshot.root_name, 0, chunks);
 
-    self.snapshot.insert(
-        path,
-        .{
-            .inode = stat.inode,
-            .size = stat.size,
-            .mtime = stat.mtime,
-            .kind = stat.kind,
-            .hidden = false,
-            .ignored = false,
-        },
-    );
+    {
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
+
+        self.snapshot.insert(
+            path,
+            .{
+                .inode = stat.inode,
+                .size = stat.size,
+                .mtime = stat.mtime,
+                .kind = stat.kind,
+                .hidden = false,
+                .ignored = false,
+                .state = .pending,
+            },
+        );
+    }
 
     if (stat.kind != .directory) return;
 
@@ -258,6 +252,9 @@ fn timerCallback(self: *Scanner, res: anyerror!void) bool {
 
 fn _timerCallback(self: *Scanner) !void {
     const update = try self.runner.dispatch(self.subscription, Event);
+    try self.mutex.lock(self.io);
+    defer self.mutex.unlock(self.io);
+
     update.* = .{
         .update = .{
             .scanning = true,
@@ -326,6 +323,12 @@ pub fn scan(
     };
 }
 
+pub const Entry = struct {
+    path: ChunkedPath,
+    meta: Snapshot.Meta,
+    next: ?*Entry = null,
+};
+
 pub fn _scan(
     self: *Scanner,
     worker_id: u32,
@@ -334,7 +337,7 @@ pub fn _scan(
 
     const chunks = self.chunks.allocator();
     var buffer: [64 * 1024]u8 = undefined;
-    var batch: Queue(NewEntry) = .{};
+    var batch: Queue(Entry) = .{};
 
     while (true) {
         const job = try self.queue.pop(self.io, worker_id);
@@ -342,21 +345,15 @@ pub fn _scan(
 
         try self.scanDir(job, worker_id, &buffer, &batch);
 
-        var producer = self.actions.register() orelse unreachable;
-        defer producer.unregister();
-
-        if (!batch.empty()) {
-            @branchHint(.likely);
-            try producer.push(.{ .new_entries = batch }, self.io);
-            batch = .{};
-        }
-
         if (self.queue.taskDone(self.io)) {
             @branchHint(.unlikely);
-            try producer.push(.scan_end, self.io);
-        }
 
-        try self.waker.wake();
+            var producer = self.actions.register() orelse unreachable;
+            defer producer.unregister();
+
+            try producer.push(.scan_end, self.io);
+            try self.waker.wake();
+        }
     }
 }
 
@@ -365,7 +362,7 @@ fn scanDir(
     job: *Job,
     worker_id: u32,
     buffer: []u8,
-    batch: *Queue(NewEntry),
+    batch: *Queue(Entry),
 ) !void {
     const arena = self.arena.allocator();
     const chunks = self.chunks.allocator();
@@ -433,10 +430,15 @@ fn scanDir(
         const len = path.read(&path_buf);
         const ignored = isIgnored(effective_ignore, path_buf[0..len], name, is_dir);
 
-        const new_entry = try chunks.create(NewEntry);
+        const new_entry = try chunks.create(Entry);
         new_entry.* = .{
             .path = path,
             .meta = .{
+                .state = bkl: {
+                    if (entry.kind == .directory) {
+                        break :bkl if (is_hidden or ignored) .unloaded else .pending;
+                    } else break :bkl .loaded;
+                },
                 .inode = entry.meta.inode,
                 .mtime = .fromNanoseconds(@intCast(entry.meta.mtime_ns)),
                 .size = entry.meta.size,
@@ -447,16 +449,29 @@ fn scanDir(
         };
         batch.push(new_entry);
 
-        if (is_hidden or ignored or !is_dir) continue;
+        if (is_dir and !(is_hidden or ignored)) {
+            const new = try chunks.create(Job);
+            new.* = .{
+                .fd = null,
+                .path = path,
+                .ignore = effective_ignore,
+            };
+            jobs.push(new);
+            count += 1;
+        }
+    }
 
-        const new = try chunks.create(Job);
-        new.* = .{
-            .fd = null,
-            .path = path,
-            .ignore = effective_ignore,
-        };
-        jobs.push(new);
-        count += 1;
+    {
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
+
+        while (batch.pop()) |entry| {
+            self.snapshot.insert(entry.path, entry.meta);
+            chunks.destroy(entry);
+        }
+
+        const dir_entry = self.snapshot.entries.get_mut(job.path) orelse unreachable;
+        dir_entry.meta.state = .loaded;
     }
 
     if (count > 0) {
