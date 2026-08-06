@@ -6,6 +6,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const posix = std.posix;
+const system = posix.system;
 const testing = std.testing;
 const Io = std.Io;
 const meta = std.meta;
@@ -16,6 +17,8 @@ const builtin = @import("builtin");
 const datastruct = @import("datastruct.zig");
 const MultiQueue = datastruct.MultiQueue;
 const heap = datastruct.heap;
+
+const log = std.log.scoped(.loop);
 
 const Queues = MultiQueue(union(enum) {
     timers: Completion,
@@ -308,6 +311,143 @@ pub fn mach(
     self.submit(completion);
 }
 
+pub fn await(
+    self: *Loop,
+    completion: *Completion,
+    function: anytype,
+    context: anytype,
+) !Waker {
+    const Context = @TypeOf(context);
+
+    const TypeErased = struct {
+        fn complete(ctx: Context, c: *Completion, res: Loop.Result) bool {
+            drain(c.operation.machport.port);
+
+            return @call(.always_inline, function, .{ ctx, res.machport });
+        }
+        fn drain(port: posix.system.mach_port_name_t) void {
+            var message: struct {
+                header: system.mach_msg_header_t,
+            } = undefined;
+
+            while (true) {
+                switch (system.mach_msg(
+                    &message.header,
+                    .{ .RCV = .{ .TIMEOUT = true } },
+                    0,
+                    @sizeOf(@TypeOf(message)),
+                    port,
+                    system.MACH.MSG.TIMEOUT_NONE,
+                    system.MACH.PORT.NULL,
+                )) {
+                    .RCV_TIMED_OUT => return,
+                    .SUCCESS => {},
+                    .RCV_TOO_LARGE => {},
+                    else => |err| {
+                        log.warn("mach msg drain err, may duplicate async wakeups err={}", .{err});
+                        return;
+                    },
+                }
+            }
+        }
+    };
+
+    const mach_self = system.mach_task_self();
+    var mach_port: system.mach_port_name_t = undefined;
+    if (system.mach_port_allocate(
+        mach_self,
+        system.MACH.PORT.RIGHT.RECEIVE,
+        &mach_port,
+    ) != 0) {
+        return error.MachPortAllocFailed;
+    }
+    errdefer _ = system.mach_port_deallocate(mach_self, mach_port);
+
+    if (system.mach_port_insert_right(
+        mach_self,
+        mach_port,
+        mach_port,
+        system.MACH.MSG.TYPE.MAKE_SEND,
+    ) != 0) {
+        return error.MachPortAllocFailed;
+    }
+
+    const mach_port_limits = extern struct { mpl_qlimit: system.natural_t };
+    const MACH_PORT_LIMITS_INFO = 1;
+
+    const Mach = struct {
+        const mach_port_flavor_t = c_int;
+
+        extern "c" fn mach_port_set_attributes(
+            task: system.ipc_space_t,
+            name: system.mach_port_name_t,
+            flavor: mach_port_flavor_t,
+            info: *anyopaque,
+            count: system.mach_msg_type_number_t,
+        ) posix.system.kern_return_t;
+    };
+    var limits: mach_port_limits = .{ .mpl_qlimit = 1 };
+    if (Mach.mach_port_set_attributes(
+        mach_self,
+        mach_port,
+        MACH_PORT_LIMITS_INFO,
+        &limits,
+        @sizeOf(@TypeOf(limits)),
+    ) != 0) return error.MachPortAllocFailed;
+
+    self.mach(
+        completion,
+        TypeErased.complete,
+        context,
+        .{ .port = mach_port, .buffer = .{ .array = undefined } },
+    );
+
+    return .{ .port = mach_port };
+}
+
+pub const Waker = struct {
+    port: system.mach_port_name_t,
+
+    pub fn wake(self: *const Waker) !void {
+        var msg: posix.system.mach_msg_header_t = .{
+            .msgh_bits = @intFromEnum(system.MACH.MSG.TYPE.COPY_SEND),
+            .msgh_size = @sizeOf(posix.system.mach_msg_header_t),
+            .msgh_remote_port = self.port,
+            .msgh_local_port = system.MACH.PORT.NULL,
+            .msgh_voucher_port = undefined,
+            .msgh_id = undefined,
+        };
+
+        switch (system.mach_msg(
+            &msg,
+            .{ .SEND = .{ .TIMEOUT = true, .MSG = true } },
+            msg.msgh_size,
+            0,
+            system.MACH.PORT.NULL,
+            @enumFromInt(0),
+            system.MACH.PORT.NULL,
+        )) {
+            .SUCCESS => {},
+            .SEND_NO_BUFFER => {},
+            .SEND_TIMED_OUT => {},
+            .SEND_INVALID_DEST => |e| {
+                log.debug("mach msg err={}", .{e});
+            },
+            else => |e| {
+                log.warn("mach msg err={}", .{e});
+                return error.MachMsgFailed;
+            },
+        }
+    }
+
+    pub fn close(self: *const Waker) void {
+        _ = system.mach_port_deallocate(
+            posix.system.mach_task_self(),
+            self.port,
+        );
+    }
+};
+
 pub const ReadBuffer = union(enum) {
     slice: []u8,
     array: [32]u8,
@@ -440,11 +580,7 @@ pub const Completion = struct {
     pub fn cancel(
         self: *Completion,
         target: *Completion,
-        callback: anytype,
-        context: anytype,
     ) void {
-        const Context = @TypeOf(context);
-
         const TypeErased = struct {
             fn complete(loop: *Loop, _completion: *Completion) bool {
                 const _target = _completion.operation.cancel;
@@ -478,11 +614,7 @@ pub const Completion = struct {
                     },
                 }
 
-                const _context: Context = @ptrCast(@alignCast(_completion.context));
-                const _callback = callback;
-
                 _completion.* = .noop;
-                @call(.always_inline, _callback, .{ _context, _completion });
 
                 return false;
             }
@@ -490,7 +622,7 @@ pub const Completion = struct {
 
         self.* = .{
             .operation = .{ .cancel = target },
-            .context = context,
+            .context = undefined,
             .callback = TypeErased.complete,
             .state = .idle,
         };
@@ -805,20 +937,13 @@ test "cancel mach port" {
     for (0..10) |_| try loop.run(.no_wait);
     try testing.expect(!called);
 
-    const Cancelled = struct {
-        fn cancel(context: *bool, _: *Completion) void {
-            context.* = true;
-        }
-    };
-    var canceled: bool = false;
     var cancellation: Completion = .noop;
 
-    cancellation.cancel(&completion, Cancelled.cancel, &canceled);
+    cancellation.cancel(&completion);
     loop.cancel(&cancellation);
 
     for (0..10) |_| try loop.run(.no_wait);
 
-    try testing.expect(canceled);
     try testing.expect(!called);
 
     // Send a message to the port
@@ -932,21 +1057,13 @@ test "cancel timer" {
 
     try loop.run(.no_wait);
 
-    var cancel_called = false;
     var cancel_completion: Completion = .noop;
     cancel_completion.cancel(
         &timer_completion,
-        struct {
-            fn cancel(_called: *bool, _: *Completion) void {
-                _called.* = true;
-            }
-        }.cancel,
-        &cancel_called,
     );
     loop.cancel(&cancel_completion);
 
     try loop.run(.until_done);
 
-    try testing.expect(cancel_called);
     try testing.expect(!timer_called);
 }

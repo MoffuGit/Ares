@@ -24,7 +24,9 @@ const Queue = datastruct.Queue;
 const MpscBounded = datastruct.MpscBounded;
 const Dequeue = datastruct.Dequeue;
 const global = @import("../global.zig");
-const Runner = @import("../runner.zig");
+const Loop = @import("../loop.zig");
+const Completion = Loop.Completion;
+const Waker = Loop.Waker;
 const attr = @import("attr.zig");
 const BulkAttr = attr.BulkAttr;
 const Snapshot = @import("snapshot.zig");
@@ -42,44 +44,36 @@ group: Io.Group,
 snapshot: Snapshot,
 mutex: Io.Mutex,
 actions: Actions,
+events: MpscBounded(Event),
 chunks: ChunkAllocator,
-runner: *Runner,
 queue: Dequeue(Job),
-
-waker: Runner.Waker,
-await: Runner.TaskId,
-timer: ?Runner.TaskId,
-
-subscription: Receiver,
+waker: Waker,
 
 pub fn init(
     self: *Scanner,
-    runner: *Runner,
-    subscription: Receiver,
+    waker: Waker,
     abs_path: []const u8,
     gpa: Allocator,
     io: Io,
 ) !void {
     self.* = .{
-        .subscription = subscription,
-        .runner = runner,
+        .waker = waker,
         .io = io,
         .gpa = gpa,
         .snapshot = undefined,
         .mutex = .init,
-        .timer = null,
-        .waker = undefined,
-        .await = undefined,
         .chunks = undefined,
         .actions = undefined,
         .queue = undefined,
         .arena = .init(gpa),
         .group = .init,
+        .events = undefined,
     };
 
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
 
+    self.events = try .init(state.cpu_count, 16, arena);
     self.actions = try .init(state.cpu_count + 2, 128, arena);
 
     try self.chunks.init(arena, &.{
@@ -93,22 +87,11 @@ pub fn init(
     try self.queue.init(arena, @intCast(state.cpu_count));
     try self.snapshot.init(abs_path, gpa, io);
 
-    self.await, self.waker = try runner.await(handleActions, .{self});
-
     var producer = self.actions.register() orelse unreachable;
     defer producer.unregister();
 
     try producer.push(.initial_scan, self.io);
     try self.waker.wake();
-}
-
-pub fn drop(self: *Scanner) void {
-    if (self.timer) |timer| {
-        self.runner.cancel(timer);
-    }
-    self.runner.cancel(self.await);
-    self.waker.close();
-    self.runner.drop(self);
 }
 
 pub fn deinit(self: *Scanner) void {
@@ -165,23 +148,17 @@ fn _handleActions(
         switch (action) {
             .initial_scan => try self.initialScan(),
             .scan_end => {
-                if (self.timer) |timer| {
-                    self.runner.cancel(timer);
-                    self.timer = null;
-                }
-                const update = try self.runner.dispatch(self.subscription, Event);
-
-                try self.mutex.lock(self.io);
-                defer self.mutex.unlock(self.io);
-
-                const snapshot = try self.snapshot.clone(self.gpa);
-
-                update.* = .{
-                    .update = .{
-                        .scanning = false,
-                        .snapshot = snapshot,
-                    },
-                };
+                // try self.mutex.lock(self.io);
+                // defer self.mutex.unlock(self.io);
+                //
+                // const snapshot = try self.snapshot.clone(self.gpa);
+                //
+                // update.* = .{
+                //     .update = .{
+                //         .scanning = false,
+                //         .snapshot = snapshot,
+                //     },
+                // };
             },
         }
     }
@@ -221,10 +198,8 @@ fn initialScan(
 
     if (stat.kind != .directory) return;
 
-    const update = try self.runner.dispatch(self.subscription, Event);
-    update.* = .started;
-
-    self.timer = try self.runner.timer(timerCallback, .{self}, @intCast(UPDATE_INTERVAL.toMilliseconds()));
+    // const update = try self.runner.dispatch(self.subscription, Event);
+    // update.* = .started;
 
     const root_job = chunks.create(Job) catch unreachable;
     root_job.* = .{ .path = path, .fd = null, .ignore = null };
@@ -250,17 +225,17 @@ fn timerCallback(self: *Scanner, res: anyerror!void) bool {
     return true;
 }
 
-fn _timerCallback(self: *Scanner) !void {
-    const update = try self.runner.dispatch(self.subscription, Event);
-    try self.mutex.lock(self.io);
-    defer self.mutex.unlock(self.io);
-
-    update.* = .{
-        .update = .{
-            .scanning = true,
-            .snapshot = try self.snapshot.clone(self.gpa),
-        },
-    };
+fn _timerCallback(_: *Scanner) !void {
+    // const update = try self.runner.dispatch(self.subscription, Event);
+    // try self.mutex.lock(self.io);
+    // defer self.mutex.unlock(self.io);
+    //
+    // update.* = .{
+    //     .update = .{
+    //         .scanning = true,
+    //         .snapshot = try self.snapshot.clone(self.gpa),
+    //     },
+    // };
 }
 
 const IgnoreNode = struct {

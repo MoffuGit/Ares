@@ -14,13 +14,14 @@ const MAX_ALIGN = constants.MAX_ALIGN;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 const Queue = datastruct.Queue;
-const MpscBounded = datastruct.MpscBounded;
 const ent = @import("entity.zig");
 const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
-const Runner = @import("runner.zig");
+const Loop = @import("loop.zig");
+const Completion = Loop.Completion;
+const Waker = Loop.Waker;
 const subs = @import("subscription.zig");
 const Subscriptions = subs.Subscriptions;
 const typeId = @import("typeId.zig");
@@ -48,12 +49,11 @@ deferred: Queue(Deferred),
 listeners: Listeners,
 receivers: Receivers,
 observers: Observers,
-batches: Batches,
 chunks: ChunkAllocator,
 peding_updates: u16,
 group: Io.Group,
 
-runner: Runner,
+loop: Loop,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
@@ -71,8 +71,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .listeners = undefined,
         .receivers = undefined,
         .chunks = undefined,
-        .runner = undefined,
-        .batches = undefined,
+        .loop = undefined,
         .peding_updates = 0,
         .flushing = false,
         .gpa = gpa,
@@ -82,6 +81,10 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .deferred = .{},
         .group = .init,
     };
+
+    try self.loop.init(self.io);
+    errdefer self.loop.deinit();
+
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
 
@@ -94,32 +97,18 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
 
     const chunks = self.chunks.allocator();
 
-    self.batches = try .init(16, 128, arena);
-
     try self.observers.init(chunks);
     try self.listeners.init(chunks);
     try self.receivers.init(chunks);
     try self.notifications.init(chunks);
-
-    try self.runner.init(
-        arena,
-        chunks,
-        self.batches.register() orelse unreachable,
-        .{
-            .userdata = options.userdata,
-            .wakeup_cb = options.wakeup_cb,
-        },
-        io,
-    );
-    errdefer self.runner.deinit();
 }
 
 pub fn deinit(self: *App) void {
     self.flush();
     self.group.await(self.io) catch {};
-    self.runner.deinit();
     self.receivers.deinit();
     self.arena.deinit();
+    self.loop.deinit();
 }
 
 pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Entity(T) {
@@ -193,27 +182,13 @@ pub fn flush(self: *App) void {
     self.flushing = true;
     defer self.flushing = false;
 
+    self.loop.run(.no_wait) catch |err| {
+        log.err("Event Loop err={}", .{err});
+    };
     self.destroyDroppedEntities();
     self.flushDeferred();
     self.flushNotifications();
     self.flushEvents();
-    self.flushBatched();
-}
-
-fn flushBatched(self: *App) void {
-    const chunks = self.chunks.allocator();
-    var batch: Batch = .{};
-
-    while (self.batches.pop()) |*b| {
-        batch.copy(b);
-    }
-
-    while (batch.pop()) |b| {
-        const reach = b.subscription.notify(.{ self, b.ptr, b.type });
-        if (!reach) b.deinit();
-        b.destroy(chunks);
-        chunks.destroy(b);
-    }
 }
 
 pub fn flushNotifications(self: *App) void {
@@ -280,39 +255,6 @@ pub fn destroyDroppedEntities(self: *App) void {
         self.entities.recycle(key);
     }
 }
-
-pub const Waker = struct {
-    fn noop(_: *anyopaque) void {}
-
-    userdata: *anyopaque = undefined,
-    wakeup_cb: *const fn (*anyopaque) void = noop,
-
-    pub fn wake(self: *const @This()) void {
-        self.wakeup_cb(self.userdata);
-    }
-};
-
-pub const Batches = MpscBounded(Queue(Batched));
-
-pub const Producer = Batches.Producer;
-
-pub const Batch = Queue(Batched);
-
-pub const Batched = struct {
-    subscription: Receiver,
-    type: TypeId,
-    ptr: *anyopaque,
-
-    next: ?*Batched = null,
-
-    pub fn deinit(self: *const Batched) void {
-        self.type.deinit(self.ptr);
-    }
-
-    pub fn destroy(self: *const Batched, chunk: Allocator) void {
-        self.type.destroy(self.ptr, chunk);
-    }
-};
 
 pub const Event = struct {
     id: EntityId,
@@ -591,12 +533,10 @@ pub fn Context(comptime T: type) type {
                 ) bool {
                     const _entity = _Entity.from(any) orelse return false;
 
-                    const ctx: Context(T) = .new(app, _entity);
-
                     const ptr, const _update = _entity.update(app);
                     defer _update.end(ptr);
 
-                    return @call(.always_inline, function, .{ ptr, event, ctx } ++ _args);
+                    return @call(.always_inline, function, .{ ptr, event } ++ _args);
                 }
             };
 
@@ -621,12 +561,10 @@ pub fn Context(comptime T: type) type {
                 ) bool {
                     const _entity = _Entity.from(any) orelse return false;
 
-                    const ctx: Context(T) = .new(app, _entity);
-
                     const ptr, const _update = _entity.update(app);
                     defer _update.end(ptr);
 
-                    @call(.always_inline, function, .{ ptr, event, ctx } ++ _args);
+                    @call(.always_inline, function, .{ ptr, event } ++ _args);
 
                     return true;
                 }
@@ -653,12 +591,10 @@ pub fn Context(comptime T: type) type {
                 ) bool {
                     const _entity = _Entity.from(any) orelse return false;
 
-                    const ctx: Context(T) = .new(app, _entity);
-
                     const ptr, const _update = _entity.update(app);
                     defer _update.end(ptr);
 
-                    @call(.always_inline, function, .{ ptr, observed, ctx } ++ _args);
+                    @call(.always_inline, function, .{ ptr, observed } ++ _args);
 
                     return true;
                 }
@@ -673,18 +609,32 @@ pub fn Context(comptime T: type) type {
                 pub fn @"defer"(any: AnyEntity, app: *App, _args: Args) void {
                     const _entity = _Entity.from(any) orelse return;
 
-                    const ctx: Context(T) = .new(app, _entity);
+                    const ptr, const _update = _entity.update(app);
+                    defer _update.end(ptr);
 
-                    @call(.always_inline, function, .{ctx} ++ _args);
+                    @call(.always_inline, function, .{ptr} ++ _args);
                 }
             };
             self.app.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
         }
-
-        pub fn runner(self: *const @This()) *Runner {
-            return &self.app.runner;
-        }
     };
+}
+
+pub fn await(self: *App, c: *Completion, function: anytype, args: anytype) !Waker {
+    return try self.loop.await(c, function, args);
+}
+
+pub fn timer(self: *App, c: *Completion, function: anytype, context: anytype, ms: u64) void {
+    self.loop.timer(c, function, context, ms);
+}
+
+pub fn cancel(
+    self: *App,
+    completion: *Completion,
+    target: *Completion,
+) void {
+    completion.cancel(target);
+    self.loop.cancel(completion);
 }
 
 pub fn @"defer"(
@@ -962,7 +912,7 @@ test "Context receive updates the receiver entity" {
             self.* = .{ .value = 0 };
         }
 
-        pub fn receive(self: *@This(), event: *TestEvent, _: Context(@This())) bool {
+        pub fn receive(self: *@This(), event: *TestEvent) bool {
             self.value = event.value;
             return true;
         }
@@ -1078,7 +1028,7 @@ test "Context listen entities events" {
     const context = listener.ctx(&app);
 
     const Listened = struct {
-        pub fn callback(ptr: *TestStruct, evt: *TestEvent, _: Context(TestStruct)) void {
+        pub fn callback(ptr: *TestStruct, evt: *TestEvent) void {
             ptr.index = evt.id;
         }
     };
@@ -1124,7 +1074,7 @@ test "Context observes entities" {
             self.* = .{ .observed_updates = 0, .last_observed_index = 0 };
         }
 
-        pub fn observe(self: *@This(), observed: Entity(Observed), _: Context(@This())) void {
+        pub fn observe(self: *@This(), observed: Entity(Observed)) void {
             self.observed_updates += 1;
             self.last_observed_index = observed.read().index;
         }
@@ -1174,10 +1124,7 @@ test "Context defer runs on foreground executor with entity context" {
             self.* = .{ .calls = 0, .last_value = 0 };
         }
 
-        pub fn deferred(ctx: Context(@This()), value: usize) void {
-            const ptr, const update = ctx.update();
-            defer update.end(ptr);
-
+        pub fn deferred(ptr: *@This(), value: usize) void {
             ptr.set(value);
         }
 
@@ -1223,7 +1170,7 @@ test "Context observe removes subscription when observer is dropped" {
     const ObserverState = struct {
         pub fn init(_: *@This(), _: Context(@This())) !void {}
 
-        pub fn observe(_: *@This(), _: Entity(Observed), _: Context(@This())) void {}
+        pub fn observe(_: *@This(), _: Entity(Observed)) void {}
     };
 
     var app: App = undefined;
@@ -1262,7 +1209,7 @@ test "Context observe removes subscription when observed is dropped" {
     const ObserverState = struct {
         pub fn init(_: *@This(), _: Context(@This())) !void {}
 
-        pub fn observe(_: *@This(), _: Entity(Observed), _: Context(@This())) void {}
+        pub fn observe(_: *@This(), _: Entity(Observed)) void {}
     };
 
     var app: App = undefined;
@@ -1367,77 +1314,5 @@ test "Observe entities drop before enable" {
         entity.drop();
     }
 
-    app.flush();
-}
-
-test "Batch wakes the app" {
-    const testing = std.testing;
-    const allocator = testing.allocator;
-    const io = testing.io;
-
-    const TestEvent = struct {
-        value: usize,
-    };
-
-    const TestEntity = struct {
-        pub fn init(_: *@This(), _: Context(@This())) !void {}
-    };
-
-    const Wakeup = struct {
-        fn callback(userdata: *anyopaque) void {
-            const count: *std.atomic.Value(usize) = @ptrCast(@alignCast(userdata));
-            _ = count.fetchAdd(1, .release);
-        }
-    };
-
-    var wakeups: std.atomic.Value(usize) = .init(0);
-    var app: App = undefined;
-    try app.init(.{ .userdata = &wakeups, .wakeup_cb = Wakeup.callback }, allocator, io);
-    defer app.deinit();
-
-    const receiver = try Entity(TestEntity).new(&app, .{});
-    var received: usize = 0;
-
-    const TestReceiver = struct {
-        fn callback(_: *App, event: *TestEvent, value: *usize) bool {
-            value.* = event.value;
-            return true;
-        }
-    };
-
-    const subscription = try app.receive(receiver, TestEvent, TestReceiver.callback, .{&received});
-    app.flush();
-
-    const TestExecutor = struct {
-        initialized: bool,
-
-        pub fn init(self: *@This(), runner: *Runner, sub: Receiver) !void {
-            self.* = .{ .initialized = true };
-            _ = runner.@"defer"(sendEvent, .{ self, runner, sub });
-        }
-
-        fn sendEvent(_: *@This(), runner: *Runner, sub: Receiver, res: anyerror!void) bool {
-            res catch return false;
-            const event = runner.dispatch(sub, TestEvent) catch return false;
-            event.* = .{ .value = 35 };
-            return false;
-        }
-    };
-
-    const test_executor = try app.runner.create(TestExecutor);
-    try test_executor.init(&app.runner, subscription);
-    defer app.runner.drop(test_executor);
-
-    for (0..1000) |_| {
-        if (wakeups.load(.acquire) != 0) break;
-        io.sleep(.fromMilliseconds(1), .real) catch {};
-    }
-
-    try testing.expectEqual(@as(usize, 1), wakeups.load(.acquire));
-
-    app.flush();
-    try testing.expectEqual(@as(usize, 35), received);
-
-    receiver.drop();
     app.flush();
 }
