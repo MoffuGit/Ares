@@ -63,8 +63,8 @@ pub fn Subscriptions(
                 return self.subscriptions.notify(self, args);
             }
 
-            pub fn unsubscribe(self: *const Subscription) !void {
-                try self.subscriptions.unsubscribe(self);
+            pub fn unsubscribe(self: *const Subscription) void {
+                self.subscriptions.unsubscribe(self);
             }
         };
 
@@ -240,7 +240,7 @@ pub fn Subscriptions(
             }
         }
 
-        pub fn unsubscribe(self: *Self, sub: *const Subscription) !void {
+        pub fn unsubscribe(self: *Self, sub: *const Subscription) void {
             const maybe_subscribers = self.subscribers.get_mut(sub.key) orelse return;
             if (maybe_subscribers.*) |*subs| {
                 if (subs.remove(self.chunk, sub.id)) |removed| {
@@ -251,7 +251,7 @@ pub fn Subscriptions(
                     _ = self.subscribers.remove(self.chunk, sub.key);
                 }
             } else {
-                _ = try self.dropped.insert(self.chunk, .{ .id = sub.id, .key = sub.key });
+                _ = self.dropped.insert(self.chunk, .{ .id = sub.id, .key = sub.key }) catch @panic("Chunks Overfow");
             }
         }
 

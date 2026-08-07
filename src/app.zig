@@ -534,7 +534,7 @@ pub fn Context(comptime T: type) type {
                     any: AnyEntity,
                     _args: Args,
                 ) bool {
-                    const _entity = _Entity.from(any) orelse return false;
+                    const _entity = _Entity.from(any) orelse unreachable;
 
                     const ptr, const _update = _entity.update(app);
                     defer _update.end(ptr);
@@ -562,7 +562,7 @@ pub fn Context(comptime T: type) type {
                     any: AnyEntity,
                     _args: Args,
                 ) bool {
-                    const _entity = _Entity.from(any) orelse return false;
+                    const _entity = _Entity.from(any) orelse unreachable;
 
                     const ptr, const _update = _entity.update(app);
                     defer _update.end(ptr);
@@ -592,7 +592,7 @@ pub fn Context(comptime T: type) type {
                     any: AnyEntity,
                     _args: Args,
                 ) bool {
-                    const _entity = _Entity.from(any) orelse return false;
+                    const _entity = _Entity.from(any) orelse unreachable;
 
                     const ptr, const _update = _entity.update(app);
                     defer _update.end(ptr);
@@ -950,7 +950,7 @@ test "Context receive updates the receiver entity" {
     app.flush();
 
     try testing.expectEqual(@as(usize, 70), receiver.read().value);
-    try sub.unsubscribe();
+    sub.unsubscribe();
 
     receiver.drop();
     app.flush();
@@ -1169,45 +1169,6 @@ test "Context defer runs on foreground executor with entity context" {
     app.flush();
 }
 
-test "Context observe removes subscription when observer is dropped" {
-    const testing = std.testing;
-    const allocator = testing.allocator;
-    const io = testing.io;
-
-    const Observed = struct {
-        pub fn init(_: *@This(), _: Context(@This())) !void {}
-    };
-
-    const ObserverState = struct {
-        pub fn init(_: *@This(), _: Context(@This())) !void {}
-
-        pub fn observe(_: *@This(), _: Entity(Observed)) void {}
-    };
-
-    var app: App = undefined;
-    try app.init(.{}, allocator, io);
-    defer app.deinit();
-
-    const observer = try Entity(ObserverState).new(&app, .{});
-    const observed = try Entity(Observed).new(&app, .{});
-
-    var context = Context(ObserverState).new(&app, observer);
-    _ = try context.observe(observed, ObserverState.observe, .{});
-
-    observer.drop();
-    app.flush();
-
-    try testing.expect(app.observers.subscribers.get(observed.id()) != null);
-
-    observed.notify(&app);
-    app.flush();
-
-    try testing.expectEqual(null, app.observers.subscribers.get(observed.id()));
-
-    observed.drop();
-    app.flush();
-}
-
 test "Context observe removes subscription when observed is dropped" {
     const testing = std.testing;
     const allocator = testing.allocator;
@@ -1303,7 +1264,7 @@ test "Observe entities drop before enable" {
     try testing.expect(!context);
 
     const sub = try app.observe(observed, Observed.callback, .{&context});
-    try sub.unsubscribe();
+    sub.unsubscribe();
 
     index = 1;
 
