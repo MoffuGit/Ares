@@ -1,5 +1,5 @@
-//SOURCE: https://codeberg.org/ziglang/zig
-//LICENSE: [ZIG]
+//Source: https://github.com/mitchellh/libxev
+//License; [LIBXEV]
 
 const std = @import("std");
 const debug = std.debug;
@@ -63,53 +63,6 @@ pub fn SinglyLinkedList(T: type) type {
             return self.head == null;
         }
     };
-}
-
-pub fn reverse(T: type, indirect: *?*T) void {
-    if (indirect.* == null) {
-        return;
-    }
-    var current: *T = indirect.*.?;
-    while (current.next) |next| {
-        current.next = next.next;
-        next.next = indirect.*;
-        indirect.* = next;
-    }
-}
-
-pub fn len(list: @This()) usize {
-    if (list.first) |n| {
-        return 1 + countChildren(n);
-    } else {
-        return 0;
-    }
-}
-
-pub fn insertAfter(T: type, node: *T, new_node: *T) void {
-    new_node.next = node.next;
-    node.next = new_node;
-}
-
-pub fn removeNext(T: type, node: *T) ?*T {
-    const next_node = node.next orelse return null;
-    node.next = next_node.next;
-    return next_node;
-}
-
-pub fn findLast(T: type, node: *T) *T {
-    var it = node;
-    while (true) {
-        it = it.next orelse return it;
-    }
-}
-
-pub fn countChildren(T: type, node: *const T) usize {
-    var count: usize = 0;
-    var it: ?*const T = node.next;
-    while (it) |n| : (it = n.next) {
-        count += 1;
-    }
-    return count;
 }
 
 test "basics" {
