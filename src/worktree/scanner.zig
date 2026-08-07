@@ -47,7 +47,7 @@ group: Io.Group,
 snapshot: Snapshot,
 mutex: Io.Mutex,
 chunks: ChunkAllocator,
-dequeue: Dequeue(Job),
+jobs: Dequeue(Job),
 requests: Io.Queue(ScanRequest),
 last_update: atomic.Value(i64),
 next_scan_id: atomic.Value(u64),
@@ -65,7 +65,7 @@ pub fn init(
         .snapshot = undefined,
         .mutex = .init,
         .chunks = undefined,
-        .dequeue = undefined,
+        .jobs = undefined,
         .requests = undefined,
         .group = .init,
         .last_update = .init(Timestamp.now(io, .real).toMilliseconds()),
@@ -85,14 +85,18 @@ pub fn init(
     const buffer = try arena.alloc(ScanRequest, 1024);
     self.requests = .init(buffer);
 
-    try self.dequeue.init(self.arena, @intCast(state.cpu_count));
+    try self.jobs.init(self.arena, @intCast(state.cpu_count));
     try self.group.concurrent(self.io, initialScan, .{self});
 }
 
 pub fn deinit(self: *Scanner) void {
-    self.dequeue.close(self.io) catch {};
-    self.group.cancel(self.io);
-    var iter = self.dequeue.iterator();
+    self.jobs.close(self.io) catch {};
+
+    self.group.await(self.io) catch |err| {
+        log.err("{}", .{err});
+    };
+
+    var iter = self.jobs.iterator();
     while (iter.next()) |job| {
         job.finish(self.chunks.allocator(), self.io);
     }
@@ -157,7 +161,7 @@ fn _initialScan(
 
     const root_job = chunks.create(Job) catch unreachable;
     root_job.* = .{ .path = path, .fd = null, .ignore = null };
-    try self.dequeue.push(self.io, 0, root_job);
+    try self.jobs.push(self.io, 0, root_job);
 
     for (0..state.cpu_count) |i| {
         try self.group.concurrent(
@@ -270,19 +274,19 @@ pub fn _scan(
     self: *Scanner,
     worker_id: u32,
 ) !void {
-    errdefer self.dequeue.closed.store(true, .release);
+    errdefer self.jobs.closed.store(true, .release);
 
     const chunks = self.chunks.allocator();
     var buffer: [64 * 1024]u8 = undefined;
     var batch: Queue(Entry) = .{};
 
     while (true) {
-        const job = try self.dequeue.pop(self.io, worker_id);
+        const job = try self.jobs.pop(self.io, worker_id);
         defer job.finish(chunks, self.io);
 
         try self.scanDir(job, worker_id, &buffer, &batch);
 
-        if (self.dequeue.taskDone() == 1) {
+        if (self.jobs.taskDone() == 1) {
             @branchHint(.unlikely);
 
             try self.mutex.lock(self.io);
@@ -367,7 +371,7 @@ fn scanDir(
     }
 
     while (try bulk.next()) |entry| {
-        if (self.dequeue.closed.load(.acquire)) {
+        if (self.jobs.closed.load(.acquire)) {
             @branchHint(.unlikely);
             return error.Closed;
         }
@@ -440,7 +444,7 @@ fn scanDir(
 
         while (jobs.pop()) |j| {
             j.fd = shared;
-            try self.dequeue.push(self.io, worker_id, j);
+            try self.jobs.push(self.io, worker_id, j);
         }
     } else {
         dir.close(self.io);
