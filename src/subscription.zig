@@ -6,8 +6,8 @@ const panic = debug.panic;
 
 const ChunkAllocator = @import("chunk_pool.zig").ChunkAllocator;
 const constants = @import("constants.zig");
-const MAX_ALIGN = constants.MAX_ALIGN;
-const MAX_SIZE = constants.MAX_SIZE;
+const MAX_CONTEXT_ALIGN = constants.MAX_CONTEXT_ALIGN;
+const MAX_CONTEXT_SIZE = constants.MAX_CONTEXT_SIZE;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 
@@ -116,8 +116,8 @@ pub fn Subscriptions(
             const SIZE = @sizeOf(Context);
             const ALIGN = @alignOf(Context);
 
-            if (SIZE > MAX_SIZE or
-                ALIGN > MAX_ALIGN.toByteUnits())
+            if (SIZE > MAX_CONTEXT_SIZE or
+                ALIGN > MAX_CONTEXT_ALIGN.toByteUnits())
             {
                 panic("Wrong Context: size: {}, align: {}", .{ SIZE, ALIGN });
             }
@@ -133,11 +133,11 @@ pub fn Subscriptions(
             self.next_id += 1;
 
             const context_buffer = (self.chunk.rawAlloc(
-                MAX_SIZE,
-                MAX_ALIGN,
+                MAX_CONTEXT_SIZE,
+                MAX_CONTEXT_ALIGN,
                 @returnAddress(),
-            ) orelse return error.OutOfMemory)[0..MAX_SIZE];
-            errdefer self.chunk.rawFree(context_buffer, MAX_ALIGN, @returnAddress());
+            ) orelse return error.OutOfMemory)[0..MAX_CONTEXT_SIZE];
+            errdefer self.chunk.rawFree(context_buffer, MAX_CONTEXT_ALIGN, @returnAddress());
 
             const context_ptr: *Context = @ptrCast(@alignCast(context_buffer.ptr));
             context_ptr.* = context;
@@ -264,8 +264,8 @@ pub fn Subscriptions(
 
         fn destroyContext(self: *Self, sub: Subscriber) void {
             self.chunk.rawFree(
-                @as([*]u8, @ptrCast(sub.context))[0..MAX_SIZE],
-                MAX_ALIGN,
+                @as([*]u8, @ptrCast(sub.context))[0..MAX_CONTEXT_SIZE],
+                MAX_CONTEXT_ALIGN,
                 @returnAddress(),
             );
         }

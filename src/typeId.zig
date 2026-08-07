@@ -3,7 +3,6 @@ const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 
 const constants = @import("constants.zig");
-const MAX_ALIGN = constants.MAX_ALIGN;
 
 pub const TypeInfo = struct {
     deinit_fn: ?*const fn (*anyopaque) void,
@@ -12,7 +11,6 @@ pub const TypeInfo = struct {
     alignment: u8,
 
     pub inline fn init(comptime T: type) *@This() {
-        comptime assert(@alignOf(T) <= MAX_ALIGN.toByteUnits());
         return &struct {
             fn deinit(ptr: *anyopaque) void {
                 @as(*T, @ptrCast(@alignCast(ptr))).deinit();

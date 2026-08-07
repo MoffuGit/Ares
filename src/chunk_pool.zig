@@ -68,7 +68,7 @@ pub const ChunkPool = struct {
             @returnAddress(),
         ) orelse return error.OutOfMemory)[0..len];
 
-        log.debug("ChunkPool size={} capacity={} | Chunk size={}", .{ buffer.len, capacity, size });
+        log.debug("ChunkPool size={B} capacity={} | Chunk size={}", .{ buffer.len, capacity, size });
 
         self.* = .{
             .buffer = buffer,
@@ -165,10 +165,10 @@ pub const ChunkPool = struct {
     }
 };
 
+pub const PoolConfig = struct { u32, u32 };
+
 pub const ChunkAllocator = struct {
     pools: []ChunkPool,
-
-    const PoolConfig = struct { u32, u32 };
 
     fn lessThan(_: void, lhs: PoolConfig, rhs: PoolConfig) bool {
         return lhs.@"1" < rhs.@"1";

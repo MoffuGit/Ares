@@ -9,8 +9,8 @@ const heap = std.heap;
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const constants = @import("constants.zig");
-const MAX_SIZE = constants.MAX_SIZE;
-const MAX_ALIGN = constants.MAX_ALIGN;
+const MAX_CONTEXT_SIZE = constants.MAX_CONTEXT_SIZE;
+const MAX_CONTEXT_ALIGN = constants.MAX_CONTEXT_ALIGN;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 const Queue = datastruct.Queue;
@@ -27,6 +27,13 @@ const Subscriptions = subs.Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
+
+const CHUNK_SIZES: []const chunk_pool.PoolConfig = &.{
+    .{ 50, 128 },
+    .{ 50, 256 },
+    .{ 50, 512 },
+    .{ 50, 2048 },
+};
 
 const log = std.log.scoped(.app);
 
@@ -89,11 +96,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     errdefer self.arena.deinit();
 
     try self.entities.init(arena, 100);
-    try self.chunks.init(arena, &.{
-        .{ 50, MAX_SIZE },
-        .{ 50, @max(Observers.NODE_SIZE, Receivers.NODE_SIZE, Listeners.NODE_SIZE) },
-        .{ 50, 2048 },
-    });
+    try self.chunks.init(arena, CHUNK_SIZES);
 
     const chunks = self.chunks.allocator();
 
@@ -205,8 +208,8 @@ pub fn flushDeferred(self: *App) void {
     while (self.deferred.pop()) |deferred| {
         deferred.callback(deferred.ptr);
         chunks.rawFree(
-            @as([*]u8, @ptrCast(deferred.ptr))[0..MAX_SIZE],
-            MAX_ALIGN,
+            @as([*]u8, @ptrCast(deferred.ptr))[0..MAX_CONTEXT_SIZE],
+            MAX_CONTEXT_ALIGN,
             @returnAddress(),
         );
         chunks.destroy(deferred);
@@ -663,7 +666,7 @@ pub fn @"defer"(
         }
     };
 
-    const ptr = chunks.rawAlloc(MAX_SIZE, MAX_ALIGN, @returnAddress()) orelse
+    const ptr = chunks.rawAlloc(MAX_CONTEXT_SIZE, MAX_CONTEXT_ALIGN, @returnAddress()) orelse
         @panic("Deferred Context Overflow");
 
     const clone: *Args = @ptrCast(@alignCast(ptr));
