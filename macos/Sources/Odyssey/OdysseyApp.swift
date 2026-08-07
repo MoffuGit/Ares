@@ -3,6 +3,9 @@
 //  Odyssey
 //
 //  Created by Adrian Hess on 01/06/26.
+//WARN:
+//I have zero idea if this is correct or not,
+//but it work for now
 
 import Foundation
 import OdysseyKit
@@ -32,30 +35,47 @@ extension Odyssey {
         }
 
         private var wakeContext: UnsafeMutableRawPointer? = nil
+        private var runLoopObserver: CFRunLoopObserver?
 
         init() {
-            wakeContext = Unmanaged.passRetained(OdysseyWakeContext(app: self)).toOpaque()
+            wakeContext =
+                Unmanaged
+                .passRetained(OdysseyWakeContext(app: self))
+                .toOpaque()
+
             var options = odyssey_options_s(
                 userdata: wakeContext,
-                wakeup_cb: { userdata in
-                    App.wakeup(userdata)
-                }
+                wakeup_cb: nil
             )
 
             guard let app = odyssey_app_new(&options) else {
-                Unmanaged<OdysseyWakeContext>.fromOpaque(wakeContext!).release()
+                Unmanaged<OdysseyWakeContext>
+                    .fromOpaque(wakeContext!)
+                    .release()
                 wakeContext = nil
                 logger.critical("odyssey_app_new failed")
                 return
             }
 
             self.app = app
+            installRunLoopObserver()
         }
 
         deinit {
+            if let observer = runLoopObserver {
+                CFRunLoopRemoveObserver(
+                    CFRunLoopGetMain(),
+                    observer,
+                    .commonModes
+                )
+            }
+
             self.app = nil
+
             if let wakeContext {
-                Unmanaged<OdysseyWakeContext>.fromOpaque(wakeContext).release()
+                Unmanaged<OdysseyWakeContext>
+                    .fromOpaque(wakeContext)
+                    .release()
             }
         }
 
@@ -63,11 +83,28 @@ extension Odyssey {
             odyssey_app_flush(app)
         }
 
-        nonisolated static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
-            let state = Unmanaged<OdysseyWakeContext>.fromOpaque(userdata!)
-                .takeUnretainedValue()
+        private func installRunLoopObserver() {
+            let activities: CFRunLoopActivity = [
+                .beforeWaiting
+            ]
 
-            state.wake()
+            let observer = CFRunLoopObserverCreateWithHandler(
+                kCFAllocatorDefault,
+                activities.rawValue,
+                true,
+                0
+            ) { [weak self] _, _ in
+                self?.flush()
+            }
+
+            if let observer {
+                runLoopObserver = observer
+                CFRunLoopAddObserver(
+                    CFRunLoopGetMain(),
+                    observer,
+                    .commonModes
+                )
+            }
         }
     }
 }
