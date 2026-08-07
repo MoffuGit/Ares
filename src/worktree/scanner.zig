@@ -188,8 +188,10 @@ pub fn handleScanRequests(self: *Scanner) !void {
 }
 
 pub fn _handleScanRequests(self: *Scanner) !void {
-    const request = try self.requests.getOne(self.io);
-    _ = request;
+    while (true) {
+        const request = try self.requests.getOne(self.io);
+        _ = request;
+    }
 }
 
 const ScanRequest = struct {
