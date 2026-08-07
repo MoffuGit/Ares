@@ -40,7 +40,7 @@ ctx: Context(Worktree),
 scanning: bool,
 snapshot: Snapshot,
 scanner: Scanner,
-events: Events,
+events: Io.Queue(Event),
 
 waker: Waker,
 await: Completion,
@@ -92,8 +92,6 @@ pub fn drop(self: *Worktree) void {
     self.waker.close();
 }
 
-pub const Events = Io.Queue(Event);
-
 pub const Event = union(enum) {
     started: void,
     update: struct {
@@ -110,6 +108,10 @@ pub const Event = union(enum) {
         }
     }
 };
+
+pub fn requestScan(self: *Worktree) !u64 {
+    return try self.scanner.requestScan();
+}
 
 fn handleEvents(self: *Worktree, res: anyerror!void) bool {
     res catch return false;
@@ -166,6 +168,12 @@ test {
         },
     );
     defer worktree.drop();
+
+    const ptr, const frame = worktree.update(&app);
+    defer frame.end(ptr);
+
+    const id = try ptr.requestScan();
+    try testing.expectEqual(0, id);
 
     try testing.expectEqualStrings(worktree.read().snapshot.abs_root, chromium_path);
 }

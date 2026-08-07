@@ -50,6 +50,7 @@ chunks: ChunkAllocator,
 dequeue: Dequeue(Job),
 requests: Io.Queue(ScanRequest),
 last_update: atomic.Value(i64),
+next_scan_id: atomic.Value(u64),
 
 pub fn init(
     self: *Scanner,
@@ -68,6 +69,7 @@ pub fn init(
         .requests = undefined,
         .group = .init,
         .last_update = .init(Timestamp.now(io, .real).toMilliseconds()),
+        .next_scan_id = .init(0),
     };
 
     self.snapshot = try self.worktree().snapshot.clone(self.gpa);
@@ -165,6 +167,18 @@ fn _initialScan(
     }
 
     try self.group.concurrent(self.io, handleScanRequests, .{self});
+}
+
+pub fn requestScan(self: *Scanner) !u64 {
+    const next_id = self.next_scan_id.fetchAdd(1, .monotonic);
+
+    var buffer: [1]ScanRequest = .{.{
+        .id = next_id,
+    }};
+    const res = try self.requests.put(self.io, &buffer, 0);
+    if (res == 0) return error.FullQueue;
+
+    return next_id;
 }
 
 pub fn handleScanRequests(self: *Scanner) !void {
