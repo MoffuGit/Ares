@@ -22,7 +22,6 @@ const constants = @import("../constants.zig");
 const MAX_PATH_LEN = constants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
 const Queue = datastruct.Queue;
-const MpscBounded = datastruct.MpscBounded;
 const Dequeue = datastruct.Dequeue;
 const global = @import("../global.zig");
 const Loop = @import("../loop.zig");
