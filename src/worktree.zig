@@ -41,6 +41,7 @@ scanning: bool,
 snapshot: Snapshot,
 scanner: Scanner,
 events: Events,
+events_buffer: []Event,
 
 waker: Waker,
 await: Completion,
@@ -61,6 +62,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
         .await_c = .noop,
         .waker = undefined,
         .events = undefined,
+        .events_buffer = undefined,
     };
 
     try self.snapshot.init(opts.abs_path, gpa, io);
@@ -68,17 +70,20 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
 
-    self.events = try .init(state.cpu_count, 16, arena);
+    self.events_buffer = try arena.alloc(Event, 16);
+    self.events = .init(self.events_buffer);
     self.waker = try ctx.await(&self.await, handleEvents, self);
 
     try self.scanner.init(gpa, self.arena.allocator(), io);
 }
 
 pub fn deinit(self: *Worktree) void {
-    while (true) {
-        var event = self.events.pop() orelse break;
+    var buffer: [16]Event = undefined;
+    const events = self.events.get(self.io, &buffer, 0) catch 0;
+    for (buffer[0..events]) |*event| {
         event.deinit();
     }
+
     self.scanner.deinit();
     self.snapshot.deinit();
     self.arena.deinit();
@@ -89,7 +94,7 @@ pub fn drop(self: *Worktree) void {
     self.waker.close();
 }
 
-pub const Events = MpscBounded(Event);
+pub const Events = Io.Queue(Event);
 
 pub const Event = union(enum) {
     started: void,
@@ -110,15 +115,23 @@ pub const Event = union(enum) {
 
 fn handleEvents(self: *Worktree, res: anyerror!void) bool {
     res catch return false;
-    while (self.events.pop()) |event| {
+
+    var buffer: [16]Event = undefined;
+    const events = self.events.get(self.io, &buffer, 0) catch return false;
+    for (buffer[0..events]) |event| {
         switch (event) {
             .started => {
                 log.debug("scanner for path \"{s}\" started", .{self.snapshot.abs_root});
                 self.scanning = true;
             },
             .update => |updated| {
+                var snapshot = updated.snapshot;
+                if (updated.scanning) {
+                    snapshot.deinit();
+                    continue;
+                }
                 self.snapshot.deinit();
-                self.snapshot = updated.snapshot;
+                self.snapshot = snapshot;
                 self.scanning = updated.scanning;
 
                 log.debug("scanner for path \"{s}\" update", .{self.snapshot.abs_root});

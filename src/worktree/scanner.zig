@@ -24,7 +24,6 @@ const datastruct = @import("../datastruct.zig");
 const Queue = datastruct.Queue;
 const MpscBounded = datastruct.MpscBounded;
 const Dequeue = datastruct.Dequeue;
-const SpscBounded = datastruct.SpscBounded;
 const global = @import("../global.zig");
 const Loop = @import("../loop.zig");
 const Completion = Loop.Completion;
@@ -49,7 +48,6 @@ snapshot: Snapshot,
 mutex: Io.Mutex,
 chunks: ChunkAllocator,
 queue: Dequeue(Job),
-requests: SpscBounded(Request),
 last_update: atomic.Value(i64),
 
 pub fn init(
@@ -67,11 +65,9 @@ pub fn init(
         .chunks = undefined,
         .queue = undefined,
         .group = .init,
-        .requests = undefined,
         .last_update = .init(Timestamp.now(io, .real).toMilliseconds()),
     };
 
-    self.requests = try .init(32, arena);
     self.snapshot = try self.worktree().snapshot.clone(self.gpa);
 
     try self.chunks.init(self.arena, &.{
@@ -101,10 +97,7 @@ pub inline fn worktree(self: *Scanner) *Worktree {
 }
 
 pub inline fn pushEvent(self: *Scanner, event: Event) !void {
-    var producer = self.worktree().events.register() orelse unreachable;
-    defer producer.unregister();
-
-    try producer.push(event, self.io);
+    try self.worktree().events.putOne(self.io, event);
 }
 
 pub inline fn flushUpdates(self: *Scanner) !void {
@@ -172,10 +165,6 @@ const IgnoreNode = struct {
     relative_offset: u32,
 
     parent: ?*const IgnoreNode,
-};
-
-pub const Request = struct {
-    id: u32,
 };
 
 pub const Job = struct {
