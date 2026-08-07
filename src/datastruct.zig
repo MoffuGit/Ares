@@ -10,8 +10,6 @@ pub const mem_map = @import("datastruct/memory_map.zig");
 pub const mpsc = @import("datastruct/mpsc.zig");
 pub const Mpsc = mpsc.Mpsc;
 pub const MpscBounded = mpsc.MpscBounded;
-pub const multi_mpsc = @import("datastruct/multi_mpsc.zig");
-pub const MultiMpsc = multi_mpsc.MultiMpsc;
 pub const multi_queue = @import("datastruct/multi_queue.zig");
 pub const MultiQueue = multi_queue.MultiQueue;
 pub const queue = @import("datastruct/queue.zig");
@@ -26,7 +24,6 @@ test {
     _ = linked_list;
     _ = doubly_linked_list;
     _ = heap;
-    _ = multi_mpsc;
     _ = multi_queue;
     _ = mpsc;
     _ = queue;
