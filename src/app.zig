@@ -409,7 +409,7 @@ pub fn nevent(self: *App, entity: anytype, comptime E: type) !*E {
     return ptr;
 }
 
-pub fn dispatch(self: *App, subscription: Receivers.Subscription, comptime E: type) !*E {
+pub fn dispatch(self: *App, subscription: Receiver, comptime E: type) !*E {
     const chunk = self.chunks.allocator();
     const ptr = try chunk.create(E);
     errdefer chunk.destroy(ptr);

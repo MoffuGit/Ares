@@ -91,6 +91,7 @@ pub fn init(
 
 pub fn deinit(self: *Scanner) void {
     self.jobs.close(self.io) catch {};
+    self.requests.close(self.io);
 
     self.group.await(self.io) catch |err| {
         log.err("{}", .{err});
@@ -118,7 +119,10 @@ pub inline fn flushUpdates(self: *Scanner) !void {
 
 fn initialScan(self: *Scanner) !void {
     self._initialScan() catch |err| {
-        log.err("Initial Scan err={}", .{err});
+        switch (err) {
+            error.Closed, error.Canceled => {},
+            else => log.err("Initial Scan err={}", .{err}),
+        }
     };
 }
 
@@ -172,18 +176,6 @@ fn _initialScan(
     }
 
     try self.group.concurrent(self.io, handleScanRequests, .{self});
-}
-
-pub fn requestScan(self: *Scanner) !u64 {
-    const next_id = self.next_scan_id.fetchAdd(1, .monotonic);
-
-    var buffer: [1]ScanRequest = .{.{
-        .id = next_id,
-    }};
-    const res = try self.requests.put(self.io, &buffer, 0);
-    if (res == 0) return error.FullQueue;
-
-    return next_id;
 }
 
 pub fn handleScanRequests(self: *Scanner) !void {
