@@ -13,7 +13,7 @@ const MAX_CONTEXT_SIZE = constants.MAX_CONTEXT_SIZE;
 const MAX_CONTEXT_ALIGN = constants.MAX_CONTEXT_ALIGN;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
-const Queue = datastruct.Queue;
+const SinglyLinkedList = datastruct.SinglyLinkedList;
 const ent = @import("entity.zig");
 const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
@@ -50,9 +50,9 @@ io: Io,
 gpa: Allocator,
 arena: heap.ArenaAllocator,
 entities: EntityStore,
-events: Queue(Event),
-dispatched: Queue(Dispatched),
-deferred: Queue(Deferred),
+events: SinglyLinkedList(Event),
+dispatched: SinglyLinkedList(Dispatched),
+deferred: SinglyLinkedList(Deferred),
 listeners: Listeners,
 receivers: Receivers,
 observers: Observers,
@@ -404,7 +404,7 @@ pub fn nevent(self: *App, entity: anytype, comptime E: type) !*E {
         .type = TypeInfo.init(E),
     };
 
-    self.events.push(event);
+    self.events.append(event);
 
     return ptr;
 }
@@ -422,7 +422,7 @@ pub fn dispatch(self: *App, subscription: Receiver, comptime E: type) !*E {
         .type = TypeInfo.init(E),
     };
 
-    self.dispatched.push(_dispatch);
+    self.dispatched.append(_dispatch);
 
     return ptr;
 }
@@ -673,7 +673,7 @@ pub fn @"defer"(
     clone.* = args;
     deferred.* = .{ .ptr = clone, .callback = TypeErased.complete };
 
-    self.deferred.push(deferred);
+    self.deferred.append(deferred);
 }
 
 test "creates/drops entities" {

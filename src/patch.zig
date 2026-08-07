@@ -11,7 +11,7 @@ const Info = Buffer.Info;
 const datastruct = @import("datastruct.zig");
 const mem_map = datastruct.mem_map;
 const MemMap = mem_map.MemMap;
-const Queue = datastruct.Queue;
+const SinglyLinkedList = datastruct.SinglyLinkedList;
 const math = @import("math.zig");
 const Rngu64 = math.Rngu64;
 
@@ -29,7 +29,7 @@ pub const Patch = struct {
 };
 
 pub const PatchList = struct {
-    list: Queue(Patch) = .{},
+    list: SinglyLinkedList(Patch) = .{},
 
     pub fn push(self: *PatchList, range: Rngu64, replace: []u8, alloc: Allocator) !void {
         const patch = try alloc.create(Patch);
@@ -37,7 +37,7 @@ pub const PatchList = struct {
             .range = range,
             .replace = replace,
         };
-        self.list.push(patch);
+        self.list.append(patch);
     }
 };
 
@@ -54,7 +54,7 @@ pub const Line = struct {
 };
 
 pub const LineMap = struct {
-    lines: Queue(Line) = .{},
+    lines: SinglyLinkedList(Line) = .{},
     total: u64 = 0,
 
     pub fn push(self: *LineMap, line: Line, alloc: Allocator) !void {
@@ -62,7 +62,7 @@ pub const LineMap = struct {
         l.* = line;
 
         self.total += l.range.dim();
-        self.lines.push(l);
+        self.lines.append(l);
     }
 
     pub fn rngForLine(self: *const LineMap, line: u64) Rngu64 {
@@ -190,7 +190,7 @@ pub const Patched = struct {
             var line_delta: i64 = 0;
             line_delta -= @intCast(replaced_lines_range.dim());
 
-            var replace_line_range: Queue(math.Rngu64Node) = .{};
+            var replace_line_range: SinglyLinkedList(math.Rngu64Node) = .{};
             var replaced_lines_count: u64 = 0;
             var last_line_start_off: u64 = 0;
 
@@ -198,7 +198,7 @@ pub const Patched = struct {
                 if (c == '\n') {
                     const new_range_node = try temp.create(math.Rngu64Node);
                     new_range_node.* = .{ .range = .new(last_line_start_off, idx) };
-                    replace_line_range.push(new_range_node);
+                    replace_line_range.append(new_range_node);
 
                     line_delta += 1;
                     last_line_start_off += 1;
@@ -208,7 +208,7 @@ pub const Patched = struct {
 
             const new_range_node = try temp.create(math.Rngu64Node);
             new_range_node.* = .{ .range = .new(last_line_start_off, patch.replace.len) };
-            replace_line_range.push(new_range_node);
+            replace_line_range.append(new_range_node);
 
             replaced_lines_count += 1;
 

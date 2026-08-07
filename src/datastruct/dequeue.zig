@@ -7,7 +7,7 @@ const atomic = std.atomic;
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
-const queue = @import("queue.zig");
+const linked_list = @import("linked_list.zig");
 
 pub fn Dequeue(T: type) type {
     return struct {
@@ -15,7 +15,7 @@ pub fn Dequeue(T: type) type {
 
         const Queue = struct {
             mutex: Io.Mutex = .init,
-            queue: queue.Queue(T) = .{},
+            queue: linked_list.SinglyLinkedList(T) = .{},
             approx_len: atomic.Value(usize) = .init(0),
         };
 
@@ -56,7 +56,7 @@ pub fn Dequeue(T: type) type {
                 try local.mutex.lock(io);
                 defer local.mutex.unlock(io);
 
-                local.queue.push(job);
+                local.queue.append(job);
 
                 _ = local.approx_len.fetchAdd(1, .release);
                 _ = self.outstanding.fetchAdd(1, .release);

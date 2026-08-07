@@ -3,7 +3,7 @@
 
 const std = @import("std");
 const math = @import("../math.zig");
-const queue = @import("queue.zig");
+const linked_list = @import("linked_list.zig");
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
 
@@ -14,13 +14,13 @@ pub const MemMapRng = struct {
 };
 
 pub const MemMap = struct {
-    ranges: queue.Queue(MemMapRng) = .{},
+    ranges: linked_list.SinglyLinkedList(MemMapRng) = .{},
 
     pub fn push(self: *MemMap, vaddr_range: math.Rngu64, base: *anyopaque, alloc: Allocator) !void {
         const range = try alloc.create(MemMapRng);
         range.* = .{ .base = @ptrCast(base), .vaddr_range = vaddr_range };
 
-        self.ranges.push(range);
+        self.ranges.append(range);
     }
 
     pub fn read(self: *const MemMap, range: math.Rngu64, dest: []u8) u64 {

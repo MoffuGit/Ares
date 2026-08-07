@@ -21,7 +21,7 @@ const CHUNK_SIZE = ChunkedPath.CHUNKS_SIZE;
 const constants = @import("../constants.zig");
 const MAX_PATH_LEN = constants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
-const Queue = datastruct.Queue;
+const SinglyLinkedList = datastruct.SinglyLinkedList;
 const Dequeue = datastruct.Dequeue;
 const global = @import("../global.zig");
 const Loop = @import("../loop.zig");
@@ -271,7 +271,7 @@ pub fn _scan(
 
     const chunks = self.chunks.allocator();
     var buffer: [64 * 1024]u8 = undefined;
-    var batch: Queue(Entry) = .{};
+    var batch: SinglyLinkedList(Entry) = .{};
 
     while (true) {
         const job = try self.jobs.pop(self.io, worker_id);
@@ -317,7 +317,7 @@ fn scanDir(
     job: *Job,
     worker_id: u32,
     buffer: []u8,
-    batch: *Queue(Entry),
+    batch: *SinglyLinkedList(Entry),
 ) !void {
     const chunks = self.chunks.allocator();
 
@@ -355,7 +355,7 @@ fn scanDir(
 
     const parent_path = job.path;
 
-    var jobs: Queue(Job) = .{};
+    var jobs: SinglyLinkedList(Job) = .{};
     var count: u32 = 0;
     errdefer {
         while (jobs.pop()) |j| {
@@ -401,7 +401,7 @@ fn scanDir(
                 .ignored = ignored,
             },
         };
-        batch.push(new_entry);
+        batch.append(new_entry);
 
         if (is_dir and !(is_hidden or ignored)) {
             const new = try chunks.create(Job);
@@ -410,7 +410,7 @@ fn scanDir(
                 .path = path,
                 .ignore = effective_ignore,
             };
-            jobs.push(new);
+            jobs.append(new);
             count += 1;
         }
     }

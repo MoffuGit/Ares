@@ -5,12 +5,10 @@ pub const doubly_linked_list = @import("datastruct/doubly_linked_list.zig");
 pub const DoublyLinkedList = doubly_linked_list.DoublyLinkedList;
 pub const heap = @import("datastruct/heap.zig");
 pub const linked_list = @import("datastruct/linked_list.zig");
-pub const LinkedList = linked_list.SinglyLinkedList;
+pub const SinglyLinkedList = linked_list.SinglyLinkedList;
 pub const mem_map = @import("datastruct/memory_map.zig");
 pub const multi_queue = @import("datastruct/multi_queue.zig");
 pub const MultiQueue = multi_queue.MultiQueue;
-pub const queue = @import("datastruct/queue.zig");
-pub const Queue = queue.Queue;
 pub const slotmap = @import("datastruct/slotmap.zig");
 
 test {
@@ -20,7 +18,6 @@ test {
     _ = doubly_linked_list;
     _ = heap;
     _ = multi_queue;
-    _ = queue;
     _ = slotmap;
     _ = btree;
 }

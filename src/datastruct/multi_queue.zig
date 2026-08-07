@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const intrusive_queue = @import("queue.zig");
+const linked_list = @import("linked_list.zig");
 
 /// Multiple intrusive queues addressed by the tags of `Queues`.
 ///
@@ -20,7 +20,7 @@ pub fn MultiQueue(comptime Queues: type) type {
         var field_types: [fields.len]type = undefined;
         var field_attrs: [fields.len]std.builtin.Type.UnionField.Attributes = undefined;
         for (fields, &field_names, &field_types, &field_attrs) |field, *name, *Type, *attrs| {
-            const QueueType = intrusive_queue.Queue(field.type);
+            const QueueType = linked_list.SinglyLinkedList(field.type);
             name.* = field.name;
             Type.* = QueueType;
             attrs.* = .{ .@"align" = @alignOf(QueueType) };
@@ -41,7 +41,7 @@ pub fn MultiQueue(comptime Queues: type) type {
         }
 
         pub fn push(self: *Self, comptime tag: Tag, value: *FieldType(tag)) void {
-            queue(self, tag).push(value);
+            queue(self, tag).append(value);
         }
 
         pub fn pop(self: *Self, comptime tag: Tag) ?*FieldType(tag) {
@@ -52,7 +52,7 @@ pub fn MultiQueue(comptime Queues: type) type {
             return queue(self, tag).empty();
         }
 
-        pub fn queue(self: *Self, comptime tag: Tag) *intrusive_queue.Queue(FieldType(tag)) {
+        pub fn queue(self: *Self, comptime tag: Tag) *linked_list.SinglyLinkedList(FieldType(tag)) {
             @setRuntimeSafety(false);
             return &@field(self.queues[@intFromEnum(tag)], @tagName(tag));
         }

@@ -82,7 +82,7 @@ pub fn extend(
 
         node.vaddr_range = .{ .min = path_len + min, .max = path_len + max };
 
-        new_memmap.ranges.push(node);
+        new_memmap.ranges.append(node);
     }
 
     return .{
