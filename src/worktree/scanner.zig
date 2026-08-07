@@ -173,9 +173,9 @@ fn _initialScan(
             Scanner.scan,
             .{ self, @as(u32, @intCast(i)) },
         );
-    }
 
-    try self.group.concurrent(self.io, handleScanRequests, .{self});
+        try self.group.concurrent(self.io, handleScanRequests, .{self});
+    }
 }
 
 pub fn handleScanRequests(self: *Scanner) !void {
