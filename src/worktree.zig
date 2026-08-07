@@ -113,6 +113,18 @@ pub fn requestScan(self: *Worktree) !u64 {
     return try self.scanner.requestScan();
 }
 
+//NOTE:
+//the request scan should be different,
+//first, request the id,
+//then, add the subscription that will react when the scan finish,
+//this sub should trigger the file read,
+//then send the request to the queue,
+//the thread will handle that and shoudl send into the events
+//when the scan ends
+// pub fn loadFile(self: *Worktree, path: []const u8) !void {
+//     const id = try self.requestScan();
+// }
+
 fn handleEvents(self: *Worktree, res: anyerror!void) bool {
     res catch return false;
 

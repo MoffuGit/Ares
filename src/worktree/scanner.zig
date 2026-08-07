@@ -90,6 +90,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *Scanner) void {
+    self.dequeue.close(self.io) catch {};
     self.group.cancel(self.io);
     var iter = self.dequeue.iterator();
     while (iter.next()) |job| {
@@ -281,7 +282,7 @@ pub fn _scan(
 
         try self.scanDir(job, worker_id, &buffer, &batch);
 
-        if (self.dequeue.taskDone(self.io)) {
+        if (self.dequeue.taskDone() == 1) {
             @branchHint(.unlikely);
 
             try self.mutex.lock(self.io);
