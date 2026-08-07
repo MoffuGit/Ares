@@ -41,7 +41,6 @@ scanning: bool,
 snapshot: Snapshot,
 scanner: Scanner,
 events: Events,
-events_buffer: []Event,
 
 waker: Waker,
 await: Completion,
@@ -62,7 +61,6 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
         .await_c = .noop,
         .waker = undefined,
         .events = undefined,
-        .events_buffer = undefined,
     };
 
     try self.snapshot.init(opts.abs_path, gpa, io);
@@ -70,8 +68,8 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
 
-    self.events_buffer = try arena.alloc(Event, 16);
-    self.events = .init(self.events_buffer);
+    const buffer = try arena.alloc(Event, 16);
+    self.events = .init(buffer);
     self.waker = try ctx.await(&self.await, handleEvents, self);
 
     try self.scanner.init(gpa, self.arena.allocator(), io);
