@@ -47,7 +47,8 @@ group: Io.Group,
 snapshot: Snapshot,
 mutex: Io.Mutex,
 chunks: ChunkAllocator,
-queue: Dequeue(Job),
+dequeue: Dequeue(Job),
+requests: Io.Queue(ScanRequest),
 last_update: atomic.Value(i64),
 
 pub fn init(
@@ -63,7 +64,8 @@ pub fn init(
         .snapshot = undefined,
         .mutex = .init,
         .chunks = undefined,
-        .queue = undefined,
+        .dequeue = undefined,
+        .requests = undefined,
         .group = .init,
         .last_update = .init(Timestamp.now(io, .real).toMilliseconds()),
     };
@@ -78,13 +80,16 @@ pub fn init(
         .{ 1024 * 1024, @sizeOf(SharedFd) },
     });
 
-    try self.queue.init(self.arena, @intCast(state.cpu_count));
+    const buffer = try arena.alloc(ScanRequest, 1024);
+    self.requests = .init(buffer);
+
+    try self.dequeue.init(self.arena, @intCast(state.cpu_count));
     try self.group.concurrent(self.io, initialScan, .{self});
 }
 
 pub fn deinit(self: *Scanner) void {
     self.group.cancel(self.io);
-    var iter = self.queue.iterator();
+    var iter = self.dequeue.iterator();
     while (iter.next()) |job| {
         job.finish(self.chunks.allocator(), self.io);
     }
@@ -149,7 +154,7 @@ fn _initialScan(
 
     const root_job = chunks.create(Job) catch unreachable;
     root_job.* = .{ .path = path, .fd = null, .ignore = null };
-    try self.queue.push(self.io, 0, root_job);
+    try self.dequeue.push(self.io, 0, root_job);
 
     for (0..state.cpu_count) |i| {
         try self.group.concurrent(
@@ -158,7 +163,27 @@ fn _initialScan(
             .{ self, @as(u32, @intCast(i)) },
         );
     }
+
+    try self.group.concurrent(self.io, handleScanRequests, .{self});
 }
+
+pub fn handleScanRequests(self: *Scanner) !void {
+    self._handleScanRequests() catch |err| {
+        switch (err) {
+            error.Closed, error.Canceled => {},
+            // else => log.err("Scan Request err={}", .{err}),
+        }
+    };
+}
+
+pub fn _handleScanRequests(self: *Scanner) !void {
+    const request = try self.requests.getOne(self.io);
+    _ = request;
+}
+
+const ScanRequest = struct {
+    id: u64,
+};
 
 const IgnoreNode = struct {
     gi: GitIgnore,
@@ -230,19 +255,19 @@ pub fn _scan(
     self: *Scanner,
     worker_id: u32,
 ) !void {
-    errdefer self.queue.closed.store(true, .release);
+    errdefer self.dequeue.closed.store(true, .release);
 
     const chunks = self.chunks.allocator();
     var buffer: [64 * 1024]u8 = undefined;
     var batch: Queue(Entry) = .{};
 
     while (true) {
-        const job = try self.queue.pop(self.io, worker_id);
+        const job = try self.dequeue.pop(self.io, worker_id);
         defer job.finish(chunks, self.io);
 
         try self.scanDir(job, worker_id, &buffer, &batch);
 
-        if (self.queue.taskDone(self.io)) {
+        if (self.dequeue.taskDone(self.io)) {
             @branchHint(.unlikely);
 
             try self.mutex.lock(self.io);
@@ -327,7 +352,7 @@ fn scanDir(
     }
 
     while (try bulk.next()) |entry| {
-        if (self.queue.closed.load(.acquire)) {
+        if (self.dequeue.closed.load(.acquire)) {
             @branchHint(.unlikely);
             return error.Closed;
         }
@@ -400,7 +425,7 @@ fn scanDir(
 
         while (jobs.pop()) |j| {
             j.fd = shared;
-            try self.queue.push(self.io, worker_id, j);
+            try self.dequeue.push(self.io, worker_id, j);
         }
     } else {
         dir.close(self.io);
