@@ -11,7 +11,7 @@ const builtin = @import("builtin");
 const GitIgnore = @import("zlob").GitIgnore;
 
 const App = @import("../app.zig");
-const Receiver = App.Receiver;
+const Context = App.Context;
 const chunk_pool = @import("../chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const ChunkedPath = @import("../chunked_path.zig");
@@ -27,11 +27,12 @@ const global = @import("../global.zig");
 const Loop = @import("../loop.zig");
 const Completion = Loop.Completion;
 const Waker = Loop.Waker;
+const Worktree = @import("../worktree.zig");
+const Event = Worktree.Event;
 const attr = @import("attr.zig");
 const BulkAttr = attr.BulkAttr;
 const Snapshot = @import("snapshot.zig");
-const Worktree = @import("../worktree.zig");
-const Event = Worktree.Event;
+const SpscBounded = datastruct.SpscBounded;
 
 const UPDATE_INTERVAL: Io.Duration = .fromMilliseconds(100);
 const state = &global.state;
@@ -47,6 +48,7 @@ snapshot: Snapshot,
 mutex: Io.Mutex,
 chunks: ChunkAllocator,
 queue: Dequeue(Job),
+requests: SpscBounded(Request),
 
 pub fn init(
     self: *Scanner,
@@ -63,7 +65,11 @@ pub fn init(
         .chunks = undefined,
         .queue = undefined,
         .group = .init,
+        .requests = undefined,
     };
+
+    self.requests = try .init(32, arena);
+    self.snapshot = try self.worktree().snapshot.clone(self.gpa);
 
     try self.chunks.init(self.arena, &.{
         .{ 1024 * 1024 * 1024, RANGE_NODE_SIZE },
@@ -74,15 +80,11 @@ pub fn init(
     });
 
     try self.queue.init(self.arena, @intCast(state.cpu_count));
-
-    self.snapshot = try self.worktree().snapshot.clone(self.gpa);
-
     try self.group.concurrent(self.io, initialScan, .{self});
 }
 
 pub fn deinit(self: *Scanner) void {
     self.group.cancel(self.io);
-
     var iter = self.queue.iterator();
     while (iter.next()) |job| {
         job.finish(self.chunks.allocator(), self.io);
@@ -91,18 +93,18 @@ pub fn deinit(self: *Scanner) void {
     self.snapshot.deinit();
 }
 
-pub fn worktree(self: *Scanner) *Worktree {
+pub inline fn worktree(self: *Scanner) *Worktree {
     return @fieldParentPtr("scanner", self);
 }
 
-pub fn pushEvent(self: *Scanner, event: Event) !void {
+pub inline fn pushEvent(self: *Scanner, event: Event) !void {
     var producer = self.worktree().events.register() orelse unreachable;
     defer producer.unregister();
 
     try producer.push(event, self.io);
 }
 
-pub fn awake(self: *Scanner) !void {
+pub inline fn flushUpdates(self: *Scanner) !void {
     try self.worktree().waker.wake();
 }
 
@@ -147,7 +149,7 @@ fn _initialScan(
     if (stat.kind != .directory) return;
 
     try self.pushEvent(.started);
-    try self.awake();
+    try self.flushUpdates();
 
     const root_job = chunks.create(Job) catch unreachable;
     root_job.* = .{ .path = path, .fd = null, .ignore = null };
@@ -167,6 +169,10 @@ const IgnoreNode = struct {
     relative_offset: u32,
 
     parent: ?*const IgnoreNode,
+};
+
+pub const Request = struct {
+    id: u32,
 };
 
 pub const Job = struct {
@@ -255,7 +261,7 @@ pub fn _scan(
                 .snapshot = try self.snapshot.clone(self.gpa),
             } });
 
-            try self.awake();
+            try self.flushUpdates();
         }
     }
 }
