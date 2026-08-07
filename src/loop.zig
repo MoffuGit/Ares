@@ -164,17 +164,12 @@ pub fn flushTimers(self: *Loop) void {
 }
 
 pub fn flushCompletions(self: *Loop) void {
-    var defered: datastruct.Queue(Completion) = .{};
-
     while (self.queues.pop(.completions)) |completion| {
         assert(completion.state == .completed);
         completion.state = .idle;
 
         if (completion.callback(self, completion)) {
             switch (completion.operation) {
-                .@"defer" => {
-                    defered.push(completion);
-                },
                 .timer => |*time| {
                     time.next = self.time.next_tick(time.ms);
                     completion.state = .submitted;
@@ -183,10 +178,6 @@ pub fn flushCompletions(self: *Loop) void {
                 else => self.submit(completion),
             }
         }
-    }
-
-    while (defered.pop()) |c| {
-        self.queues.push(.completions, c);
     }
 }
 
@@ -280,16 +271,6 @@ pub fn complete(
 ) void {
     completion.state = .completed;
     self.queues.push(.completions, completion);
-}
-
-pub fn @"defer"(
-    self: *Loop,
-    completion: *Completion,
-    callback: anytype,
-    context: anytype,
-) void {
-    completion.@"defer"(callback, context);
-    self.complete(completion);
 }
 
 pub fn cancel(
@@ -460,7 +441,6 @@ pub const MachPort = struct {
 
 pub const Operation = union(OperationType) {
     noop: void,
-    @"defer": void,
     machport: MachPort,
     cancel: *Completion,
     timer: Timer,
@@ -468,7 +448,6 @@ pub const Operation = union(OperationType) {
 
 const OperationType = enum {
     noop,
-    @"defer",
     machport,
     cancel,
     timer,
@@ -478,7 +457,6 @@ const Canceled = error{Canceled};
 
 pub const Result = union(OperationType) {
     noop: void,
-    @"defer": Canceled!void,
     machport: Canceled!void,
     cancel: void,
     timer: Canceled!void,
@@ -547,7 +525,6 @@ pub const Completion = struct {
         self.state = .completed;
         switch (self.operation) {
             .noop, .cancel => {},
-            .@"defer" => self.result = .{ .@"defer" = error.Canceled },
             .machport => self.result = .{ .machport = error.Canceled },
             .timer => self.result = .{ .timer = error.Canceled },
         }
@@ -555,7 +532,7 @@ pub const Completion = struct {
 
     pub fn kevent(self: *Completion, event: *Kevent) void {
         switch (self.operation) {
-            .cancel, .noop, .@"defer", .timer => panic(
+            .cancel, .noop, .timer => panic(
                 "{s} operation reached the submissions queueu",
                 .{@tagName(self.operation)},
             ),
@@ -623,29 +600,6 @@ pub const Completion = struct {
         self.* = .{
             .operation = .{ .cancel = target },
             .context = undefined,
-            .callback = TypeErased.complete,
-            .state = .idle,
-        };
-    }
-
-    pub fn @"defer"(
-        self: *Completion,
-        callback: anytype,
-        context: anytype,
-    ) void {
-        const Context = @TypeOf(context);
-
-        const TypeErased = struct {
-            fn complete(_: *Loop, _completion: *Completion) bool {
-                const _context: Context = @ptrCast(@alignCast(_completion.context));
-                const result = _completion.result orelse Result{ .@"defer" = {} };
-                return @call(.always_inline, callback, .{ _context, _completion, result });
-            }
-        };
-
-        self.* = .{
-            .operation = .@"defer",
-            .context = context,
             .callback = TypeErased.complete,
             .state = .idle,
         };
@@ -774,30 +728,6 @@ pub const Time = struct {
         };
     }
 };
-
-test "defer" {
-    const io = testing.io;
-
-    var loop: Loop = undefined;
-    try loop.init(io);
-    defer loop.deinit();
-
-    var context: u64 = 0;
-    var completion: Completion = .noop;
-
-    loop.@"defer"(&completion, struct {
-        pub fn @"defer"(_context: *u64, _: *Completion, _: Result) bool {
-            _context.* += 1;
-            return false;
-        }
-    }.@"defer", &context);
-
-    try testing.expectEqual(context, 0);
-
-    try loop.run(.no_wait);
-
-    try testing.expectEqual(context, 1);
-}
 
 test "mach port" {
     const io = testing.io;
