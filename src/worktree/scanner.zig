@@ -6,6 +6,7 @@ const posix = std.posix;
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 const heap = std.heap;
+const Timestamp = Io.Timestamp;
 const builtin = @import("builtin");
 
 const GitIgnore = @import("zlob").GitIgnore;
@@ -23,6 +24,7 @@ const datastruct = @import("../datastruct.zig");
 const Queue = datastruct.Queue;
 const MpscBounded = datastruct.MpscBounded;
 const Dequeue = datastruct.Dequeue;
+const SpscBounded = datastruct.SpscBounded;
 const global = @import("../global.zig");
 const Loop = @import("../loop.zig");
 const Completion = Loop.Completion;
@@ -32,9 +34,8 @@ const Event = Worktree.Event;
 const attr = @import("attr.zig");
 const BulkAttr = attr.BulkAttr;
 const Snapshot = @import("snapshot.zig");
-const SpscBounded = datastruct.SpscBounded;
 
-const UPDATE_INTERVAL: Io.Duration = .fromMilliseconds(100);
+const UPDATE_INTERVAL_IN_MS = if (builtin.mode == .Debug) 2000 else 100;
 const state = &global.state;
 const log = std.log.scoped(.scanner);
 
@@ -49,6 +50,7 @@ mutex: Io.Mutex,
 chunks: ChunkAllocator,
 queue: Dequeue(Job),
 requests: SpscBounded(Request),
+last_update: atomic.Value(i64),
 
 pub fn init(
     self: *Scanner,
@@ -66,6 +68,7 @@ pub fn init(
         .queue = undefined,
         .group = .init,
         .requests = undefined,
+        .last_update = .init(Timestamp.now(io, .real).toMilliseconds()),
     };
 
     self.requests = try .init(32, arena);
@@ -262,6 +265,23 @@ pub fn _scan(
             } });
 
             try self.flushUpdates();
+        } else {
+            const now = Timestamp.now(self.io, .real).toMilliseconds();
+            const last = self.last_update.load(.acquire);
+
+            if (now - last >= UPDATE_INTERVAL_IN_MS) {
+                if (self.last_update.cmpxchgWeak(last, now, .acq_rel, .monotonic) == null) {
+                    try self.mutex.lock(self.io);
+                    defer self.mutex.unlock(self.io);
+
+                    try self.pushEvent(.{ .update = .{
+                        .scanning = true,
+                        .snapshot = try self.snapshot.clone(self.gpa),
+                    } });
+
+                    try self.flushUpdates();
+                }
+            }
         }
     }
 }
