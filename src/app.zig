@@ -206,12 +206,7 @@ pub fn flushNotifications(self: *App) void {
 pub fn flushDeferred(self: *App) void {
     const chunks = self.chunks.allocator();
     while (self.deferred.pop()) |deferred| {
-        deferred.callback(deferred.ptr);
-        chunks.rawFree(
-            @as([*]u8, @ptrCast(deferred.ptr))[0..MAX_CONTEXT_SIZE],
-            MAX_CONTEXT_ALIGN,
-            @returnAddress(),
-        );
+        deferred.callback(&deferred.context);
         chunks.destroy(deferred);
     }
 }
@@ -273,8 +268,8 @@ pub const Event = struct {
 };
 
 pub const Deferred = struct {
-    ptr: *anyopaque,
     callback: *const fn (*anyopaque) void,
+    context: [MAX_CONTEXT_SIZE]u8 align(MAX_CONTEXT_ALIGN.toByteUnits()),
 
     next: ?*Deferred = null,
 };
@@ -654,6 +649,8 @@ pub fn @"defer"(
     args: anytype,
 ) void {
     const Args = @TypeOf(args);
+    assert(@sizeOf(Args) <= MAX_CONTEXT_SIZE);
+    assert(@alignOf(Args) <= MAX_CONTEXT_ALIGN.toByteUnits());
 
     const chunks = self.chunks.allocator();
     const deferred = chunks.create(Deferred) catch @panic("Deferred Overflow");
@@ -666,12 +663,10 @@ pub fn @"defer"(
         }
     };
 
-    const ptr = chunks.rawAlloc(MAX_CONTEXT_SIZE, MAX_CONTEXT_ALIGN, @returnAddress()) orelse
-        @panic("Deferred Context Overflow");
+    deferred.* = .{ .callback = TypeErased.complete, .context = undefined };
 
-    const clone: *Args = @ptrCast(@alignCast(ptr));
+    const clone: *Args = @ptrCast(@alignCast(&deferred.context));
     clone.* = args;
-    deferred.* = .{ .ptr = clone, .callback = TypeErased.complete };
 
     self.deferred.append(deferred);
 }

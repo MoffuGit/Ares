@@ -39,7 +39,7 @@ pub fn Subscriptions(
         pub const Subscriber = struct {
             active: bool,
             callback: Callback,
-            context: *anyopaque,
+            context: [MAX_CONTEXT_SIZE]u8 align(MAX_CONTEXT_ALIGN.toByteUnits()),
         };
 
         pub const Dropped = struct {
@@ -95,7 +95,6 @@ pub fn Subscriptions(
             var outer = self.subscribers.iter();
             while (outer.next_mut()) |entry| {
                 const subscribers = entry.value;
-                self.destroyContexts(subscribers);
                 subscribers.deinit(self.chunk);
             }
             self.subscribers.deinit(self.chunk);
@@ -109,18 +108,13 @@ pub fn Subscriptions(
             context: anytype,
         ) !Subscription {
             const Context = @TypeOf(context);
-            const SIZE = @sizeOf(Context);
-            const ALIGN = @alignOf(Context);
 
-            if (SIZE > MAX_CONTEXT_SIZE or
-                ALIGN > MAX_CONTEXT_ALIGN.toByteUnits())
-            {
-                panic("Wrong Context: size: {}, align: {}", .{ SIZE, ALIGN });
-            }
+            assert(@sizeOf(Context) <= MAX_CONTEXT_SIZE);
+            assert(@alignOf(Context) <= MAX_CONTEXT_ALIGN.toByteUnits());
 
             const TypeErased = struct {
                 fn _callback(sub: Subscriber, args: Args) bool {
-                    const _context: *const Context = @ptrCast(@alignCast(sub.context));
+                    const _context: *const Context = @ptrCast(@alignCast(&sub.context));
                     return @call(.always_inline, callback, args ++ _context.*);
                 }
             };
@@ -128,21 +122,14 @@ pub fn Subscriptions(
             const id = self.next_id;
             self.next_id += 1;
 
-            const buffer = (self.chunk.rawAlloc(
-                MAX_CONTEXT_SIZE,
-                MAX_CONTEXT_ALIGN,
-                @returnAddress(),
-            ) orelse return error.OutOfMemory)[0..MAX_CONTEXT_SIZE];
-            errdefer self.chunk.rawFree(buffer, MAX_CONTEXT_ALIGN, @returnAddress());
-
-            const ptr: *Context = @ptrCast(@alignCast(buffer.ptr));
-            ptr.* = context;
-
-            const sub = Subscriber{
+            var sub = Subscriber{
                 .active = false,
                 .callback = TypeErased._callback,
-                .context = ptr,
+                .context = undefined,
             };
+
+            const ptr: *Context = @ptrCast(@alignCast(&sub.context));
+            ptr.* = context;
 
             if (self.subscribers.get_mut(key)) |subs| {
                 const old = try subs.insert(self.chunk, id, sub);
@@ -204,9 +191,7 @@ pub fn Subscriptions(
 
                 const subscribers = self.subscribers.get_mut(drop.key) orelse continue;
 
-                if (subscribers.remove(self.chunk, drop.id)) |sub| {
-                    self.destroyContext(sub);
-                }
+                _ = subscribers.remove(self.chunk, drop.id);
 
                 if (subscribers.is_empty()) {
                     subscribers.deinit(self.chunk);
@@ -217,35 +202,17 @@ pub fn Subscriptions(
 
         pub fn remove(self: *@This(), key: Key) void {
             var subscribers = self.subscribers.remove(self.chunk, key) orelse return;
-            self.destroyContexts(&subscribers);
             subscribers.deinit(self.chunk);
         }
 
         pub fn unsubscribe(self: *@This(), sub: *const Subscription) void {
             const subscribers = self.subscribers.get_mut(sub.key) orelse return;
-            if (subscribers.remove(self.chunk, sub.id)) |removed| {
-                self.destroyContext(removed);
-            }
+            _ = subscribers.remove(self.chunk, sub.id);
 
             if (subscribers.is_empty()) {
                 subscribers.deinit(self.chunk);
                 _ = self.subscribers.remove(self.chunk, sub.key);
             }
-        }
-
-        fn destroyContexts(self: *@This(), subscribers: *const SubscriberTree) void {
-            var iter = subscribers.iter();
-            while (iter.next()) |entry| {
-                self.destroyContext(entry.value);
-            }
-        }
-
-        fn destroyContext(self: *@This(), sub: Subscriber) void {
-            self.chunk.rawFree(
-                @as([*]u8, @ptrCast(sub.context))[0..MAX_CONTEXT_SIZE],
-                MAX_CONTEXT_ALIGN,
-                @returnAddress(),
-            );
         }
     };
 }
