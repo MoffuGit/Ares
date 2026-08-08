@@ -81,23 +81,57 @@ test "basics" {
     try testing.expect(q.pop() == null);
     q.append(&elems[0]);
     try testing.expect(!q.empty());
-    try testing.expect(q.pop().? == &elems[0]);
-    try testing.expect(q.pop() == null);
+    try testing.expectEqual(q.pop().?, &elems[0]);
+    try testing.expectEqual(q.pop(), null);
+    try testing.expect(q.empty());
+
+    // Two
+    try testing.expectEqual(q.pop(), null);
+    q.append(&elems[0]);
+    q.append(&elems[1]);
+    try testing.expectEqual(q.pop().?, &elems[0]);
+    try testing.expectEqual(q.pop().?, &elems[1]);
+    try testing.expectEqual(q.pop(), null);
+
+    // Interleaved
+    try testing.expectEqual(q.pop(), null);
+    q.append(&elems[0]);
+    try testing.expectEqual(q.pop().?, &elems[0]);
+    q.append(&elems[1]);
+    try testing.expectEqual(q.pop().?, &elems[1]);
+    try testing.expectEqual(q.pop(), null);
+
+    // One
+    try testing.expectEqual(q.pop(), null);
+    q.prepend(&elems[0]);
+    try testing.expect(!q.empty());
+    try testing.expectEqual(q.pop().?, &elems[0]);
+    try testing.expectEqual(q.pop(), null);
     try testing.expect(q.empty());
 
     // Two
     try testing.expect(q.pop() == null);
-    q.append(&elems[0]);
-    q.append(&elems[1]);
-    try testing.expect(q.pop().? == &elems[0]);
-    try testing.expect(q.pop().? == &elems[1]);
+    q.prepend(&elems[0]);
+    q.prepend(&elems[1]);
+    try testing.expectEqual(q.pop().?, &elems[1]);
+    try testing.expectEqual(q.pop().?, &elems[0]);
     try testing.expect(q.pop() == null);
 
     // Interleaved
     try testing.expect(q.pop() == null);
-    q.append(&elems[0]);
+    q.prepend(&elems[0]);
     try testing.expect(q.pop().? == &elems[0]);
-    q.append(&elems[1]);
+    q.prepend(&elems[1]);
     try testing.expect(q.pop().? == &elems[1]);
     try testing.expect(q.pop() == null);
+
+    q.prepend(&elems[0]);
+    q.append(&elems[1]);
+    q.prepend(&elems[2]);
+    q.append(&elems[4]);
+
+    try testing.expect(q.pop().? == &elems[2]);
+    try testing.expect(q.pop().? == &elems[0]);
+    try testing.expect(q.pop().? == &elems[1]);
+    try testing.expect(q.pop().? == &elems[4]);
 }
