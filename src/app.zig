@@ -225,7 +225,8 @@ pub fn flushEvents(self: *App) void {
         }
 
         while (self.dispatched.pop()) |event| {
-            const reach = event.subscription.notify(
+            const reach = self.receivers.notify(
+                event.subscription,
                 .{ self, event.ptr, event.type },
             );
 
@@ -328,8 +329,8 @@ pub fn receive(
             return @call(.always_inline, function, .{ app, event } ++ _args);
         }
 
-        fn enable(sub: Receivers.Subscription) void {
-            sub.enable();
+        fn enable(app: *App, sub: Receiver) void {
+            app.receivers.enable(sub);
         }
     };
 
@@ -339,7 +340,7 @@ pub fn receive(
         .{args},
     );
 
-    _ = self.@"defer"(TypeErased.enable, .{sub});
+    _ = self.@"defer"(TypeErased.enable, .{ self, sub });
 
     return sub;
 }
@@ -366,8 +367,8 @@ pub fn listen(
             return @call(.always_inline, function, .{ app, event } ++ _args);
         }
 
-        fn enable(sub: Listeners.Subscription) void {
-            sub.enable();
+        fn enable(app: *App, sub: Listener) void {
+            app.listeners.enable(sub);
         }
     };
 
@@ -377,7 +378,7 @@ pub fn listen(
         .{args},
     );
 
-    _ = self.@"defer"(TypeErased.enable, .{sub});
+    _ = self.@"defer"(TypeErased.enable, .{ self, sub });
 
     return sub;
 }
@@ -451,8 +452,8 @@ pub fn observe(
             return @call(.always_inline, function, .{ app, _entity } ++ _args);
         }
 
-        fn enable(sub: Observer) void {
-            sub.enable();
+        fn enable(app: *App, sub: Observer) void {
+            app.observers.enable(sub);
         }
     };
 
@@ -462,7 +463,7 @@ pub fn observe(
         .{args},
     );
 
-    _ = self.@"defer"(TypeErased.enable, .{sub});
+    _ = self.@"defer"(TypeErased.enable, .{ self, sub });
 
     return sub;
 }
@@ -945,7 +946,7 @@ test "Context receive updates the receiver entity" {
     app.flush();
 
     try testing.expectEqual(@as(usize, 70), receiver.read().value);
-    sub.unsubscribe();
+    app.receivers.unsubscribe(sub);
 
     receiver.drop();
     app.flush();
@@ -1259,7 +1260,7 @@ test "Observe entities drop before enable" {
     try testing.expect(!context);
 
     const sub = try app.observe(observed, Observed.callback, .{&context});
-    sub.unsubscribe();
+    app.observers.unsubscribe(sub);
 
     index = 1;
 

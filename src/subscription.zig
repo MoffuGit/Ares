@@ -54,21 +54,8 @@ pub fn Subscriptions(
         };
 
         pub const Subscription = struct {
-            subscriptions: *Self,
             key: Key,
             id: u32,
-
-            pub fn enable(self: *const Subscription) void {
-                self.subscriptions.enable(self);
-            }
-
-            pub fn notify(self: *const Subscription, args: Args) bool {
-                return self.subscriptions.notify(self, args);
-            }
-
-            pub fn unsubscribe(self: *const Subscription) void {
-                self.subscriptions.unsubscribe(self);
-            }
         };
 
         subscribers: Subscribers,
@@ -143,10 +130,10 @@ pub fn Subscriptions(
                 _ = try self.subscribers.insert(self.chunk, key, subscribers);
             }
 
-            return .{ .subscriptions = self, .key = key, .id = id };
+            return .{ .key = key, .id = id };
         }
 
-        pub fn enable(self: *@This(), sub: *const Subscription) void {
+        pub fn enable(self: *@This(), sub: Subscription) void {
             const subscribers = self.subscribers.get_mut(sub.key) orelse return;
             const subscriber = subscribers.get_mut(sub.id) orelse return;
             subscriber.active = true;
@@ -167,7 +154,7 @@ pub fn Subscriptions(
             self.clearDrops();
         }
 
-        pub fn notify(self: *@This(), sub: *const Subscription, args: Args) bool {
+        pub fn notify(self: *@This(), sub: Subscription, args: Args) bool {
             const subscribers = self.subscribers.get_mut(sub.key) orelse return false;
             const subscriber = subscribers.get(sub.id) orelse return false;
 
@@ -205,7 +192,7 @@ pub fn Subscriptions(
             subscribers.deinit(self.chunk);
         }
 
-        pub fn unsubscribe(self: *@This(), sub: *const Subscription) void {
+        pub fn unsubscribe(self: *@This(), sub: Subscription) void {
             const subscribers = self.subscribers.get_mut(sub.key) orelse return;
             _ = subscribers.remove(self.chunk, sub.id);
 
@@ -244,9 +231,8 @@ test "Subscriptions" {
 
     const key = 42;
     var context = false;
-    var sub = try subscriptions.insert(key, Callback.notify, .{&context});
+    const sub = try subscriptions.insert(key, Callback.notify, .{&context});
 
-    try std.testing.expectEqual(&subscriptions, sub.subscriptions);
     try std.testing.expectEqual(@as(Key, 42), sub.key);
     try std.testing.expectEqual(@as(u32, 0), sub.id);
     try std.testing.expectEqual(@as(u32, 1), subscriptions.next_id);
@@ -258,7 +244,7 @@ test "Subscriptions" {
     subscriptions.notifyAll(42, .{ true, true });
     try std.testing.expect(!context);
 
-    sub.enable();
+    subscriptions.enable(sub);
 
     subscriptions.notifyAll(42, .{ true, true });
     subscriptions.notifyAll(24, .{ false, false });
@@ -295,17 +281,17 @@ test "Subscription notifies only its subscriber" {
 
     var first_result: u32 = 0;
     var second_result: u32 = 0;
-    var first = try subscriptions.insert(42, Callback.notify, .{&first_result});
-    var second = try subscriptions.insert(42, Callback.notify, .{&second_result});
-    first.enable();
-    second.enable();
+    const first = try subscriptions.insert(42, Callback.notify, .{&first_result});
+    const second = try subscriptions.insert(42, Callback.notify, .{&second_result});
+    subscriptions.enable(first);
+    subscriptions.enable(second);
 
-    _ = first.notify(.{ 35, true });
+    _ = subscriptions.notify(first, .{ 35, true });
 
     try std.testing.expectEqual(@as(u32, 35), first_result);
     try std.testing.expectEqual(@as(u32, 0), second_result);
 
-    _ = first.notify(.{ 70, false });
+    _ = subscriptions.notify(first, .{ 70, false });
 
     try std.testing.expectEqual(@as(u32, 70), first_result);
     try std.testing.expect(subscriptions.subscribers.get_mut(42).?.get(first.id) == null);
