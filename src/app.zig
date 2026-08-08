@@ -943,7 +943,7 @@ test "Context receive updates the receiver entity" {
     app.flush();
 
     try testing.expectEqual(@as(usize, 35), receiver.read().value);
-    try testing.expect(app.receivers.subscribers.get_mut(receiver.id()).?.*.?.get(sub.id) != null);
+    try testing.expect(app.receivers.subscribers.get_mut(receiver.id()).?.get(sub.id) != null);
 
     const second = try app.dispatch(sub, TestEvent);
     second.* = .{ .value = 70 };

@@ -902,13 +902,13 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
                 return null;
             }
 
-            pub fn next_mut(self: *Iterator) ?struct { key: *K, value: *V } {
+            pub fn next_mut(self: *Iterator) ?struct { key: K, value: *V } {
                 while (self.leaf) |node| {
                     if (node.is_leaf()) {
                         const leaf = &node.Leaf;
                         if (self.index < leaf.len) {
                             self.index += 1;
-                            return .{ .key = &leaf.keys[self.index - 1], .value = &leaf.items[self.index - 1] };
+                            return .{ .key = leaf.keys[self.index - 1], .value = &leaf.items[self.index - 1] };
                         } else {
                             self.leaf = leaf.next;
                             self.index = 0;

@@ -11,6 +11,10 @@ const MAX_CONTEXT_SIZE = constants.MAX_CONTEXT_SIZE;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 
+fn order(a: u32, b: u32) std.math.Order {
+    return std.math.order(a, b);
+}
+
 pub fn Subscriptions(
     Key: type,
     Args: type,
@@ -18,19 +22,18 @@ pub fn Subscriptions(
 ) type {
     return struct {
         const Self = @This();
-
         const Callback = *const fn (Subscriber, Args) bool;
-
-        const Order = struct {
-            fn order(a: u32, b: u32) std.math.Order {
-                return std.math.order(a, b);
-            }
-        };
-
+        const SubscriberTree = btree.BPlusTree(u32, Subscriber, order);
         const Subscribers = btree.BPlusTree(
             Key,
-            ?btree.BPlusTree(u32, Subscriber, Order.order),
+            btree.BPlusTree(u32, Subscriber, order),
             comp,
+        );
+
+        pub const NODE_SIZE = @max(
+            Subscribers.NODE_SIZE,
+            SubscriberTree.NODE_SIZE,
+            btree.BPlusSet(Dropped, Dropped.order).NODE_SIZE,
         );
 
         pub const Subscriber = struct {
@@ -73,10 +76,7 @@ pub fn Subscriptions(
         chunk: Allocator,
         next_id: u32,
 
-        const SubscriberTree = btree.BPlusTree(u32, Subscriber, Order.order);
-        pub const NODE_SIZE = @max(Subscribers.NODE_SIZE, SubscriberTree.NODE_SIZE, btree.BPlusSet(Dropped, Dropped.order).NODE_SIZE);
-
-        pub fn init(self: *Self, chunk: Allocator) !void {
+        pub fn init(self: *@This(), chunk: Allocator) !void {
             self.* = .{
                 .next_id = 0,
                 .chunk = chunk,
@@ -91,23 +91,19 @@ pub fn Subscriptions(
             errdefer self.dropped.deinit(chunk);
         }
 
-        pub fn deinit(self: *Self) void {
+        pub fn deinit(self: *@This()) void {
             var outer = self.subscribers.iter();
-            while (outer.next()) |entry| {
-                if (self.subscribers.get_mut(entry.key)) |maybe_subscribers| {
-                    if (maybe_subscribers.*) |*subscribers| {
-                        self.destroyContexts(subscribers);
-                        subscribers.deinit(self.chunk);
-                    }
-                }
+            while (outer.next_mut()) |entry| {
+                const subscribers = entry.value;
+                self.destroyContexts(subscribers);
+                subscribers.deinit(self.chunk);
             }
             self.subscribers.deinit(self.chunk);
-            self.clearDrops();
             self.dropped.deinit(self.chunk);
         }
 
         pub fn insert(
-            self: *Self,
+            self: *@This(),
             key: Key,
             callback: anytype,
             context: anytype,
@@ -132,24 +128,24 @@ pub fn Subscriptions(
             const id = self.next_id;
             self.next_id += 1;
 
-            const context_buffer = (self.chunk.rawAlloc(
+            const buffer = (self.chunk.rawAlloc(
                 MAX_CONTEXT_SIZE,
                 MAX_CONTEXT_ALIGN,
                 @returnAddress(),
             ) orelse return error.OutOfMemory)[0..MAX_CONTEXT_SIZE];
-            errdefer self.chunk.rawFree(context_buffer, MAX_CONTEXT_ALIGN, @returnAddress());
+            errdefer self.chunk.rawFree(buffer, MAX_CONTEXT_ALIGN, @returnAddress());
 
-            const context_ptr: *Context = @ptrCast(@alignCast(context_buffer.ptr));
-            context_ptr.* = context;
+            const ptr: *Context = @ptrCast(@alignCast(buffer.ptr));
+            ptr.* = context;
 
             const sub = Subscriber{
                 .active = false,
                 .callback = TypeErased._callback,
-                .context = context_ptr,
+                .context = ptr,
             };
 
             if (self.subscribers.get_mut(key)) |subs| {
-                const old = try subs.*.?.insert(self.chunk, id, sub);
+                const old = try subs.insert(self.chunk, id, sub);
                 assert(old == null);
             } else {
                 var subscribers: SubscriberTree = undefined;
@@ -163,17 +159,14 @@ pub fn Subscriptions(
             return .{ .subscriptions = self, .key = key, .id = id };
         }
 
-        pub fn enable(self: *Self, sub: *const Subscription) void {
-            const maybe_subscribers = self.subscribers.get_mut(sub.key) orelse return;
-            if (maybe_subscribers.*) |*subscribers| {
-                const subscriber = subscribers.get_mut(sub.id) orelse return;
-                subscriber.active = true;
-            }
+        pub fn enable(self: *@This(), sub: *const Subscription) void {
+            const subscribers = self.subscribers.get_mut(sub.key) orelse return;
+            const subscriber = subscribers.get_mut(sub.id) orelse return;
+            subscriber.active = true;
         }
 
-        pub fn notifyAll(self: *Self, key: Key, args: Args) void {
-            const maybe_subscribers = self.subscribers.get_mut(key) orelse return;
-            var subscribers = maybe_subscribers.* orelse return;
+        pub fn notifyAll(self: *@This(), key: Key, args: Args) void {
+            const subscribers = self.subscribers.get_mut(key) orelse return;
 
             var iter = subscribers.iter();
             while (iter.next()) |entry| {
@@ -187,10 +180,8 @@ pub fn Subscriptions(
             self.clearDrops();
         }
 
-        pub fn notify(self: *Self, sub: *const Subscription, args: Args) bool {
-            defer self.clearDrops();
-            const maybe_subscribers = self.subscribers.get_mut(sub.key) orelse return false;
-            var subscribers = maybe_subscribers.* orelse return false;
+        pub fn notify(self: *@This(), sub: *const Subscription, args: Args) bool {
+            const subscribers = self.subscribers.get_mut(sub.key) orelse return false;
             const subscriber = subscribers.get(sub.id) orelse return false;
 
             if (!subscriber.active) return false;
@@ -201,68 +192,55 @@ pub fn Subscriptions(
                 };
             }
 
+            self.clearDrops();
+
             return true;
         }
 
-        pub fn clearDrops(self: *Self) void {
+        pub fn clearDrops(self: *@This()) void {
             var dropped = self.dropped.iter();
             while (dropped.next()) |drop| {
-                const maybe_dropped_subscribers = self.subscribers.get_mut(drop.key) orelse {
-                    _ = self.dropped.remove(self.chunk, drop);
-                    continue;
-                };
-                var dropped_subscribers = maybe_dropped_subscribers.* orelse {
-                    _ = self.dropped.remove(self.chunk, drop);
-                    continue;
-                };
-                if (dropped_subscribers.remove(self.chunk, drop.id)) |sub| {
+                defer _ = self.dropped.remove(self.chunk, drop);
+
+                const subscribers = self.subscribers.get_mut(drop.key) orelse continue;
+
+                if (subscribers.remove(self.chunk, drop.id)) |sub| {
                     self.destroyContext(sub);
                 }
 
-                _ = self.dropped.remove(self.chunk, drop);
-
-                if (dropped_subscribers.is_empty()) {
-                    dropped_subscribers.deinit(self.chunk);
+                if (subscribers.is_empty()) {
+                    subscribers.deinit(self.chunk);
                     _ = self.subscribers.remove(self.chunk, drop.key);
-                } else {
-                    maybe_dropped_subscribers.* = dropped_subscribers;
                 }
             }
         }
 
-        pub fn remove(self: *Self, key: Key) void {
-            if (self.subscribers.remove(self.chunk, key)) |subscribers| {
-                if (subscribers) |subs| {
-                    var mutable_subs = subs;
-                    self.destroyContexts(&mutable_subs);
-                    mutable_subs.deinit(self.chunk);
-                }
+        pub fn remove(self: *@This(), key: Key) void {
+            var subscribers = self.subscribers.remove(self.chunk, key) orelse return;
+            self.destroyContexts(&subscribers);
+            subscribers.deinit(self.chunk);
+        }
+
+        pub fn unsubscribe(self: *@This(), sub: *const Subscription) void {
+            const subscribers = self.subscribers.get_mut(sub.key) orelse return;
+            if (subscribers.remove(self.chunk, sub.id)) |removed| {
+                self.destroyContext(removed);
+            }
+
+            if (subscribers.is_empty()) {
+                subscribers.deinit(self.chunk);
+                _ = self.subscribers.remove(self.chunk, sub.key);
             }
         }
 
-        pub fn unsubscribe(self: *Self, sub: *const Subscription) void {
-            const maybe_subscribers = self.subscribers.get_mut(sub.key) orelse return;
-            if (maybe_subscribers.*) |*subs| {
-                if (subs.remove(self.chunk, sub.id)) |removed| {
-                    self.destroyContext(removed);
-                }
-                if (subs.is_empty()) {
-                    subs.deinit(self.chunk);
-                    _ = self.subscribers.remove(self.chunk, sub.key);
-                }
-            } else {
-                _ = self.dropped.insert(self.chunk, .{ .id = sub.id, .key = sub.key }) catch @panic("Chunks Overfow");
-            }
-        }
-
-        fn destroyContexts(self: *Self, subscribers: *SubscriberTree) void {
+        fn destroyContexts(self: *@This(), subscribers: *const SubscriberTree) void {
             var iter = subscribers.iter();
             while (iter.next()) |entry| {
                 self.destroyContext(entry.value);
             }
         }
 
-        fn destroyContext(self: *Self, sub: Subscriber) void {
+        fn destroyContext(self: *@This(), sub: Subscriber) void {
             self.chunk.rawFree(
                 @as([*]u8, @ptrCast(sub.context))[0..MAX_CONTEXT_SIZE],
                 MAX_CONTEXT_ALIGN,
@@ -307,7 +285,7 @@ test "Subscriptions" {
     try std.testing.expectEqual(@as(u32, 1), subscriptions.next_id);
 
     const subscribers = subscriptions.subscribers.get_mut(42).?;
-    const subscriber = subscribers.*.?.get(0).?;
+    const subscriber = subscribers.get(0).?;
     try std.testing.expect(!subscriber.active);
 
     subscriptions.notifyAll(42, .{ true, true });
@@ -363,6 +341,6 @@ test "Subscription notifies only its subscriber" {
     _ = first.notify(.{ 70, false });
 
     try std.testing.expectEqual(@as(u32, 70), first_result);
-    try std.testing.expect(subscriptions.subscribers.get_mut(42).?.*.?.get(first.id) == null);
-    try std.testing.expect(subscriptions.subscribers.get_mut(42).?.*.?.get(second.id) != null);
+    try std.testing.expect(subscriptions.subscribers.get_mut(42).?.get(first.id) == null);
+    try std.testing.expect(subscriptions.subscribers.get_mut(42).?.get(second.id) != null);
 }
