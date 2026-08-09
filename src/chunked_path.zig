@@ -5,8 +5,6 @@ const testing = std.testing;
 const Io = std.Io;
 const math = std.math;
 
-const chunk_pool = @import("chunk_pool.zig");
-const ChunkPool = chunk_pool.ChunkPool;
 const constans = @import("constants.zig");
 const SIMD_CHUNK_BYTES = constans.SIMD_CHUNK_BYTES;
 const MAX_PATH_LEN = constans.MAX_PATH_LEN;

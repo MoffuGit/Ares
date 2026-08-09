@@ -8,7 +8,6 @@ const heap = std.heap;
 const App = @import("app.zig");
 const Context = App.Context;
 const chunk_pool = @import("chunk_pool.zig");
-const ChunkAllocator = chunk_pool.ChunkAllocator;
 const ChunkedPath = @import("chunked_path.zig");
 const datastruct = @import("datastruct.zig");
 const MpscBounded = datastruct.MpscBounded;

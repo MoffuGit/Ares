@@ -8,25 +8,17 @@ const panic = debug.panic;
 const atomic = std.atomic;
 const builtin = @import("builtin");
 const math = std.math;
+const Io = std.Io;
 
 const log = std.log.scoped(.chunk_pool);
 
+const Index = enum(u32) {
+    none = math.maxInt(u32),
+    _,
+};
 const Chunk = opaque {
-    pub const Index = enum(u32) {
-        none = math.maxInt(u32),
-        _,
-    };
-
     const Header = struct {
-        next: u32,
-
-        fn loadNext(self: *Header) Index {
-            return @enumFromInt(@atomicLoad(u32, &self.next, .acquire));
-        }
-
-        fn storeNext(self: *Header, value: Index) void {
-            @atomicStore(u32, &self.next, @intFromEnum(value), .release);
-        }
+        next: Index,
     };
 
     fn header(self: *Chunk) *Header {
@@ -34,26 +26,13 @@ const Chunk = opaque {
     }
 };
 
-fn packFreeList(version: u32, index: Chunk.Index) u64 {
-    return (@as(u64, version) << 32) | @as(u64, @intFromEnum(index));
-}
-
-fn freeListIndex(state: u64) Chunk.Index {
-    return @enumFromInt(@as(u32, @truncate(state)));
-}
-
-fn freeListVersion(state: u64) u32 {
-    return @intCast(state >> 32);
-}
-
 pub const ChunkPool = struct {
-    pub const Index = Chunk.Index;
-
     buffer: []u8,
     alignment: mem.Alignment,
     chunk_size: u32,
-    reserved: atomic.Value(u32) = .init(0),
-    free_list: atomic.Value(u64) = .init(packFreeList(0, .none)),
+    reserved: u32 = 0,
+    free_list: Index = .none,
+    mutex: Io.Mutex,
 
     pub fn init(self: *ChunkPool, allocator: Allocator, capacity: u32, size: u32) !void {
         assert(capacity < math.maxInt(u32));
@@ -68,115 +47,86 @@ pub const ChunkPool = struct {
             @returnAddress(),
         ) orelse return error.OutOfMemory)[0..len];
 
-        log.debug("ChunkPool size={B} capacity={} | Chunk size={}", .{ buffer.len, capacity, size });
+        log.debug("Chunk Pool size={B} capacity={} size={}", .{ buffer.len, capacity, size });
 
         self.* = .{
             .buffer = buffer,
             .alignment = alignment,
             .chunk_size = size,
+            .mutex = .init,
         };
     }
 
-    pub fn deinit(self: *ChunkPool, gpa: Allocator) void {
-        gpa.rawFree(self.buffer, self.alignment, @returnAddress());
-    }
-
-    fn popFreeList(self: *ChunkPool) ?Index {
-        while (true) {
-            const state = self.free_list.load(.acquire);
-            const head_index = freeListIndex(state);
-            if (head_index == .none) return null;
-            const chunk = self.get(head_index);
-            const next_index = chunk.?.header().loadNext();
-            const new_state = packFreeList(freeListVersion(state) + 1, next_index);
-            if (self.free_list.cmpxchgWeak(state, new_state, .acq_rel, .monotonic) == null) {
-                return head_index;
-            }
-        }
-    }
-
-    fn allocBump(self: *ChunkPool) ?Index {
-        while (true) {
-            const current = self.reserved.load(.monotonic);
-            const offset = @as(usize, current) * self.chunk_size;
-            if (offset >= self.buffer.len) return null;
-            if (self.reserved.cmpxchgWeak(current, current + 1, .monotonic, .monotonic) == null) {
-                return @enumFromInt(current);
-            }
-        }
-    }
-
-    pub fn allocIndex(self: *ChunkPool) ?Index {
-        return self.popFreeList() orelse self.allocBump();
-    }
-
-    pub fn sliceFromIndex(self: *ChunkPool, index: Index) ?[]u8 {
-        if (index == .none) return null;
-        const start = @as(usize, @intFromEnum(index)) * self.chunk_size;
-        if (start >= self.buffer.len) return null;
-        return self.buffer[start .. start + self.chunk_size];
-    }
-
     pub fn alloc(self: *ChunkPool) ?[]u8 {
-        const index = self.allocIndex() orelse return null;
-        return self.sliceFromIndex(index).?;
+        if (self.free_list == .none) {
+            const index = self.reserved;
+            const offset = index * self.chunk_size;
+
+            if (offset == self.buffer.len) return null;
+            self.reserved += 1;
+
+            return self.buffer[offset .. offset + self.chunk_size];
+        } else {
+            const index = self.free_list;
+
+            const offset = @intFromEnum(index) * self.chunk_size;
+            const chunk: *Chunk = @ptrCast(@alignCast(&self.buffer[offset]));
+            const next = chunk.header().next;
+            self.free_list = next;
+
+            return self.buffer[offset .. offset + self.chunk_size];
+        }
     }
 
-    pub fn freeIndex(self: *ChunkPool, index: Index) void {
-        assert(index != .none);
-        const chunk = self.get(index) orelse @panic("ChunkPool.freeIndex: index out of range");
-        self.pushFreeList(index, chunk);
+    pub fn threadSafeAlloc(self: *ChunkPool, io: Io) ?[]u8 {
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
+
+        return self.alloc();
     }
 
-    fn freePrepare(self: *ChunkPool, buffer: []u8) struct { index: Chunk.Index, chunk: *Chunk } {
+    pub fn free(self: *ChunkPool, buffer: []u8) void {
         assert(buffer.len == self.chunk_size);
         assert(@intFromPtr(buffer.ptr) >= @intFromPtr(self.buffer.ptr));
         assert(@intFromPtr(buffer.ptr) + buffer.len <= @intFromPtr(self.buffer.ptr) + self.buffer.len);
 
         const offset = @intFromPtr(buffer.ptr) - @intFromPtr(self.buffer.ptr);
         assert(offset % self.chunk_size == 0);
-        const index: Chunk.Index = @enumFromInt(offset / self.chunk_size);
-
+        const index: Index = @enumFromInt(offset / self.chunk_size);
         const chunk: *Chunk = @ptrCast(@alignCast(buffer.ptr));
-        return .{ .index = index, .chunk = chunk };
+
+        const head = self.free_list;
+        chunk.header().next = head;
+
+        self.free_list = index;
     }
 
-    pub fn free(self: *ChunkPool, buffer: []u8) void {
-        const entry = self.freePrepare(buffer);
-        self.pushFreeList(entry.index, entry.chunk);
+    pub fn threadSafeFree(self: *ChunkPool, buffer: []u8, io: Io) void {
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
+
+        self.free(buffer);
     }
 
-    fn pushFreeList(self: *ChunkPool, index: Chunk.Index, chunk: *Chunk) void {
-        while (true) {
-            const state = self.free_list.load(.acquire);
-            const head_index = freeListIndex(state);
-            chunk.header().storeNext(head_index);
-            const new_state = packFreeList(freeListVersion(state) + 1, index);
-            if (self.free_list.cmpxchgWeak(state, new_state, .acq_rel, .monotonic) == null) {
-                return;
-            }
-        }
-    }
-
-    fn get(self: *ChunkPool, index: Chunk.Index) ?*Chunk {
-        if (index == .none) return null;
-        const start = @as(usize, @intFromEnum(index)) * self.chunk_size;
-        return @ptrCast(@alignCast(&self.buffer[start]));
+    pub fn deinit(self: *ChunkPool, gpa: Allocator) void {
+        gpa.rawFree(self.buffer, self.alignment, @returnAddress());
     }
 };
 
 pub const PoolConfig = struct { u32, u32 };
 
+fn lessThan(_: void, lhs: PoolConfig, rhs: PoolConfig) bool {
+    return lhs.@"1" < rhs.@"1";
+}
+
 pub const ChunkAllocator = struct {
     pools: []ChunkPool,
-
-    fn lessThan(_: void, lhs: PoolConfig, rhs: PoolConfig) bool {
-        return lhs.@"1" < rhs.@"1";
-    }
+    io: Io,
 
     pub fn init(self: *ChunkAllocator, child_alloc: Allocator, pool_configs: []const PoolConfig) !void {
         self.* = .{
             .pools = undefined,
+            .io = undefined,
         };
 
         self.pools = try child_alloc.alloc(ChunkPool, pool_configs.len);
@@ -206,6 +156,11 @@ pub const ChunkAllocator = struct {
         }
     }
 
+    pub fn initThreadSafe(self: *ChunkAllocator, child_alloc: Allocator, pool_configs: []const PoolConfig, io: Io) !void {
+        try self.init(child_alloc, pool_configs);
+        self.io = io;
+    }
+
     pub fn deinit(self: *ChunkAllocator, child_alloc: Allocator) void {
         for (self.pools) |*pool| pool.deinit(child_alloc);
         child_alloc.free(self.pools);
@@ -223,38 +178,64 @@ pub const ChunkAllocator = struct {
         };
     }
 
-    fn alloc(ctx: *anyopaque, len: usize, alignment: mem.Alignment, _: usize) ?[*]u8 {
-        const self: *ChunkAllocator = @ptrCast(@alignCast(ctx));
-        const max_size = self.pools[self.pools.len - 1].chunk_size;
-        if (len > max_size) panic("Chunk of {} bytes exceeds max chunk size {}", .{ len, max_size });
+    pub fn threadSafeAllocator(self: *ChunkAllocator) Allocator {
+        return .{
+            .ptr = self,
+            .vtable = &.{
+                .alloc = threadSafeAlloc,
+                .resize = Allocator.noResize,
+                .remap = Allocator.noRemap,
+                .free = threadSafeFree,
+            },
+        };
+    }
+
+    fn findPool(self: *ChunkAllocator, len: usize, alignment: mem.Alignment) ?*ChunkPool {
+        assert(self.pools[self.pools.len - 1].chunk_size >= len);
 
         for (self.pools) |*pool| {
             if (len > pool.chunk_size) continue;
             if (alignment.toByteUnits() > pool.alignment.toByteUnits()) continue;
-            const buffer = pool.alloc() orelse return null;
-            if (builtin.mode == .Debug and !builtin.is_test) {
-                if (len < buffer.len >> 1) {
-                    log.warn("Mostly unused chunk size={} used={}", .{ buffer.len, len });
-                }
-            }
-            return buffer.ptr;
+            return pool;
         }
 
-        std.debug.assert(false);
         return null;
     }
 
-    fn free(ctx: *anyopaque, memory: []u8, _: mem.Alignment, _: usize) void {
+    fn alloc(ctx: *anyopaque, len: usize, alignment: mem.Alignment, _: usize) ?[*]u8 {
         const self: *ChunkAllocator = @ptrCast(@alignCast(ctx));
+        const pool = self.findPool(len, alignment) orelse return null;
+        const buffer = pool.alloc() orelse return null;
 
-        for (self.pools) |*pool| {
-            if (@intFromPtr(memory.ptr) < @intFromPtr(pool.buffer.ptr)) continue;
-            if (@intFromPtr(memory.ptr) >= @intFromPtr(pool.buffer.ptr) + pool.buffer.len) continue;
-            pool.free(memory.ptr[0..pool.chunk_size]);
-            return;
+        if (builtin.mode == .Debug and !builtin.is_test and len < buffer.len >> 1) {
+            log.warn("Unused chunk size={} used={}", .{ buffer.len, len });
         }
 
-        std.debug.assert(false);
+        return buffer.ptr;
+    }
+
+    fn free(ctx: *anyopaque, memory: []u8, alignment: mem.Alignment, _: usize) void {
+        const self: *ChunkAllocator = @ptrCast(@alignCast(ctx));
+        const pool = self.findPool(memory.len, alignment) orelse unreachable;
+        pool.free(memory.ptr[0..pool.chunk_size]);
+    }
+
+    fn threadSafeAlloc(ctx: *anyopaque, len: usize, alignment: mem.Alignment, _: usize) ?[*]u8 {
+        const self: *ChunkAllocator = @ptrCast(@alignCast(ctx));
+        const pool = self.findPool(len, alignment) orelse return null;
+        const buffer = pool.threadSafeAlloc(self.io) orelse return null;
+
+        if (builtin.mode == .Debug and !builtin.is_test and len < buffer.len >> 1) {
+            log.warn("Unused chunk size={} used={}", .{ buffer.len, len });
+        }
+
+        return buffer.ptr;
+    }
+
+    fn threadSafeFree(ctx: *anyopaque, memory: []u8, alignment: mem.Alignment, _: usize) void {
+        const self: *ChunkAllocator = @ptrCast(@alignCast(ctx));
+        const pool = self.findPool(memory.len, alignment) orelse unreachable;
+        pool.threadSafeFree(memory.ptr[0..pool.chunk_size], self.io);
     }
 };
 
@@ -294,60 +275,6 @@ test "Chunk Pool reuses chunk after capacity is exhausted" {
 
     const reused = pool.alloc() orelse return error.TestUnexpectedResult;
     try testing.expectEqual(first.ptr, reused.ptr);
-}
-
-test "Chunk Pool index API allocates distinct writable indices" {
-    const gpa = testing.allocator;
-
-    var pool: ChunkPool = undefined;
-    try pool.init(gpa, 3, 128);
-    defer pool.deinit(gpa);
-
-    const idx_a = pool.allocIndex() orelse return error.TestUnexpectedResult;
-    const idx_b = pool.allocIndex() orelse return error.TestUnexpectedResult;
-    try testing.expect(idx_a != .none);
-    try testing.expect(idx_b != .none);
-    try testing.expect(idx_a != idx_b);
-
-    const slice_a = pool.sliceFromIndex(idx_a).?;
-    const slice_b = pool.sliceFromIndex(idx_b).?;
-    try testing.expectEqual(@as(usize, 128), slice_a.len);
-    try testing.expect(slice_a.ptr != slice_b.ptr);
-
-    @memset(slice_a, 0xAB);
-    try testing.expectEqual(@as(u8, 0xAB), pool.sliceFromIndex(idx_a).?[0]);
-    // Writing through one index must not bleed into another.
-    try testing.expectEqual(@as(u8, 0), pool.sliceFromIndex(idx_b).?[0]);
-}
-
-test "Chunk Pool freeIndex then allocIndex reuses the slot" {
-    const gpa = testing.allocator;
-
-    var pool: ChunkPool = undefined;
-    try pool.init(gpa, 2, 128);
-    defer pool.deinit(gpa);
-
-    const idx_a = pool.allocIndex() orelse return error.TestUnexpectedResult;
-    _ = pool.allocIndex() orelse return error.TestUnexpectedResult;
-    try testing.expect(pool.allocIndex() == null);
-
-    pool.freeIndex(idx_a);
-
-    const reused = pool.allocIndex() orelse return error.TestUnexpectedResult;
-    try testing.expectEqual(idx_a, reused);
-}
-
-test "Chunk Pool sliceFromIndex rejects none and out-of-range indices" {
-    const gpa = testing.allocator;
-
-    var pool: ChunkPool = undefined;
-    try pool.init(gpa, 2, 128);
-    defer pool.deinit(gpa);
-
-    try testing.expect(pool.sliceFromIndex(.none) == null);
-
-    const forged: ChunkPool.Index = @enumFromInt(1_000_000);
-    try testing.expect(pool.sliceFromIndex(forged) == null);
 }
 
 test "Chunk Allocator" {

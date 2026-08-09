@@ -73,13 +73,17 @@ pub fn init(
 
     self.snapshot = try self.worktree().snapshot.clone(self.gpa);
 
-    try self.chunks.init(self.arena, &.{
-        .{ 1024 * 1024 * 1024, RANGE_NODE_SIZE },
-        .{ 1024 * 1024 * 1024, CHUNK_SIZE },
-        .{ 1024 * 1024, @sizeOf(Entry) },
-        .{ 1024 * 1024, @sizeOf(Job) },
-        .{ 1024 * 1024, @sizeOf(SharedFd) },
-    });
+    try self.chunks.initThreadSafe(
+        self.arena,
+        &.{
+            .{ 1024 * 1024 * 1024, RANGE_NODE_SIZE },
+            .{ 1024 * 1024 * 1024, CHUNK_SIZE },
+            .{ 1024 * 1024, @sizeOf(Entry) },
+            .{ 1024 * 1024, @sizeOf(Job) },
+            .{ 1024 * 1024, @sizeOf(SharedFd) },
+        },
+        self.io,
+    );
 
     const buffer = try arena.alloc(ScanRequest, 1024);
     self.requests = .init(buffer);
@@ -98,7 +102,7 @@ pub fn deinit(self: *Scanner) void {
 
     var iter = self.jobs.iterator();
     while (iter.next()) |job| {
-        job.finish(self.chunks.allocator(), self.io);
+        job.finish(self.chunks.threadSafeAllocator(), self.io);
     }
 
     self.snapshot.deinit();
@@ -135,7 +139,7 @@ fn _initialScan(
         .{},
     );
 
-    const chunks = self.chunks.allocator();
+    const chunks = self.chunks.threadSafeAllocator();
 
     const path: ChunkedPath = .new(self.snapshot.root_name, 0, chunks);
 
@@ -269,7 +273,7 @@ pub fn _scan(
 ) !void {
     errdefer self.jobs.closed.store(true, .release);
 
-    const chunks = self.chunks.allocator();
+    const chunks = self.chunks.threadSafeAllocator();
     var buffer: [64 * 1024]u8 = undefined;
     var batch: SinglyLinkedList(Entry) = .{};
 
@@ -319,7 +323,7 @@ fn scanDir(
     buffer: []u8,
     batch: *SinglyLinkedList(Entry),
 ) !void {
-    const chunks = self.chunks.allocator();
+    const chunks = self.chunks.threadSafeAllocator();
 
     const dir = bkl: {
         if (job.fd) |fd| {
@@ -378,7 +382,7 @@ fn scanDir(
         @memcpy(suffix_buf[1 .. 1 + name.len], name);
         const suffix = suffix_buf[0 .. 1 + name.len];
 
-        const path: ChunkedPath = .extend(parent_path, suffix, 1, self.chunks.allocator());
+        const path: ChunkedPath = .extend(parent_path, suffix, 1, self.chunks.threadSafeAllocator());
 
         var path_buf: [MAX_PATH_LEN]u8 = undefined;
         const len = path.read(&path_buf);
