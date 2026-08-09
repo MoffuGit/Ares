@@ -9,12 +9,14 @@ const Loop = @import("loop.zig");
 const patch = @import("patch.zig");
 const Project = @import("project.zig");
 const WorktreeStore = @import("project/worktree_store.zig");
+const Scheduler = @import("scheduler.zig");
 const Session = @import("session.zig");
 const subscription = @import("subscription.zig");
 const Workspace = @import("workspace.zig");
 const Worktree = @import("worktree.zig");
 
 test {
+    _ = Scheduler;
     _ = bench;
     _ = patch;
     _ = Buffer;

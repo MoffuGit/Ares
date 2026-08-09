@@ -42,12 +42,9 @@ const Scanner = @This();
 io: Io,
 gpa: Allocator,
 arena: Allocator,
-group: Io.Group,
 snapshot: Snapshot,
 mutex: Io.Mutex,
 chunks: ChunkAllocator,
-jobs: Dequeue(Job),
-requests: Io.Queue(ScanRequest),
 last_update: atomic.Value(i64),
 next_scan_id: atomic.Value(u64),
 
@@ -64,9 +61,6 @@ pub fn init(
         .snapshot = undefined,
         .mutex = .init,
         .chunks = undefined,
-        .jobs = undefined,
-        .requests = undefined,
-        .group = .init,
         .last_update = .init(Timestamp.now(io, .real).toMilliseconds()),
         .next_scan_id = .init(0),
     };
@@ -84,27 +78,9 @@ pub fn init(
         },
         self.io,
     );
-
-    const buffer = try arena.alloc(ScanRequest, 1024);
-    self.requests = .init(buffer);
-
-    try self.jobs.init(self.arena, @intCast(state.cpu_count));
-    try self.group.concurrent(self.io, initialScan, .{self});
 }
 
 pub fn deinit(self: *Scanner) void {
-    self.jobs.close(self.io) catch {};
-    self.requests.close(self.io);
-
-    self.group.await(self.io) catch |err| {
-        log.err("{}", .{err});
-    };
-
-    var iter = self.jobs.iterator();
-    while (iter.next()) |job| {
-        job.finish(self.chunks.threadSafeAllocator(), self.io);
-    }
-
     self.snapshot.deinit();
 }
 

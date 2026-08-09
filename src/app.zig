@@ -27,6 +27,7 @@ const Subscriptions = subs.Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
+const Scheduler = @import("scheduler.zig");
 
 const CHUNK_SIZES: []const chunk_pool.PoolConfig = &.{
     .{ 50, 128 },
@@ -58,7 +59,7 @@ receivers: Receivers,
 observers: Observers,
 chunks: ChunkAllocator,
 peding_updates: u16,
-group: Io.Group,
+scheduler: Scheduler,
 
 loop: Loop,
 
@@ -86,7 +87,7 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .events = .{},
         .dispatched = .{},
         .deferred = .{},
-        .group = .init,
+        .scheduler = undefined,
     };
 
     try self.loop.init(self.io);
@@ -104,11 +105,13 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     try self.listeners.init(chunks);
     try self.receivers.init(chunks);
     try self.notifications.init(chunks);
+
+    try self.scheduler.init(self.io);
 }
 
 pub fn deinit(self: *App) void {
+    self.scheduler.deinit();
     self.flush();
-    self.group.await(self.io) catch {};
     self.receivers.deinit();
     self.arena.deinit();
     self.loop.deinit();
