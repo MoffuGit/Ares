@@ -39,13 +39,6 @@ const CHUNK_SIZES: []const chunk_pool.PoolConfig = &.{
 
 const log = std.log.scoped(.app);
 
-pub const Options = struct {
-    fn noop(_: *anyopaque) void {}
-
-    userdata: *anyopaque = undefined,
-    wakeup_cb: *const fn (*anyopaque) void = noop,
-};
-
 pub const App = @This();
 
 io: Io,
@@ -68,12 +61,9 @@ notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
 flushing: bool,
 
-options: Options,
-
-pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
+pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     self.* = .{
         .io = io,
-        .options = options,
         .notifications = undefined,
         .entities = undefined,
         .observers = undefined,

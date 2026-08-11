@@ -24,7 +24,7 @@ pub fn init(self: *WorktreeStore, ctx: Context(WorktreeStore), options: Options)
         .next_id = 0,
         .worktrees = .init(options.arena),
     };
-    errdefer self.drop();
+    errdefer _ = self.drop();
 
     for (options.paths) |path| {
         const id = self.next_id;
@@ -39,11 +39,13 @@ pub fn init(self: *WorktreeStore, ctx: Context(WorktreeStore), options: Options)
     }
 }
 
-pub fn drop(self: *WorktreeStore) void {
+pub fn drop(self: *WorktreeStore) bool {
     var iter = self.worktrees.iterator();
     while (iter.next()) |entry| {
         entry.value_ptr.drop();
     }
+
+    return true;
 }
 
 pub fn deinit(self: *WorktreeStore) void {

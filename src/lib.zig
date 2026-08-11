@@ -18,21 +18,6 @@ const log = std.log.scoped(.lib);
 
 const state = &@import("global.zig").state;
 
-const ExternAppOptions = extern struct {
-    userdata: *anyopaque = undefined,
-    wakeup_cb: *const fn (*anyopaque) callconv(.c) void,
-};
-
-const ExternAppCallback = struct {
-    userdata: *anyopaque,
-    wakeup_cb: *const fn (*anyopaque) callconv(.c) void,
-
-    fn wakeup(userdata: *anyopaque) void {
-        const callback: *ExternAppCallback = @ptrCast(@alignCast(userdata));
-        callback.wakeup_cb(callback.userdata);
-    }
-};
-
 fn Slice(T: type) type {
     return extern struct {
         ptr: ?[*]const T,
@@ -101,30 +86,6 @@ const ExternEntity = extern struct {
         };
     }
 };
-
-const ExternObserver = extern struct {
-    ptr: *anyopaque,
-    key: u64,
-    id: u32,
-
-    fn init(sub: *const Observer) @This() {
-        return .{
-            .key = @bitCast(sub.key),
-            .id = sub.id,
-            .ptr = sub.subscriptions,
-        };
-    }
-
-    pub fn subscription(self: *const @This()) Observer {
-        return .{
-            .id = self.id,
-            .key = @bitCast(self.key),
-            .subscriptions = @ptrCast(@alignCast(self.ptr)),
-        };
-    }
-};
-
-const MaybeObserver = Option(ExternObserver);
 
 const ExternSerializedWindowBounds = extern struct {
     x: f64,
@@ -242,30 +203,18 @@ pub export fn odyssey_db_stop() void {
     db.deinit();
 }
 
-pub export fn odyssey_app_new(options: *const ExternAppOptions) ?*App {
-    return app_new(options) catch |err| {
+pub export fn odyssey_app_new() ?*App {
+    return app_new() catch |err| {
         log.err("error initializing app: {}", .{err});
         return null;
     };
 }
 
-fn app_new(options: *const ExternAppOptions) !*App {
+fn app_new() !*App {
     var app = try state.gpa.create(App);
     errdefer state.gpa.destroy(app);
 
-    const callback = try state.gpa.create(ExternAppCallback);
-    errdefer state.gpa.destroy(callback);
-
-    callback.* = .{
-        .userdata = options.userdata,
-        .wakeup_cb = options.wakeup_cb,
-    };
-
     try app.init(
-        .{
-            .userdata = callback,
-            .wakeup_cb = ExternAppCallback.wakeup,
-        },
         state.gpa,
         state.threaded.io(),
     );
@@ -274,14 +223,12 @@ fn app_new(options: *const ExternAppOptions) !*App {
 }
 
 pub export fn odyssey_app_free(app: *App) void {
-    const callback: *ExternAppCallback = @ptrCast(@alignCast(app.options.userdata));
     app.deinit();
-    state.gpa.destroy(callback);
     state.gpa.destroy(app);
 }
 
 pub export fn odyssey_app_flush(app: *App) void {
-    app.flush();
+    app.flush(.no_wait);
 }
 
 pub export fn odyssey_drop_entity(entity: ExternEntity) void {
@@ -355,13 +302,6 @@ pub export fn odyssey_workspace_set_bounds(extern_entity: ExternEntity, extern_b
 pub export fn odyssey_workspace_get_id(extern_entity: ExternEntity) i64 {
     const workspace = ent.Entity(Workspace).from(extern_entity.any()) orelse @panic("Missing Workspace Entity");
     return workspace.read().id;
-}
-
-pub export fn odyssey_remove_observer(observer: ExternObserver) void {
-    const sub = observer.subscription();
-    sub.unsubscribe() catch |err| {
-        log.err("unsubscribe err={}", .{err});
-    };
 }
 
 pub export fn odyssey_session_new(app: *App) MaybeEntity {
