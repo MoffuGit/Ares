@@ -694,11 +694,10 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
 }
 
 pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a: K, b: K) std.math.Order) type {
-    const Node = NodeType(K, V, comp);
-
     return struct {
         pub const Key = K;
         pub const Value = V;
+        const Node = NodeType(K, V, comp);
 
         pub const NODE_SIZE = @sizeOf(Node);
         pub const NODE_ALIGN = @alignOf(Node);
@@ -863,11 +862,13 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             }
         }
 
+        const Self = @This();
+
         pub const Iterator = struct {
             leaf: ?*Node,
             index: usize,
 
-            pub fn init(tree: *const @This()) Iterator {
+            pub fn init(tree: *const Self) Iterator {
                 var current: ?*Node = tree.root;
                 while (current) |node| {
                     switch (node.*) {
@@ -940,7 +941,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             end_bound: Bound,
 
             /// Initialize a range iterator starting from a specific bound
-            pub fn init(tree: *const @This(), start_bound: Bound, end_bound: Bound) RangeIterator {
+            pub fn init(tree: *const Self, start_bound: Bound, end_bound: Bound) RangeIterator {
                 const start_leaf = switch (start_bound) {
                     .unbounded => findLeftmostLeaf(tree.root),
                     .inclusive => |key| findLeafForKey(tree.root, key),
