@@ -49,10 +49,9 @@ pub fn SpscBounded(T: type) type {
             return self.len;
         }
 
-        pub fn push(self: *Self, value: T, io: Io) !void {
+        pub fn push(self: *Self, value: T) void {
             const write = self.producer.load(.monotonic);
             while (write - self.cache_consumer == self.len) {
-                try Io.checkCancel(io);
                 self.cache_consumer = self.consumer.load(.acquire);
                 atomic.spinLoopHint();
             }
@@ -95,7 +94,6 @@ pub fn SpscBounded(T: type) type {
 }
 
 test "SPSC bounded pads both ends of its slots allocation" {
-    const io = testing.io;
     const Queue = SpscBounded(u64);
     var queue = try Queue.init(10, testing.allocator);
     defer queue.deinit(testing.allocator);
@@ -106,7 +104,7 @@ test "SPSC bounded pads both ends of its slots allocation" {
     try testing.expectEqual(&queue.slots[Queue.Padding + 15], queue.slot(15));
 
     for (0..queue.len) |b| {
-        try queue.push(b, io);
+        queue.push(b);
     }
 
     try testing.expectEqual(false, queue.tryPush(11));

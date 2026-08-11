@@ -23,6 +23,7 @@ const Snapshot = @import("worktree/snapshot.zig");
 const Entry = Snapshot.Entry;
 
 const log = std.log.scoped(.worktree);
+const state = &global.state;
 
 pub const Worktree = @This();
 
@@ -37,7 +38,7 @@ ctx: Context(Worktree),
 scanning: bool,
 snapshot: Snapshot,
 scanner: Scanner,
-events: Io.Queue(Event),
+events: MpscBounded(Event),
 
 waker: Waker,
 await: Completion,
@@ -65,17 +66,15 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
 
-    const buffer = try arena.alloc(Event, 16);
-    self.events = .init(buffer);
+    self.events = try .init(state.cpu_count, 64, arena);
     self.waker = try ctx.await(&self.await, handleEvents, self);
 
     try self.scanner.init(ctx.scheduler(), gpa, self.arena.allocator(), io);
 }
 
 pub fn deinit(self: *Worktree) void {
-    var buffer: [16]Event = undefined;
-    const events = self.events.get(self.io, &buffer, 0) catch 0;
-    for (buffer[0..events]) |*event| {
+    while (true) {
+        var event = self.events.pop() orelse break;
         event.deinit();
     }
 
@@ -116,9 +115,7 @@ pub const Event = union(enum) {
 fn handleEvents(self: *Worktree, res: anyerror!void) bool {
     res catch return false;
 
-    var buffer: [16]Event = undefined;
-    const events = self.events.get(self.io, &buffer, 0) catch return false;
-    for (buffer[0..events]) |event| {
+    while (self.events.pop()) |event| {
         switch (event) {
             .stopped => self.ctx.drop(),
             .started => {
@@ -137,7 +134,6 @@ fn handleEvents(self: *Worktree, res: anyerror!void) bool {
             },
         }
     }
-
     self.ctx.notify();
 
     return true;

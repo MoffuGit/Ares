@@ -140,16 +140,18 @@ fn taskDone(self: *Scanner, task: *ScannerTask) void {
     const worktree = self.parent();
     defer worktree.waker.wake() catch unreachable;
 
-    if (self.stopped.load(.acquire)) {
-        worktree.events.putOne(self.io, .stopped) catch unreachable;
-    } else {
-        self.mutex.lock(self.io) catch unreachable;
-        defer self.mutex.unlock(self.io);
+    var producer = worktree.events.register() orelse unreachable;
+    defer producer.unregister();
 
-        worktree.events.putOne(self.io, .{ .update = .{
-            .scanning = false,
-            .snapshot = self.snapshot.clone(self.gpa) catch unreachable,
-        } }) catch unreachable;
+    if (self.stopped.load(.acquire)) {
+        producer.push(.stopped);
+    } else {
+        producer.push(.{
+            .update = .{
+                .scanning = false,
+                .snapshot = self.snapshot.clone(self.gpa) catch unreachable,
+            },
+        });
     }
 }
 
@@ -215,8 +217,13 @@ fn initialScan(
 
     if (stat.kind != .directory) return;
 
-    try worktree.events.putOne(self.io, .started);
-    try worktree.waker.wake();
+    {
+        var producer = worktree.events.register() orelse unreachable;
+        defer producer.unregister();
+
+        producer.push(.started);
+        try worktree.waker.wake();
+    }
 
     const task = chunks.create(ScannerTask) catch unreachable;
     errdefer chunks.destroy(task);
@@ -427,16 +434,20 @@ fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore:
     if (now - last >= UPDATE_INTERVAL_IN_MS) {
         if (self.last_update.cmpxchgWeak(last, now, .acq_rel, .monotonic) == null) {
             const worktree = self.parent();
+            var producer = worktree.events.register() orelse unreachable;
+            defer producer.unregister();
 
             self.mutex.lock(self.io) catch unreachable;
             defer self.mutex.unlock(self.io);
 
-            worktree.events.putOne(self.io, .{ .update = .{
-                .scanning = true,
-                .snapshot = try self.snapshot.clone(self.gpa),
-            } }) catch unreachable;
+            producer.push(.{
+                .update = .{
+                    .scanning = true,
+                    .snapshot = try self.snapshot.clone(self.gpa),
+                },
+            });
 
-            worktree.waker.wake() catch unreachable;
+            try worktree.waker.wake();
         }
     }
 }
