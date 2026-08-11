@@ -85,6 +85,7 @@ pub fn init(
             .{ 1024 * 1024 * 1024, CHUNK_SIZE },
             .{ 1024 * 1024, @sizeOf(ScannerTask) },
             .{ 1024 * 1024, @sizeOf(SharedFd) },
+            .{ 1024 * 1024, @sizeOf(EntryData) },
         },
         self.io,
     );
@@ -272,6 +273,12 @@ fn isIgnored(
     return false;
 }
 
+const EntryData = struct {
+    path: ChunkedPath,
+    meta: Snapshot.Meta,
+    next: ?*EntryData = null,
+};
+
 const SharedFd = struct {
     dir: Io.Dir,
     refs: atomic.Value(u32),
@@ -349,6 +356,8 @@ fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore:
     suffix_buf[0] = '/';
     var path_buf: [MAX_PATH_LEN]u8 = undefined;
 
+    var entries: SinglyLinkedList(EntryData) = .{};
+
     while (try bulk.next()) |entry| {
         const name = entry.name;
         @memcpy(suffix_buf[1 .. 1 + name.len], name);
@@ -360,27 +369,24 @@ fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore:
         const len = path.read(&path_buf);
         const ignored = isIgnored(effective_ignore, path_buf[0..len], name, is_dir);
 
-        {
-            try self.mutex.lock(self.io);
-            defer self.mutex.unlock(self.io);
-
-            self.snapshot.insert(
-                path,
-                .{
-                    .state = bkl: {
-                        if (entry.kind == .directory) {
-                            break :bkl if (is_hidden or ignored) .unloaded else .pending;
-                        } else break :bkl .loaded;
-                    },
-                    .inode = entry.meta.inode,
-                    .mtime = .fromNanoseconds(@intCast(entry.meta.mtime_ns)),
-                    .size = entry.meta.size,
-                    .kind = entry.kind,
-                    .hidden = is_hidden,
-                    .ignored = ignored,
+        const data = chunks.create(EntryData) catch unreachable;
+        data.* = .{
+            .path = path,
+            .meta = .{
+                .state = bkl: {
+                    if (entry.kind == .directory) {
+                        break :bkl if (is_hidden or ignored) .unloaded else .pending;
+                    } else break :bkl .loaded;
                 },
-            );
-        }
+                .inode = entry.meta.inode,
+                .mtime = .fromNanoseconds(@intCast(entry.meta.mtime_ns)),
+                .size = entry.meta.size,
+                .kind = entry.kind,
+                .hidden = is_hidden,
+                .ignored = ignored,
+            },
+        };
+        entries.append(data);
 
         if (is_dir and !(is_hidden or ignored)) {
             const task = try chunks.create(ScannerTask);
@@ -404,6 +410,14 @@ fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore:
     {
         try self.mutex.lock(self.io);
         defer self.mutex.unlock(self.io);
+
+        while (entries.pop()) |data| {
+            self.snapshot.insert(
+                data.path,
+                data.meta,
+            );
+            chunks.destroy(data);
+        }
 
         const entry = self.snapshot.entries.get_mut(dir_path) orelse unreachable;
         entry.meta.state = .loaded;
