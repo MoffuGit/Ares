@@ -1,3 +1,7 @@
+//The stealing queue came from zlob
+// SOURCE: https://github.com/dmtrKovalenko/zlob/tree/main
+// LICENSE: [ZLOB]
+
 const std = @import("std");
 const atomic = std.atomic;
 const Io = std.Io;
