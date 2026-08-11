@@ -90,9 +90,6 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
         .scheduler = undefined,
     };
 
-    try self.loop.init(self.io);
-    errdefer self.loop.deinit();
-
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
 
@@ -107,11 +104,15 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     try self.notifications.init(chunks);
 
     try self.scheduler.init(arena, self.io);
+    errdefer self.scheduler.deinit();
+
+    try self.loop.init(&self.scheduler, self.io);
+    errdefer self.loop.deinit();
 }
 
 pub fn deinit(self: *App) void {
-    self.scheduler.deinit();
     self.flush(.until_done);
+    self.scheduler.deinit();
     self.receivers.deinit();
     self.arena.deinit();
     self.loop.deinit();

@@ -13,6 +13,7 @@ const meta = std.meta;
 const panic = std.debug.panic;
 const Kevent = std.c.kevent64_s;
 const builtin = @import("builtin");
+const Scheduler = @import("scheduler.zig");
 
 const datastruct = @import("datastruct.zig");
 const MultiQueue = datastruct.MultiQueue;
@@ -34,6 +35,7 @@ kq: posix.fd_t,
 
 time: Time,
 
+scheduler: *Scheduler,
 queues: Queues,
 timers: heap.Intrusive(Timer, void, Timer.less),
 inflight: usize,
@@ -41,7 +43,7 @@ stopped: bool,
 
 io: Io,
 
-pub fn init(self: *Loop, io: Io) !void {
+pub fn init(self: *Loop, scheduler: *Scheduler, io: Io) !void {
     const kq = posix.system.kqueue();
 
     switch (posix.errno(kq)) {
@@ -50,6 +52,7 @@ pub fn init(self: *Loop, io: Io) !void {
     }
 
     self.* = .{
+        .scheduler = scheduler,
         .io = io,
         .kq = kq,
         .queues = undefined,
@@ -733,7 +736,7 @@ test "mach port" {
     const io = testing.io;
 
     var loop: Loop = undefined;
-    try loop.init(io);
+    try loop.init(undefined, io);
     defer loop.deinit();
 
     const mach_self = posix.system.mach_task_self();
@@ -831,7 +834,7 @@ test "cancel mach port" {
     const c = std.c;
 
     var loop: Loop = undefined;
-    try loop.init(io);
+    try loop.init(undefined, io);
     defer loop.deinit();
 
     const mach_self = c.mach_task_self();
@@ -907,7 +910,7 @@ test "timer completes" {
     const io = testing.io;
 
     var loop: Loop = undefined;
-    try loop.init(io);
+    try loop.init(undefined, io);
     defer loop.deinit();
 
     var called = false;
@@ -935,7 +938,7 @@ test "timer rearms when callback returns true" {
     const io = testing.io;
 
     var loop: Loop = undefined;
-    try loop.init(io);
+    try loop.init(undefined, io);
     defer loop.deinit();
 
     var calls: u8 = 0;
@@ -963,7 +966,7 @@ test "cancel timer" {
     const io = testing.io;
 
     var loop: Loop = undefined;
-    try loop.init(io);
+    try loop.init(undefined, io);
     defer loop.deinit();
 
     var timer_called = false;
