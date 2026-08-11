@@ -11,41 +11,60 @@ const MAX_CONTEXT_SIZE = constants.MAX_CONTEXT_SIZE;
 const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 
-fn order(a: u32, b: u32) std.math.Order {
-    return std.math.order(a, b);
-}
-
 pub fn Subscriptions(
-    Key: type,
+    K: type,
     Args: type,
-    comptime comp: *const fn (Key, Key) std.math.Order,
+    comptime comp: *const fn (K, K) std.math.Order,
 ) type {
     return struct {
-        const Self = @This();
-        const Callback = *const fn (Subscriber, Args) bool;
-        const SubscriberTree = btree.BPlusTree(u32, Subscriber, order);
+        pub const Key = K;
+
+        fn order(a: u32, b: u32) std.math.Order {
+            return std.math.order(a, b);
+        }
+
         const Subscribers = btree.BPlusTree(
             Key,
-            btree.BPlusTree(u32, Subscriber, order),
+            btree.BPlusTree(u32, *Subscription, order),
             comp,
         );
 
-        pub const NODE_SIZE = @max(
-            Subscribers.NODE_SIZE,
-            SubscriberTree.NODE_SIZE,
-            btree.BPlusSet(Dropped, Dropped.order).NODE_SIZE,
-        );
+        const Dropped = btree.BPlusSet(Drops, Drops.order);
 
-        pub const Subscriber = struct {
-            active: bool,
+        const Callback = *const fn (*Subscription, Args) bool;
+
+        fn noopCallback(_: *Subscription, _: Args) bool {
+            return false;
+        }
+
+        pub const Subscription = struct {
+            pub const noop: @This() = .{
+                .callback = noopCallback,
+                .active = false,
+                .id = 0,
+            };
+
             callback: Callback,
-            context: [MAX_CONTEXT_SIZE]u8 align(MAX_CONTEXT_ALIGN.toByteUnits()),
+            active: bool,
+            id: u32,
+
+            pub fn enable(self: *@This()) void {
+                assert(self.id != 0);
+                self.active = true;
+            }
         };
 
-        pub const Dropped = struct {
+        pub const NODE_SIZE = @max(
+            Subscribers.NODE_SIZE,
+            Subscribers.Value.NODE_SIZE,
+            Dropped.NODE_SIZE,
+        );
+
+        pub const Drops = struct {
             key: Key,
             id: u32,
-            pub fn order(a: Dropped, b: Dropped) std.math.Order {
+
+            pub fn order(a: Drops, b: Drops) std.math.Order {
                 return switch (comp(a.key, b.key)) {
                     .eq => std.math.order(a.id, b.id),
                     else => |ord| ord,
@@ -53,19 +72,14 @@ pub fn Subscriptions(
             }
         };
 
-        pub const Subscription = struct {
-            key: Key,
-            id: u32,
-        };
-
         subscribers: Subscribers,
-        dropped: btree.BPlusSet(Dropped, Dropped.order),
+        dropped: Dropped,
         chunk: Allocator,
         next_id: u32,
 
         pub fn init(self: *@This(), chunk: Allocator) !void {
             self.* = .{
-                .next_id = 0,
+                .next_id = 1,
                 .chunk = chunk,
                 .subscribers = undefined,
                 .dropped = undefined,
@@ -92,51 +106,37 @@ pub fn Subscriptions(
             self: *@This(),
             key: Key,
             callback: anytype,
-            context: anytype,
-        ) !Subscription {
-            const Context = @TypeOf(context);
-
-            assert(@sizeOf(Context) <= MAX_CONTEXT_SIZE);
-            assert(@alignOf(Context) <= MAX_CONTEXT_ALIGN.toByteUnits());
+            subscription: *Subscription,
+        ) !void {
+            assert(subscription.id == 0);
+            assert(!subscription.active);
 
             const TypeErased = struct {
-                fn _callback(sub: Subscriber, args: Args) bool {
-                    const _context: *const Context = @ptrCast(@alignCast(&sub.context));
-                    return @call(.always_inline, callback, args ++ _context.*);
+                fn _callback(sub: *Subscription, args: Args) bool {
+                    return @call(.always_inline, callback, .{sub} ++ args);
                 }
             };
 
             const id = self.next_id;
             self.next_id += 1;
 
-            var sub = Subscriber{
+            subscription.* = .{
                 .active = false,
                 .callback = TypeErased._callback,
-                .context = undefined,
+                .id = id,
             };
 
-            const ptr: *Context = @ptrCast(@alignCast(&sub.context));
-            ptr.* = context;
-
             if (self.subscribers.get_mut(key)) |subs| {
-                const old = try subs.insert(self.chunk, id, sub);
+                const old = try subs.insert(self.chunk, id, subscription);
                 assert(old == null);
             } else {
-                var subscribers: SubscriberTree = undefined;
+                var subscribers: Subscribers.Value = undefined;
                 try subscribers.init(self.chunk);
                 errdefer subscribers.deinit(self.chunk);
 
-                _ = try subscribers.insert(self.chunk, id, sub);
+                _ = try subscribers.insert(self.chunk, id, subscription);
                 _ = try self.subscribers.insert(self.chunk, key, subscribers);
             }
-
-            return .{ .key = key, .id = id };
-        }
-
-        pub fn enable(self: *@This(), sub: Subscription) void {
-            const subscribers = self.subscribers.get_mut(sub.key) orelse return;
-            const subscriber = subscribers.get_mut(sub.id) orelse return;
-            subscriber.active = true;
         }
 
         pub fn notifyAll(self: *@This(), key: Key, args: Args) void {
@@ -154,14 +154,14 @@ pub fn Subscriptions(
             self.clearDrops();
         }
 
-        pub fn notify(self: *@This(), sub: Subscription, args: Args) bool {
-            const subscribers = self.subscribers.get_mut(sub.key) orelse return false;
-            const subscriber = subscribers.get(sub.id) orelse return false;
+        pub fn notify(self: *@This(), key: Key, id: u32, args: Args) bool {
+            const subscribers = self.subscribers.get_mut(key) orelse return false;
+            const subscriber = subscribers.get(id) orelse return false;
 
             if (!subscriber.active) return false;
 
             if (!subscriber.callback(subscriber, args)) {
-                _ = self.dropped.insert(self.chunk, .{ .key = sub.key, .id = sub.id }) catch |err| {
+                _ = self.dropped.insert(self.chunk, .{ .key = key, .id = id }) catch |err| {
                     debug.panic("Drop subscriber err: {}", .{err});
                 };
             }
@@ -192,13 +192,13 @@ pub fn Subscriptions(
             subscribers.deinit(self.chunk);
         }
 
-        pub fn unsubscribe(self: *@This(), sub: Subscription) void {
-            const subscribers = self.subscribers.get_mut(sub.key) orelse return;
-            _ = subscribers.remove(self.chunk, sub.id);
+        pub fn unsubscribe(self: *@This(), key: Key, id: u32) void {
+            const subscribers = self.subscribers.get_mut(key) orelse return;
+            _ = subscribers.remove(self.chunk, id);
 
             if (subscribers.is_empty()) {
                 subscribers.deinit(self.chunk);
-                _ = self.subscribers.remove(self.chunk, sub.key);
+                _ = self.subscribers.remove(self.chunk, key);
             }
         }
     };
@@ -212,14 +212,19 @@ test "Subscriptions" {
         }
     };
 
-    const Callback = struct {
-        fn notify(value: bool, keep: bool, run: *bool) bool {
-            run.* = value;
+    const Subs = Subscriptions(Key, @Tuple(&.{ bool, bool }), Order.order);
+
+    const TestSub = struct {
+        const Self = @This();
+        run: bool,
+        sub: Subs.Subscription = .noop,
+
+        fn notify(sub: *Subs.Subscription, value: bool, keep: bool) bool {
+            const self: *Self = @fieldParentPtr("sub", sub);
+            self.run = value;
             return keep;
         }
     };
-
-    const Subs = Subscriptions(Key, @Tuple(&.{ bool, bool }), Order.order);
 
     var chunks: ChunkAllocator = undefined;
     try chunks.init(std.testing.allocator, &.{.{ 100, Subs.NODE_SIZE }});
@@ -230,25 +235,24 @@ test "Subscriptions" {
     defer subscriptions.deinit();
 
     const key = 42;
-    var context = false;
-    const sub = try subscriptions.insert(key, Callback.notify, .{&context});
+    var subscription: TestSub = .{ .run = false };
+    try subscriptions.insert(key, TestSub.notify, &subscription.sub);
 
-    try std.testing.expectEqual(@as(Key, 42), sub.key);
-    try std.testing.expectEqual(@as(u32, 0), sub.id);
-    try std.testing.expectEqual(@as(u32, 1), subscriptions.next_id);
+    try std.testing.expectEqual(1, subscription.sub.id);
+    try std.testing.expectEqual(2, subscriptions.next_id);
 
-    const subscribers = subscriptions.subscribers.get_mut(42).?;
-    const subscriber = subscribers.get(0).?;
+    const subscribers = subscriptions.subscribers.get_mut(key).?;
+    const subscriber = subscribers.get(subscription.sub.id).?;
     try std.testing.expect(!subscriber.active);
 
     subscriptions.notifyAll(42, .{ true, true });
-    try std.testing.expect(!context);
+    try std.testing.expect(!subscription.run);
 
-    subscriptions.enable(sub);
+    subscription.sub.enable();
 
     subscriptions.notifyAll(42, .{ true, true });
     subscriptions.notifyAll(24, .{ false, false });
-    try std.testing.expect(context);
+    try std.testing.expect(subscription.run);
 
     subscriptions.notifyAll(42, .{ false, false });
     try std.testing.expect(subscriptions.subscribers.get_mut(42) == null);
@@ -262,14 +266,20 @@ test "Subscription notifies only its subscriber" {
         }
     };
 
-    const Callback = struct {
-        fn notify(value: u32, keep: bool, result: *u32) bool {
-            result.* = value;
+    const Subs = Subscriptions(Key, @Tuple(&.{ u32, bool }), Order.order);
+
+    const TestSubscription = struct {
+        const Self = @This();
+
+        result: u32,
+        sub: Subs.Subscription = undefined,
+
+        fn notify(sub: *Subs.Subscription, value: u32, keep: bool) bool {
+            const self: *Self = @fieldParentPtr("sub", sub);
+            self.result = value;
             return keep;
         }
     };
-
-    const Subs = Subscriptions(Key, @Tuple(&.{ u32, bool }), Order.order);
 
     var chunks: ChunkAllocator = undefined;
     try chunks.init(std.testing.allocator, &.{.{ 100, Subs.NODE_SIZE }});
@@ -279,21 +289,30 @@ test "Subscription notifies only its subscriber" {
     try subscriptions.init(chunks.allocator());
     defer subscriptions.deinit();
 
-    var first_result: u32 = 0;
-    var second_result: u32 = 0;
-    const first = try subscriptions.insert(42, Callback.notify, .{&first_result});
-    const second = try subscriptions.insert(42, Callback.notify, .{&second_result});
-    subscriptions.enable(first);
-    subscriptions.enable(second);
+    var test_sub_1: TestSubscription = .{
+        .result = 0,
+        .sub = .noop,
+    };
 
-    _ = subscriptions.notify(first, .{ 35, true });
+    var test_sub_2: TestSubscription = .{
+        .result = 0,
+        .sub = .noop,
+    };
 
-    try std.testing.expectEqual(@as(u32, 35), first_result);
-    try std.testing.expectEqual(@as(u32, 0), second_result);
+    try subscriptions.insert(42, TestSubscription.notify, &test_sub_1.sub);
+    try subscriptions.insert(42, TestSubscription.notify, &test_sub_2.sub);
 
-    _ = subscriptions.notify(first, .{ 70, false });
+    test_sub_1.sub.enable();
+    test_sub_2.sub.enable();
 
-    try std.testing.expectEqual(@as(u32, 70), first_result);
-    try std.testing.expect(subscriptions.subscribers.get_mut(42).?.get(first.id) == null);
-    try std.testing.expect(subscriptions.subscribers.get_mut(42).?.get(second.id) != null);
+    _ = subscriptions.notify(42, 1, .{ 35, true });
+
+    try std.testing.expectEqual(35, test_sub_1.result);
+    try std.testing.expectEqual(0, test_sub_2.result);
+
+    _ = subscriptions.notify(42, 1, .{ 70, false });
+
+    try std.testing.expectEqual(70, test_sub_1.result);
+    try std.testing.expect(subscriptions.subscribers.get_mut(42).?.get(1) == null);
+    try std.testing.expect(subscriptions.subscribers.get_mut(42).?.get(2) != null);
 }
