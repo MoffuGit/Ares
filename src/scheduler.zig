@@ -76,7 +76,11 @@ pub fn wakeOne(self: *Scheduler) void {
 pub fn push(self: *Scheduler, task: *Task) !void {
     if (self.closed.load(.acquire)) return error.Closed;
 
-    self.queue.push(task, self.io);
+    if (Worker.local) |local| {
+        local.push(task, self.io);
+    } else {
+        self.queue.push(task, self.io);
+    }
     self.taskAdded();
 }
 
@@ -93,20 +97,18 @@ fn register(self: *Scheduler, worker: *Worker) void {
     }
 }
 
-pub const Worker = struct {
+const Worker = struct {
     queue: Queue,
     next: ?*Worker,
     target: ?*Worker,
-    scheduler: *Scheduler,
 
-    pub threadlocal var local: ?*Worker = null;
+    threadlocal var local: ?*Worker = null;
 
     pub fn run(self: *Worker, scheduler: *Scheduler) Io.Cancelable!void {
         self.* = .{
             .queue = .{},
             .next = null,
             .target = null,
-            .scheduler = scheduler,
         };
 
         local = self;
@@ -144,10 +146,8 @@ pub const Worker = struct {
         }
     }
 
-    pub fn push(self: *Worker, task: *Task) !void {
-        if (self.scheduler.closed.load(.acquire)) return error.Closed;
-        self.queue.push(task, self.scheduler.io);
-        self.scheduler.taskAdded();
+    pub fn push(self: *Worker, task: *Task, io: Io) void {
+        self.queue.push(task, io);
     }
 };
 

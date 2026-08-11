@@ -1,7 +1,3 @@
-//TODO:
-//I need to check all the try/catch/defer/errdefer points
-//i didn't care becaues i wanted to test the scheduler
-
 const std = @import("std");
 const Io = std.Io;
 const c = std.c;
@@ -33,7 +29,6 @@ const Completion = Loop.Completion;
 const Waker = Loop.Waker;
 const Scheduler = @import("../scheduler.zig");
 const Task = Scheduler.Task;
-const Worker = Scheduler.Worker;
 const Worktree = @import("../worktree.zig");
 const Event = Worktree.Event;
 const attr = @import("attr.zig");
@@ -47,6 +42,7 @@ const Scanner = @This();
 
 io: Io,
 gpa: Allocator,
+scheduler: *Scheduler,
 arena: Allocator,
 snapshot: Snapshot,
 mutex: Io.Mutex,
@@ -64,6 +60,7 @@ pub fn init(
     io: Io,
 ) !void {
     self.* = .{
+        .scheduler = scheduler,
         .gpa = gpa,
         .arena = arena,
         .io = io,
@@ -77,15 +74,15 @@ pub fn init(
     };
 
     self.snapshot = try self.parent().snapshot.clone(self.gpa);
+    errdefer self.snapshot.deinit();
 
     try self.chunks.initThreadSafe(
         self.arena,
         &.{
             .{ 1024 * 1024 * 1024, RANGE_NODE_SIZE },
             .{ 1024 * 1024 * 1024, CHUNK_SIZE },
-            .{ 1024 * 1024, @sizeOf(ScannerTask) },
+            .{ 1024 * 1024 * 2, @max(@sizeOf(EntryData), @sizeOf(ScannerTask)) },
             .{ 1024 * 1024, @sizeOf(SharedFd) },
-            .{ 1024 * 1024, @sizeOf(EntryData) },
         },
         self.io,
     );
@@ -97,7 +94,7 @@ pub fn init(
         .scanner = self,
         .kind = .initial_scan,
         .task = .{
-            .callback = handleTask,
+            .callback = taskCallback,
         },
     };
 
@@ -147,47 +144,44 @@ fn taskDone(self: *Scanner, task: *ScannerTask) void {
     if (self.stopped.load(.acquire)) {
         producer.push(.stopped);
     } else {
+        const snapshot = self.snapshot.clone(self.gpa) catch return;
         producer.push(.{
             .update = .{
                 .scanning = false,
-                .snapshot = self.snapshot.clone(self.gpa) catch unreachable,
+                .snapshot = snapshot,
             },
         });
     }
 }
 
-fn handleTask(task: *Task) void {
+fn taskCallback(task: *Task) void {
     const t: *ScannerTask = @fieldParentPtr("task", task);
 
     const self = t.scanner;
     defer self.taskDone(t);
 
+    self._taskCallback(t) catch |err| {
+        switch (err) {
+            error.Closed => {},
+            else => log.err("Scanner err={}", .{err}),
+        }
+    };
+}
+
+fn _taskCallback(self: *Scanner, task: *ScannerTask) !void {
     if (self.stopped.load(.acquire)) return;
 
-    switch (t.kind) {
-        .initial_scan => self.initialScan() catch |err| {
-            switch (err) {
-                error.Closed => {},
-                else => log.err("Initial Scan err={}", .{err}),
-            }
-        },
-        .scan_dir => |dir| {
-            self.scanDir(dir.path, dir.shared_fd, dir.ignore) catch |err| {
-                switch (err) {
-                    error.Closed => {},
-                    else => log.err("Initial Scan err={}", .{err}),
-                }
-            };
-        },
+    switch (task.kind) {
+        .initial_scan => try self.initialScan(),
+        .scan_dir => |dir| try self.scanDir(dir.path, dir.shared_fd, dir.ignore),
     }
 }
 
 fn initialScan(
     self: *Scanner,
 ) !void {
-    const worker = Worker.local orelse unreachable;
-    const chunks = self.chunks.threadSafeAllocator();
     const worktree = self.parent();
+    const chunks = self.chunks.threadSafeAllocator();
 
     const stat = try Io.Dir.statFile(
         .cwd(),
@@ -238,97 +232,38 @@ fn initialScan(
                 .ignore = null,
             },
         },
-        .task = .{ .callback = handleTask },
+        .task = .{ .callback = taskCallback },
     };
 
-    try worker.push(&task.task);
+    try self.scheduler.push(&task.task);
     _ = self.task_count.fetchAdd(1, .release);
 }
-
-const IgnoreNode = struct {
-    gi: GitIgnore,
-    relative_offset: u32,
-
-    parent: ?*const IgnoreNode,
-};
-
-fn isIgnored(
-    start: ?*const IgnoreNode,
-    path: []const u8,
-    basename: []const u8,
-    is_dir: bool,
-) bool {
-    var node = start;
-    while (node) |n| : (node = n.parent) {
-        if (n.gi.is_empty) continue;
-
-        if (n.gi.checkWithBasename(
-            path[n.relative_offset..],
-            basename,
-            is_dir,
-        )) |verdict| {
-            return verdict;
-        }
-    }
-    return false;
-}
-
-const EntryData = struct {
-    path: ChunkedPath,
-    meta: Snapshot.Meta,
-    next: ?*EntryData = null,
-};
-
-const SharedFd = struct {
-    dir: Io.Dir,
-    refs: atomic.Value(u32),
-
-    pub fn init(self: *SharedFd, dir: Io.Dir, refs: u32) void {
-        self.* = .{
-            .dir = dir,
-            .refs = .init(refs),
-        };
-    }
-
-    fn release(self: *SharedFd) u32 {
-        return self.refs.fetchSub(1, .acq_rel);
-    }
-
-    fn close(self: *SharedFd, io: Io) void {
-        self.dir.close(io);
-    }
-};
 
 fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore: ?*const IgnoreNode) !void {
     const chunks = self.chunks.threadSafeAllocator();
     var buffer: [64 * 1024]u8 = undefined;
     var tasks: SinglyLinkedList(Task) = .{};
-    //     errdefer {
-    //         while (jobs.pop()) |j| {
-    //             j.finish(chunks, self.io);
-    //         }
-    //     }
     var count: u32 = 0;
+
+    defer if (shared_fd) |fd| fd.release(chunks, self.io);
 
     const dir = bkl: {
         if (shared_fd) |fd| {
             const len = dir_path.basename(&buffer);
-            break :bkl try fd.dir.openDir(self.io, buffer[0..len], .{ .follow_symlinks = false, .iterate = true });
+            break :bkl try fd.dir.openDir(
+                self.io,
+                buffer[0..len],
+                .{ .follow_symlinks = false, .iterate = true },
+            );
         }
 
-        break :bkl try Io.Dir.openDirAbsolute(self.io, self.snapshot.abs_root, .{ .follow_symlinks = false, .iterate = true });
+        break :bkl try Io.Dir.openDirAbsolute(
+            self.io,
+            self.snapshot.abs_root,
+            .{ .follow_symlinks = false, .iterate = true },
+        );
     };
     errdefer dir.close(self.io);
-
-    defer if (shared_fd) |fd| {
-        const prev = fd.release();
-
-        assert(prev != 0);
-        if (prev == 1) {
-            fd.close(self.io);
-            chunks.destroy(fd);
-        }
-    };
 
     var effective_ignore: ?*const IgnoreNode = ignore;
     {
@@ -389,10 +324,10 @@ fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore:
         entries.append(data);
 
         if (is_dir and !(is_hidden or ignored)) {
-            const task = try chunks.create(ScannerTask);
+            const task = chunks.create(ScannerTask) catch unreachable;
             task.* = .{
                 .scanner = self,
-                .task = .{ .callback = handleTask },
+                .task = .{ .callback = taskCallback },
                 .kind = .{
                     .scan_dir = .{
                         .shared_fd = null,
@@ -429,13 +364,16 @@ fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore:
             .dir = dir,
             .refs = .init(count),
         };
-
-        const worker = Worker.local orelse unreachable;
+        //     errdefer {
+        //         while (jobs.pop()) |j| {
+        //             j.finish(chunks, self.io);
+        //         }
+        //     }
 
         while (tasks.pop()) |task| {
             const scanner_task: *ScannerTask = @fieldParentPtr("task", task);
             scanner_task.kind.scan_dir.shared_fd = shared;
-            try worker.push(task);
+            try self.scheduler.push(task);
             _ = self.task_count.fetchAdd(1, .release);
         }
     } else {
@@ -454,10 +392,13 @@ fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore:
             self.mutex.lock(self.io) catch unreachable;
             defer self.mutex.unlock(self.io);
 
+            var snapshot = try self.snapshot.clone(self.gpa);
+            errdefer snapshot.deinit();
+
             producer.push(.{
                 .update = .{
                     .scanning = true,
-                    .snapshot = try self.snapshot.clone(self.gpa),
+                    .snapshot = snapshot,
                 },
             });
 
@@ -465,3 +406,63 @@ fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore:
         }
     }
 }
+
+const IgnoreNode = struct {
+    gi: GitIgnore,
+    relative_offset: u32,
+
+    parent: ?*const IgnoreNode,
+};
+
+fn isIgnored(
+    start: ?*const IgnoreNode,
+    path: []const u8,
+    basename: []const u8,
+    is_dir: bool,
+) bool {
+    var node = start;
+    while (node) |n| : (node = n.parent) {
+        if (n.gi.is_empty) continue;
+
+        if (n.gi.checkWithBasename(
+            path[n.relative_offset..],
+            basename,
+            is_dir,
+        )) |verdict| {
+            return verdict;
+        }
+    }
+    return false;
+}
+
+const EntryData = struct {
+    path: ChunkedPath,
+    meta: Snapshot.Meta,
+    next: ?*EntryData = null,
+};
+
+const SharedFd = struct {
+    dir: Io.Dir,
+    refs: atomic.Value(u32),
+
+    pub fn init(self: *SharedFd, dir: Io.Dir, refs: u32) void {
+        self.* = .{
+            .dir = dir,
+            .refs = .init(refs),
+        };
+    }
+
+    fn release(self: *SharedFd, alloc: Allocator, io: Io) void {
+        const prev = self.refs.fetchSub(1, .acq_rel);
+
+        assert(prev != 0);
+        if (prev == 1) {
+            self.close(io);
+            alloc.destroy(self);
+        }
+    }
+
+    fn close(self: *SharedFd, io: Io) void {
+        self.dir.close(io);
+    }
+};
