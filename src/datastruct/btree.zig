@@ -8,12 +8,12 @@ const CAPACITY: usize = 2 * BASE;
 
 pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K) std.math.Order) type {
     return union(enum) {
-        const Self = @This();
+        const Node = @This();
 
-        Internal: struct { childs: [CAPACITY]*Self = undefined, keys: [CAPACITY]K = undefined, len: u16 = 0, height: usize = 0 },
-        Leaf: struct { items: [CAPACITY]V = undefined, keys: [CAPACITY]K = undefined, len: u16 = 0, next: ?*Self = null },
+        Internal: struct { childs: [CAPACITY]*Node = undefined, keys: [CAPACITY]K = undefined, len: u16 = 0, height: usize = 0 },
+        Leaf: struct { items: [CAPACITY]V = undefined, keys: [CAPACITY]K = undefined, len: u16 = 0, next: ?*Node = null },
 
-        pub fn add_item(self: *Self, key: K, value: V) void {
+        pub fn add_item(self: *Node, key: K, value: V) void {
             assert(self.is_leaf());
             assert(self.Leaf.len < CAPACITY);
 
@@ -37,7 +37,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             leaf.len += 1;
         }
 
-        pub fn add_children(self: *Self, key: K, value: *Self) void {
+        pub fn add_children(self: *Node, key: K, value: *Node) void {
             assert(!self.is_leaf());
             assert(self.Internal.len < CAPACITY);
 
@@ -61,7 +61,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             internal.len += 1;
         }
 
-        pub fn remove_item(self: *Self, index: u16) struct { key: K, value: V } {
+        pub fn remove_item(self: *Node, index: u16) struct { key: K, value: V } {
             assert(self.is_leaf());
             assert(self.Leaf.len > index);
 
@@ -86,7 +86,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             return .{ .key = key, .value = value };
         }
 
-        pub fn remove_children(self: *Self, index: u16) struct { key: K, child: *Self } {
+        pub fn remove_children(self: *Node, index: u16) struct { key: K, child: *Node } {
             assert(!self.is_leaf());
             assert(self.Internal.len > index);
 
@@ -111,13 +111,13 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             return .{ .key = key, .child = child };
         }
 
-        fn clone(self: *const Self, alloc: Allocator) Allocator.Error!*Self {
-            var last_leaf: ?*Self = null;
+        fn clone(self: *const Node, alloc: Allocator) Allocator.Error!*Node {
+            var last_leaf: ?*Node = null;
             return try self.clone_recursive(alloc, &last_leaf);
         }
 
-        fn clone_recursive(self: *const Self, alloc: Allocator, last_leaf: *?*Self) Allocator.Error!*Self {
-            const new_node = try alloc.create(Self);
+        fn clone_recursive(self: *const Node, alloc: Allocator, last_leaf: *?*Node) Allocator.Error!*Node {
+            const new_node = try alloc.create(Node);
 
             switch (self.*) {
                 .Leaf => |leaf| {
@@ -152,19 +152,19 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             return new_node;
         }
 
-        pub fn items(self: *const Self) *const [CAPACITY]V {
+        pub fn items(self: *const Node) *const [CAPACITY]V {
             assert(self.is_leaf());
             return &self.Leaf.items;
         }
 
-        pub fn keys(self: *const Self) *const [CAPACITY]K {
+        pub fn keys(self: *const Node) *const [CAPACITY]K {
             return switch (self.*) {
                 .Internal => &self.Internal.keys,
                 .Leaf => &self.Leaf.keys,
             };
         }
 
-        pub fn is_empty(self: Self) bool {
+        pub fn is_empty(self: Node) bool {
             switch (self) {
                 .Internal => return false,
                 .Leaf => |leaf| {
@@ -173,37 +173,37 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             }
         }
 
-        pub fn len(self: Self) u16 {
+        pub fn len(self: Node) u16 {
             switch (self) {
                 .Internal => |int| return int.len,
                 .Leaf => |leaf| return leaf.len,
             }
         }
 
-        pub fn is_leaf(self: Self) bool {
+        pub fn is_leaf(self: Node) bool {
             switch (self) {
                 .Internal => return false,
                 .Leaf => return true,
             }
         }
 
-        pub fn height(self: Self) usize {
+        pub fn height(self: Node) usize {
             switch (self) {
                 .Internal => |internal| return internal.height,
                 .Leaf => return 0,
             }
         }
 
-        pub fn is_underflowing(self: Self) bool {
+        pub fn is_underflowing(self: Node) bool {
             return self.len() < BASE;
         }
 
-        pub fn childs(self: *const Self) *const [CAPACITY]*Self {
+        pub fn childs(self: *const Node) *const [CAPACITY]*Node {
             assert(!self.is_leaf());
             return &self.Internal.childs;
         }
 
-        pub fn destroy(self: *Self, alloc: Allocator) void {
+        pub fn destroy(self: *Node, alloc: Allocator) void {
             switch (self.*) {
                 .Internal => |*internal| {
                     if (internal.len > 0) {
@@ -217,7 +217,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             alloc.destroy(self);
         }
 
-        pub fn append(self: *Self, other: Self, alloc: Allocator) !?V {
+        pub fn append(self: *Node, other: Node, alloc: Allocator) !?V {
             if (self.is_empty()) {
                 self.* = other;
             } else if (!other.is_leaf() or other.items().len != 0) {
@@ -228,9 +228,9 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                 } else if (try self.append_recursive(other, alloc)) |res| {
                     switch (res) {
                         .append => |right| {
-                            const left = try alloc.create(Self);
+                            const left = try alloc.create(Node);
                             left.* = self.*;
-                            self.* = try Self.from_child_nodes(left, right);
+                            self.* = try Node.from_child_nodes(left, right);
                         },
                         .duplicated => |old| return old,
                     }
@@ -240,8 +240,8 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             return null;
         }
 
-        pub fn from_child_nodes(left: *Self, right: *Self) !Self {
-            var childrens: [CAPACITY]*Self = undefined;
+        pub fn from_child_nodes(left: *Node, right: *Node) !Node {
+            var childrens: [CAPACITY]*Node = undefined;
             childrens[0] = left;
             childrens[1] = right;
 
@@ -254,16 +254,16 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
 
         const Result = union(enum) {
             duplicated: V,
-            append: *Self,
+            append: *Node,
         };
 
-        pub fn append_recursive(self: *Self, other: Self, alloc: Allocator) !?Result {
+        pub fn append_recursive(self: *Node, other: Node, alloc: Allocator) !?Result {
             switch (self.*) {
                 .Internal => |*internal| {
                     const height_delta = internal.height - other.height();
 
                     var keys_to_append: [CAPACITY]K = undefined;
-                    var childs_to_append: [CAPACITY]*Self = undefined;
+                    var childs_to_append: [CAPACITY]*Node = undefined;
                     var len_to_append: u16 = 0;
 
                     if (height_delta == 0) {
@@ -272,7 +272,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         len_to_append = other.len();
                     } else if (height_delta == 1 and !other.is_underflowing()) {
                         keys_to_append[0] = other.keys()[0];
-                        const new_other_node = try alloc.create(Self);
+                        const new_other_node = try alloc.create(Node);
                         new_other_node.* = other;
                         childs_to_append[0] = new_other_node;
                         len_to_append = 1;
@@ -314,7 +314,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                     const childs_len = internal.len + len_to_append;
                     if (childs_len > CAPACITY) {
                         var temp_keys: [CAPACITY * 2]K = undefined;
-                        var temp_items: [CAPACITY * 2]*Self = undefined;
+                        var temp_items: [CAPACITY * 2]*Node = undefined;
 
                         var idx: usize = 0;
                         var other_idx: usize = 0;
@@ -354,10 +354,10 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         }
 
                         var left_keys: [CAPACITY]K = undefined;
-                        var left_items: [CAPACITY]*Self = undefined;
+                        var left_items: [CAPACITY]*Node = undefined;
 
                         var right_keys: [CAPACITY]K = undefined;
-                        var right_items: [CAPACITY]*Self = undefined;
+                        var right_items: [CAPACITY]*Node = undefined;
 
                         const mid = (childs_len + childs_len % 2) / 2;
 
@@ -371,7 +371,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         internal.keys = left_keys;
                         internal.len = mid;
 
-                        const right_node = try alloc.create(Self);
+                        const right_node = try alloc.create(Node);
                         right_node.* = .{ .Internal = .{ .childs = right_items, .keys = right_keys, .len = childs_len - mid, .height = internal.height } };
                         return Result{ .append = right_node };
                     } else {
@@ -467,7 +467,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
                         leaf.keys = left_keys;
                         leaf.len = mid;
 
-                        const right_node = try alloc.create(Self);
+                        const right_node = try alloc.create(Node);
                         right_node.* = .{ .Leaf = .{ .items = right_items, .keys = right_keys, .len = new_len - mid, .next = original_next_leaf } };
 
                         leaf.next = right_node;
@@ -484,7 +484,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             return null;
         }
 
-        pub fn find(self: *Self, key: K) ?V {
+        pub fn find(self: *Node, key: K) ?V {
             switch (self.*) {
                 .Leaf => |*leaf| {
                     var i: u16 = 0;
@@ -520,7 +520,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             }
         }
 
-        pub fn find_mut(self: *Self, key: K) ?*V {
+        pub fn find_mut(self: *Node, key: K) ?*V {
             switch (self.*) {
                 .Leaf => |*leaf| {
                     var i: u16 = 0;
@@ -556,7 +556,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             }
         }
 
-        pub fn delete(self: *Self, key: K, alloc: Allocator) ?V {
+        pub fn delete(self: *Node, key: K, alloc: Allocator) ?V {
             switch (self.*) {
                 .Leaf => |*leaf| {
                     var i: u16 = 0;
@@ -613,7 +613,7 @@ pub fn NodeType(comptime K: type, comptime V: type, comp: *const fn (a: K, b: K)
             }
         }
 
-        fn rebalance_child(self: *Self, idx: u16, alloc: Allocator) void {
+        fn rebalance_child(self: *Node, idx: u16, alloc: Allocator) void {
             const parent = &self.Internal;
             const child = parent.childs[idx];
 
