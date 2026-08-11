@@ -22,8 +22,6 @@ const Scanner = @import("worktree/scanner.zig");
 const Snapshot = @import("worktree/snapshot.zig");
 const Entry = Snapshot.Entry;
 
-const state = &global.state;
-
 const log = std.log.scoped(.worktree);
 
 pub const Worktree = @This();
@@ -145,9 +143,7 @@ fn handleEvents(self: *Worktree, res: anyerror!void) bool {
     return true;
 }
 
-test {
-    _ = bench;
-
+test "Worktree" {
     const gpa = testing.allocator;
     const io = testing.io;
     const chromium_path = @import("test_options").chromium_path;
@@ -168,4 +164,8 @@ test {
     defer worktree.drop();
 
     try testing.expectEqualStrings(worktree.read().snapshot.abs_root, chromium_path);
+}
+
+test {
+    _ = bench;
 }

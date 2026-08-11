@@ -41,7 +41,6 @@ const BulkAttr = attr.BulkAttr;
 const Snapshot = @import("snapshot.zig");
 
 const UPDATE_INTERVAL_IN_MS = if (builtin.mode == .Debug) 2000 else 100;
-const state = &global.state;
 const log = std.log.scoped(.scanner);
 
 const Scanner = @This();

@@ -33,9 +33,7 @@ test "benchmark: Worktree initial scan" {
     defer global.state.deinit();
 
     const gpa = global.state.gpa;
-    //BUG:
-    //using the global state io make the test crash
-    const io = std.testing.io;
+    const io = global.state.threaded.io();
 
     var app: App = undefined;
     try app.init(.{}, gpa, io);

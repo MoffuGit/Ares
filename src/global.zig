@@ -48,9 +48,9 @@ const GlobalState = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        self.threaded.deinit();
         if (use_safe_allocator) {
             _ = safe_allocator.deinit(); // Leaks do not affect return code.
         }
-        self.threaded.deinit();
     }
 };
