@@ -159,10 +159,14 @@ pub fn flushTimers(self: *Loop) void {
         const completion = t.completion;
         assert(completion.state == .active);
 
-        completion.state = .completed;
+        completion.state = .idle;
         completion.result = .{ .timer = {} };
 
-        self.queues.push(.completions, completion);
+        if (completion.callback(self, completion)) {
+            t.next = self.time.next_tick(t.ms);
+            self.queues.push(.timers, completion);
+            completion.state = .submitted;
+        }
     }
 }
 
@@ -172,14 +176,7 @@ pub fn flushCompletions(self: *Loop) void {
         completion.state = .idle;
 
         if (completion.callback(self, completion)) {
-            switch (completion.operation) {
-                .timer => |*time| {
-                    time.next = self.time.next_tick(time.ms);
-                    completion.state = .submitted;
-                    self.queues.push(.timers, completion);
-                },
-                else => self.submit(completion),
-            }
+            self.submit(completion);
         }
     }
 }
@@ -572,13 +569,7 @@ pub const Completion = struct {
                             _target.canceled();
                         }
                     },
-                    .completed => _target.canceled(),
-                    .submitted => {
-                        _target.canceled();
-                        if (_target.operation == .timer) {
-                            loop.queues.push(.completions, _target);
-                        }
-                    },
+                    .completed, .submitted => _target.canceled(),
                     .active => {
                         switch (_target.operation) {
                             .timer => |*timer_op| {
