@@ -1,5 +1,5 @@
-//This App and many parts/ideas of it came from gpui (https://github.com/zed-industries/zed/tree/main/crates/gpui)
-//LICENSE: [ZED]
+// //This App and many parts/ideas of it came from gpui (https://github.com/zed-industries/zed/tree/main/crates/gpui)
+// //LICENSE: [ZED]
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
@@ -160,17 +160,6 @@ pub fn updateFrame(self: *App, any: AnyEntity) UpdateFrame {
     return .{ .any = any, .app = self };
 }
 
-pub fn notify(self: *App, entity: anytype) void {
-    const _Entity = @TypeOf(entity);
-    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
-        @compileError("entity must be an Entity(T)");
-    }
-
-    _ = self.notifications.insert(self.chunks.allocator(), entity.id()) catch |err| {
-        log.err("We cannot notify, err: {}", .{err});
-    };
-}
-
 pub fn startUpdate(self: *App) void {
     self.peding_updates += 1;
 }
@@ -191,54 +180,10 @@ pub fn flush(self: *App, mode: Loop.RunMode) void {
     self.loop.run(mode) catch |err| {
         log.err("Event Loop err={}", .{err});
     };
-    self.destroyDroppedEntities();
     self.flushDeferred();
+    self.destroyDroppedEntities();
     self.flushNotifications();
     self.flushEvents();
-}
-
-pub fn flushNotifications(self: *App) void {
-    var iter = self.notifications.iter();
-    while (iter.next()) |id| {
-        self.observers.notifyAll(id, .{ self, id });
-    }
-
-    self.notifications.clear(self.chunks.allocator());
-}
-
-pub fn flushDeferred(self: *App) void {
-    const chunks = self.chunks.allocator();
-    while (self.deferred.pop()) |deferred| {
-        deferred.callback(&deferred.context);
-        chunks.destroy(deferred);
-    }
-}
-
-pub fn flushEvents(self: *App) void {
-    const chunk = self.chunks.allocator();
-    while (!self.events.empty() or !self.dispatched.empty()) {
-        while (self.events.pop()) |event| {
-            self.listeners.notifyAll(
-                event.id,
-                .{ self, event.ptr, event.type },
-            );
-
-            event.destroy(chunk);
-            chunk.destroy(event);
-        }
-
-        while (self.dispatched.pop()) |event| {
-            const reach = self.receivers.notify(
-                event.subscription,
-                .{ self, event.ptr, event.type },
-            );
-
-            if (!reach) event.deinit();
-
-            event.destroy(chunk);
-            chunk.destroy(event);
-        }
-    }
 }
 
 pub fn destroyDroppedEntities(self: *App) void {
@@ -258,6 +203,130 @@ pub fn destroyDroppedEntities(self: *App) void {
     }
 }
 
+pub fn flushNotifications(self: *App) void {
+    var iter = self.notifications.iter();
+    while (iter.next()) |id| {
+        self.observers.notifyAll(id, .{ self, id });
+    }
+
+    self.notifications.clear(self.chunks.allocator());
+}
+
+pub const Observers = Subscriptions(
+    EntityId,
+    @Tuple(&.{ *App, EntityId }),
+    ent.entityOrder,
+);
+
+pub const Observer = Observers.Subscription;
+
+pub fn observe(
+    self: *App,
+    entity: anytype,
+    function: anytype,
+    observer: *Observer,
+) !void {
+    const _Entity = @TypeOf(entity);
+    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
+        @compileError("entity must be an Entity(T)");
+    }
+
+    const T = _Entity.EntityType;
+
+    const TypeErased = struct {
+        fn _callback(sub: *Observer, app: *App, id: EntityId) bool {
+            const observed = AnyEntity.init(&app.entities, id, TypeInfo.init(T));
+            const _entity = _Entity.from(observed) orelse return false;
+            return @call(.always_inline, function, .{ sub, app, _entity });
+        }
+    };
+
+    try self.observers.insert(
+        entity.id(),
+        TypeErased._callback,
+        observer,
+    );
+
+    self.@"defer"(Observer, Observer.enable, observer);
+}
+
+pub fn notify(self: *App, entity: anytype) void {
+    const _Entity = @TypeOf(entity);
+    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
+        @compileError("entity must be an Entity(T)");
+    }
+
+    _ = self.notifications.insert(self.chunks.allocator(), entity.id()) catch |err| {
+        log.err("We cannot notify, err: {}", .{err});
+    };
+}
+
+pub fn flushDeferred(self: *App) void {
+    const chunks = self.chunks.allocator();
+
+    while (self.deferred.pop()) |deferred| {
+        deferred.callback(deferred.context);
+        chunks.destroy(deferred);
+    }
+}
+
+pub fn @"defer"(
+    self: *App,
+    comptime T: type,
+    comptime function: *const fn (*T) void,
+    data: *T,
+) void {
+    const chunks = self.chunks.allocator();
+    const deferred = chunks.create(Deferred) catch @panic("Deferred Overflow");
+
+    const TypeErased = struct {
+        fn callback(ptr: *anyopaque) void {
+            const d: *T = @ptrCast(@alignCast(ptr));
+
+            @call(.always_inline, function, .{d});
+        }
+    };
+
+    deferred.* = .{ .callback = TypeErased.callback, .context = data };
+
+    self.deferred.append(deferred);
+}
+
+pub const Deferred = struct {
+    callback: *const fn (*anyopaque) void,
+    context: *anyopaque,
+
+    next: ?*Deferred = null,
+};
+
+pub fn flushEvents(self: *App) void {
+    const chunk = self.chunks.allocator();
+    while (!self.events.empty() or !self.dispatched.empty()) {
+        while (self.events.pop()) |event| {
+            self.listeners.notifyAll(
+                event.id,
+                .{ self, event.ptr, event.type },
+            );
+
+            event.destroy(chunk);
+            chunk.destroy(event);
+        }
+
+        while (self.dispatched.pop()) |event| {
+            const reach = self.receivers.notify(
+                event.key,
+                event.id,
+                .{ self, event.ptr, event.type },
+            );
+
+            if (!reach) event.deinit();
+
+            event.destroy(chunk);
+            chunk.destroy(event);
+        }
+    }
+}
+
 pub const Event = struct {
     id: EntityId,
     type: TypeId,
@@ -271,11 +340,21 @@ pub const Event = struct {
     }
 };
 
-pub const Deferred = struct {
-    callback: *const fn (*anyopaque) void,
-    context: [MAX_CONTEXT_SIZE]u8 align(MAX_CONTEXT_ALIGN.toByteUnits()),
+pub const Dispatched = struct {
+    key: Receivers.Key,
+    id: u32,
+    type: TypeId,
+    ptr: *anyopaque,
 
-    next: ?*Deferred = null,
+    next: ?*Dispatched = null,
+
+    pub fn deinit(self: *const Dispatched) void {
+        self.type.deinit(self.ptr);
+    }
+
+    pub fn destroy(self: *const Dispatched, chunk: Allocator) void {
+        self.type.destroy(self.ptr, chunk);
+    }
 };
 
 pub const Listeners = Subscriptions(
@@ -294,58 +373,34 @@ pub const Receivers = Subscriptions(
 
 pub const Receiver = Receivers.Subscription;
 
-pub const Dispatched = struct {
-    subscription: Receivers.Subscription,
-    type: TypeId,
-    ptr: *anyopaque,
-
-    next: ?*Dispatched = null,
-
-    pub fn deinit(self: *const Dispatched) void {
-        self.type.deinit(self.ptr);
-    }
-
-    pub fn destroy(self: *const Dispatched, chunk: Allocator) void {
-        self.type.destroy(self.ptr, chunk);
-    }
-};
-
 pub fn receive(
     self: *App,
-    receiver: anytype,
+    entity: anytype,
     comptime E: type,
     function: anytype,
-    args: anytype,
-) !Receiver {
-    const _Entity = @TypeOf(receiver);
+    receiver: *Receiver,
+) !void {
+    const _Entity = @TypeOf(entity);
 
     if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
         @compileError("receiver must be an Entity(T)");
     }
 
-    const Args = @TypeOf(args);
-
     const TypeErased = struct {
-        fn _callback(app: *App, ptr: *anyopaque, _type: TypeId, _args: Args) bool {
+        fn _callback(sub: *Receiver, app: *App, ptr: *anyopaque, _type: TypeId) bool {
             if (TypeInfo.init(E) != _type) @panic("Receiver subscription event type mismatch");
             const event: *E = @ptrCast(@alignCast(ptr));
-            return @call(.always_inline, function, .{ app, event } ++ _args);
-        }
-
-        fn enable(app: *App, sub: Receiver) void {
-            app.receivers.enable(sub);
+            return @call(.always_inline, function, .{ sub, app, event });
         }
     };
 
-    const sub = try self.receivers.insert(
-        receiver.id(),
+    try self.receivers.insert(
+        entity.id(),
         TypeErased._callback,
-        .{args},
+        receiver,
     );
 
-    _ = self.@"defer"(TypeErased.enable, .{ self, sub });
-
-    return sub;
+    self.@"defer"(Receiver, Receiver.enable, receiver);
 }
 
 pub fn listen(
@@ -353,21 +408,19 @@ pub fn listen(
     entity: anytype,
     comptime E: type,
     function: anytype,
-    args: anytype,
-) !Listeners.Subscription {
+    listener: *Listener,
+) !void {
     const _Entity = @TypeOf(entity);
 
     if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
         @compileError("entity must be an Entity(T)");
     }
 
-    const Args = @TypeOf(args);
-
     const TypeErased = struct {
-        fn _callback(app: *App, ptr: *anyopaque, _type: TypeId, _args: Args) bool {
+        fn _callback(sub: *Listener, app: *App, ptr: *anyopaque, _type: TypeId) bool {
             if (TypeInfo.init(E) != _type) return true;
             const event: *E = @ptrCast(@alignCast(ptr));
-            return @call(.always_inline, function, .{ app, event } ++ _args);
+            return @call(.always_inline, function, .{ sub, app, event });
         }
 
         fn enable(app: *App, sub: Listener) void {
@@ -375,15 +428,13 @@ pub fn listen(
         }
     };
 
-    const sub = try self.listeners.insert(
+    try self.listeners.insert(
         entity.id(),
         TypeErased._callback,
-        .{args},
+        listener,
     );
 
-    _ = self.@"defer"(TypeErased.enable, .{ self, sub });
-
-    return sub;
+    self.@"defer"(Listener, Listener.enable, listener);
 }
 
 pub fn nevent(self: *App, entity: anytype, comptime E: type) !*E {
@@ -408,67 +459,23 @@ pub fn nevent(self: *App, entity: anytype, comptime E: type) !*E {
     return ptr;
 }
 
-pub fn dispatch(self: *App, subscription: Receiver, comptime E: type) !*E {
+pub fn dispatch(self: *App, key: Receivers.Key, id: u32, comptime E: type) !*E {
     const chunk = self.chunks.allocator();
     const ptr = try chunk.create(E);
     errdefer chunk.destroy(ptr);
 
-    const _dispatch = try chunk.create(Dispatched);
+    const dispatched = try chunk.create(Dispatched);
 
-    _dispatch.* = .{
-        .subscription = subscription,
+    dispatched.* = .{
+        .key = key,
+        .id = id,
         .ptr = ptr,
         .type = TypeInfo.init(E),
     };
 
-    self.dispatched.append(_dispatch);
+    self.dispatched.append(dispatched);
 
     return ptr;
-}
-
-pub const Observers = Subscriptions(
-    EntityId,
-    @Tuple(&.{ *App, EntityId }),
-    ent.entityOrder,
-);
-
-pub const Observer = Observers.Subscription;
-
-pub fn observe(
-    self: *App,
-    entity: anytype,
-    function: anytype,
-    args: anytype,
-) !Observer {
-    const _Entity = @TypeOf(entity);
-    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
-        @compileError("entity must be an Entity(T)");
-    }
-
-    const T = _Entity.EntityType;
-    const Args = @TypeOf(args);
-
-    const TypeErased = struct {
-        fn _callback(app: *App, id: EntityId, _args: Args) bool {
-            const observed = AnyEntity.init(&app.entities, id, TypeInfo.init(T));
-            const _entity = _Entity.from(observed) orelse return false;
-            return @call(.always_inline, function, .{ app, _entity } ++ _args);
-        }
-
-        fn enable(app: *App, sub: Observer) void {
-            app.observers.enable(sub);
-        }
-    };
-
-    const sub = try self.observers.insert(
-        entity.id(),
-        TypeErased._callback,
-        .{args},
-    );
-
-    _ = self.@"defer"(TypeErased.enable, .{ self, sub });
-
-    return sub;
 }
 
 pub fn Context(comptime T: type) type {
@@ -522,102 +529,55 @@ pub fn Context(comptime T: type) type {
             self: *const @This(),
             comptime E: type,
             function: anytype,
-            args: anytype,
-        ) !Receiver {
-            const Args = @TypeOf(args);
-
-            const TypeErased = struct {
-                pub fn callback(
-                    app: *App,
-                    event: *E,
-                    any: AnyEntity,
-                    _args: Args,
-                ) bool {
-                    const _entity = _Entity.from(any) orelse unreachable;
-
-                    const ptr, const _update = _entity.update(app);
-                    defer _update.end(ptr);
-
-                    return @call(.always_inline, function, .{ ptr, event } ++ _args);
-                }
-            };
-
-            return try self.app.receive(self.entity, E, TypeErased.callback, .{ self.entity.any, args });
+            receiver: *Receiver,
+        ) !void {
+            return try self.app.receive(
+                self.entity,
+                E,
+                function,
+                receiver,
+            );
         }
 
         pub fn listen(
             self: *const @This(),
-            comptime E: type,
             entity: anytype,
+            comptime E: type,
             function: anytype,
-            args: anytype,
-        ) !Listener {
-            const Args = @TypeOf(args);
-
-            const TypeErased = struct {
-                pub fn callback(
-                    app: *App,
-                    event: *E,
-                    any: AnyEntity,
-                    _args: Args,
-                ) bool {
-                    const _entity = _Entity.from(any) orelse unreachable;
-
-                    const ptr, const _update = _entity.update(app);
-                    defer _update.end(ptr);
-
-                    @call(.always_inline, function, .{ ptr, event } ++ _args);
-
-                    return true;
-                }
-            };
-
-            return try self.app.listen(entity, E, TypeErased.callback, .{ self.entity.any, args });
+            listener: *Listener,
+        ) !void {
+            return try self.app.listen(
+                entity,
+                E,
+                function,
+                listener,
+            );
         }
 
         pub fn observe(
             self: *const @This(),
             entity: anytype,
             function: anytype,
-            args: anytype,
-        ) !Observer {
-            const Args = @TypeOf(args);
-            const Observed = @TypeOf(entity);
-
-            const TypeErased = struct {
-                pub fn callback(
-                    app: *App,
-                    observed: Observed,
-                    any: AnyEntity,
-                    _args: Args,
-                ) bool {
-                    const _entity = _Entity.from(any) orelse unreachable;
-
-                    const ptr, const _update = _entity.update(app);
-                    defer _update.end(ptr);
-
-                    @call(.always_inline, function, .{ ptr, observed } ++ _args);
-
-                    return true;
-                }
-            };
-
-            return try self.app.observe(entity, TypeErased.callback, .{ self.entity.any, args });
+            observer: *Observer,
+        ) !void {
+            return try self.app.observe(
+                entity,
+                function,
+                observer,
+            );
         }
 
-        pub fn @"defer"(self: *const @This(), function: anytype, args: anytype) void {
-            const Args = @TypeOf(args);
-            const TypeErased = struct {
-                pub fn @"defer"(any: AnyEntity, app: *App, _args: Args) void {
-                    const _entity = _Entity.from(any) orelse return;
-
-                    const ptr, const _update = _entity.update(app);
-                    defer _update.end(ptr);
-
-                    @call(.always_inline, function, .{ptr} ++ _args);
-                }
-            };
-            self.app.@"defer"(TypeErased.@"defer", .{ self.entity.any, self.app, args });
+        pub fn @"defer"(
+            self: *const @This(),
+            comptime D: type,
+            function: *const fn (*D) void,
+            data: *D,
+        ) void {
+            self.app.@"defer"(
+                D,
+                function,
+                data,
+            );
         }
 
         pub fn await(self: *const @This(), c: *Completion, function: anytype, args: anytype) !Waker {
@@ -648,34 +608,6 @@ pub fn timer(self: *App, c: *Completion, function: anytype, context: anytype, ms
 pub fn cancel(self: *App, completion: *Completion, target: *Completion) void {
     completion.cancel(target);
     self.loop.cancel(completion);
-}
-
-pub fn @"defer"(
-    self: *App,
-    function: anytype,
-    args: anytype,
-) void {
-    const Args = @TypeOf(args);
-    assert(@sizeOf(Args) <= MAX_CONTEXT_SIZE);
-    assert(@alignOf(Args) <= MAX_CONTEXT_ALIGN.toByteUnits());
-
-    const chunks = self.chunks.allocator();
-    const deferred = chunks.create(Deferred) catch @panic("Deferred Overflow");
-
-    const TypeErased = struct {
-        fn complete(ptr: *anyopaque) void {
-            const _args: *Args = @ptrCast(@alignCast(ptr));
-
-            @call(.always_inline, function, _args.*);
-        }
-    };
-
-    deferred.* = .{ .callback = TypeErased.complete, .context = undefined };
-
-    const clone: *Args = @ptrCast(@alignCast(&deferred.context));
-    clone.* = args;
-
-    self.deferred.append(deferred);
 }
 
 test "creates/drops entities" {
@@ -732,7 +664,6 @@ test "Observe entities" {
     const testing = std.testing;
     const allocator = testing.allocator;
     const io = testing.io;
-    const entity_count = 32;
 
     const TestStruct = struct {
         index: usize,
@@ -756,21 +687,21 @@ test "Observe entities" {
     try app.init(.{}, allocator, io);
     defer app.deinit();
 
-    var entities: [entity_count]TestEntity = undefined;
-    for (&entities) |*entity| {
-        entity.* = try TestEntity.new(&app, .{});
-    }
+    const observed = try TestEntity.new(&app, .{});
+    defer observed.drop();
 
-    const observed = entities[0];
+    const TestObserver = struct {
+        run: bool = false,
+        observer: Observer = .noop,
 
-    var context: bool = false;
-
-    const Observed = struct {
-        pub fn callback(_: *App, _: TestEntity, _context: *bool) bool {
-            _context.* = true;
+        pub fn callback(observer: *Observer, _: *App, _: TestEntity) bool {
+            const parent: *@This() = @fieldParentPtr("observer", observer);
+            parent.run = true;
             return false;
         }
     };
+
+    var observer: TestObserver = .{};
 
     var index: usize = 0;
 
@@ -784,9 +715,9 @@ test "Observe entities" {
     try testing.expectEqual(index + 1, observed.read().index);
     observed.notify(&app);
 
-    try testing.expect(!context);
+    try testing.expect(!observer.run);
 
-    _ = try app.observe(observed, Observed.callback, .{&context});
+    _ = try app.observe(observed, TestObserver.callback, &observer.observer);
 
     index = 1;
 
@@ -802,11 +733,7 @@ test "Observe entities" {
 
     app.flush(.no_wait);
 
-    try testing.expect(context);
-
-    for (entities) |entity| {
-        entity.drop();
-    }
+    try testing.expect(observer.run);
 
     app.flush(.no_wait);
 }
@@ -844,16 +771,20 @@ test "Listen entities events" {
 
     const listened = try TestEntity.new(&app, .{});
 
-    var context: usize = 0;
+    const TestListener = struct {
+        id: usize = 0,
+        listener: Listener = .noop,
 
-    const Listened = struct {
-        pub fn callback(_: *App, evt: *TestEvent, _context: *usize) bool {
-            _context.* = evt.id;
+        pub fn callback(listener: *Listener, _: *App, evt: *TestEvent) bool {
+            const parent: *@This() = @fieldParentPtr("listener", listener);
+            parent.id = evt.id;
             return false;
         }
     };
 
-    _ = try app.listen(listened, TestEvent, Listened.callback, .{&context});
+    var listener: TestListener = .{};
+
+    _ = try app.listen(listened, TestEvent, TestListener.callback, &listener.listener);
 
     const evt = try listened.nevent(&app, TestEvent);
     evt.* = .{
@@ -862,7 +793,7 @@ test "Listen entities events" {
 
     app.flush(.no_wait);
 
-    try testing.expectEqual(context, 35);
+    try testing.expectEqual(listener.id, 35);
 
     listened.drop();
     app.flush(.no_wait);
@@ -881,80 +812,36 @@ test "Queued receiver event targets a typed subscription" {
         pub fn init(_: *@This(), _: Context(@This())) !void {}
     };
 
-    var app: App = undefined;
-    try app.init(.{}, allocator, io);
-    defer app.deinit();
-
-    const receiver = try Entity(TestStruct).new(&app, .{});
-    var received: usize = 0;
-
     const TestReceiver = struct {
-        pub fn callback(_: *App, event: *TestEvent, value: *usize) bool {
-            value.* = event.value;
+        received: usize = 0,
+        receiver: Receiver = .noop,
+
+        pub fn callback(receiver: *Receiver, _: *App, evt: *TestEvent) bool {
+            const parent: *@This() = @fieldParentPtr("receiver", receiver);
+            parent.received = evt.value;
             return false;
         }
     };
 
-    const sub = try app.receive(receiver, TestEvent, TestReceiver.callback, .{&received});
-    app.flush(.no_wait);
-
-    const event = try app.dispatch(sub, TestEvent);
-    event.* = .{ .value = 35 };
-    app.flush(.no_wait);
-
-    try testing.expectEqual(@as(usize, 35), received);
-    try testing.expectEqual(null, app.receivers.subscribers.get_mut(receiver.id()));
-
-    receiver.drop();
-    app.flush(.no_wait);
-}
-
-test "Context receive updates the receiver entity" {
-    const testing = std.testing;
-    const allocator = testing.allocator;
-    const io = testing.io;
-
-    const TestEvent = struct {
-        value: usize,
-    };
-
-    const TestStruct = struct {
-        value: usize,
-
-        pub fn init(self: *@This(), _: Context(@This())) !void {
-            self.* = .{ .value = 0 };
-        }
-
-        pub fn receive(self: *@This(), event: *TestEvent) bool {
-            self.value = event.value;
-            return true;
-        }
-    };
-
     var app: App = undefined;
     try app.init(.{}, allocator, io);
     defer app.deinit();
 
-    const receiver = try Entity(TestStruct).new(&app, .{});
-    const ctx = receiver.ctx(&app);
-    const sub = try ctx.receive(TestEvent, TestStruct.receive, .{});
+    const dispatcher = try Entity(TestStruct).new(&app, .{});
+
+    var receiver: TestReceiver = .{};
+
+    try app.receive(dispatcher, TestEvent, TestReceiver.callback, &receiver.receiver);
     app.flush(.no_wait);
 
-    const first = try app.dispatch(sub, TestEvent);
-    first.* = .{ .value = 35 };
+    const event = try app.dispatch(dispatcher.id(), receiver.receiver.id, TestEvent);
+    event.* = .{ .value = 35 };
     app.flush(.no_wait);
 
-    try testing.expectEqual(@as(usize, 35), receiver.read().value);
-    try testing.expect(app.receivers.subscribers.get_mut(receiver.id()).?.get(sub.id) != null);
+    try testing.expectEqual(@as(usize, 35), receiver.received);
+    try testing.expectEqual(null, app.receivers.subscribers.get_mut(dispatcher.id()));
 
-    const second = try app.dispatch(sub, TestEvent);
-    second.* = .{ .value = 70 };
-    app.flush(.no_wait);
-
-    try testing.expectEqual(@as(usize, 70), receiver.read().value);
-    app.receivers.unsubscribe(sub);
-
-    receiver.drop();
+    dispatcher.drop();
     app.flush(.no_wait);
 }
 
@@ -975,242 +862,45 @@ test "Dropping a receiver removes subscriptions before queued delivery" {
         pub fn init(_: *@This(), _: Context(@This())) !void {}
     };
 
+    const TestReceiver = struct {
+        received: bool = false,
+        receiver: Receiver = .noop,
+
+        pub fn callback(receiver: *Receiver, _: *App, evt: *TestEvent) bool {
+            const parent: *@This() = @fieldParentPtr("receiver", receiver);
+            parent.received = evt.deinit_called.*;
+            return false;
+        }
+    };
+
     var app: App = undefined;
     try app.init(.{}, allocator, io);
     defer app.deinit();
 
-    const receiver = try Entity(TestStruct).new(&app, .{});
-    var callback_called = false;
+    const dispatcher = try Entity(TestStruct).new(&app, .{});
     var deinit_called = false;
 
-    const TestReceiver = struct {
-        pub fn callback(_: *App, _: *TestEvent, called: *bool) bool {
-            called.* = true;
-            return true;
-        }
-    };
+    var receiver: TestReceiver = .{};
 
-    const sub = try app.receive(receiver, TestEvent, TestReceiver.callback, .{&callback_called});
+    try app.receive(dispatcher, TestEvent, TestReceiver.callback, &receiver.receiver);
     app.flush(.no_wait);
 
-    const event = try app.dispatch(sub, TestEvent);
+    const event = try app.dispatch(dispatcher.id(), receiver.receiver.id, TestEvent);
     event.* = .{ .deinit_called = &deinit_called };
 
-    const receiver_id = receiver.id();
-    receiver.drop();
+    const receiver_id = dispatcher.id();
+    dispatcher.drop();
     app.flush(.no_wait);
 
-    try testing.expect(!callback_called);
+    try testing.expect(!receiver.received);
     try testing.expect(deinit_called);
     try testing.expectEqual(null, app.receivers.subscribers.get_mut(receiver_id));
-}
-
-test "Context listen entities events" {
-    const testing = std.testing;
-    const allocator = testing.allocator;
-    const io = testing.io;
-
-    const TestEvent = struct {
-        id: usize,
-    };
-
-    const TestStruct = struct {
-        index: usize,
-
-        pub fn init(self: *@This(), _: Context(@This())) !void {
-            self.* = .{ .index = 0 };
-        }
-
-        pub fn set_index(self: *@This(), index: usize) void {
-            self.index = index;
-        }
-
-        pub fn inc(self: *@This()) void {
-            self.index += 1;
-        }
-    };
-
-    const TestEntity = Entity(TestStruct);
-
-    var app: App = undefined;
-    try app.init(.{}, allocator, io);
-    defer app.deinit();
-
-    const listened = try TestEntity.new(&app, .{});
-    const listener = try TestEntity.new(&app, .{});
-    const context = listener.ctx(&app);
-
-    const Listened = struct {
-        pub fn callback(ptr: *TestStruct, evt: *TestEvent) void {
-            ptr.index = evt.id;
-        }
-    };
-
-    _ = try context.listen(TestEvent, listened, Listened.callback, .{});
-
-    const evt = try listened.nevent(&app, TestEvent);
-    evt.* = .{
-        .id = 35,
-    };
-
-    app.flush(.no_wait);
-
-    try testing.expectEqual(listener.read().index, 35);
-
-    listened.drop();
-    listener.drop();
-    app.flush(.no_wait);
-}
-
-test "Context observes entities" {
-    const testing = std.testing;
-    const allocator = testing.allocator;
-    const io = testing.io;
-
-    const Observed = struct {
-        index: usize,
-
-        pub fn init(self: *@This(), _: Context(@This())) !void {
-            self.* = .{ .index = 0 };
-        }
-
-        pub fn set_index(self: *@This(), index: usize) void {
-            self.index = index;
-        }
-    };
-
-    const ObserverState = struct {
-        observed_updates: usize,
-        last_observed_index: usize,
-
-        pub fn init(self: *@This(), _: Context(@This())) !void {
-            self.* = .{ .observed_updates = 0, .last_observed_index = 0 };
-        }
-
-        pub fn observe(self: *@This(), observed: Entity(Observed)) void {
-            self.observed_updates += 1;
-            self.last_observed_index = observed.read().index;
-        }
-
-        pub fn get_last_observed_index(self: *const @This()) usize {
-            return self.last_observed_index;
-        }
-    };
-
-    var app: App = undefined;
-    try app.init(.{}, allocator, io);
-    defer app.deinit();
-
-    const observer = try Entity(ObserverState).new(&app, .{});
-    const observed = try Entity(Observed).new(&app, .{});
-
-    var context = Context(ObserverState).new(&app, observer);
-    _ = try context.observe(observed, ObserverState.observe, .{});
-
-    {
-        const ptr, const update = observed.update(&app);
-        defer update.end(ptr);
-
-        ptr.set_index(42);
-    }
-    observed.notify(&app);
-    app.flush(.no_wait);
-
-    try testing.expectEqual(1, observer.read().observed_updates);
-    try testing.expectEqual(42, observer.read().last_observed_index);
-
-    observer.drop();
-    observed.drop();
-    app.flush(.no_wait);
-}
-
-test "Context defer runs on foreground executor with entity context" {
-    const testing = std.testing;
-    const allocator = testing.allocator;
-    const io = testing.io;
-
-    const State = struct {
-        calls: usize,
-        last_value: usize,
-
-        pub fn init(self: *@This(), _: Context(@This())) !void {
-            self.* = .{ .calls = 0, .last_value = 0 };
-        }
-
-        pub fn deferred(ptr: *@This(), value: usize) void {
-            ptr.set(value);
-        }
-
-        pub fn set(self: *@This(), value: usize) void {
-            self.calls += 1;
-            self.last_value = value;
-        }
-
-        pub fn get_last_value(self: *const @This()) usize {
-            return self.last_value;
-        }
-    };
-
-    var app: App = undefined;
-    try app.init(.{}, allocator, io);
-    defer app.deinit();
-
-    const entity = try Entity(State).new(&app, .{});
-
-    var context = Context(State).new(&app, entity);
-    context.@"defer"(State.deferred, .{42});
-
-    try testing.expectEqual(0, entity.read().calls);
-
-    app.flush(.no_wait);
-
-    try testing.expectEqual(1, entity.read().calls);
-    try testing.expectEqual(42, entity.read().last_value);
-
-    entity.drop();
-    app.flush(.no_wait);
-}
-
-test "Context observe removes subscription when observed is dropped" {
-    const testing = std.testing;
-    const allocator = testing.allocator;
-    const io = testing.io;
-
-    const Observed = struct {
-        pub fn init(_: *@This(), _: Context(@This())) !void {}
-    };
-
-    const ObserverState = struct {
-        pub fn init(_: *@This(), _: Context(@This())) !void {}
-
-        pub fn observe(_: *@This(), _: Entity(Observed)) void {}
-    };
-
-    var app: App = undefined;
-    try app.init(.{}, allocator, io);
-    defer app.deinit();
-
-    const observer = try Entity(ObserverState).new(&app, .{});
-    const observed = try Entity(Observed).new(&app, .{});
-    const observed_id = observed.id();
-
-    var context = Context(ObserverState).new(&app, observer);
-    _ = try context.observe(observed, ObserverState.observe, .{});
-
-    observed.drop();
-    app.flush(.no_wait);
-
-    try testing.expectEqual(null, app.observers.subscribers.get(observed_id));
-
-    observer.drop();
-    app.flush(.no_wait);
 }
 
 test "Observe entities drop before enable" {
     const testing = std.testing;
     const allocator = testing.allocator;
     const io = testing.io;
-    const entity_count = 32;
 
     const TestStruct = struct {
         index: usize,
@@ -1230,26 +920,24 @@ test "Observe entities drop before enable" {
 
     const TestEntity = Entity(TestStruct);
 
+    const TestObserver = struct {
+        run: bool = false,
+        observer: Observer = .noop,
+
+        pub fn callback(observer: *Observer, _: *App, _: TestEntity) bool {
+            const parent: *@This() = @fieldParentPtr("observer", observer);
+            parent.run = true;
+            return false;
+        }
+    };
+
     var app: App = undefined;
     try app.init(.{}, allocator, io);
     defer app.deinit();
 
-    var entities: [entity_count]TestEntity = undefined;
-    for (&entities) |*entity| {
-        entity.* = try TestEntity.new(&app, .{});
-    }
+    const observed = try TestEntity.new(&app, .{});
 
-    const observed = entities[0];
-
-    var context: bool = false;
-
-    const Observed = struct {
-        pub fn callback(_: *App, _: TestEntity, _context: *bool) bool {
-            _context.* = true;
-
-            return false;
-        }
-    };
+    var observer: TestObserver = .{};
 
     var index: usize = 0;
 
@@ -1263,10 +951,10 @@ test "Observe entities drop before enable" {
     try testing.expectEqual(index + 1, observed.read().index);
     observed.notify(&app);
 
-    try testing.expect(!context);
+    try testing.expect(!observer.run);
 
-    const sub = try app.observe(observed, Observed.callback, .{&context});
-    app.observers.unsubscribe(sub);
+    try app.observe(observed, TestObserver.callback, &observer.observer);
+    app.observers.unsubscribe(observed.id(), observer.observer.id);
 
     index = 1;
 
@@ -1282,11 +970,9 @@ test "Observe entities drop before enable" {
 
     app.flush(.no_wait);
 
-    try testing.expect(!context);
+    try testing.expect(!observer.run);
 
-    for (entities) |entity| {
-        entity.drop();
-    }
+    observed.drop();
 
     app.flush(.no_wait);
 }

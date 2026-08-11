@@ -21,10 +21,16 @@ const log = std.log.scoped(.worktree_bench);
 const mode: enum { smoke, benchmark } =
     if (@import("test_options").benchmark) .benchmark else .smoke;
 
-pub fn observe(_: *App, worktree: Entity(Worktree), scanning: *bool) bool {
-    scanning.* = worktree.read().scanning;
-    return scanning.*;
-}
+const WorktreeObserver = struct {
+    scanning: bool = true,
+    observer: App.Observer = .noop,
+
+    pub fn callback(observer: *App.Observer, _: *App, worktree: Entity(Worktree)) bool {
+        const parent: *@This() = @fieldParentPtr("observer", observer);
+        parent.scanning = worktree.read().scanning;
+        return parent.scanning;
+    }
+};
 
 test "benchmark: Worktree initial scan" {
     if (mode == .smoke) return;
@@ -73,11 +79,11 @@ test "benchmark: Worktree initial scan" {
         );
         defer worktree.drop();
 
-        var scanning = true;
+        var observer: WorktreeObserver = .{};
 
-        _ = try app.observe(worktree, observe, .{&scanning});
+        try app.observe(worktree, WorktreeObserver.callback, &observer.observer);
 
-        while (scanning) app.flush(.no_wait);
+        while (observer.scanning) app.flush(.no_wait);
 
         durations[idx] = bench.stop(io);
 
