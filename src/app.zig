@@ -22,12 +22,12 @@ const EntityStore = ent.EntityStore;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const Waker = Loop.Waker;
+const Scheduler = @import("scheduler.zig");
 const subs = @import("subscription.zig");
 const Subscriptions = subs.Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
-const Scheduler = @import("scheduler.zig");
 
 const CHUNK_SIZES: []const chunk_pool.PoolConfig = &.{
     .{ 50, 128 },

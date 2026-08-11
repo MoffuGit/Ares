@@ -13,11 +13,11 @@ const meta = std.meta;
 const panic = std.debug.panic;
 const Kevent = std.c.kevent64_s;
 const builtin = @import("builtin");
-const Scheduler = @import("scheduler.zig");
 
 const datastruct = @import("datastruct.zig");
 const MultiQueue = datastruct.MultiQueue;
 const heap = datastruct.heap;
+const Scheduler = @import("scheduler.zig");
 
 const log = std.log.scoped(.loop);
 
