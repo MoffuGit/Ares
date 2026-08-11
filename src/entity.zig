@@ -38,9 +38,10 @@ pub const AnyEntity = struct {
     }
 
     pub fn drop(self: @This()) void {
-        if (self.store.entities.get(self.id)) |ptr| {
-            self.type_id.drop(ptr.*);
-            self.store.dropped.appendAssumeCapacity(self);
+        const store = self.store;
+        const ptr = store.entities.get(self.id) orelse return;
+        if (self.type_id.drop(ptr.*)) {
+            store.dropped.appendAssumeCapacity(self);
         }
     }
 };

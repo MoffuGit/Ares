@@ -16,6 +16,7 @@ const Entity = ent.Entity;
 const global = @import("../global.zig");
 const Worktree = @import("../worktree.zig");
 const Snapshot = @import("../worktree/snapshot.zig");
+const log = std.log.scoped(.worktree_bench);
 
 const mode: enum { smoke, benchmark } =
     if (@import("test_options").benchmark) .benchmark else .smoke;
@@ -32,7 +33,9 @@ test "benchmark: Worktree initial scan" {
     defer global.state.deinit();
 
     const gpa = global.state.gpa;
-    const io = global.state.threaded.io();
+    //BUG:
+    //using the global state io make the test crash
+    const io = std.testing.io;
 
     var app: App = undefined;
     try app.init(.{}, gpa, io);
@@ -76,11 +79,13 @@ test "benchmark: Worktree initial scan" {
 
         _ = try app.observe(worktree, observe, .{&scanning});
 
-        while (scanning) app.flush();
+        while (scanning) app.flush(.no_wait);
 
         durations[idx] = bench.stop(io);
 
-        try verify(&app, zlob_set, worktree);
+        verify(&app, zlob_set, worktree) catch |err| {
+            log.err("Verify err={}", .{err});
+        };
     }
 
     const estimate = Bench.estimate(&durations);

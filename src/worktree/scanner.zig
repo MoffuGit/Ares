@@ -1,3 +1,7 @@
+//TODO:
+//I need to check all the try/catch/defer/errdefer points
+//i didn't care becaues i wanted to test the scheduler
+
 const std = @import("std");
 const Io = std.Io;
 const c = std.c;
@@ -27,6 +31,9 @@ const global = @import("../global.zig");
 const Loop = @import("../loop.zig");
 const Completion = Loop.Completion;
 const Waker = Loop.Waker;
+const Scheduler = @import("../scheduler.zig");
+const Task = Scheduler.Task;
+const Worker = Scheduler.Worker;
 const Worktree = @import("../worktree.zig");
 const Event = Worktree.Event;
 const attr = @import("attr.zig");
@@ -47,9 +54,12 @@ mutex: Io.Mutex,
 chunks: ChunkAllocator,
 last_update: atomic.Value(i64),
 next_scan_id: atomic.Value(u64),
+task_count: atomic.Value(u64),
+stopped: atomic.Value(bool),
 
 pub fn init(
     self: *Scanner,
+    scheduler: *Scheduler,
     gpa: Allocator,
     arena: Allocator,
     io: Io,
@@ -63,59 +73,126 @@ pub fn init(
         .chunks = undefined,
         .last_update = .init(Timestamp.now(io, .real).toMilliseconds()),
         .next_scan_id = .init(0),
+        .task_count = .init(0),
+        .stopped = .init(false),
     };
 
-    self.snapshot = try self.worktree().snapshot.clone(self.gpa);
+    self.snapshot = try self.parent().snapshot.clone(self.gpa);
 
     try self.chunks.initThreadSafe(
         self.arena,
         &.{
             .{ 1024 * 1024 * 1024, RANGE_NODE_SIZE },
             .{ 1024 * 1024 * 1024, CHUNK_SIZE },
-            .{ 1024 * 1024, @sizeOf(Entry) },
-            .{ 1024 * 1024, @sizeOf(Job) },
+            .{ 1024 * 1024, @sizeOf(ScannerTask) },
             .{ 1024 * 1024, @sizeOf(SharedFd) },
         },
         self.io,
     );
+
+    const chunks = self.chunks.threadSafeAllocator();
+
+    const task = try chunks.create(ScannerTask);
+    task.* = .{
+        .scanner = self,
+        .kind = .initial_scan,
+        .task = .{
+            .callback = handleTask,
+        },
+    };
+
+    try scheduler.push(&task.task);
+    self.task_count.store(1, .release);
 }
 
 pub fn deinit(self: *Scanner) void {
     self.snapshot.deinit();
 }
 
-pub inline fn worktree(self: *Scanner) *Worktree {
+pub fn stop(self: *Scanner) bool {
+    self.stopped.store(true, .release);
+    return self.task_count.load(.acquire) == 0;
+}
+
+const ScannerTask = struct {
+    scanner: *Scanner,
+    kind: union(enum) {
+        initial_scan,
+        scan_dir: struct {
+            path: ChunkedPath,
+            shared_fd: ?*SharedFd,
+            ignore: ?*const IgnoreNode,
+        },
+    },
+    task: Task,
+};
+
+pub inline fn parent(self: *Scanner) *Worktree {
     return @fieldParentPtr("scanner", self);
 }
 
-pub inline fn pushEvent(self: *Scanner, event: Event) !void {
-    try self.worktree().events.putOne(self.io, event);
+fn taskDone(self: *Scanner, task: *ScannerTask) void {
+    const chunks = self.chunks.threadSafeAllocator();
+    defer chunks.destroy(task);
+
+    const prev = self.task_count.fetchSub(1, .release);
+    if (prev != 1) return;
+
+    const worktree = self.parent();
+    defer worktree.waker.wake() catch unreachable;
+
+    if (self.stopped.load(.acquire)) {
+        worktree.events.putOne(self.io, .stopped) catch unreachable;
+    } else {
+        self.mutex.lock(self.io) catch unreachable;
+        defer self.mutex.unlock(self.io);
+
+        worktree.events.putOne(self.io, .{ .update = .{
+            .scanning = false,
+            .snapshot = self.snapshot.clone(self.gpa) catch unreachable,
+        } }) catch unreachable;
+    }
 }
 
-pub inline fn flushUpdates(self: *Scanner) !void {
-    try self.worktree().waker.wake();
+fn handleTask(task: *Task) void {
+    const t: *ScannerTask = @fieldParentPtr("task", task);
+
+    const self = t.scanner;
+    defer self.taskDone(t);
+
+    if (self.stopped.load(.acquire)) return;
+
+    switch (t.kind) {
+        .initial_scan => self.initialScan() catch |err| {
+            switch (err) {
+                error.Closed => {},
+                else => log.err("Initial Scan err={}", .{err}),
+            }
+        },
+        .scan_dir => |dir| {
+            self.scanDir(dir.path, dir.shared_fd, dir.ignore) catch |err| {
+                switch (err) {
+                    error.Closed => {},
+                    else => log.err("Initial Scan err={}", .{err}),
+                }
+            };
+        },
+    }
 }
 
-fn initialScan(self: *Scanner) !void {
-    self._initialScan() catch |err| {
-        switch (err) {
-            error.Closed, error.Canceled => {},
-            else => log.err("Initial Scan err={}", .{err}),
-        }
-    };
-}
-
-fn _initialScan(
+fn initialScan(
     self: *Scanner,
 ) !void {
+    const worker = Worker.local orelse unreachable;
+    const chunks = self.chunks.threadSafeAllocator();
+    const worktree = self.parent();
+
     const stat = try Io.Dir.statFile(
         .cwd(),
         self.io,
         self.snapshot.abs_root,
         .{},
     );
-
-    const chunks = self.chunks.threadSafeAllocator();
 
     const path: ChunkedPath = .new(self.snapshot.root_name, 0, chunks);
 
@@ -139,43 +216,27 @@ fn _initialScan(
 
     if (stat.kind != .directory) return;
 
-    try self.pushEvent(.started);
-    try self.flushUpdates();
+    try worktree.events.putOne(self.io, .started);
+    try worktree.waker.wake();
 
-    const root_job = chunks.create(Job) catch unreachable;
-    root_job.* = .{ .path = path, .fd = null, .ignore = null };
-    try self.jobs.push(self.io, 0, root_job);
+    const task = chunks.create(ScannerTask) catch unreachable;
+    errdefer chunks.destroy(task);
 
-    for (0..state.cpu_count) |i| {
-        try self.group.concurrent(
-            self.io,
-            Scanner.scan,
-            .{ self, @as(u32, @intCast(i)) },
-        );
-
-        try self.group.concurrent(self.io, handleScanRequests, .{self});
-    }
-}
-
-pub fn handleScanRequests(self: *Scanner) !void {
-    self._handleScanRequests() catch |err| {
-        switch (err) {
-            error.Closed, error.Canceled => {},
-            // else => log.err("Scan Request err={}", .{err}),
-        }
+    task.* = .{
+        .scanner = self,
+        .kind = .{
+            .scan_dir = .{
+                .path = path,
+                .shared_fd = null,
+                .ignore = null,
+            },
+        },
+        .task = .{ .callback = handleTask },
     };
-}
 
-pub fn _handleScanRequests(self: *Scanner) !void {
-    while (true) {
-        const request = try self.requests.getOne(self.io);
-        _ = request;
-    }
+    try worker.push(&task.task);
+    _ = self.task_count.fetchAdd(1, .release);
 }
-
-const ScanRequest = struct {
-    id: u64,
-};
 
 const IgnoreNode = struct {
     gi: GitIgnore,
@@ -184,26 +245,26 @@ const IgnoreNode = struct {
     parent: ?*const IgnoreNode,
 };
 
-pub const Job = struct {
-    path: ChunkedPath,
-    fd: ?*SharedFd,
-    ignore: ?*const IgnoreNode,
-    next: ?*Job = null,
+fn isIgnored(
+    start: ?*const IgnoreNode,
+    path: []const u8,
+    basename: []const u8,
+    is_dir: bool,
+) bool {
+    var node = start;
+    while (node) |n| : (node = n.parent) {
+        if (n.gi.is_empty) continue;
 
-    pub fn finish(self: *Job, chunks: Allocator, io: Io) void {
-        if (self.fd) |fd| {
-            const prev = fd.release();
-
-            assert(prev != 0);
-            if (prev == 1) {
-                fd.close(io);
-                chunks.destroy(fd);
-            }
+        if (n.gi.checkWithBasename(
+            path[n.relative_offset..],
+            basename,
+            is_dir,
+        )) |verdict| {
+            return verdict;
         }
-
-        chunks.destroy(self);
     }
-};
+    return false;
+}
 
 const SharedFd = struct {
     dir: Io.Dir,
@@ -225,85 +286,20 @@ const SharedFd = struct {
     }
 };
 
-pub fn scan(
-    self: *Scanner,
-    worker_id: u32,
-) void {
-    self._scan(worker_id) catch |err| {
-        switch (err) {
-            error.Closed, error.Canceled => {},
-            else => log.err("worker err: {}", .{err}),
-        }
-    };
-}
-
-pub const Entry = struct {
-    path: ChunkedPath,
-    meta: Snapshot.Meta,
-    next: ?*Entry = null,
-};
-
-pub fn _scan(
-    self: *Scanner,
-    worker_id: u32,
-) !void {
-    errdefer self.jobs.closed.store(true, .release);
-
+fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore: ?*const IgnoreNode) !void {
     const chunks = self.chunks.threadSafeAllocator();
     var buffer: [64 * 1024]u8 = undefined;
-    var batch: SinglyLinkedList(Entry) = .{};
-
-    while (true) {
-        const job = try self.jobs.pop(self.io, worker_id);
-        defer job.finish(chunks, self.io);
-
-        try self.scanDir(job, worker_id, &buffer, &batch);
-
-        if (self.jobs.taskDone() == 1) {
-            @branchHint(.unlikely);
-
-            try self.mutex.lock(self.io);
-            defer self.mutex.unlock(self.io);
-
-            try self.pushEvent(.{ .update = .{
-                .scanning = false,
-                .snapshot = try self.snapshot.clone(self.gpa),
-            } });
-
-            try self.flushUpdates();
-        } else {
-            const now = Timestamp.now(self.io, .real).toMilliseconds();
-            const last = self.last_update.load(.acquire);
-
-            if (now - last >= UPDATE_INTERVAL_IN_MS) {
-                if (self.last_update.cmpxchgWeak(last, now, .acq_rel, .monotonic) == null) {
-                    try self.mutex.lock(self.io);
-                    defer self.mutex.unlock(self.io);
-
-                    try self.pushEvent(.{ .update = .{
-                        .scanning = true,
-                        .snapshot = try self.snapshot.clone(self.gpa),
-                    } });
-
-                    try self.flushUpdates();
-                }
-            }
-        }
-    }
-}
-
-fn scanDir(
-    self: *Scanner,
-    job: *Job,
-    worker_id: u32,
-    buffer: []u8,
-    batch: *SinglyLinkedList(Entry),
-) !void {
-    const chunks = self.chunks.threadSafeAllocator();
+    var tasks: SinglyLinkedList(Task) = .{};
+    //     errdefer {
+    //         while (jobs.pop()) |j| {
+    //             j.finish(chunks, self.io);
+    //         }
+    //     }
+    var count: u32 = 0;
 
     const dir = bkl: {
-        if (job.fd) |fd| {
-            const len = job.path.basename(buffer);
+        if (shared_fd) |fd| {
+            const len = dir_path.basename(&buffer);
             break :bkl try fd.dir.openDir(self.io, buffer[0..len], .{ .follow_symlinks = false, .iterate = true });
         }
 
@@ -311,86 +307,90 @@ fn scanDir(
     };
     errdefer dir.close(self.io);
 
-    var effective_ignore: ?*const IgnoreNode = job.ignore;
+    defer if (shared_fd) |fd| {
+        const prev = fd.release();
+
+        assert(prev != 0);
+        if (prev == 1) {
+            fd.close(self.io);
+            chunks.destroy(fd);
+        }
+    };
+
+    var effective_ignore: ?*const IgnoreNode = ignore;
     {
-        const content = dir.readFile(self.io, ".gitignore", buffer) catch null;
+        const content = dir.readFile(self.io, ".gitignore", &buffer) catch null;
 
         if (content) |src| {
             const gi = try GitIgnore.parse(self.arena, src);
             const node = try self.arena.create(IgnoreNode);
             node.* = .{
-                .parent = job.ignore,
+                .parent = ignore,
                 .gi = gi,
-                .relative_offset = job.path.len + 1,
+                .relative_offset = dir_path.len + 1,
             };
             effective_ignore = node;
         }
     }
 
-    var bulk = BulkAttr.init(dir.handle, buffer, .{
+    var bulk = BulkAttr.init(dir.handle, &buffer, .{
         .size = true,
         .mtime = true,
         .inode = true,
     });
 
-    const parent_path = job.path;
-
-    var jobs: SinglyLinkedList(Job) = .{};
-    var count: u32 = 0;
-    errdefer {
-        while (jobs.pop()) |j| {
-            j.finish(chunks, self.io);
-        }
-    }
+    var suffix_buf: [MAX_PATH_LEN]u8 = undefined;
+    suffix_buf[0] = '/';
+    var path_buf: [MAX_PATH_LEN]u8 = undefined;
 
     while (try bulk.next()) |entry| {
-        if (self.jobs.closed.load(.acquire)) {
-            @branchHint(.unlikely);
-            return error.Closed;
-        }
-
         const name = entry.name;
+        @memcpy(suffix_buf[1 .. 1 + name.len], name);
+        const suffix = suffix_buf[0 .. 1 + name.len];
         const is_dir = entry.kind == .directory;
         const is_hidden = name.len > 0 and name[0] == '.';
 
-        var suffix_buf: [MAX_PATH_LEN]u8 = undefined;
-        suffix_buf[0] = '/';
-        @memcpy(suffix_buf[1 .. 1 + name.len], name);
-        const suffix = suffix_buf[0 .. 1 + name.len];
-
-        const path: ChunkedPath = .extend(parent_path, suffix, 1, self.chunks.threadSafeAllocator());
-
-        var path_buf: [MAX_PATH_LEN]u8 = undefined;
+        const path: ChunkedPath = .extend(dir_path, suffix, 1, chunks);
         const len = path.read(&path_buf);
         const ignored = isIgnored(effective_ignore, path_buf[0..len], name, is_dir);
 
-        const new_entry = try chunks.create(Entry);
-        new_entry.* = .{
-            .path = path,
-            .meta = .{
-                .state = bkl: {
-                    if (entry.kind == .directory) {
-                        break :bkl if (is_hidden or ignored) .unloaded else .pending;
-                    } else break :bkl .loaded;
+        {
+            try self.mutex.lock(self.io);
+            defer self.mutex.unlock(self.io);
+
+            self.snapshot.insert(
+                path,
+                .{
+                    .state = bkl: {
+                        if (entry.kind == .directory) {
+                            break :bkl if (is_hidden or ignored) .unloaded else .pending;
+                        } else break :bkl .loaded;
+                    },
+                    .inode = entry.meta.inode,
+                    .mtime = .fromNanoseconds(@intCast(entry.meta.mtime_ns)),
+                    .size = entry.meta.size,
+                    .kind = entry.kind,
+                    .hidden = is_hidden,
+                    .ignored = ignored,
                 },
-                .inode = entry.meta.inode,
-                .mtime = .fromNanoseconds(@intCast(entry.meta.mtime_ns)),
-                .size = entry.meta.size,
-                .kind = entry.kind,
-                .hidden = is_hidden,
-                .ignored = ignored,
-            },
-        };
-        batch.append(new_entry);
+            );
+        }
 
         if (is_dir and !(is_hidden or ignored)) {
-            const new = try chunks.create(Job);
-            new.* = .{
-                .fd = null,
-                .path = path,
-                .ignore = effective_ignore,
+            const task = try chunks.create(ScannerTask);
+            task.* = .{
+                .scanner = self,
+                .task = .{ .callback = handleTask },
+                .kind = .{
+                    .scan_dir = .{
+                        .shared_fd = null,
+                        .path = path,
+                        .ignore = effective_ignore,
+                    },
+                },
             };
-            jobs.append(new);
+
+            tasks.append(&task.task);
             count += 1;
         }
     }
@@ -399,13 +399,8 @@ fn scanDir(
         try self.mutex.lock(self.io);
         defer self.mutex.unlock(self.io);
 
-        while (batch.pop()) |entry| {
-            self.snapshot.insert(entry.path, entry.meta);
-            chunks.destroy(entry);
-        }
-
-        const dir_entry = self.snapshot.entries.get_mut(job.path) orelse unreachable;
-        dir_entry.meta.state = .loaded;
+        const entry = self.snapshot.entries.get_mut(dir_path) orelse unreachable;
+        entry.meta.state = .loaded;
     }
 
     if (count > 0) {
@@ -415,32 +410,34 @@ fn scanDir(
             .refs = .init(count),
         };
 
-        while (jobs.pop()) |j| {
-            j.fd = shared;
-            try self.jobs.push(self.io, worker_id, j);
+        const worker = Worker.local orelse unreachable;
+
+        while (tasks.pop()) |task| {
+            const scanner_task: *ScannerTask = @fieldParentPtr("task", task);
+            scanner_task.kind.scan_dir.shared_fd = shared;
+            try worker.push(task);
+            _ = self.task_count.fetchAdd(1, .release);
         }
     } else {
         dir.close(self.io);
     }
-}
 
-fn isIgnored(
-    start: ?*const IgnoreNode,
-    path: []const u8,
-    basename: []const u8,
-    is_dir: bool,
-) bool {
-    var node = start;
-    while (node) |n| : (node = n.parent) {
-        if (n.gi.is_empty) continue;
+    const now = Timestamp.now(self.io, .real).toMilliseconds();
+    const last = self.last_update.load(.acquire);
 
-        if (n.gi.checkWithBasename(
-            path[n.relative_offset..],
-            basename,
-            is_dir,
-        )) |verdict| {
-            return verdict;
+    if (now - last >= UPDATE_INTERVAL_IN_MS) {
+        if (self.last_update.cmpxchgWeak(last, now, .acq_rel, .monotonic) == null) {
+            const worktree = self.parent();
+
+            self.mutex.lock(self.io) catch unreachable;
+            defer self.mutex.unlock(self.io);
+
+            worktree.events.putOne(self.io, .{ .update = .{
+                .scanning = true,
+                .snapshot = try self.snapshot.clone(self.gpa),
+            } }) catch unreachable;
+
+            worktree.waker.wake() catch unreachable;
         }
     }
-    return false;
 }

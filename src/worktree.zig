@@ -71,7 +71,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
     self.events = .init(buffer);
     self.waker = try ctx.await(&self.await, handleEvents, self);
 
-    try self.scanner.init(gpa, self.arena.allocator(), io);
+    try self.scanner.init(ctx.scheduler(), gpa, self.arena.allocator(), io);
 }
 
 pub fn deinit(self: *Worktree) void {
@@ -86,17 +86,24 @@ pub fn deinit(self: *Worktree) void {
     self.arena.deinit();
 }
 
-pub fn drop(self: *Worktree) void {
+pub fn drop(self: *Worktree) bool {
+    const stopped = self.scanner.stop();
+
+    if (!stopped) return false;
+
     self.ctx.cancel(&self.await_c, &self.await);
     self.waker.close();
+
+    return true;
 }
 
 pub const Event = union(enum) {
-    started: void,
     update: struct {
         snapshot: Snapshot,
         scanning: bool,
     },
+    started,
+    stopped,
 
     pub fn deinit(self: *Event) void {
         switch (self.*) {
@@ -115,18 +122,14 @@ fn handleEvents(self: *Worktree, res: anyerror!void) bool {
     const events = self.events.get(self.io, &buffer, 0) catch return false;
     for (buffer[0..events]) |event| {
         switch (event) {
+            .stopped => self.ctx.drop(),
             .started => {
                 log.debug("scanner for path \"{s}\" started", .{self.snapshot.abs_root});
                 self.scanning = true;
             },
             .update => |updated| {
-                var snapshot = updated.snapshot;
-                if (updated.scanning) {
-                    snapshot.deinit();
-                    continue;
-                }
                 self.snapshot.deinit();
-                self.snapshot = snapshot;
+                self.snapshot = updated.snapshot;
                 self.scanning = updated.scanning;
 
                 log.debug("scanner for path \"{s}\" update", .{self.snapshot.abs_root});

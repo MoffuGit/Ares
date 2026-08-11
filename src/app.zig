@@ -106,12 +106,12 @@ pub fn init(self: *App, options: Options, gpa: Allocator, io: Io) !void {
     try self.receivers.init(chunks);
     try self.notifications.init(chunks);
 
-    try self.scheduler.init(self.io);
+    try self.scheduler.init(arena, self.io);
 }
 
 pub fn deinit(self: *App) void {
     self.scheduler.deinit();
-    self.flush();
+    self.flush(.until_done);
     self.receivers.deinit();
     self.arena.deinit();
     self.loop.deinit();
@@ -177,18 +177,18 @@ pub fn startUpdate(self: *App) void {
 
 pub fn endUpdate(self: *App) void {
     if (self.peding_updates == 1) {
-        self.flush();
+        self.flush(.no_wait);
     }
     self.peding_updates -= 1;
 }
 
-pub fn flush(self: *App) void {
+pub fn flush(self: *App, mode: Loop.RunMode) void {
     if (self.flushing) return;
 
     self.flushing = true;
     defer self.flushing = false;
 
-    self.loop.run(.no_wait) catch |err| {
+    self.loop.run(mode) catch |err| {
         log.err("Event Loop err={}", .{err});
     };
     self.destroyDroppedEntities();
@@ -631,6 +631,9 @@ pub fn Context(comptime T: type) type {
         pub fn cancel(self: *const @This(), completion: *Completion, target: *Completion) void {
             self.app.cancel(completion, target);
         }
+        pub fn scheduler(self: *const @This()) *Scheduler {
+            return &self.app.scheduler;
+        }
     };
 }
 
@@ -722,7 +725,7 @@ test "creates/drops entities" {
         entity.drop();
     }
 
-    app.flush();
+    app.flush(.no_wait);
 }
 
 test "Observe entities" {
@@ -797,7 +800,7 @@ test "Observe entities" {
     try testing.expectEqual(index + 1, observed.read().index);
     observed.notify(&app);
 
-    app.flush();
+    app.flush(.no_wait);
 
     try testing.expect(context);
 
@@ -805,7 +808,7 @@ test "Observe entities" {
         entity.drop();
     }
 
-    app.flush();
+    app.flush(.no_wait);
 }
 
 test "Listen entities events" {
@@ -857,12 +860,12 @@ test "Listen entities events" {
         .id = 35,
     };
 
-    app.flush();
+    app.flush(.no_wait);
 
     try testing.expectEqual(context, 35);
 
     listened.drop();
-    app.flush();
+    app.flush(.no_wait);
 }
 
 test "Queued receiver event targets a typed subscription" {
@@ -893,17 +896,17 @@ test "Queued receiver event targets a typed subscription" {
     };
 
     const sub = try app.receive(receiver, TestEvent, TestReceiver.callback, .{&received});
-    app.flush();
+    app.flush(.no_wait);
 
     const event = try app.dispatch(sub, TestEvent);
     event.* = .{ .value = 35 };
-    app.flush();
+    app.flush(.no_wait);
 
     try testing.expectEqual(@as(usize, 35), received);
     try testing.expectEqual(null, app.receivers.subscribers.get_mut(receiver.id()));
 
     receiver.drop();
-    app.flush();
+    app.flush(.no_wait);
 }
 
 test "Context receive updates the receiver entity" {
@@ -935,24 +938,24 @@ test "Context receive updates the receiver entity" {
     const receiver = try Entity(TestStruct).new(&app, .{});
     const ctx = receiver.ctx(&app);
     const sub = try ctx.receive(TestEvent, TestStruct.receive, .{});
-    app.flush();
+    app.flush(.no_wait);
 
     const first = try app.dispatch(sub, TestEvent);
     first.* = .{ .value = 35 };
-    app.flush();
+    app.flush(.no_wait);
 
     try testing.expectEqual(@as(usize, 35), receiver.read().value);
     try testing.expect(app.receivers.subscribers.get_mut(receiver.id()).?.get(sub.id) != null);
 
     const second = try app.dispatch(sub, TestEvent);
     second.* = .{ .value = 70 };
-    app.flush();
+    app.flush(.no_wait);
 
     try testing.expectEqual(@as(usize, 70), receiver.read().value);
     app.receivers.unsubscribe(sub);
 
     receiver.drop();
-    app.flush();
+    app.flush(.no_wait);
 }
 
 test "Dropping a receiver removes subscriptions before queued delivery" {
@@ -988,14 +991,14 @@ test "Dropping a receiver removes subscriptions before queued delivery" {
     };
 
     const sub = try app.receive(receiver, TestEvent, TestReceiver.callback, .{&callback_called});
-    app.flush();
+    app.flush(.no_wait);
 
     const event = try app.dispatch(sub, TestEvent);
     event.* = .{ .deinit_called = &deinit_called };
 
     const receiver_id = receiver.id();
     receiver.drop();
-    app.flush();
+    app.flush(.no_wait);
 
     try testing.expect(!callback_called);
     try testing.expect(deinit_called);
@@ -1050,13 +1053,13 @@ test "Context listen entities events" {
         .id = 35,
     };
 
-    app.flush();
+    app.flush(.no_wait);
 
     try testing.expectEqual(listener.read().index, 35);
 
     listened.drop();
     listener.drop();
-    app.flush();
+    app.flush(.no_wait);
 }
 
 test "Context observes entities" {
@@ -1111,14 +1114,14 @@ test "Context observes entities" {
         ptr.set_index(42);
     }
     observed.notify(&app);
-    app.flush();
+    app.flush(.no_wait);
 
     try testing.expectEqual(1, observer.read().observed_updates);
     try testing.expectEqual(42, observer.read().last_observed_index);
 
     observer.drop();
     observed.drop();
-    app.flush();
+    app.flush(.no_wait);
 }
 
 test "Context defer runs on foreground executor with entity context" {
@@ -1159,13 +1162,13 @@ test "Context defer runs on foreground executor with entity context" {
 
     try testing.expectEqual(0, entity.read().calls);
 
-    app.flush();
+    app.flush(.no_wait);
 
     try testing.expectEqual(1, entity.read().calls);
     try testing.expectEqual(42, entity.read().last_value);
 
     entity.drop();
-    app.flush();
+    app.flush(.no_wait);
 }
 
 test "Context observe removes subscription when observed is dropped" {
@@ -1195,12 +1198,12 @@ test "Context observe removes subscription when observed is dropped" {
     _ = try context.observe(observed, ObserverState.observe, .{});
 
     observed.drop();
-    app.flush();
+    app.flush(.no_wait);
 
     try testing.expectEqual(null, app.observers.subscribers.get(observed_id));
 
     observer.drop();
-    app.flush();
+    app.flush(.no_wait);
 }
 
 test "Observe entities drop before enable" {
@@ -1277,7 +1280,7 @@ test "Observe entities drop before enable" {
     try testing.expectEqual(index + 1, observed.read().index);
     observed.notify(&app);
 
-    app.flush();
+    app.flush(.no_wait);
 
     try testing.expect(!context);
 
@@ -1285,5 +1288,5 @@ test "Observe entities drop before enable" {
         entity.drop();
     }
 
-    app.flush();
+    app.flush(.no_wait);
 }
