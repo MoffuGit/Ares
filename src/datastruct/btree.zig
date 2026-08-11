@@ -697,30 +697,32 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
     const Node = NodeType(K, V, comp);
 
     return struct {
-        const Self = @This();
+        pub const Key = K;
+        pub const Value = V;
+
         pub const NODE_SIZE = @sizeOf(Node);
         pub const NODE_ALIGN = @alignOf(Node);
 
         root: *Node,
         count: usize = 0,
 
-        pub fn init(self: *Self, alloc: Allocator) !void {
+        pub fn init(self: *@This(), alloc: Allocator) !void {
             const root = try alloc.create(Node);
             root.* = .{ .Leaf = .{} };
 
             self.* = .{ .root = root };
         }
 
-        pub fn deinit(self: *Self, alloc: Allocator) void {
+        pub fn deinit(self: *@This(), alloc: Allocator) void {
             self.root.destroy(alloc);
         }
 
-        pub fn clone(self: *const Self, alloc: Allocator) !Self {
+        pub fn clone(self: *const @This(), alloc: Allocator) !@This() {
             const root = try self.root.clone(alloc);
             return .{ .root = root, .count = self.count };
         }
 
-        pub fn insert(self: *Self, alloc: Allocator, key: K, value: V) !?V {
+        pub fn insert(self: *@This(), alloc: Allocator, key: K, value: V) !?V {
             var node: Node = Node{ .Leaf = .{} };
 
             node.add_item(key, value);
@@ -733,11 +735,11 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             return null;
         }
 
-        pub fn get(self: *Self, key: K) ?V {
+        pub fn get(self: *@This(), key: K) ?V {
             return self.root.find(key);
         }
 
-        pub fn clear(self: *Self, alloc: Allocator) void {
+        pub fn clear(self: *@This(), alloc: Allocator) void {
             self.root.destroy(alloc);
 
             const root = alloc.create(Node) catch @panic("Temporal btree clear panic");
@@ -746,11 +748,11 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             self.count = 0;
         }
 
-        pub fn get_mut(self: *Self, key: K) ?*V {
+        pub fn get_mut(self: *@This(), key: K) ?*V {
             return self.root.find_mut(key);
         }
 
-        pub fn remove(self: *Self, alloc: Allocator, key: K) ?V {
+        pub fn remove(self: *@This(), alloc: Allocator, key: K) ?V {
             const removed = self.root.delete(key, alloc) orelse return null;
 
             if (!self.root.is_leaf() and self.root.len() == 1) {
@@ -763,11 +765,11 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             return removed;
         }
 
-        pub fn is_empty(self: *Self) bool {
+        pub fn is_empty(self: *@This()) bool {
             return self.count == 0;
         }
 
-        pub fn first(self: *Self) ?V {
+        pub fn first(self: *@This()) ?V {
             var current: ?*Node = self.root;
             while (current) |node| {
                 switch (node.*) {
@@ -787,31 +789,31 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             return null;
         }
 
-        pub fn iter(self: *const Self) Iterator {
+        pub fn iter(self: *const @This()) Iterator {
             return Iterator.init(self);
         }
 
         /// Create a range iterator over [start, end] (both inclusive)
-        pub fn range(self: *Self, start: K, end: K) RangeIterator {
+        pub fn range(self: *@This(), start: K, end: K) RangeIterator {
             return RangeIterator.init(self, .{ .inclusive = start }, .{ .inclusive = end });
         }
 
         /// Create a range iterator from start (inclusive) to end of tree
-        pub fn rangeFrom(self: *Self, start: K) RangeIterator {
+        pub fn rangeFrom(self: *@This(), start: K) RangeIterator {
             return RangeIterator.init(self, .{ .inclusive = start }, .unbounded);
         }
 
         /// Create a range iterator from start of tree to end (inclusive)
-        pub fn rangeTo(self: *Self, end: K) RangeIterator {
+        pub fn rangeTo(self: *@This(), end: K) RangeIterator {
             return RangeIterator.init(self, .unbounded, .{ .inclusive = end });
         }
 
         /// Create a range iterator with custom bounds
-        pub fn rangeWithBounds(self: *Self, start_bound: Bound, end_bound: Bound) RangeIterator {
+        pub fn rangeWithBounds(self: *@This(), start_bound: Bound, end_bound: Bound) RangeIterator {
             return RangeIterator.init(self, start_bound, end_bound);
         }
 
-        pub fn print(self: *const Self, alloc: Allocator) !void {
+        pub fn print(self: *const @This(), alloc: Allocator) !void {
             var queue = try std.ArrayList(*Node).initCapacity(alloc, 0);
             defer queue.deinit(alloc);
 
@@ -865,7 +867,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             leaf: ?*Node,
             index: usize,
 
-            pub fn init(tree: *const Self) Iterator {
+            pub fn init(tree: *const @This()) Iterator {
                 var current: ?*Node = tree.root;
                 while (current) |node| {
                     switch (node.*) {
@@ -938,7 +940,7 @@ pub fn BPlusTree(comptime K: type, comptime V: type, comptime comp: *const fn (a
             end_bound: Bound,
 
             /// Initialize a range iterator starting from a specific bound
-            pub fn init(tree: *const Self, start_bound: Bound, end_bound: Bound) RangeIterator {
+            pub fn init(tree: *const @This(), start_bound: Bound, end_bound: Bound) RangeIterator {
                 const start_leaf = switch (start_bound) {
                     .unbounded => findLeftmostLeaf(tree.root),
                     .inclusive => |key| findLeafForKey(tree.root, key),
