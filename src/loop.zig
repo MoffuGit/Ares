@@ -445,7 +445,9 @@ pub fn submit(
                 _completion.result = @call(.always_inline, resolver, .{ @field(_completion.operation, @tagName(op_tag)), loop });
             }
 
-            return @call(.always_inline, callback, .{ _completion, _completion.result.? });
+            const res = @field(_completion.result.?, @tagName(op_tag));
+
+            return @call(.always_inline, callback, .{ _completion, res });
         }
     };
 
@@ -564,39 +566,6 @@ pub fn await(
     completion: *Completion,
     function: anytype,
 ) !Waker {
-    const TypeErased = struct {
-        fn complete(c: *Completion, res: Loop.Result) bool {
-            drain(c.operation.machport.port);
-
-            return @call(.always_inline, function, .{ c, res.machport });
-        }
-        fn drain(port: posix.system.mach_port_name_t) void {
-            var message: struct {
-                header: system.mach_msg_header_t,
-            } = undefined;
-
-            while (true) {
-                switch (system.mach_msg(
-                    &message.header,
-                    .{ .RCV = .{ .TIMEOUT = true } },
-                    0,
-                    @sizeOf(@TypeOf(message)),
-                    port,
-                    system.MACH.MSG.TIMEOUT_NONE,
-                    system.MACH.PORT.NULL,
-                )) {
-                    .RCV_TIMED_OUT => return,
-                    .SUCCESS => {},
-                    .RCV_TOO_LARGE => {},
-                    else => |err| {
-                        log.warn("mach msg drain err, may duplicate async wakeups err={}", .{err});
-                        return;
-                    },
-                }
-            }
-        }
-    };
-
     const mach_self = system.mach_task_self();
     var mach_port: system.mach_port_name_t = undefined;
     if (system.mach_port_allocate(
@@ -640,10 +609,43 @@ pub fn await(
         @sizeOf(@TypeOf(limits)),
     ) != 0) return error.MachPortAllocFailed;
 
-    self.mach(
+    self.submit(
         completion,
-        TypeErased.complete,
+        function,
+        .machport,
         .{ .port = mach_port, .buffer = .{ .array = undefined } },
+        struct {
+            fn drain(port: posix.system.mach_port_name_t) void {
+                var message: struct {
+                    header: system.mach_msg_header_t,
+                } = undefined;
+
+                while (true) {
+                    switch (system.mach_msg(
+                        &message.header,
+                        .{ .RCV = .{ .TIMEOUT = true } },
+                        0,
+                        @sizeOf(@TypeOf(message)),
+                        port,
+                        system.MACH.MSG.TIMEOUT_NONE,
+                        system.MACH.PORT.NULL,
+                    )) {
+                        .RCV_TIMED_OUT => return,
+                        .SUCCESS => {},
+                        .RCV_TOO_LARGE => {},
+                        else => |err| {
+                            log.warn("mach msg drain err, may duplicate async wakeups err={}", .{err});
+                            return;
+                        },
+                    }
+                }
+            }
+
+            fn machport(m: MachPort, _: *Loop) Result {
+                drain(m.port);
+                return .{ .machport = {} };
+            }
+        }.machport,
     );
 
     return .{ .port = mach_port };
@@ -717,9 +719,9 @@ test "mach port" {
         called: bool = false,
         completion: Completion = .noop,
 
-        fn machport(c: *Completion, res: Result) bool {
+        fn machport(c: *Completion, res: Canceled!void) bool {
             const parent: *@This() = @fieldParentPtr("completion", c);
-            if (res.machport != error.Canceled) {
+            if (res != error.Canceled) {
                 parent.called = true;
             }
             return false;
@@ -806,9 +808,9 @@ test "cancel mach port" {
         called: bool = false,
         completion: Completion = .noop,
 
-        fn machport(c: *Completion, res: Result) bool {
+        fn machport(c: *Completion, res: Canceled!void) bool {
             const parent: *@This() = @fieldParentPtr("completion", c);
-            if (res.machport != error.Canceled) {
+            if (res != error.Canceled) {
                 parent.called = true;
             }
             return false;
@@ -834,8 +836,7 @@ test "cancel mach port" {
         completion: Completion = .noop,
         called: bool = false,
 
-        pub fn callback(c: *Completion, res: Result) bool {
-            assert(res == .cancel);
+        pub fn callback(c: *Completion, _: void) bool {
             const parent: *@This() = @fieldParentPtr("completion", c);
             parent.called = true;
             return false;
@@ -888,8 +889,8 @@ test "timer completes" {
         called: bool = false,
         completion: Completion = .noop,
 
-        fn timer(c: *Completion, res: Result) bool {
-            res.timer catch return false;
+        fn timer(c: *Completion, res: Canceled!void) bool {
+            res catch return false;
             const parent: *@This() = @fieldParentPtr("completion", c);
             parent.called = true;
             return false;
@@ -920,8 +921,8 @@ test "timer rearms when callback returns true" {
         times: u8 = 0,
         completion: Completion = .noop,
 
-        fn timer(c: *Completion, res: Result) bool {
-            res.timer catch return false;
+        fn timer(c: *Completion, res: Canceled!void) bool {
+            res catch return false;
             const parent: *@This() = @fieldParentPtr("completion", c);
             parent.times += 1;
             return parent.times < 2;
@@ -952,8 +953,8 @@ test "cancel timer" {
         called: bool = false,
         completion: Completion = .noop,
 
-        fn timer(c: *Completion, res: Result) bool {
-            res.timer catch return false;
+        fn timer(c: *Completion, res: Canceled!void) bool {
+            res catch return false;
             const parent: *@This() = @fieldParentPtr("completion", c);
             parent.called = true;
             return false;
@@ -974,8 +975,7 @@ test "cancel timer" {
         completion: Completion = .noop,
         called: bool = false,
 
-        pub fn callback(c: *Completion, res: Result) bool {
-            assert(res == .cancel);
+        pub fn callback(c: *Completion, _: void) bool {
             const parent: *@This() = @fieldParentPtr("completion", c);
             parent.called = true;
             return false;

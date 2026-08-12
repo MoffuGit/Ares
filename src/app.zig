@@ -582,8 +582,7 @@ pub fn Context(comptime T: type) type {
 
         pub fn cancel(self: *const @This(), completion: *Completion, target: *Completion) void {
             self.app.cancel(completion, struct {
-                fn cancel(_: *Completion, res: Loop.Result) bool {
-                    assert(res == .cancel);
+                fn cancel(_: *Completion, _: void) bool {
                     return false;
                 }
             }.cancel, target);
