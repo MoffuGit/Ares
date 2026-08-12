@@ -1,6 +1,4 @@
 pub const btree = @import("datastruct/btree.zig");
-pub const dequeue = @import("datastruct/dequeue.zig");
-pub const Dequeue = dequeue.Dequeue;
 pub const doubly_linked_list = @import("datastruct/doubly_linked_list.zig");
 pub const DoublyLinkedList = doubly_linked_list.DoublyLinkedList;
 pub const heap = @import("datastruct/heap.zig");
@@ -18,7 +16,6 @@ pub const SpscBounded = spsc.SpscBounded;
 test {
     _ = mpsc;
     _ = spsc;
-    _ = dequeue;
     _ = mem_map;
     _ = linked_list;
     _ = doubly_linked_list;
