@@ -171,8 +171,14 @@ const Queue = struct {
 };
 
 pub const Task = struct {
-    callback: *const fn (*Task) void,
+    fn noopCallback(_: *Task) void {}
 
+    pub const noop: Task = .{
+        .next = null,
+        .callback = noopCallback,
+    };
+
+    callback: *const fn (*Task) void,
     next: ?*Task = null,
 };
 

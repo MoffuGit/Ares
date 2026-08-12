@@ -19,6 +19,7 @@ const Mpsc = datastruct.Mpsc;
 const MultiQueue = datastruct.MultiQueue;
 const heap = datastruct.heap;
 const Scheduler = @import("scheduler.zig");
+const Task = Scheduler.Task;
 
 const log = std.log.scoped(.loop);
 
@@ -357,6 +358,7 @@ pub const Completion = struct {
     callback: *const fn (loop: *Loop, completion: *Completion) bool,
 
     next: ?*Completion = null,
+    task: Task = .noop,
 
     state: State,
 
