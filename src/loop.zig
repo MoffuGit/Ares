@@ -416,7 +416,7 @@ const Timer = struct {
     }
 };
 
-pub fn set(
+pub fn submit(
     self: *Loop,
     completion: *Completion,
     callback: anytype,
@@ -465,7 +465,7 @@ pub fn mach(
     function: anytype,
     data: MachPort,
 ) void {
-    self.set(
+    self.submit(
         completion,
         function,
         .machport,
@@ -484,7 +484,7 @@ pub fn cancel(
     function: anytype,
     target: *Completion,
 ) void {
-    self.set(
+    self.submit(
         completion,
         function,
         .cancel,
@@ -526,7 +526,7 @@ pub fn timer(
     callback: anytype,
     ms: u64,
 ) void {
-    self.set(
+    self.submit(
         completion,
         callback,
         .timer,
