@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const atomic = std.atomic;
 const heap = std.heap;
+const assert = std.debug.assert;
 
 const App = @import("app.zig");
 const Context = App.Context;
@@ -36,6 +37,7 @@ gpa: Allocator,
 arena: heap.ArenaAllocator,
 ctx: Context(Worktree),
 scanning: bool,
+stopped: bool,
 snapshot: Snapshot,
 scanner: Scanner,
 events: MpscBounded(Event),
@@ -54,6 +56,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
         .scanning = false,
         .snapshot = undefined,
         .scanner = undefined,
+        .stopped = false,
         .ctx = ctx,
         .await = .noop,
         .await_c = .noop,
@@ -83,15 +86,16 @@ pub fn deinit(self: *Worktree) void {
     self.arena.deinit();
 }
 
-pub fn drop(self: *Worktree) bool {
-    const stopped = self.scanner.stop();
+pub fn stop(self: *Worktree) void {
+    self.stopped = self.scanner.stop();
 
-    if (!stopped) return false;
+    if (self.stopped) self.ctx.drop();
+}
 
+pub fn drop(self: *Worktree) void {
+    assert(self.stopped);
     self.ctx.cancel(&self.await_c, &self.await);
     self.waker.close();
-
-    return true;
 }
 
 pub const Event = union(enum) {
@@ -118,7 +122,10 @@ fn handleEvents(c: *Completion, res: anyerror!void) bool {
 
     while (self.events.pop()) |event| {
         switch (event) {
-            .stopped => self.ctx.drop(),
+            .stopped => {
+                if (self.stopped) continue;
+                self.stop();
+            },
             .started => {
                 log.debug("scanner for path \"{s}\" started", .{self.snapshot.abs_root});
                 self.scanning = true;
@@ -158,9 +165,12 @@ test "Worktree" {
             },
         },
     );
-    defer worktree.drop();
 
     try testing.expectEqualStrings(worktree.read().snapshot.abs_root, chromium_path);
+
+    const ptr, const frame = worktree.update(&app);
+    ptr.stop();
+    frame.end(ptr);
 }
 
 test {

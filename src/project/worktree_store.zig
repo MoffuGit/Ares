@@ -39,13 +39,11 @@ pub fn init(self: *WorktreeStore, ctx: Context(WorktreeStore), options: Options)
     }
 }
 
-pub fn drop(self: *WorktreeStore) bool {
+pub fn drop(self: *WorktreeStore) void {
     var iter = self.worktrees.iterator();
     while (iter.next()) |entry| {
         entry.value_ptr.drop();
     }
-
-    return true;
 }
 
 pub fn deinit(self: *WorktreeStore) void {

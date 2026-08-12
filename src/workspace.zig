@@ -86,10 +86,8 @@ pub fn setBounds(self: *const Workspace, bounds: ?persistence.SerializedWindowBo
     try persistence.setBounds(self.conn, self.id, bounds, left_dock, right_dock);
 }
 
-pub fn drop(self: *Workspace) bool {
+pub fn drop(self: *Workspace) void {
     self.project.drop();
-
-    return true;
 }
 
 pub fn deinit(self: *Workspace) void {

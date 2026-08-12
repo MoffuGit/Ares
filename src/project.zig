@@ -32,7 +32,6 @@ pub fn init(self: *Project, ctx: Context(Project), options: Options) !void {
     };
 }
 
-pub fn drop(self: *Project) bool {
+pub fn drop(self: *Project) void {
     self.worktree_store.drop();
-    return true;
 }
