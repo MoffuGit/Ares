@@ -572,34 +572,39 @@ pub fn Context(comptime T: type) type {
             );
         }
 
-        pub fn await(self: *const @This(), c: *Completion, function: anytype, args: anytype) !Waker {
-            return try self.app.await(c, function, args);
+        pub fn await(self: *const @This(), c: *Completion, function: anytype) !Waker {
+            return try self.app.await(c, function);
         }
 
-        pub fn timer(self: *const @This(), c: *Completion, function: anytype, context: anytype, ms: u64) void {
-            self.app.timer(c, function, context, ms);
+        pub fn timer(self: *const @This(), c: *Completion, function: anytype, ms: u64) void {
+            self.app.timer(c, function, ms);
         }
 
         pub fn cancel(self: *const @This(), completion: *Completion, target: *Completion) void {
-            self.app.cancel(completion, target);
+            self.app.cancel(completion, struct {
+                fn cancel(_: *Completion, res: Loop.Result) bool {
+                    assert(res == .cancel);
+                    return false;
+                }
+            }.cancel, target);
         }
+
         pub fn scheduler(self: *const @This()) *Scheduler {
             return &self.app.scheduler;
         }
     };
 }
 
-pub fn await(self: *App, c: *Completion, function: anytype, args: anytype) !Waker {
-    return try self.loop.await(c, function, args);
+pub fn await(self: *App, c: *Completion, function: anytype) !Waker {
+    return try self.loop.await(c, function);
 }
 
-pub fn timer(self: *App, c: *Completion, function: anytype, context: anytype, ms: u64) void {
-    self.loop.timer(c, function, context, ms);
+pub fn timer(self: *App, c: *Completion, function: anytype, ms: u64) void {
+    self.loop.timer(c, function, ms);
 }
 
-pub fn cancel(self: *App, completion: *Completion, target: *Completion) void {
-    completion.cancel(target);
-    self.loop.cancel(completion);
+pub fn cancel(self: *App, completion: *Completion, function: anytype, target: *Completion) void {
+    self.loop.cancel(completion, function, target);
 }
 
 test "creates/drops entities" {
@@ -627,7 +632,7 @@ test "creates/drops entities" {
     const TestEntity = Entity(TestStruct);
 
     var app: App = undefined;
-    try app.init(.{}, allocator, io);
+    try app.init(allocator, io);
     defer app.deinit();
 
     var entities: [entity_count]TestEntity = undefined;
@@ -676,7 +681,7 @@ test "Observe entities" {
     const TestEntity = Entity(TestStruct);
 
     var app: App = undefined;
-    try app.init(.{}, allocator, io);
+    try app.init(allocator, io);
     defer app.deinit();
 
     const observed = try TestEntity.new(&app, .{});
@@ -758,7 +763,7 @@ test "Listen entities events" {
     const TestEntity = Entity(TestStruct);
 
     var app: App = undefined;
-    try app.init(.{}, allocator, io);
+    try app.init(allocator, io);
     defer app.deinit();
 
     const listened = try TestEntity.new(&app, .{});
@@ -816,7 +821,7 @@ test "Queued receiver event targets a typed subscription" {
     };
 
     var app: App = undefined;
-    try app.init(.{}, allocator, io);
+    try app.init(allocator, io);
     defer app.deinit();
 
     const dispatcher = try Entity(TestStruct).new(&app, .{});
@@ -866,7 +871,7 @@ test "Dropping a receiver removes subscriptions before queued delivery" {
     };
 
     var app: App = undefined;
-    try app.init(.{}, allocator, io);
+    try app.init(allocator, io);
     defer app.deinit();
 
     const dispatcher = try Entity(TestStruct).new(&app, .{});
@@ -924,7 +929,7 @@ test "Observe entities drop before enable" {
     };
 
     var app: App = undefined;
-    try app.init(.{}, allocator, io);
+    try app.init(allocator, io);
     defer app.deinit();
 
     const observed = try TestEntity.new(&app, .{});

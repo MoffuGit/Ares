@@ -67,7 +67,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
     errdefer self.arena.deinit();
 
     self.events = try .init(state.cpu_count, 64, arena);
-    self.waker = try ctx.await(&self.await, handleEvents, self);
+    self.waker = try ctx.await(&self.await, handleEvents);
 
     try self.scanner.init(ctx.scheduler(), gpa, self.arena.allocator(), io);
 }
@@ -112,8 +112,9 @@ pub const Event = union(enum) {
     }
 };
 
-fn handleEvents(self: *Worktree, res: anyerror!void) bool {
+fn handleEvents(c: *Completion, res: anyerror!void) bool {
     res catch return false;
+    const self: *Worktree = @fieldParentPtr("await", c);
 
     while (self.events.pop()) |event| {
         switch (event) {
@@ -145,7 +146,7 @@ test "Worktree" {
     const chromium_path = @import("test_options").chromium_path;
 
     var app: App = undefined;
-    try app.init(.{}, gpa, io);
+    try app.init(gpa, io);
     defer app.deinit();
 
     const worktree: Entity(Worktree) = try .new(
