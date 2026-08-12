@@ -15,6 +15,7 @@ const Kevent = std.c.kevent64_s;
 const builtin = @import("builtin");
 
 const datastruct = @import("datastruct.zig");
+const Mpsc = datastruct.Mpsc;
 const MultiQueue = datastruct.MultiQueue;
 const heap = datastruct.heap;
 const Scheduler = @import("scheduler.zig");
@@ -28,6 +29,7 @@ kq: posix.fd_t,
 time: Time,
 
 scheduler: *Scheduler,
+mpsc: Mpsc(Completion),
 queues: MultiQueue(union(enum) {
     timers: Completion,
     canceling: Completion,
@@ -50,6 +52,7 @@ pub fn init(self: *Loop, scheduler: *Scheduler, io: Io) !void {
     }
 
     self.* = .{
+        .mpsc = undefined,
         .scheduler = scheduler,
         .io = io,
         .kq = kq,
@@ -60,6 +63,7 @@ pub fn init(self: *Loop, scheduler: *Scheduler, io: Io) !void {
         .time = undefined,
     };
 
+    self.mpsc.init();
     self.queues.init();
 }
 
@@ -301,11 +305,17 @@ pub const MachPort = struct {
     buffer: ReadBuffer,
 };
 
+pub const Read = struct {
+    buffer: ReadBuffer,
+    fd: posix.fd_t,
+};
+
 pub const Operation = union(OperationType) {
     noop: void,
     machport: MachPort,
     cancel: *Completion,
     timer: Timer,
+    read: Read,
 };
 
 const OperationType = enum {
@@ -313,6 +323,7 @@ const OperationType = enum {
     machport,
     cancel,
     timer,
+    read,
 };
 
 const Canceled = error{Canceled};
@@ -322,6 +333,7 @@ pub const Result = union(OperationType) {
     machport: Canceled!void,
     cancel: void,
     timer: Canceled!void,
+    read: Canceled!usize,
 };
 
 const State = enum {
@@ -354,7 +366,7 @@ pub const Completion = struct {
 
     pub fn kevent(self: *Completion, event: *Kevent) void {
         switch (self.operation) {
-            .cancel, .noop, .timer => panic(
+            .cancel, .noop, .timer, .read => panic(
                 "{s} operation reached the submissions queueu",
                 .{@tagName(self.operation)},
             ),
@@ -382,6 +394,7 @@ pub const Completion = struct {
             .noop, .cancel => {},
             .machport => self.result = .{ .machport = error.Canceled },
             .timer => self.result = .{ .timer = error.Canceled },
+            .read => self.result = .{ .read = error.Canceled },
         }
     }
 };
@@ -441,6 +454,7 @@ pub fn submit(
     };
 
     switch (op_tag) {
+        .read => unreachable,
         .cancel => {
             completion.state = .submitted;
             self.queues.push(.cancellations, completion);
