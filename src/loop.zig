@@ -165,12 +165,12 @@ pub fn flushTimers(self: *Loop) void {
         assert(completion.state == .active);
 
         completion.state = .idle;
-        completion.result = .{ .timer = {} };
 
         if (completion.callback(self, completion)) {
             t.next = self.time.next_tick(t.ms);
             self.queues.push(.timers, completion);
             completion.state = .submitted;
+            completion.result = null;
         }
     }
 }
@@ -183,6 +183,7 @@ pub fn flushCompletions(self: *Loop) void {
         if (completion.callback(self, completion)) {
             assert(completion.operation != .timer);
             completion.state = .submitted;
+            completion.result = null;
             self.queues.push(.submissions, completion);
         }
     }
