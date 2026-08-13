@@ -123,7 +123,7 @@ fn handleEvents(c: *Completion, res: anyerror!void) bool {
     const self: *Worktree = @fieldParentPtr("await", c);
 
     const update = self.ctx.update();
-    defer self.ctx.endUpdate(&update);
+    defer update.end();
 
     while (self.events.pop()) |event| {
         switch (event) {

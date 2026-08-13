@@ -121,43 +121,36 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     const ctx: Context(T) = .new(self, entity);
 
     const update = ctx.update();
-    defer ctx.endUpdate(&update);
+    defer update.end();
 
     try @call(.always_inline, function, .{ ptr, ctx } ++ args);
 
     return entity;
 }
 
-pub const UpdateScope = struct {
+pub const Update = struct {
     any: AnyEntity,
+    app: *App,
 
-    pub fn end(self: *const @This(), app: *App) void {
-        app.entities.endUpdate(self.any.id);
-        app.endUpdate();
+    pub fn end(self: *const @This()) void {
+        self.app.entities.endUpdate(self.any.id);
+        if (self.app.peding_updates == 1) {
+            self.app.flush(.no_wait);
+        }
+        self.app.peding_updates -= 1;
     }
 };
 
-pub fn updateScope(self: *App, entity: anytype) UpdateScope {
+pub fn startUpdate(self: *App, entity: anytype) Update {
     const _Entity = @TypeOf(entity);
     if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
         @compileError("entity must be an Entity(T)");
     }
 
-    self.startUpdate();
+    self.peding_updates += 1;
     self.entities.startUpdate(entity.any.id);
 
-    return .{ .any = entity.any };
-}
-
-pub fn startUpdate(self: *App) void {
-    self.peding_updates += 1;
-}
-
-pub fn endUpdate(self: *App) void {
-    if (self.peding_updates == 1) {
-        self.flush(.no_wait);
-    }
-    self.peding_updates -= 1;
+    return .{ .any = entity.any, .app = self };
 }
 
 pub fn flush(self: *App, mode: Loop.RunMode) void {
@@ -494,13 +487,8 @@ pub fn Context(comptime T: type) type {
             return self.app.chunks.allocator();
         }
 
-        pub fn update(self: *const @This()) UpdateScope {
-            return self.app.updateScope(self.entity);
-        }
-
-        pub fn endUpdate(self: *const @This(), scope: *const UpdateScope) void {
-            assert(scope.any.type_id == self.entity.any.type_id);
-            scope.end(self.app);
+        pub fn update(self: *const @This()) Update {
+            return self.app.startUpdate(self.entity);
         }
 
         pub fn notify(self: *const @This()) void {
@@ -634,8 +622,8 @@ test "creates/drops entities" {
 
         {
             const ptr = entity.update();
-            const update = app.updateScope(entity.*);
-            defer update.end(&app);
+            const update = app.startUpdate(entity.*);
+            defer update.end();
 
             ptr.set_index(index);
             ptr.inc();
@@ -698,8 +686,8 @@ test "Observe entities" {
 
     {
         const ptr = observed.update();
-        const update = app.updateScope(observed);
-        defer update.end(&app);
+        const update = app.startUpdate(observed);
+        defer update.end();
 
         ptr.set_index(index);
         ptr.inc();
@@ -715,8 +703,8 @@ test "Observe entities" {
 
     {
         const ptr = observed.update();
-        const update = app.updateScope(observed);
-        defer update.end(&app);
+        const update = app.startUpdate(observed);
+        defer update.end();
 
         ptr.set_index(index);
         ptr.inc();
@@ -934,8 +922,8 @@ test "Observe entities drop before enable" {
 
     {
         const ptr = observed.update();
-        const update = app.updateScope(observed);
-        defer update.end(&app);
+        const update = app.startUpdate(observed);
+        defer update.end();
 
         ptr.set_index(index);
         ptr.inc();
@@ -952,8 +940,8 @@ test "Observe entities drop before enable" {
 
     {
         const ptr = observed.update();
-        const update = app.updateScope(observed);
-        defer update.end(&app);
+        const update = app.startUpdate(observed);
+        defer update.end();
 
         ptr.set_index(index);
         ptr.inc();
