@@ -45,7 +45,7 @@ pub fn Entity(comptime T: type) type {
 
         any: AnyEntity,
 
-        pub fn init(store: *EntityStore, new_id: EntityId) @This() {
+        pub fn new(store: *EntityStore, new_id: EntityId) @This() {
             return .{ .any = .init(store, new_id, TypeInfo.init(T)) };
         }
 
@@ -161,7 +161,7 @@ test "entity store returns inserted data and rejects wrong type" {
     ptr.* = .{ .value = 42 };
 
     const id = store.insert(ptr);
-    const entity: Entity(A) = .init(&store, id);
+    const entity: Entity(A) = .new(&store, id);
 
     try std.testing.expectEqualDeep(@intFromPtr(ptr), @intFromPtr(store.get(entity.id())));
     try std.testing.expectEqual(@as(u32, 42), entity.read().?.value);
@@ -184,7 +184,7 @@ test "closing entity records id and type when ref count reaches zero" {
     ptr.* = .{ .value = 7 };
 
     const id = store.insert(ptr);
-    const entity: Entity(A) = .init(&store, id);
+    const entity: Entity(A) = .new(&store, id);
 
     entity.drop();
 
@@ -219,7 +219,7 @@ test "dropping arena-backed entity calls optional deinit" {
     ptr.* = .{ .deinit_called = &deinit_called };
 
     const id = store.insert(ptr);
-    const entity: Entity(A) = .init(&store, id);
+    const entity: Entity(A) = .new(&store, id);
 
     entity.drop();
 
@@ -249,7 +249,7 @@ test "destroyed entities recycle ids" {
     ptr.* = .{ .value = 1 };
 
     const id = store.insert(ptr);
-    const entity: Entity(A) = .init(&store, id);
+    const entity: Entity(A) = .new(&store, id);
 
     entity.drop();
     const drop = store.popDrop().?;

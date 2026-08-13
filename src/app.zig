@@ -117,7 +117,7 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     const id = self.entities.insert(ptr);
     errdefer self.entities.recycle(id);
 
-    const entity: Entity(T) = .init(&self.entities, id);
+    const entity: Entity(T) = .new(&self.entities, id);
     const ctx: Context(T) = .new(self, entity);
 
     const update = ctx.update();
