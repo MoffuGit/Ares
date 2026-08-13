@@ -119,7 +119,11 @@ pub const Event = union(enum) {
 
 fn handleEvents(c: *Completion, res: anyerror!void) bool {
     res catch return false;
+
     const self: *Worktree = @fieldParentPtr("await", c);
+
+    const update = self.ctx.update();
+    defer self.ctx.endUpdate(&update);
 
     while (self.events.pop()) |event| {
         switch (event) {
