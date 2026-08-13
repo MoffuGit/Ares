@@ -4,7 +4,6 @@ const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 
-const App = @import("app.zig");
 const datastruct = @import("datastruct.zig");
 const slotmap = datastruct.slotmap;
 pub const EntityId = slotmap.Key;
