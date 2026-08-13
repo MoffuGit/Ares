@@ -30,7 +30,7 @@ pub fn init(self: *WorktreeStore, ctx: Context(WorktreeStore), options: Options)
         const id = self.next_id;
         const worktree = try ctx.app.new(Worktree, Worktree.init, .{
             options.io,
-            Worktree.Options{ .abs_path = path },
+            path,
         });
         errdefer worktree.drop();
 

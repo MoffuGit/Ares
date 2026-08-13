@@ -73,9 +73,7 @@ test "benchmark: Worktree initial scan" {
             Worktree.init,
             .{
                 io,
-                Worktree.Options{
-                    .abs_path = chromium_path,
-                },
+                chromium_path,
             },
         );
         defer worktree.drop();

@@ -17,11 +17,6 @@ pub const SerializedWorkspace = persistence.SerializedWorkspace;
 
 pub const Workspace = @This();
 
-pub const Options = struct {
-    paths: []const []const u8,
-    session: uuid.Uuid,
-};
-
 io: Io,
 id: i64,
 conn: zqlite.Conn,
@@ -33,7 +28,8 @@ paths: std.ArrayList([]u8),
 pub fn init(
     self: *Workspace,
     ctx: Context(Workspace),
-    options: Options,
+    paths: []const []const u8,
+    session: uuid.Uuid,
     io: Io,
 ) !void {
     const conn = try db.acquire(io);
@@ -42,7 +38,7 @@ pub fn init(
     const gpa = ctx.gpa();
 
     self.* = .{
-        .session = options.session,
+        .session = session,
         .id = undefined,
         .io = io,
         .conn = conn,
@@ -52,9 +48,9 @@ pub fn init(
     };
     errdefer self.arena.deinit();
 
-    self.paths = try .initCapacity(self.arena.allocator(), options.paths.len);
+    self.paths = try .initCapacity(self.arena.allocator(), paths.len);
 
-    for (options.paths) |path| {
+    for (paths) |path| {
         const copy = try self.arena.allocator().dupe(u8, path);
         self.paths.appendAssumeCapacity(copy);
     }

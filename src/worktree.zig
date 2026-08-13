@@ -28,10 +28,6 @@ const state = &global.state;
 
 pub const Worktree = @This();
 
-pub const Options = struct {
-    abs_path: []const u8,
-};
-
 io: Io,
 gpa: Allocator,
 arena: heap.ArenaAllocator,
@@ -46,7 +42,12 @@ waker: Waker,
 await: Completion,
 await_c: Completion,
 
-pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !void {
+pub fn init(
+    self: *Worktree,
+    ctx: Context(Worktree),
+    io: Io,
+    abs_path: []const u8,
+) !void {
     const gpa = ctx.gpa();
 
     self.* = .{
@@ -64,7 +65,7 @@ pub fn init(self: *Worktree, ctx: Context(Worktree), io: Io, opts: Options) !voi
         .events = undefined,
     };
 
-    try self.snapshot.init(opts.abs_path, gpa, io);
+    try self.snapshot.init(abs_path, gpa, io);
 
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
@@ -161,9 +162,7 @@ test "Worktree" {
         init,
         .{
             io,
-            Options{
-                .abs_path = chromium_path,
-            },
+            chromium_path,
         },
     );
 

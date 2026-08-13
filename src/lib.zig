@@ -268,10 +268,8 @@ fn workspace_new(app: *App, session: ent.Entity(Session), extern_paths: Slice(St
         Workspace,
         Workspace.init,
         .{
-            Workspace.Options{
-                .paths = paths,
-                .session = id,
-            },
+            paths,
+            id,
             state.threaded.io(),
         },
     );
