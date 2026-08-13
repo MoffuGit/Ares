@@ -27,7 +27,7 @@ const WorktreeObserver = struct {
 
     pub fn callback(observer: *App.Observer, _: *App, worktree: Entity(Worktree)) bool {
         const parent: *@This() = @fieldParentPtr("observer", observer);
-        parent.scanning = worktree.read().scanning;
+        parent.scanning = worktree.read().?.scanning;
         return parent.scanning;
     }
 };
@@ -68,8 +68,9 @@ test "benchmark: Worktree initial scan" {
     for (0..durations.len) |idx| {
         bench.start(io);
 
-        const worktree: Entity(Worktree) = try .new(
-            &app,
+        const worktree = try app.new(
+            Worktree,
+            Worktree.init,
             .{
                 io,
                 Worktree.Options{
@@ -101,7 +102,7 @@ fn verify(app: *App, zlob_set: std.StringHashMap(void), worktree: Entity(Worktre
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    const snap = worktree.read().snapshot;
+    const snap = worktree.read().?.snapshot;
 
     const root_name = snap.root_name;
     const prefix_len = root_name.len + 1;

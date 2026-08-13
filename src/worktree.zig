@@ -156,21 +156,21 @@ test "Worktree" {
     try app.init(gpa, io);
     defer app.deinit();
 
-    const worktree: Entity(Worktree) = try .new(
-        &app,
+    const worktree = try app.new(
+        Worktree,
+        init,
         .{
             io,
-            Worktree.Options{
+            Options{
                 .abs_path = chromium_path,
             },
         },
     );
 
-    try testing.expectEqualStrings(worktree.read().snapshot.abs_root, chromium_path);
+    try testing.expectEqualStrings(worktree.read().?.snapshot.abs_root, chromium_path);
 
-    const ptr, const frame = worktree.update(&app);
+    const ptr = worktree.update();
     ptr.stop();
-    frame.end(ptr);
 }
 
 test {

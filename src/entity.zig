@@ -5,7 +5,6 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 
 const App = @import("app.zig");
-const UpdateFrame = App.UpdateFrame;
 const datastruct = @import("datastruct.zig");
 const slotmap = datastruct.slotmap;
 pub const EntityId = slotmap.Key;
@@ -29,12 +28,8 @@ pub const AnyEntity = struct {
         return .{ .store = store, .id = id, .type_id = type_id };
     }
 
-    pub fn get(self: *const @This()) *anyopaque {
+    pub fn get(self: *const @This()) ?*anyopaque {
         return self.store.get(self.id);
-    }
-
-    pub fn tryGet(self: *const @This()) ?*anyopaque {
-        return self.store.tryGet(self.id);
     }
 
     pub fn drop(self: @This()) void {
@@ -51,8 +46,8 @@ pub fn Entity(comptime T: type) type {
 
         any: AnyEntity,
 
-        pub fn new(app: *App, args: anytype) !@This() {
-            return try app.new(T, T.init, args);
+        pub fn init(store: *EntityStore, new_id: EntityId) @This() {
+            return .{ .any = .init(store, new_id, TypeInfo.init(T)) };
         }
 
         pub fn from(any: AnyEntity) ?@This() {
@@ -64,33 +59,14 @@ pub fn Entity(comptime T: type) type {
             };
         }
 
-        pub fn update(self: @This(), app: *App) struct { *T, UpdateFrame } {
-            const frame = app.updateFrame(self.any);
-            const ptr = self.any.get();
-
-            return .{ @ptrCast(@alignCast(ptr)), frame };
-        }
-
-        pub fn read(self: @This()) *const T {
-            const ptr = self.any.get();
+        pub fn read(self: @This()) ?*const T {
+            const ptr = self.any.get() orelse return null;
             return @ptrCast(@alignCast(ptr));
         }
 
-        pub fn tryRead(self: @This()) ?*const T {
-            const ptr = self.any.tryGet() orelse return null;
+        pub fn update(self: @This()) *T {
+            const ptr = self.any.get() orelse @panic("Updating non-existing entiry");
             return @ptrCast(@alignCast(ptr));
-        }
-
-        pub fn notify(self: @This(), app: *App) void {
-            app.notify(self);
-        }
-
-        pub fn nevent(self: @This(), app: *App, comptime E: type) !*E {
-            return try app.nevent(self, E);
-        }
-
-        pub fn init(store: *EntityStore, new_id: EntityId) @This() {
-            return .{ .any = .init(store, new_id, TypeInfo.init(T)) };
         }
 
         pub fn id(self: *const @This()) EntityId {
@@ -99,10 +75,6 @@ pub fn Entity(comptime T: type) type {
 
         pub fn drop(self: @This()) void {
             self.any.drop();
-        }
-
-        pub fn ctx(self: *const @This(), app: *App) App.Context(T) {
-            return .new(app, self.*);
         }
     };
 }
@@ -133,12 +105,7 @@ pub const EntityStore = struct {
         return self.entities.put(ptr) catch @panic("Entities Overflow");
     }
 
-    pub fn get(self: *@This(), id: EntityId) *anyopaque {
-        const ptr = self.entities.get(id) orelse @panic("Reading non existing entity");
-        return ptr.*;
-    }
-
-    pub fn tryGet(self: *@This(), id: EntityId) ?*anyopaque {
+    pub fn get(self: *@This(), id: EntityId) ?*anyopaque {
         const ptr = self.entities.get(id) orelse return null;
         return ptr.*;
     }
@@ -198,7 +165,7 @@ test "entity store returns inserted data and rejects wrong type" {
     const entity: Entity(A) = .init(&store, id);
 
     try std.testing.expectEqualDeep(@intFromPtr(ptr), @intFromPtr(store.get(entity.id())));
-    try std.testing.expectEqual(@as(u32, 42), entity.read().value);
+    try std.testing.expectEqual(@as(u32, 42), entity.read().?.value);
 }
 
 test "closing entity records id and type when ref count reaches zero" {

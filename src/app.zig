@@ -110,9 +110,6 @@ pub fn deinit(self: *App) void {
 }
 
 pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Entity(T) {
-    self.startUpdate();
-    defer self.endUpdate();
-
     const alloc = self.chunks.allocator();
     const ptr = try alloc.create(T);
     errdefer alloc.destroy(ptr);
@@ -123,33 +120,33 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     const entity: Entity(T) = .init(&self.entities, id);
     const ctx: Context(T) = .new(self, entity);
 
-    self.entities.startUpdate(id);
-    defer self.entities.endUpdate(id);
+    const update = ctx.update();
+    defer ctx.endUpdate(&update);
 
     try @call(.always_inline, function, .{ ptr, ctx } ++ args);
 
     return entity;
 }
 
-pub const UpdateFrame = struct {
-    app: *App,
+pub const UpdateScope = struct {
     any: AnyEntity,
 
-    pub fn end(self: *const @This(), ptr: anytype) void {
-        const T = @TypeOf(ptr);
-
-        assert(self.any.type_id == TypeInfo.init(@typeInfo(T).pointer.child));
-
-        self.app.entities.endUpdate(self.any.id);
-        self.app.endUpdate();
+    pub fn end(self: *const @This(), app: *App) void {
+        app.entities.endUpdate(self.any.id);
+        app.endUpdate();
     }
 };
 
-pub fn updateFrame(self: *App, any: AnyEntity) UpdateFrame {
-    self.startUpdate();
-    self.entities.startUpdate(any.id);
+pub fn updateScope(self: *App, entity: anytype) UpdateScope {
+    const _Entity = @TypeOf(entity);
+    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
+        @compileError("entity must be an Entity(T)");
+    }
 
-    return .{ .any = any, .app = self };
+    self.startUpdate();
+    self.entities.startUpdate(entity.any.id);
+
+    return .{ .any = entity.any };
 }
 
 pub fn startUpdate(self: *App) void {
@@ -497,20 +494,17 @@ pub fn Context(comptime T: type) type {
             return self.app.chunks.allocator();
         }
 
-        pub fn update(self: *const @This()) struct { *T, UpdateFrame } {
-            return self.entity.update(self.app);
+        pub fn update(self: *const @This()) UpdateScope {
+            return self.app.updateScope(self.entity);
         }
 
-        pub fn read(self: *const @This()) *const T {
-            return self.entity.read();
-        }
-
-        pub fn tryRead(self: *const @This()) ?*const T {
-            return self.entity.tryRead();
+        pub fn endUpdate(self: *const @This(), scope: *const UpdateScope) void {
+            assert(scope.any.type_id == self.entity.any.type_id);
+            scope.end(self.app);
         }
 
         pub fn notify(self: *const @This()) void {
-            self.entity.notify(self.app);
+            self.app.notify(self.entity);
         }
 
         pub fn nevent(self: *const @This(), comptime E: type) !*E {
@@ -636,17 +630,18 @@ test "creates/drops entities" {
 
     var entities: [entity_count]TestEntity = undefined;
     for (&entities, 0..) |*entity, index| {
-        entity.* = try TestEntity.new(&app, .{});
+        entity.* = try app.new(TestStruct, TestStruct.init, .{});
 
         {
-            const ptr, const update = entity.update(&app);
-            defer update.end(ptr);
+            const ptr = entity.update();
+            const update = app.updateScope(entity.*);
+            defer update.end(&app);
 
             ptr.set_index(index);
             ptr.inc();
         }
 
-        try testing.expectEqual(index + 1, entity.read().index);
+        try testing.expectEqual(index + 1, entity.read().?.index);
     }
 
     for (entities) |entity| {
@@ -683,7 +678,7 @@ test "Observe entities" {
     try app.init(allocator, io);
     defer app.deinit();
 
-    const observed = try TestEntity.new(&app, .{});
+    const observed = try app.new(TestStruct, TestStruct.init, .{});
     defer observed.drop();
 
     const TestObserver = struct {
@@ -702,14 +697,15 @@ test "Observe entities" {
     var index: usize = 0;
 
     {
-        const ptr, const update = observed.update(&app);
-        defer update.end(ptr);
+        const ptr = observed.update();
+        const update = app.updateScope(observed);
+        defer update.end(&app);
 
         ptr.set_index(index);
         ptr.inc();
     }
-    try testing.expectEqual(index + 1, observed.read().index);
-    observed.notify(&app);
+    try testing.expectEqual(index + 1, observed.read().?.index);
+    app.notify(observed);
 
     try testing.expect(!observer.run);
 
@@ -718,14 +714,15 @@ test "Observe entities" {
     index = 1;
 
     {
-        const ptr, const update = observed.update(&app);
-        defer update.end(ptr);
+        const ptr = observed.update();
+        const update = app.updateScope(observed);
+        defer update.end(&app);
 
         ptr.set_index(index);
         ptr.inc();
     }
-    try testing.expectEqual(index + 1, observed.read().index);
-    observed.notify(&app);
+    try testing.expectEqual(index + 1, observed.read().?.index);
+    app.notify(observed);
 
     app.flush(.no_wait);
 
@@ -759,13 +756,11 @@ test "Listen entities events" {
         }
     };
 
-    const TestEntity = Entity(TestStruct);
-
     var app: App = undefined;
     try app.init(allocator, io);
     defer app.deinit();
 
-    const listened = try TestEntity.new(&app, .{});
+    const listened = try app.new(TestStruct, TestStruct.init, .{});
 
     const TestListener = struct {
         id: usize = 0,
@@ -782,7 +777,7 @@ test "Listen entities events" {
 
     _ = try app.listen(listened, TestEvent, TestListener.callback, &listener.listener);
 
-    const evt = try listened.nevent(&app, TestEvent);
+    const evt = try app.nevent(listened, TestEvent);
     evt.* = .{
         .id = 35,
     };
@@ -823,7 +818,7 @@ test "Queued receiver event targets a typed subscription" {
     try app.init(allocator, io);
     defer app.deinit();
 
-    const dispatcher = try Entity(TestStruct).new(&app, .{});
+    const dispatcher = try app.new(TestStruct, TestStruct.init, .{});
 
     var receiver: TestReceiver = .{};
 
@@ -873,7 +868,7 @@ test "Dropping a receiver removes subscriptions before queued delivery" {
     try app.init(allocator, io);
     defer app.deinit();
 
-    const dispatcher = try Entity(TestStruct).new(&app, .{});
+    const dispatcher = try app.new(TestStruct, TestStruct.init, .{});
     var deinit_called = false;
 
     var receiver: TestReceiver = .{};
@@ -931,21 +926,22 @@ test "Observe entities drop before enable" {
     try app.init(allocator, io);
     defer app.deinit();
 
-    const observed = try TestEntity.new(&app, .{});
+    const observed = try app.new(TestStruct, TestStruct.init, .{});
 
     var observer: TestObserver = .{};
 
     var index: usize = 0;
 
     {
-        const ptr, const update = observed.update(&app);
-        defer update.end(ptr);
+        const ptr = observed.update();
+        const update = app.updateScope(observed);
+        defer update.end(&app);
 
         ptr.set_index(index);
         ptr.inc();
     }
-    try testing.expectEqual(index + 1, observed.read().index);
-    observed.notify(&app);
+    try testing.expectEqual(index + 1, observed.read().?.index);
+    app.notify(observed);
 
     try testing.expect(!observer.run);
 
@@ -955,14 +951,15 @@ test "Observe entities drop before enable" {
     index = 1;
 
     {
-        const ptr, const update = observed.update(&app);
-        defer update.end(ptr);
+        const ptr = observed.update();
+        const update = app.updateScope(observed);
+        defer update.end(&app);
 
         ptr.set_index(index);
         ptr.inc();
     }
-    try testing.expectEqual(index + 1, observed.read().index);
-    observed.notify(&app);
+    try testing.expectEqual(index + 1, observed.read().?.index);
+    app.notify(observed);
 
     app.flush(.no_wait);
 
