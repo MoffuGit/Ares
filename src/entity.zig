@@ -58,12 +58,12 @@ pub fn Entity(comptime T: type) type {
             };
         }
 
-        pub fn read(self: @This()) ?*const T {
+        pub fn get(self: @This()) ?*const T {
             const ptr = self.any.get() orelse return null;
             return @ptrCast(@alignCast(ptr));
         }
 
-        pub fn update(self: @This()) *T {
+        pub fn mut(self: @This()) *T {
             const ptr = self.any.get() orelse @panic("Updating non-existing entiry");
             return @ptrCast(@alignCast(ptr));
         }
@@ -164,7 +164,7 @@ test "entity store returns inserted data and rejects wrong type" {
     const entity: Entity(A) = .new(&store, id);
 
     try std.testing.expectEqualDeep(@intFromPtr(ptr), @intFromPtr(store.get(entity.id())));
-    try std.testing.expectEqual(@as(u32, 42), entity.read().?.value);
+    try std.testing.expectEqual(@as(u32, 42), entity.get().?.value);
 }
 
 test "closing entity records id and type when ref count reaches zero" {

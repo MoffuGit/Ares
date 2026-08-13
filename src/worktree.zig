@@ -170,9 +170,9 @@ test "Worktree" {
         },
     );
 
-    try testing.expectEqualStrings(worktree.read().?.snapshot.abs_root, chromium_path);
+    try testing.expectEqualStrings(worktree.get().?.snapshot.abs_root, chromium_path);
 
-    worktree.update().stop();
+    worktree.mut().stop();
 }
 
 test {

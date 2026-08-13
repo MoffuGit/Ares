@@ -621,7 +621,7 @@ test "creates/drops entities" {
         entity.* = try app.new(TestStruct, TestStruct.init, .{});
 
         {
-            const ptr = entity.update();
+            const ptr = entity.mut();
             const update = app.startUpdate(entity.*);
             defer update.end();
 
@@ -629,7 +629,7 @@ test "creates/drops entities" {
             ptr.inc();
         }
 
-        try testing.expectEqual(index + 1, entity.read().?.index);
+        try testing.expectEqual(index + 1, entity.get().?.index);
     }
 
     for (entities) |entity| {
@@ -685,14 +685,14 @@ test "Observe entities" {
     var index: usize = 0;
 
     {
-        const ptr = observed.update();
+        const ptr = observed.mut();
         const update = app.startUpdate(observed);
         defer update.end();
 
         ptr.set_index(index);
         ptr.inc();
     }
-    try testing.expectEqual(index + 1, observed.read().?.index);
+    try testing.expectEqual(index + 1, observed.get().?.index);
     app.notify(observed);
 
     try testing.expect(!observer.run);
@@ -702,14 +702,14 @@ test "Observe entities" {
     index = 1;
 
     {
-        const ptr = observed.update();
+        const ptr = observed.mut();
         const update = app.startUpdate(observed);
         defer update.end();
 
         ptr.set_index(index);
         ptr.inc();
     }
-    try testing.expectEqual(index + 1, observed.read().?.index);
+    try testing.expectEqual(index + 1, observed.get().?.index);
     app.notify(observed);
 
     app.flush(.no_wait);
@@ -921,14 +921,14 @@ test "Observe entities drop before enable" {
     var index: usize = 0;
 
     {
-        const ptr = observed.update();
+        const ptr = observed.mut();
         const update = app.startUpdate(observed);
         defer update.end();
 
         ptr.set_index(index);
         ptr.inc();
     }
-    try testing.expectEqual(index + 1, observed.read().?.index);
+    try testing.expectEqual(index + 1, observed.get().?.index);
     app.notify(observed);
 
     try testing.expect(!observer.run);
@@ -939,14 +939,14 @@ test "Observe entities drop before enable" {
     index = 1;
 
     {
-        const ptr = observed.update();
+        const ptr = observed.mut();
         const update = app.startUpdate(observed);
         defer update.end();
 
         ptr.set_index(index);
         ptr.inc();
     }
-    try testing.expectEqual(index + 1, observed.read().?.index);
+    try testing.expectEqual(index + 1, observed.get().?.index);
     app.notify(observed);
 
     app.flush(.no_wait);
