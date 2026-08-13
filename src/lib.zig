@@ -247,7 +247,7 @@ pub export fn odyssey_workspace_new(app: *App, extern_entity: ExternEntity, path
 }
 
 fn workspace_new(app: *App, session: ent.Entity(Session), extern_paths: Slice(String)) !ent.Entity(Workspace) {
-    const id = session.read().id;
+    const id = session.read().?.id;
 
     var buffer: [1024][]const u8 = undefined;
 
@@ -264,8 +264,9 @@ fn workspace_new(app: *App, session: ent.Entity(Session), extern_paths: Slice(St
 
     const paths = buffer[0..string_slices.len];
 
-    const workspace: ent.Entity(Workspace) = try .new(
-        app,
+    const workspace = try app.new(
+        Workspace,
+        Workspace.init,
         .{
             Workspace.Options{
                 .paths = paths,
@@ -281,7 +282,7 @@ fn workspace_new(app: *App, session: ent.Entity(Session), extern_paths: Slice(St
 
 pub export fn odyssey_workspace_mark_for_restoration(extern_entity: ExternEntity) void {
     const workspace = ent.Entity(Workspace).from(extern_entity.any()) orelse @panic("Missing Workspace Entity");
-    const ptr = workspace.read();
+    const ptr = workspace.read() orelse unreachable;
 
     ptr.markForRestoration(state.gpa) catch |err| {
         log.warn("Workspace would not restore={}", .{err});
@@ -290,7 +291,7 @@ pub export fn odyssey_workspace_mark_for_restoration(extern_entity: ExternEntity
 
 pub export fn odyssey_workspace_set_bounds(extern_entity: ExternEntity, extern_bounds: Option(ExternSerializedWindowBounds), left_dock: Option(f64), right_dock: Option(f64)) void {
     const workspace = ent.Entity(Workspace).from(extern_entity.any()) orelse @panic("Missing Workspace Entity");
-    const ptr = workspace.read();
+    const ptr = workspace.read() orelse unreachable;
 
     const bounds = if (extern_bounds.into()) |n| n.into() else null;
 
@@ -301,7 +302,7 @@ pub export fn odyssey_workspace_set_bounds(extern_entity: ExternEntity, extern_b
 
 pub export fn odyssey_workspace_get_id(extern_entity: ExternEntity) i64 {
     const workspace = ent.Entity(Workspace).from(extern_entity.any()) orelse @panic("Missing Workspace Entity");
-    return workspace.read().id;
+    return workspace.read().?.id;
 }
 
 pub export fn odyssey_session_new(app: *App) MaybeEntity {
@@ -319,7 +320,7 @@ fn session_new(app: *App) !ent.Entity(Session) {
     const conn = try db.acquire(io);
     defer db.release(io, conn);
 
-    const session: ent.Entity(Session) = try .new(app, .{
+    const session = try app.new(Session, Session.init, .{
         gpa,
         &conn,
         io,
@@ -356,7 +357,7 @@ pub export fn odyssey_workspace_get_by_session(session_entity: ExternEntity) Ext
 
 fn workspace_get_by_session(session_entity: ExternEntity) !ExternSerializedWorkspaces {
     const session = ent.Entity(Session).from(session_entity.any()) orelse @panic("Missing Session Entity");
-    const old_id = session.read().old_id orelse return .empty;
+    const old_id = session.read().?.old_id orelse return .empty;
 
     const io = state.threaded.io();
     const gpa = state.gpa;

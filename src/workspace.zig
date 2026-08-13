@@ -59,7 +59,7 @@ pub fn init(
         self.paths.appendAssumeCapacity(copy);
     }
 
-    self.project = try .new(ctx.app, .{
+    self.project = try ctx.app.new(Project, Project.init, .{
         Project.Options{
             .arena = self.arena.allocator(),
             .paths = self.paths.items,

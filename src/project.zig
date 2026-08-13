@@ -22,7 +22,7 @@ worktree_store: Entity(WorktreeStore),
 pub fn init(self: *Project, ctx: Context(Project), options: Options) !void {
     self.* = .{
         .arena = options.arena,
-        .worktree_store = try .new(ctx.app, .{
+        .worktree_store = try ctx.app.new(WorktreeStore, WorktreeStore.init, .{
             WorktreeStore.Options{
                 .arena = options.arena,
                 .paths = options.paths,

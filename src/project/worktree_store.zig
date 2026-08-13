@@ -28,7 +28,7 @@ pub fn init(self: *WorktreeStore, ctx: Context(WorktreeStore), options: Options)
 
     for (options.paths) |path| {
         const id = self.next_id;
-        const worktree: Entity(Worktree) = try .new(ctx.app, .{
+        const worktree = try ctx.app.new(Worktree, Worktree.init, .{
             options.io,
             Worktree.Options{ .abs_path = path },
         });
