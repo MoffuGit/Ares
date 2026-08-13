@@ -172,8 +172,7 @@ test "Worktree" {
 
     try testing.expectEqualStrings(worktree.read().?.snapshot.abs_root, chromium_path);
 
-    const ptr = worktree.update();
-    ptr.stop();
+    worktree.update().stop();
 }
 
 test {
