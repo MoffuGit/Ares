@@ -261,7 +261,7 @@ pub const Patched = struct {
                     affected_range.min = last_linemap.rngForLine(replaced_lines_range.min).min;
                 }
 
-                if (affected_idx == replaced_lines_count - 1 and affected_idx >= math.clamp(0, line_delta)) {
+                if (affected_idx == replaced_lines_count - 1 and affected_idx >= @max(0, line_delta)) {
                     const original_range = last_linemap.rngForLine(replaced_lines_range.max);
                     if (original_range.max > patch.range.max) {
                         affected_range.max += original_range.max - patch.range.max;

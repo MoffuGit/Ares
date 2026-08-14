@@ -32,7 +32,3 @@ pub const Rngu64Node = struct {
     range: Rngu64,
     next: ?*Rngu64Node = null,
 };
-
-pub inline fn clamp(a: comptime_int, delta: i64) i64 {
-    return @max(a, delta);
-}
