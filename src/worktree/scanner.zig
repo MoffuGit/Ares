@@ -90,6 +90,8 @@ pub fn init(
     const chunks = self.chunks.threadSafeAllocator();
 
     const task = try chunks.create(ScannerTask);
+    errdefer chunks.destroy(task);
+
     task.* = .{
         .scanner = self,
         .kind = .initial_scan,
@@ -98,8 +100,7 @@ pub fn init(
         },
     };
 
-    try scheduler.push(&task.task);
-    self.task_count.store(1, .release);
+    try self.pushTask(task);
 }
 
 pub fn deinit(self: *Scanner) void {
@@ -126,6 +127,13 @@ const ScannerTask = struct {
 
 pub inline fn parent(self: *Scanner) *Worktree {
     return @fieldParentPtr("scanner", self);
+}
+
+fn pushTask(self: *Scanner, task: *ScannerTask) !void {
+    if (self.stopped.load(.acquire)) return error.Closed;
+
+    try self.scheduler.push(&task.task);
+    _ = self.task_count.fetchAdd(1, .release);
 }
 
 fn taskDone(self: *Scanner, task: *ScannerTask) void {
@@ -235,8 +243,7 @@ fn initialScan(
         .task = .{ .callback = taskCallback },
     };
 
-    try self.scheduler.push(&task.task);
-    _ = self.task_count.fetchAdd(1, .release);
+    try self.pushTask(task);
 }
 
 fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore: ?*const IgnoreNode) !void {
@@ -370,11 +377,11 @@ fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore:
         //         }
         //     }
 
-        while (tasks.pop()) |task| {
-            const scanner_task: *ScannerTask = @fieldParentPtr("task", task);
-            scanner_task.kind.scan_dir.shared_fd = shared;
-            try self.scheduler.push(task);
-            _ = self.task_count.fetchAdd(1, .release);
+        while (tasks.pop()) |t| {
+            const task: *ScannerTask = @fieldParentPtr("task", t);
+            task.kind.scan_dir.shared_fd = shared;
+
+            try self.pushTask(task);
         }
     } else {
         dir.close(self.io);
