@@ -13,6 +13,7 @@ const meta = std.meta;
 const panic = std.debug.panic;
 const Kevent = std.c.kevent64_s;
 const builtin = @import("builtin");
+const atomic = std.atomic;
 
 const datastruct = @import("datastruct.zig");
 const Mpsc = datastruct.Mpsc;
@@ -28,7 +29,6 @@ pub const Loop = @This();
 kq: posix.fd_t,
 
 time: Time,
-
 scheduler: *Scheduler,
 mpsc: Mpsc(Completion),
 queues: MultiQueue(union(enum) {
@@ -41,7 +41,6 @@ queues: MultiQueue(union(enum) {
 timers: heap.Intrusive(Timer, void, Timer.less),
 inflight: usize,
 stopped: bool,
-
 io: Io,
 
 pub fn init(self: *Loop, scheduler: *Scheduler, io: Io) !void {
@@ -134,6 +133,14 @@ pub fn flush(self: *Loop) !void {
 
             const c: *Completion = @ptrFromInt(@as(usize, @intCast(ev.udata)));
 
+            if (ev.flags & std.c.EV.ERROR != 0) {
+                //something go wrong with the submisssion
+                unreachable;
+            } else {
+                c.result = c.resolve(self);
+            }
+
+            assert(c.result != null);
             c.state = .completed;
             self.queues.push(.completions, c);
         }
@@ -164,6 +171,7 @@ pub fn flushTimers(self: *Loop) void {
         const completion = t.completion;
         assert(completion.state == .active);
 
+        completion.result = completion.resolve(self);
         completion.state = .idle;
 
         if (completion.callback(self, completion)) {
@@ -178,12 +186,14 @@ pub fn flushTimers(self: *Loop) void {
 pub fn flushCompletions(self: *Loop) void {
     while (self.queues.pop(.completions)) |completion| {
         assert(completion.state == .completed);
+        assert(completion.result != null);
+
         completion.state = .idle;
 
         if (completion.callback(self, completion)) {
             assert(completion.operation != .timer);
-            completion.state = .submitted;
             completion.result = null;
+            completion.state = .submitted;
             self.queues.push(.submissions, completion);
         }
     }
@@ -191,6 +201,7 @@ pub fn flushCompletions(self: *Loop) void {
 
 pub fn flushCancelations(self: *Loop) void {
     while (self.queues.pop(.cancellations)) |c| {
+        c.result = c.resolve(self);
         _ = c.callback(self, c);
     }
 }
@@ -344,6 +355,7 @@ const State = enum {
     canceled,
     active,
     completed,
+    concurrent,
 };
 
 pub const Completion = struct {
@@ -360,6 +372,7 @@ pub const Completion = struct {
 
     next: ?*Completion = null,
     task: Task = .noop,
+    stopped: atomic.Value(bool) = .init(false),
 
     state: State,
 
@@ -388,6 +401,45 @@ pub const Completion = struct {
                     .ext = .{ @intFromPtr(buffer.ptr), buffer.len },
                 };
             },
+        }
+    }
+
+    pub fn resolve(self: *Completion, loop: *Loop) Result {
+        switch (self.operation) {
+            .noop => panic(
+                "{s} operation try to resolve",
+                .{@tagName(self.operation)},
+            ),
+            .machport => return .{ .machport = {} },
+            .timer => return .{ .timer = {} },
+            .cancel => |c| {
+                switch (c.state) {
+                    .canceled => {},
+                    .idle => {
+                        if (c.operation == .timer) {
+                            c.canceled();
+                        }
+                    },
+                    .completed, .submitted => c.canceled(),
+                    .active => {
+                        switch (c.operation) {
+                            .timer => |*timer_op| {
+                                loop.timers.remove(timer_op);
+                                c.canceled();
+                                loop.queues.push(.completions, c);
+                            },
+                            else => {
+                                c.state = .canceled;
+                                loop.queues.push(.canceling, c);
+                            },
+                        }
+                    },
+                    .concurrent => unreachable,
+                }
+
+                return .cancel;
+            },
+            .read => unreachable,
         }
     }
 
@@ -438,17 +490,12 @@ pub fn submit(
     callback: anytype,
     comptime op_tag: meta.Tag(Operation),
     op_data: @FieldType(Operation, @tagName(op_tag)),
-    resolver: anytype,
 ) void {
     const TypeErased = struct {
         fn complete(loop: *Loop, _completion: *Completion) bool {
-            if (_completion.result == null) {
-                _completion.result = @call(.always_inline, resolver, .{ @field(_completion.operation, @tagName(op_tag)), loop });
-            }
-
             const res = @field(_completion.result.?, @tagName(op_tag));
 
-            return @call(.always_inline, callback, .{ _completion, res });
+            return @call(.always_inline, callback, .{ _completion, loop, res });
         }
     };
 
@@ -489,11 +536,6 @@ pub fn mach(
         function,
         .machport,
         data,
-        struct {
-            fn machport(_: MachPort, _: *Loop) Result {
-                return .{ .machport = {} };
-            }
-        }.machport,
     );
 }
 
@@ -508,34 +550,6 @@ pub fn cancel(
         function,
         .cancel,
         target,
-        struct {
-            fn resolver(t: *Completion, loop: *Loop) Result {
-                switch (t.state) {
-                    .canceled => {},
-                    .idle => {
-                        if (t.operation == .timer) {
-                            t.canceled();
-                        }
-                    },
-                    .completed, .submitted => t.canceled(),
-                    .active => {
-                        switch (t.operation) {
-                            .timer => |*timer_op| {
-                                loop.timers.remove(timer_op);
-                                t.canceled();
-                                loop.queues.push(.completions, t);
-                            },
-                            else => {
-                                t.state = .canceled;
-                                loop.queues.push(.canceling, t);
-                            },
-                        }
-                    },
-                }
-
-                return .cancel;
-            }
-        }.resolver,
     );
 }
 
@@ -554,11 +568,6 @@ pub fn timer(
             .completion = completion,
             .ms = ms,
         },
-        struct {
-            fn timer(_: Timer, _: *Loop) Result {
-                return .{ .timer = {} };
-            }
-        }.timer,
     );
 }
 
@@ -610,11 +619,7 @@ pub fn await(
         @sizeOf(@TypeOf(limits)),
     ) != 0) return error.MachPortAllocFailed;
 
-    self.submit(
-        completion,
-        function,
-        .machport,
-        .{ .port = mach_port, .buffer = .{ .array = undefined } },
+    const TypeErased =
         struct {
             fn drain(port: posix.system.mach_port_name_t) void {
                 var message: struct {
@@ -642,11 +647,17 @@ pub fn await(
                 }
             }
 
-            fn machport(m: MachPort, _: *Loop) Result {
-                drain(m.port);
-                return .{ .machport = {} };
+            fn complete(c: *Completion, loop: *Loop, res: Canceled!void) bool {
+                drain(c.operation.machport.port);
+                return @call(.always_inline, function, .{ c, loop, res });
             }
-        }.machport,
+        };
+
+    self.submit(
+        completion,
+        TypeErased.complete,
+        .machport,
+        .{ .port = mach_port, .buffer = .{ .array = undefined } },
     );
 
     return .{ .port = mach_port };
@@ -720,7 +731,7 @@ test "mach port" {
         called: bool = false,
         completion: Completion = .noop,
 
-        fn machport(c: *Completion, res: Canceled!void) bool {
+        fn machport(c: *Completion, _: *Loop, res: Canceled!void) bool {
             const parent: *@This() = @fieldParentPtr("completion", c);
             if (res != error.Canceled) {
                 parent.called = true;
@@ -809,7 +820,7 @@ test "cancel mach port" {
         called: bool = false,
         completion: Completion = .noop,
 
-        fn machport(c: *Completion, res: Canceled!void) bool {
+        fn machport(c: *Completion, _: *Loop, res: Canceled!void) bool {
             const parent: *@This() = @fieldParentPtr("completion", c);
             if (res != error.Canceled) {
                 parent.called = true;
@@ -837,7 +848,7 @@ test "cancel mach port" {
         completion: Completion = .noop,
         called: bool = false,
 
-        pub fn callback(c: *Completion, _: void) bool {
+        pub fn callback(c: *Completion, _: *Loop, _: void) bool {
             const parent: *@This() = @fieldParentPtr("completion", c);
             parent.called = true;
             return false;
@@ -890,7 +901,7 @@ test "timer completes" {
         called: bool = false,
         completion: Completion = .noop,
 
-        fn timer(c: *Completion, res: Canceled!void) bool {
+        fn timer(c: *Completion, _: *Loop, res: Canceled!void) bool {
             res catch return false;
             const parent: *@This() = @fieldParentPtr("completion", c);
             parent.called = true;
@@ -922,7 +933,7 @@ test "timer rearms when callback returns true" {
         times: u8 = 0,
         completion: Completion = .noop,
 
-        fn timer(c: *Completion, res: Canceled!void) bool {
+        fn timer(c: *Completion, _: *Loop, res: Canceled!void) bool {
             res catch return false;
             const parent: *@This() = @fieldParentPtr("completion", c);
             parent.times += 1;
@@ -954,7 +965,7 @@ test "cancel timer" {
         called: bool = false,
         completion: Completion = .noop,
 
-        fn timer(c: *Completion, res: Canceled!void) bool {
+        fn timer(c: *Completion, _: *Loop, res: Canceled!void) bool {
             res catch return false;
             const parent: *@This() = @fieldParentPtr("completion", c);
             parent.called = true;
@@ -976,7 +987,7 @@ test "cancel timer" {
         completion: Completion = .noop,
         called: bool = false,
 
-        pub fn callback(c: *Completion, _: void) bool {
+        pub fn callback(c: *Completion, _: *Loop, _: void) bool {
             const parent: *@This() = @fieldParentPtr("completion", c);
             parent.called = true;
             return false;

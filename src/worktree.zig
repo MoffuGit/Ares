@@ -95,7 +95,7 @@ pub fn drop(self: *Worktree) void {
         self.app.cancel(
             &self.await_c,
             struct {
-                fn noop(_: *Completion, _: void) bool {
+                fn noop(_: *Completion, _: *Loop, _: void) bool {
                     return false;
                 }
             }.noop,
@@ -124,7 +124,7 @@ pub const Event = union(enum) {
     }
 };
 
-fn handleEvents(c: *Completion, res: anyerror!void) bool {
+fn handleEvents(c: *Completion, _: *Loop, res: anyerror!void) bool {
     res catch return false;
 
     const self: *Worktree = @fieldParentPtr("await", c);
