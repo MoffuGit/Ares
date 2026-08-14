@@ -93,10 +93,26 @@ pub fn stop(bench: *Bench, io: Io) Duration {
     return elapsed;
 }
 
-pub fn estimate(durations: []Duration) Duration {
-    assert(durations.len >= 8); // Ensure that we have enough samples to get a meaningful result.
+pub fn min(durations: []Duration) Duration {
+    assert(durations.len >= 8);
     std.sort.block(Duration, durations, {}, asc);
-    return durations[2];
+    return durations[0];
+}
+
+pub fn max(durations: []Duration) Duration {
+    assert(durations.len >= 8);
+    std.sort.block(Duration, durations, {}, asc);
+    return durations[durations.len - 1];
+}
+
+pub fn mean(durations: []Duration) Duration {
+    assert(durations.len >= 8);
+    var acc: i96 = 0;
+    for (durations) |duration| {
+        acc += duration.nanoseconds;
+    }
+
+    return .fromNanoseconds(@divTrunc(acc, durations.len));
 }
 
 fn asc(_: void, a: Duration, b: Duration) bool {

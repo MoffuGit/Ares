@@ -149,17 +149,13 @@ fn taskDone(self: *Scanner, task: *ScannerTask) void {
     var producer = worktree.events.register() orelse unreachable;
     defer producer.unregister();
 
-    if (self.stopped.load(.acquire)) {
-        producer.push(.stopped);
-    } else {
-        const snapshot = self.snapshot.clone(self.gpa) catch return;
-        producer.push(.{
-            .update = .{
-                .scanning = false,
-                .snapshot = snapshot,
-            },
-        });
-    }
+    const snapshot = self.snapshot.clone(self.gpa) catch return;
+    producer.push(.{
+        .update = .{
+            .scanning = false,
+            .snapshot = snapshot,
+        },
+    });
 }
 
 fn taskCallback(task: *Task) void {

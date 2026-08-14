@@ -63,7 +63,7 @@ test "benchmark: Worktree initial scan" {
     }
 
     Bench.report("Worktree Scanned Path={s}", .{chromium_path});
-    var durations: [25]Io.Duration = undefined;
+    var durations: [8]Io.Duration = undefined;
 
     for (0..durations.len) |idx| {
         bench.start(io);
@@ -91,8 +91,14 @@ test "benchmark: Worktree initial scan" {
         };
     }
 
-    const estimate = Bench.estimate(&durations);
-    Bench.report("{}ms", .{estimate.toMilliseconds()});
+    const min = Bench.min(&durations);
+    const max = Bench.max(&durations);
+    const mean = Bench.mean(&durations);
+    Bench.report("min={}ms, max={}ms, mean={}ms", .{
+        min.toMilliseconds(),
+        max.toMilliseconds(),
+        mean.toMilliseconds(),
+    });
 }
 
 fn verify(app: *App, zlob_set: std.StringHashMap(void), worktree: Entity(Worktree)) !void {

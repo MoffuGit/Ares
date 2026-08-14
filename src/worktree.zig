@@ -88,9 +88,9 @@ pub fn deinit(self: *Worktree) void {
 }
 
 pub fn stop(self: *Worktree) void {
-    self.stopped = self.scanner.stop();
+    if (self.scanner.stop()) return self.ctx.drop();
 
-    if (self.stopped) self.ctx.drop();
+    self.stopped = true;
 }
 
 pub fn drop(self: *Worktree) void {
@@ -105,7 +105,6 @@ pub const Event = union(enum) {
         scanning: bool,
     },
     started,
-    stopped,
 
     pub fn deinit(self: *Event) void {
         switch (self.*) {
@@ -127,10 +126,6 @@ fn handleEvents(c: *Completion, res: anyerror!void) bool {
 
     while (self.events.pop()) |event| {
         switch (event) {
-            .stopped => {
-                if (self.stopped) continue;
-                self.stop();
-            },
             .started => {
                 log.debug("scanner for path \"{s}\" started", .{self.snapshot.abs_root});
                 self.scanning = true;
@@ -140,9 +135,8 @@ fn handleEvents(c: *Completion, res: anyerror!void) bool {
                 self.snapshot = updated.snapshot;
                 self.scanning = updated.scanning;
 
-                log.debug("scanner for path \"{s}\" update", .{self.snapshot.abs_root});
-                if (!self.scanning) {
-                    log.debug("scanner for path \"{s}\" ended", .{self.snapshot.abs_root});
+                if (!self.scanning and self.stopped) {
+                    self.ctx.drop();
                 }
             },
         }
