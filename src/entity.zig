@@ -31,52 +31,18 @@ pub const AnyEntity = struct {
         return self.store.get(self.id);
     }
 
+    pub fn into(self: *const @This(), comptime T: type) ?*T {
+        assert(TypeInfo.init(T) == self.type_id);
+
+        const ptr = self.get() orelse return null;
+        return @ptrCast(@alignCast(ptr));
+    }
+
     pub fn drop(self: @This()) void {
         const store = self.store;
-        const ptr = store.entities.get(self.id) orelse return;
-        self.type_id.drop(ptr.*);
         store.dropped.appendAssumeCapacity(self);
     }
 };
-
-pub fn Entity(comptime T: type) type {
-    return struct {
-        pub const EntityType = T;
-
-        any: AnyEntity,
-
-        pub fn new(store: *EntityStore, new_id: EntityId) @This() {
-            return .{ .any = .init(store, new_id, TypeInfo.init(T)) };
-        }
-
-        pub fn from(any: AnyEntity) ?@This() {
-            assert(any.type_id == TypeInfo.init(T));
-            if (!any.store.entities.contains(any.id)) return null;
-
-            return .{
-                .any = any,
-            };
-        }
-
-        pub fn get(self: @This()) ?*const T {
-            const ptr = self.any.get() orelse return null;
-            return @ptrCast(@alignCast(ptr));
-        }
-
-        pub fn mut(self: @This()) *T {
-            const ptr = self.any.get() orelse @panic("Updating non-existing entiry");
-            return @ptrCast(@alignCast(ptr));
-        }
-
-        pub fn id(self: *const @This()) EntityId {
-            return self.any.id;
-        }
-
-        pub fn drop(self: @This()) void {
-            self.any.drop();
-        }
-    };
-}
 
 pub const EntityStore = struct {
     const Entities = slotmap.SlotMap(*anyopaque);
@@ -161,40 +127,10 @@ test "entity store returns inserted data and rejects wrong type" {
     ptr.* = .{ .value = 42 };
 
     const id = store.insert(ptr);
-    const entity: Entity(A) = .new(&store, id);
+    const any = AnyEntity.init(&store, id, TypeInfo.init(A));
 
-    try std.testing.expectEqualDeep(@intFromPtr(ptr), @intFromPtr(store.get(entity.id())));
-    try std.testing.expectEqual(@as(u32, 42), entity.get().?.value);
-}
-
-test "closing entity records id and type when ref count reaches zero" {
-    const allocator = std.testing.allocator;
-    var alloc = std.heap.ArenaAllocator.init(allocator);
-    defer alloc.deinit();
-
-    const arena = alloc.allocator();
-
-    const A = struct { value: u32 };
-
-    var store: EntityStore = undefined;
-    try store.init(arena, 10);
-
-    const ptr = try allocator.create(A);
-    defer allocator.destroy(ptr);
-    ptr.* = .{ .value = 7 };
-
-    const id = store.insert(ptr);
-    const entity: Entity(A) = .new(&store, id);
-
-    entity.drop();
-
-    var collected = try store.collect(allocator);
-    defer collected.deinit(allocator);
-
-    try std.testing.expectEqual(@as(usize, 1), collected.items.len);
-    try std.testing.expectEqual(ptr, @as(*A, @ptrCast(@alignCast(collected.items[0][0]))));
-    try std.testing.expect(collected.items[0][1].eql(id));
-    try std.testing.expectEqual(TypeInfo.init(A), collected.items[0][2]);
+    try std.testing.expectEqualDeep(@intFromPtr(ptr), @intFromPtr(store.get(any.id)));
+    try std.testing.expectEqual(@as(u32, 42), any.into(A).?.value);
 }
 
 test "dropping arena-backed entity calls optional deinit" {
@@ -219,9 +155,9 @@ test "dropping arena-backed entity calls optional deinit" {
     ptr.* = .{ .deinit_called = &deinit_called };
 
     const id = store.insert(ptr);
-    const entity: Entity(A) = .new(&store, id);
+    const any = AnyEntity.init(&store, id, TypeInfo.init(A));
 
-    entity.drop();
+    any.drop();
 
     const drop = store.popDrop().?;
     try std.testing.expectEqual(ptr, @as(*A, @ptrCast(@alignCast(drop.@"0"))));
@@ -249,9 +185,9 @@ test "destroyed entities recycle ids" {
     ptr.* = .{ .value = 1 };
 
     const id = store.insert(ptr);
-    const entity: Entity(A) = .new(&store, id);
+    const any = AnyEntity.init(&store, id, TypeInfo.init(A));
 
-    entity.drop();
+    any.drop();
     const drop = store.popDrop().?;
     try std.testing.expect(drop.@"1".eql(id));
     store.recycle(drop.@"1");

@@ -16,7 +16,6 @@ const datastruct = @import("datastruct.zig");
 const btree = datastruct.btree;
 const SinglyLinkedList = datastruct.SinglyLinkedList;
 const ent = @import("entity.zig");
-const Entity = ent.Entity;
 const AnyEntity = ent.AnyEntity;
 const EntityId = ent.EntityId;
 const EntityStore = ent.EntityStore;
@@ -109,7 +108,7 @@ pub fn deinit(self: *App) void {
     self.loop.deinit();
 }
 
-pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Entity(T) {
+pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !*T {
     const alloc = self.chunks.allocator();
     const ptr = try alloc.create(T);
     errdefer alloc.destroy(ptr);
@@ -117,15 +116,17 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !Enti
     const id = self.entities.insert(ptr);
     errdefer self.entities.recycle(id);
 
-    const entity: Entity(T) = .new(&self.entities, id);
-    const ctx: Context(T) = .new(self, entity);
+    const any: AnyEntity = .init(&self.entities, id, TypeInfo.init(T));
 
-    const update = ctx.update();
-    defer update.end();
+    self.peding_updates += 1;
+    defer self.peding_updates -= 1;
 
-    try @call(.always_inline, function, .{ ptr, ctx } ++ args);
+    self.entities.startUpdate(any.id);
+    defer self.entities.endUpdate(any.id);
 
-    return entity;
+    try @call(.always_inline, function, .{ ptr, any, self } ++ args);
+
+    return ptr;
 }
 
 pub const Update = struct {
@@ -141,12 +142,7 @@ pub const Update = struct {
     }
 };
 
-pub fn startUpdate(self: *App, entity: anytype) Update {
-    const _Entity = @TypeOf(entity);
-    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
-        @compileError("entity must be an Entity(T)");
-    }
-
+pub fn update(self: *App, entity: anytype) Update {
     self.peding_updates += 1;
     self.entities.startUpdate(entity.any.id);
 
@@ -208,23 +204,22 @@ pub fn observe(
     function: anytype,
     observer: *Observer,
 ) !void {
-    const _Entity = @TypeOf(entity);
-    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
-        @compileError("entity must be an Entity(T)");
-    }
-
-    const T = _Entity.EntityType;
+    const T = @typeInfo(@TypeOf(entity)).pointer.child;
 
     const TypeErased = struct {
         fn _callback(sub: *Observer, app: *App, id: EntityId) bool {
             const observed = AnyEntity.init(&app.entities, id, TypeInfo.init(T));
-            const _entity = _Entity.from(observed) orelse return false;
-            return @call(.always_inline, function, .{ sub, app, _entity });
+            const ptr = observed.into(T) orelse return false;
+            return @call(
+                .always_inline,
+                function,
+                .{ sub, app, ptr },
+            );
         }
     };
 
     try self.observers.insert(
-        entity.id(),
+        entity.any.id,
         TypeErased._callback,
         observer,
     );
@@ -233,12 +228,7 @@ pub fn observe(
 }
 
 pub fn notify(self: *App, entity: anytype) void {
-    const _Entity = @TypeOf(entity);
-    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
-        @compileError("entity must be an Entity(T)");
-    }
-
-    _ = self.notifications.insert(self.chunks.allocator(), entity.id()) catch |err| {
+    _ = self.notifications.insert(self.chunks.allocator(), entity.any.id) catch |err| {
         log.err("We cannot notify, err: {}", .{err});
     };
 }
@@ -362,12 +352,6 @@ pub fn receive(
     function: anytype,
     receiver: *Receiver,
 ) !void {
-    const _Entity = @TypeOf(entity);
-
-    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
-        @compileError("receiver must be an Entity(T)");
-    }
-
     const TypeErased = struct {
         fn _callback(sub: *Receiver, app: *App, ptr: *anyopaque, _type: TypeId) bool {
             if (TypeInfo.init(E) != _type) @panic("Receiver subscription event type mismatch");
@@ -377,7 +361,7 @@ pub fn receive(
     };
 
     try self.receivers.insert(
-        entity.id(),
+        entity.any.id,
         TypeErased._callback,
         receiver,
     );
@@ -392,12 +376,6 @@ pub fn listen(
     function: anytype,
     listener: *Listener,
 ) !void {
-    const _Entity = @TypeOf(entity);
-
-    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
-        @compileError("entity must be an Entity(T)");
-    }
-
     const TypeErased = struct {
         fn _callback(sub: *Listener, app: *App, ptr: *anyopaque, _type: TypeId) bool {
             if (TypeInfo.init(E) != _type) return true;
@@ -411,7 +389,7 @@ pub fn listen(
     };
 
     try self.listeners.insert(
-        entity.id(),
+        entity.any.id,
         TypeErased._callback,
         listener,
     );
@@ -420,18 +398,13 @@ pub fn listen(
 }
 
 pub fn nevent(self: *App, entity: anytype, comptime E: type) !*E {
-    const _Entity = @TypeOf(entity);
-    if (!@hasDecl(_Entity, "EntityType") or !@hasField(_Entity, "any") or !@hasDecl(_Entity, "id")) {
-        @compileError("entity must be an Entity(T)");
-    }
-
     const chunk = self.chunks.allocator();
     const ptr = try chunk.create(E);
     errdefer chunk.destroy(ptr);
 
     const event = try chunk.create(Event);
     event.* = .{
-        .id = entity.id(),
+        .id = entity.any.id,
         .ptr = ptr,
         .type = TypeInfo.init(E),
     };
@@ -441,7 +414,7 @@ pub fn nevent(self: *App, entity: anytype, comptime E: type) !*E {
     return ptr;
 }
 
-pub fn dispatch(self: *App, key: Receivers.Key, id: u32, comptime E: type) !*E {
+pub fn dispatch(self: *App, entity: anytype, id: u32, comptime E: type) !*E {
     const chunk = self.chunks.allocator();
     const ptr = try chunk.create(E);
     errdefer chunk.destroy(ptr);
@@ -449,7 +422,7 @@ pub fn dispatch(self: *App, key: Receivers.Key, id: u32, comptime E: type) !*E {
     const dispatched = try chunk.create(Dispatched);
 
     dispatched.* = .{
-        .key = key,
+        .key = entity.any.id,
         .id = id,
         .ptr = ptr,
         .type = TypeInfo.init(E),
@@ -458,122 +431,6 @@ pub fn dispatch(self: *App, key: Receivers.Key, id: u32, comptime E: type) !*E {
     self.dispatched.append(dispatched);
 
     return ptr;
-}
-
-pub fn Context(comptime T: type) type {
-    return struct {
-        const _Entity = Entity(T);
-
-        app: *App,
-        entity: _Entity,
-
-        pub fn new(app: *App, entity: _Entity) @This() {
-            return .{ .app = app, .entity = entity };
-        }
-
-        pub fn drop(self: *const @This()) void {
-            self.entity.drop();
-        }
-
-        pub fn gpa(self: *const @This()) Allocator {
-            return self.app.gpa;
-        }
-
-        pub fn arena(self: *const @This()) Allocator {
-            return self.app.arena.allocator();
-        }
-
-        pub fn chunks(self: *const @This()) Allocator {
-            return self.app.chunks.allocator();
-        }
-
-        pub fn update(self: *const @This()) Update {
-            return self.app.startUpdate(self.entity);
-        }
-
-        pub fn notify(self: *const @This()) void {
-            self.app.notify(self.entity);
-        }
-
-        pub fn nevent(self: *const @This(), comptime E: type) !*E {
-            return try self.entity.nevent(self.app, E);
-        }
-
-        pub fn receive(
-            self: *const @This(),
-            comptime E: type,
-            function: anytype,
-            receiver: *Receiver,
-        ) !void {
-            return try self.app.receive(
-                self.entity,
-                E,
-                function,
-                receiver,
-            );
-        }
-
-        pub fn listen(
-            self: *const @This(),
-            entity: anytype,
-            comptime E: type,
-            function: anytype,
-            listener: *Listener,
-        ) !void {
-            return try self.app.listen(
-                entity,
-                E,
-                function,
-                listener,
-            );
-        }
-
-        pub fn observe(
-            self: *const @This(),
-            entity: anytype,
-            function: anytype,
-            observer: *Observer,
-        ) !void {
-            return try self.app.observe(
-                entity,
-                function,
-                observer,
-            );
-        }
-
-        pub fn @"defer"(
-            self: *const @This(),
-            comptime D: type,
-            function: *const fn (*D) void,
-            data: *D,
-        ) void {
-            self.app.@"defer"(
-                D,
-                function,
-                data,
-            );
-        }
-
-        pub fn await(self: *const @This(), c: *Completion, function: anytype) !Waker {
-            return try self.app.await(c, function);
-        }
-
-        pub fn timer(self: *const @This(), c: *Completion, function: anytype, ms: u64) void {
-            self.app.timer(c, function, ms);
-        }
-
-        pub fn cancel(self: *const @This(), completion: *Completion, target: *Completion) void {
-            self.app.cancel(completion, struct {
-                fn cancel(_: *Completion, _: void) bool {
-                    return false;
-                }
-            }.cancel, target);
-        }
-
-        pub fn scheduler(self: *const @This()) *Scheduler {
-            return &self.app.scheduler;
-        }
-    };
 }
 
 pub fn await(self: *App, c: *Completion, function: anytype) !Waker {
@@ -588,51 +445,53 @@ pub fn cancel(self: *App, completion: *Completion, function: anytype, target: *C
     self.loop.cancel(completion, function, target);
 }
 
+const TestStruct = struct {
+    index: usize,
+    any: AnyEntity,
+
+    pub fn init(self: *@This(), any: AnyEntity, _: *App) !void {
+        self.* = .{ .index = 0, .any = any };
+    }
+
+    pub fn set_index(self: *@This(), index: usize) void {
+        self.index = index;
+    }
+
+    pub fn inc(self: *@This()) void {
+        self.index += 1;
+    }
+
+    pub fn drop(self: *@This()) void {
+        self.any.drop();
+    }
+};
+
 test "creates/drops entities" {
     const testing = std.testing;
     const allocator = testing.allocator;
     const io = testing.io;
     const entity_count = 32;
 
-    const TestStruct = struct {
-        index: usize,
-
-        pub fn init(self: *@This(), _: Context(@This())) !void {
-            self.* = .{ .index = 0 };
-        }
-
-        pub fn set_index(self: *@This(), index: usize) void {
-            self.index = index;
-        }
-
-        pub fn inc(self: *@This()) void {
-            self.index += 1;
-        }
-    };
-
-    const TestEntity = Entity(TestStruct);
-
     var app: App = undefined;
     try app.init(allocator, io);
     defer app.deinit();
 
-    var entities: [entity_count]TestEntity = undefined;
+    var entities: [entity_count]AnyEntity = undefined;
     for (&entities, 0..) |*entity, index| {
-        entity.* = try app.new(TestStruct, TestStruct.init, .{});
+        const ptr = try app.new(TestStruct, TestStruct.init, .{});
+        entity.* = ptr.any;
 
         {
-            const ptr = entity.mut();
-            const update = app.startUpdate(entity.*);
-            defer update.end();
+            const up = app.update(ptr);
+            defer up.end();
 
             ptr.set_index(index);
             ptr.inc();
         }
-
-        try testing.expectEqual(index + 1, entity.get().?.index);
     }
 
-    for (entities) |entity| {
+    for (entities, 0..) |entity, index| {
+        try testing.expectEqual(index + 1, entity.into(TestStruct).?.index);
         entity.drop();
     }
 
@@ -643,24 +502,6 @@ test "Observe entities" {
     const testing = std.testing;
     const allocator = testing.allocator;
     const io = testing.io;
-
-    const TestStruct = struct {
-        index: usize,
-
-        pub fn init(self: *@This(), _: Context(@This())) !void {
-            self.* = .{ .index = 0 };
-        }
-
-        pub fn set_index(self: *@This(), index: usize) void {
-            self.index = index;
-        }
-
-        pub fn inc(self: *@This()) void {
-            self.index += 1;
-        }
-    };
-
-    const TestEntity = Entity(TestStruct);
 
     var app: App = undefined;
     try app.init(allocator, io);
@@ -673,7 +514,7 @@ test "Observe entities" {
         run: bool = false,
         observer: Observer = .noop,
 
-        pub fn callback(observer: *Observer, _: *App, _: TestEntity) bool {
+        pub fn callback(observer: *Observer, _: *App, _: *TestStruct) bool {
             const parent: *@This() = @fieldParentPtr("observer", observer);
             parent.run = true;
             return false;
@@ -685,14 +526,12 @@ test "Observe entities" {
     var index: usize = 0;
 
     {
-        const ptr = observed.mut();
-        const update = app.startUpdate(observed);
-        defer update.end();
+        const up = app.update(observed);
+        defer up.end();
 
-        ptr.set_index(index);
-        ptr.inc();
+        observed.set_index(index);
+        observed.inc();
     }
-    try testing.expectEqual(index + 1, observed.get().?.index);
     app.notify(observed);
 
     try testing.expect(!observer.run);
@@ -702,14 +541,12 @@ test "Observe entities" {
     index = 1;
 
     {
-        const ptr = observed.mut();
-        const update = app.startUpdate(observed);
-        defer update.end();
+        const up = app.update(observed);
+        defer up.end();
 
-        ptr.set_index(index);
-        ptr.inc();
+        observed.set_index(index);
+        observed.inc();
     }
-    try testing.expectEqual(index + 1, observed.get().?.index);
     app.notify(observed);
 
     app.flush(.no_wait);
@@ -728,27 +565,12 @@ test "Listen entities events" {
         id: usize,
     };
 
-    const TestStruct = struct {
-        index: usize,
-
-        pub fn init(self: *@This(), _: Context(@This())) !void {
-            self.* = .{ .index = 0 };
-        }
-
-        pub fn set_index(self: *@This(), index: usize) void {
-            self.index = index;
-        }
-
-        pub fn inc(self: *@This()) void {
-            self.index += 1;
-        }
-    };
-
     var app: App = undefined;
     try app.init(allocator, io);
     defer app.deinit();
 
     const listened = try app.new(TestStruct, TestStruct.init, .{});
+    defer listened.drop();
 
     const TestListener = struct {
         id: usize = 0,
@@ -774,7 +596,6 @@ test "Listen entities events" {
 
     try testing.expectEqual(listener.id, 35);
 
-    listened.drop();
     app.flush(.no_wait);
 }
 
@@ -785,10 +606,6 @@ test "Queued receiver event targets a typed subscription" {
 
     const TestEvent = struct {
         value: usize,
-    };
-
-    const TestStruct = struct {
-        pub fn init(_: *@This(), _: Context(@This())) !void {}
     };
 
     const TestReceiver = struct {
@@ -807,20 +624,20 @@ test "Queued receiver event targets a typed subscription" {
     defer app.deinit();
 
     const dispatcher = try app.new(TestStruct, TestStruct.init, .{});
+    defer dispatcher.drop();
 
     var receiver: TestReceiver = .{};
 
     try app.receive(dispatcher, TestEvent, TestReceiver.callback, &receiver.receiver);
     app.flush(.no_wait);
 
-    const event = try app.dispatch(dispatcher.id(), receiver.receiver.id, TestEvent);
+    const event = try app.dispatch(dispatcher, receiver.receiver.id, TestEvent);
     event.* = .{ .value = 35 };
     app.flush(.no_wait);
 
     try testing.expectEqual(@as(usize, 35), receiver.received);
-    try testing.expectEqual(null, app.receivers.subscribers.get_mut(dispatcher.id()));
+    try testing.expectEqual(null, app.receivers.subscribers.get_mut(dispatcher.any.id));
 
-    dispatcher.drop();
     app.flush(.no_wait);
 }
 
@@ -835,10 +652,6 @@ test "Dropping a receiver removes subscriptions before queued delivery" {
         pub fn deinit(self: *@This()) void {
             self.deinit_called.* = true;
         }
-    };
-
-    const TestStruct = struct {
-        pub fn init(_: *@This(), _: Context(@This())) !void {}
     };
 
     const TestReceiver = struct {
@@ -864,10 +677,10 @@ test "Dropping a receiver removes subscriptions before queued delivery" {
     try app.receive(dispatcher, TestEvent, TestReceiver.callback, &receiver.receiver);
     app.flush(.no_wait);
 
-    const event = try app.dispatch(dispatcher.id(), receiver.receiver.id, TestEvent);
+    const event = try app.dispatch(dispatcher, receiver.receiver.id, TestEvent);
     event.* = .{ .deinit_called = &deinit_called };
 
-    const receiver_id = dispatcher.id();
+    const receiver_id = dispatcher.any.id;
     dispatcher.drop();
     app.flush(.no_wait);
 
@@ -881,29 +694,11 @@ test "Observe entities drop before enable" {
     const allocator = testing.allocator;
     const io = testing.io;
 
-    const TestStruct = struct {
-        index: usize,
-
-        pub fn init(self: *@This(), _: Context(@This())) !void {
-            self.* = .{ .index = 0 };
-        }
-
-        pub fn set_index(self: *@This(), index: usize) void {
-            self.index = index;
-        }
-
-        pub fn inc(self: *@This()) void {
-            self.index += 1;
-        }
-    };
-
-    const TestEntity = Entity(TestStruct);
-
     const TestObserver = struct {
         run: bool = false,
         observer: Observer = .noop,
 
-        pub fn callback(observer: *Observer, _: *App, _: TestEntity) bool {
+        pub fn callback(observer: *Observer, _: *App, _: *TestStruct) bool {
             const parent: *@This() = @fieldParentPtr("observer", observer);
             parent.run = true;
             return false;
@@ -921,32 +716,28 @@ test "Observe entities drop before enable" {
     var index: usize = 0;
 
     {
-        const ptr = observed.mut();
-        const update = app.startUpdate(observed);
-        defer update.end();
+        const up = app.update(observed);
+        defer up.end();
 
-        ptr.set_index(index);
-        ptr.inc();
+        observed.set_index(index);
+        observed.inc();
     }
-    try testing.expectEqual(index + 1, observed.get().?.index);
     app.notify(observed);
 
     try testing.expect(!observer.run);
 
     try app.observe(observed, TestObserver.callback, &observer.observer);
-    app.observers.unsubscribe(observed.id(), observer.observer.id);
+    app.observers.unsubscribe(observed.any.id, observer.observer.id);
 
     index = 1;
 
     {
-        const ptr = observed.mut();
-        const update = app.startUpdate(observed);
-        defer update.end();
+        const up = app.update(observed);
+        defer up.end();
 
-        ptr.set_index(index);
-        ptr.inc();
+        observed.set_index(index);
+        observed.inc();
     }
-    try testing.expectEqual(index + 1, observed.get().?.index);
     app.notify(observed);
 
     app.flush(.no_wait);

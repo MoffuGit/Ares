@@ -7,11 +7,11 @@ const datastruct = @import("datastruct.zig");
 const entity = @import("entity.zig");
 const Loop = @import("loop.zig");
 const patch = @import("patch.zig");
+const Scheduler = @import("scheduler.zig");
+const subscription = @import("subscription.zig");
 const Project = @import("project.zig");
 const WorktreeStore = @import("project/worktree_store.zig");
-const Scheduler = @import("scheduler.zig");
 const Session = @import("session.zig");
-const subscription = @import("subscription.zig");
 const Workspace = @import("workspace.zig");
 const Worktree = @import("worktree.zig");
 
@@ -25,11 +25,11 @@ test {
     _ = chunked_path;
     _ = datastruct;
     _ = entity;
+    _ = subscription;
     _ = Loop;
     _ = Project;
     _ = WorktreeStore;
     _ = Session;
-    _ = subscription;
     _ = Workspace;
     _ = Worktree;
 }

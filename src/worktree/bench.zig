@@ -12,7 +12,6 @@ const Bench = @import("../bench.zig");
 const constants = @import("../constants.zig");
 const MAX_PATH_LEN = constants.MAX_PATH_LEN;
 const ent = @import("../entity.zig");
-const Entity = ent.Entity;
 const global = @import("../global.zig");
 const Worktree = @import("../worktree.zig");
 const Snapshot = @import("../worktree/snapshot.zig");
@@ -25,9 +24,9 @@ const WorktreeObserver = struct {
     scanning: bool = true,
     observer: App.Observer = .noop,
 
-    pub fn callback(observer: *App.Observer, _: *App, worktree: Entity(Worktree)) bool {
+    pub fn callback(observer: *App.Observer, _: *App, worktree: *Worktree) bool {
         const parent: *@This() = @fieldParentPtr("observer", observer);
-        parent.scanning = worktree.get().?.scanning;
+        parent.scanning = worktree.scanning;
         return parent.scanning;
     }
 };
@@ -101,19 +100,19 @@ test "benchmark: Worktree initial scan" {
     });
 }
 
-fn verify(app: *App, zlob_set: std.StringHashMap(void), worktree: Entity(Worktree)) !void {
+fn verify(app: *App, zlob_set: std.StringHashMap(void), worktree: *Worktree) !void {
     var arena = std.heap.ArenaAllocator.init(app.gpa);
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    const snap = worktree.get().?.snapshot;
+    const snapshot = &worktree.snapshot;
 
-    const root_name = snap.root_name;
+    const root_name = snapshot.root_name;
     const prefix_len = root_name.len + 1;
     var ody_set = std.StringHashMap(void).init(alloc);
     defer ody_set.deinit();
 
-    var it = snap.entries.iter();
+    var it = snapshot.entries.iter();
     while (it.next()) |kv| {
         const entry = kv.value;
         if (entry.meta.hidden or entry.meta.ignored) continue;

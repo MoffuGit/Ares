@@ -6,9 +6,8 @@ const Allocator = std.mem.Allocator;
 const zqlite = @import("zqlite");
 
 const App = @import("app.zig");
-const Context = App.Context;
 const ent = @import("entity.zig");
-const Entity = ent.Entity;
+const AnyEntity = ent.AnyEntity;
 const db = @import("db.zig");
 const Project = @import("project.zig");
 const uuid = @import("uuid.zig");
@@ -19,15 +18,17 @@ pub const Workspace = @This();
 
 io: Io,
 id: i64,
+any: AnyEntity,
 conn: zqlite.Conn,
 session: uuid.Uuid,
 arena: heap.ArenaAllocator,
-project: Entity(Project),
+project: *Project,
 paths: std.ArrayList([]u8),
 
 pub fn init(
     self: *Workspace,
-    ctx: Context(Workspace),
+    any: AnyEntity,
+    app: *App,
     paths: []const []const u8,
     session: uuid.Uuid,
     io: Io,
@@ -35,9 +36,10 @@ pub fn init(
     const conn = try db.acquire(io);
     errdefer db.release(io, conn);
 
-    const gpa = ctx.gpa();
+    const gpa = app.gpa;
 
     self.* = .{
+        .any = any,
         .session = session,
         .id = undefined,
         .io = io,
@@ -55,7 +57,7 @@ pub fn init(
         self.paths.appendAssumeCapacity(copy);
     }
 
-    self.project = try ctx.app.new(Project, Project.init, .{
+    self.project = try app.new(Project, Project.init, .{
         Project.Options{
             .arena = self.arena.allocator(),
             .paths = self.paths.items,

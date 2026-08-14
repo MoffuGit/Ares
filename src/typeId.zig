@@ -6,7 +6,6 @@ const constants = @import("constants.zig");
 
 pub const TypeInfo = struct {
     deinit_fn: ?*const fn (*anyopaque) void,
-    drop_fn: ?*const fn (*anyopaque) void,
     size: usize,
     alignment: u8,
 
@@ -16,25 +15,16 @@ pub const TypeInfo = struct {
                 @as(*T, @ptrCast(@alignCast(ptr))).deinit();
             }
 
-            fn drop(ptr: *anyopaque) void {
-                return @as(*T, @ptrCast(@alignCast(ptr))).drop();
-            }
-
             var info: TypeInfo = .{
                 .size = @sizeOf(T),
                 .alignment = @alignOf(T),
                 .deinit_fn = if (@hasDecl(T, "deinit")) @This().deinit else null,
-                .drop_fn = if (@hasDecl(T, "drop")) @This().drop else null,
             };
         }.info;
     }
 
     pub fn deinit(self: *const @This(), ptr: *anyopaque) void {
         if (self.deinit_fn) |deinit_fn| deinit_fn(ptr);
-    }
-
-    pub fn drop(self: *const @This(), ptr: *anyopaque) void {
-        if (self.drop_fn) |drop_fn| drop_fn(ptr);
     }
 
     pub fn destroy(self: *const @This(), ptr: *anyopaque, alloc: Allocator) void {

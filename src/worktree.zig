@@ -7,13 +7,12 @@ const heap = std.heap;
 const assert = std.debug.assert;
 
 const App = @import("app.zig");
-const Context = App.Context;
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkedPath = @import("chunked_path.zig");
 const datastruct = @import("datastruct.zig");
 const MpscBounded = datastruct.MpscBounded;
 const ent = @import("entity.zig");
-const Entity = ent.Entity;
+const AnyEntity = ent.AnyEntity;
 const global = @import("global.zig");
 const Loop = @import("loop.zig");
 const Waker = Loop.Waker;
@@ -29,9 +28,10 @@ const state = &global.state;
 pub const Worktree = @This();
 
 io: Io,
+app: *App,
 gpa: Allocator,
+any: AnyEntity,
 arena: heap.ArenaAllocator,
-ctx: Context(Worktree),
 scanning: bool,
 stopped: bool,
 snapshot: Snapshot,
@@ -44,13 +44,16 @@ await_c: Completion,
 
 pub fn init(
     self: *Worktree,
-    ctx: Context(Worktree),
+    any: AnyEntity,
+    app: *App,
     io: Io,
     abs_path: []const u8,
 ) !void {
-    const gpa = ctx.gpa();
+    const gpa = app.gpa;
 
     self.* = .{
+        .any = any,
+        .app = app,
         .io = io,
         .gpa = gpa,
         .arena = .init(gpa),
@@ -58,7 +61,6 @@ pub fn init(
         .snapshot = undefined,
         .scanner = undefined,
         .stopped = false,
-        .ctx = ctx,
         .await = .noop,
         .await_c = .noop,
         .waker = undefined,
@@ -71,9 +73,9 @@ pub fn init(
     errdefer self.arena.deinit();
 
     self.events = try .init(state.cpu_count, 64, arena);
-    self.waker = try ctx.await(&self.await, handleEvents);
+    self.waker = try app.await(&self.await, handleEvents);
 
-    try self.scanner.init(ctx.scheduler(), gpa, self.arena.allocator(), io);
+    try self.scanner.init(&app.scheduler, gpa, self.arena.allocator(), io);
 }
 
 pub fn deinit(self: *Worktree) void {
@@ -87,16 +89,22 @@ pub fn deinit(self: *Worktree) void {
     self.arena.deinit();
 }
 
-pub fn stop(self: *Worktree) void {
-    if (self.scanner.stop()) return self.ctx.drop();
-
-    self.stopped = true;
-}
-
 pub fn drop(self: *Worktree) void {
-    assert(self.stopped);
-    self.ctx.cancel(&self.await_c, &self.await);
-    self.waker.close();
+    if (self.scanner.stop()) {
+        self.any.drop();
+        self.app.cancel(
+            &self.await_c,
+            struct {
+                fn noop(_: *Completion, _: void) bool {
+                    return false;
+                }
+            }.noop,
+            &self.await,
+        );
+        self.waker.close();
+    } else {
+        self.stopped = true;
+    }
 }
 
 pub const Event = union(enum) {
@@ -121,7 +129,7 @@ fn handleEvents(c: *Completion, res: anyerror!void) bool {
 
     const self: *Worktree = @fieldParentPtr("await", c);
 
-    const update = self.ctx.update();
+    const update = self.app.update(self);
     defer update.end();
 
     while (self.events.pop()) |event| {
@@ -136,12 +144,12 @@ fn handleEvents(c: *Completion, res: anyerror!void) bool {
                 self.scanning = updated.scanning;
 
                 if (!self.scanning and self.stopped) {
-                    self.ctx.drop();
+                    self.drop();
                 }
             },
         }
     }
-    self.ctx.notify();
+    self.app.notify(self);
 
     return true;
 }
@@ -163,10 +171,9 @@ test "Worktree" {
             chromium_path,
         },
     );
+    defer worktree.drop();
 
-    try testing.expectEqualStrings(worktree.get().?.snapshot.abs_root, chromium_path);
-
-    worktree.mut().stop();
+    try testing.expectEqualStrings(worktree.snapshot.abs_root, chromium_path);
 }
 
 test {

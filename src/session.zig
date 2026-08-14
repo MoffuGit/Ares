@@ -5,10 +5,11 @@ const Io = std.Io;
 const zqlite = @import("zqlite");
 
 const App = @import("app.zig");
-const Context = App.Context;
 const db = @import("db.zig");
 const KVS = db.KVS;
 const uuid = @import("uuid.zig");
+const ent = @import("entity.zig");
+const AnyEntity = ent.AnyEntity;
 
 const log = std.log.scoped(.session);
 
@@ -17,11 +18,13 @@ const SESSION_KEY = "session_id";
 pub const Session = @This();
 
 id: uuid.Uuid,
+any: AnyEntity,
 old_id: ?uuid.Uuid,
 
 pub fn init(
     self: *Session,
-    _: Context(Session),
+    any: AnyEntity,
+    _: *App,
     alloc: Allocator,
     conn: *const zqlite.Conn,
     io: Io,
@@ -43,11 +46,16 @@ pub fn init(
     try KVS.write(conn, SESSION_KEY, new_value);
 
     self.* = .{
+        .any = any,
         .id = new,
         .old_id = old,
     };
 
     log.debug("Current Session: {}\nOld Session: {?}", .{ self.id, self.old_id });
+}
+
+pub fn drop(self: *Session) void {
+    self.any.drop();
 }
 
 test "Session init stores current id and reads previous id" {
@@ -62,14 +70,14 @@ test "Session init stores current id and reads previous id" {
     defer conn.release(io);
 
     var first: Session = undefined;
-    try first.init(undefined, allocator, &conn, io);
+    try first.init(undefined, undefined, allocator, &conn, io);
     try testing.expect(first.old_id == null);
 
     const stored_first = (try KVS.read(&conn, allocator, SESSION_KEY)).?;
     defer allocator.free(stored_first);
     try testing.expectEqual(first.id, uuid.parse(stored_first));
     var second: Session = undefined;
-    try second.init(undefined, allocator, &conn, io);
+    try second.init(undefined, undefined, allocator, &conn, io);
     try testing.expectEqual(first.id, second.old_id.?);
     try testing.expect(second.id != second.old_id.?);
 
@@ -90,12 +98,12 @@ test "Session created after drop uses previous session id as old id" {
     defer conn.release(io);
 
     var first: Session = undefined;
-    try first.init(undefined, allocator, &conn, io);
+    try first.init(undefined, undefined, allocator, &conn, io);
     const first_id = first.id;
     first = undefined;
 
     var second: Session = undefined;
-    try second.init(undefined, allocator, &conn, io);
+    try second.init(undefined, undefined, allocator, &conn, io);
 
     try testing.expectEqual(first_id, second.old_id.?);
     try testing.expect(second.id != first_id);
