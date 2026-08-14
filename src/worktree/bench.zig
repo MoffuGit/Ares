@@ -63,7 +63,7 @@ test "benchmark: Worktree initial scan" {
     }
 
     Bench.report("Worktree Scanned Path={s}", .{chromium_path});
-    var durations: [8]Io.Duration = undefined;
+    var durations: [25]Io.Duration = undefined;
 
     for (0..durations.len) |idx| {
         bench.start(io);
