@@ -48,9 +48,11 @@ snapshot: Snapshot,
 mutex: Io.Mutex,
 chunks: ChunkAllocator,
 last_update: atomic.Value(i64),
-next_scan_id: atomic.Value(u64),
 task_count: atomic.Value(u64),
 stopped: atomic.Value(bool),
+
+scan_id: atomic.Value(u64),
+completed_scan: u64,
 
 pub fn init(
     self: *Scanner,
@@ -68,7 +70,8 @@ pub fn init(
         .mutex = .init,
         .chunks = undefined,
         .last_update = .init(Timestamp.now(io, .real).toMilliseconds()),
-        .next_scan_id = .init(0),
+        .scan_id = .init(0),
+        .completed_scan = 0,
         .task_count = .init(0),
         .stopped = .init(false),
     };
@@ -121,12 +124,32 @@ const ScannerTask = struct {
             shared_fd: ?*SharedFd,
             ignore: ?*const IgnoreNode,
         },
+        scan_request: struct {
+            subscription: u6,
+            path: ChunkedPath,
+        },
     },
     task: Task,
 };
 
 pub inline fn parent(self: *Scanner) *Worktree {
     return @fieldParentPtr("scanner", self);
+}
+
+fn pushUpdate(self: *Scanner, scanning: bool) !void {
+    const worktree = self.parent();
+    defer worktree.waker.wake() catch unreachable;
+
+    var producer = worktree.events.register() orelse unreachable;
+    defer producer.unregister();
+
+    const snapshot = try self.snapshot.clone(self.gpa);
+    producer.push(.{
+        .update = .{
+            .scanning = scanning,
+            .snapshot = snapshot,
+        },
+    });
 }
 
 fn pushTask(self: *Scanner, task: *ScannerTask) !void {
@@ -143,19 +166,9 @@ fn taskDone(self: *Scanner, task: *ScannerTask) void {
     const prev = self.task_count.fetchSub(1, .release);
     if (prev != 1) return;
 
-    const worktree = self.parent();
-    defer worktree.waker.wake() catch unreachable;
+    self.completed_scan = self.scan_id.load(.acquire);
 
-    var producer = worktree.events.register() orelse unreachable;
-    defer producer.unregister();
-
-    const snapshot = self.snapshot.clone(self.gpa) catch return;
-    producer.push(.{
-        .update = .{
-            .scanning = false,
-            .snapshot = snapshot,
-        },
-    });
+    self.pushUpdate(false) catch unreachable;
 }
 
 fn taskCallback(task: *Task) void {
@@ -178,6 +191,7 @@ fn _taskCallback(self: *Scanner, task: *ScannerTask) !void {
     switch (task.kind) {
         .initial_scan => try self.initialScan(),
         .scan_dir => |dir| try self.scanDir(dir.path, dir.shared_fd, dir.ignore),
+        .scan_request => |request| try self.scanRequest(request.subscription, request.path),
     }
 }
 
@@ -227,6 +241,8 @@ fn initialScan(
     const task = chunks.create(ScannerTask) catch unreachable;
     errdefer chunks.destroy(task);
 
+    _ = self.scan_id.fetchAdd(1, .release);
+
     task.* = .{
         .scanner = self,
         .kind = .{
@@ -240,6 +256,18 @@ fn initialScan(
     };
 
     try self.pushTask(task);
+}
+
+fn scanRequest(self: *Scanner, subscription: u64, path: ChunkedPath) !void {
+    //load any pending directory
+    _ = subscription;
+    _ = path;
+    //push the scan id up
+    _ = self.scan_id.fetchAdd(1, .release);
+    //reload the paths
+
+    //send status update
+    try self.pushUpdate(self.task_count.load(.acquire) > 0);
 }
 
 fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore: ?*const IgnoreNode) !void {
@@ -388,24 +416,7 @@ fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore:
 
     if (now - last >= UPDATE_INTERVAL_IN_MS) {
         if (self.last_update.cmpxchgWeak(last, now, .acq_rel, .monotonic) == null) {
-            const worktree = self.parent();
-            var producer = worktree.events.register() orelse unreachable;
-            defer producer.unregister();
-
-            self.mutex.lock(self.io) catch unreachable;
-            defer self.mutex.unlock(self.io);
-
-            var snapshot = try self.snapshot.clone(self.gpa);
-            errdefer snapshot.deinit();
-
-            producer.push(.{
-                .update = .{
-                    .scanning = true,
-                    .snapshot = snapshot,
-                },
-            });
-
-            try worktree.waker.wake();
+            try self.pushUpdate(true);
         }
     }
 }
