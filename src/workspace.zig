@@ -85,6 +85,7 @@ pub fn setBounds(self: *const Workspace, bounds: ?persistence.SerializedWindowBo
 }
 
 pub fn drop(self: *Workspace) void {
+    self.any.drop();
     self.project.drop();
 }
 
