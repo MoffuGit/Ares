@@ -614,6 +614,25 @@ pub fn timer(
     self.submit(completion);
 }
 
+pub fn read(
+    self: *Loop,
+    completion: *Completion,
+    callback: anytype,
+    fd: posix.fd_t,
+    buffer: ReadBuffer,
+) void {
+    completion.set(
+        callback,
+        .read,
+        .{
+            .fd = fd,
+            .buffer = buffer,
+        },
+    );
+
+    self.submit(completion);
+}
+
 pub fn await(
     self: *Loop,
     completion: *Completion,
@@ -1045,4 +1064,47 @@ test "cancel timer" {
 
     try testing.expect(!timer_test.called);
     try testing.expect(cancellation.called);
+}
+
+test "read completion" {
+    const ReadTest = struct {
+        readed: usize = 0,
+        completion: Completion = .noop,
+
+        fn reader(c: *Completion, _: *Loop, res: ReadError!usize) bool {
+            const readed = res catch return false;
+            const parent: *@This() = @fieldParentPtr("completion", c);
+            parent.readed = readed;
+            return false;
+        }
+    };
+
+    const io = testing.io;
+    const gpa = testing.allocator;
+
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+
+    var scheduler: Scheduler = undefined;
+    try scheduler.init(arena.allocator(), io);
+    defer scheduler.deinit();
+
+    var loop: Loop = undefined;
+    try loop.init(&scheduler, io);
+    defer loop.deinit();
+
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+
+    const file = try temp.dir.createFile(io, "temporal_file", .{ .read = true });
+    try file.writePositionalAll(io, "expected text", 0);
+
+    var buffer: [1024]u8 = undefined;
+    var reader: ReadTest = .{};
+
+    loop.read(&reader.completion, ReadTest.reader, file.handle, .{ .slice = &buffer });
+
+    try loop.run(.until_done);
+
+    try testing.expectEqualStrings("expected text", buffer[0..reader.readed]);
 }
