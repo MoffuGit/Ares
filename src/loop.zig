@@ -30,7 +30,7 @@ kq: posix.fd_t,
 
 time: Time,
 scheduler: *Scheduler,
-mpsc: Mpsc(Completion),
+tasks: Mpsc(Completion),
 queues: MultiQueue(union(enum) {
     timers: Completion,
     canceling: Completion,
@@ -52,7 +52,7 @@ pub fn init(self: *Loop, scheduler: *Scheduler, io: Io) !void {
     }
 
     self.* = .{
-        .mpsc = undefined,
+        .tasks = undefined,
         .scheduler = scheduler,
         .io = io,
         .kq = kq,
@@ -63,7 +63,7 @@ pub fn init(self: *Loop, scheduler: *Scheduler, io: Io) !void {
         .time = undefined,
     };
 
-    self.mpsc.init();
+    self.tasks.init();
     self.queues.init();
 }
 
@@ -103,11 +103,18 @@ pub fn flush(self: *Loop) !void {
     self.flushCancelations();
     self.flushTimers();
 
+    while (self.tasks.pop()) |c| {
+        if (c.stopped.raw) c.canceled();
+        c.state = .completed;
+        self.inflight -= 1;
+        self.queues.push(.completions, c);
+    }
+
     var events: [256]Kevent = undefined;
 
     const canceled = self.flushCanceled(&events);
     const active = if (canceled < events.len)
-        self.flush_submissions(events[canceled..])
+        self.flushSubmissions(events[canceled..])
     else
         0;
     const submitted = canceled + active;
@@ -134,10 +141,9 @@ pub fn flush(self: *Loop) !void {
             const c: *Completion = @ptrFromInt(@as(usize, @intCast(ev.udata)));
 
             if (ev.flags & std.c.EV.ERROR != 0) {
-                //something go wrong with the submisssion
-                unreachable;
+                @panic("something go wrong with the kqueue submisssion");
             } else {
-                c.result = c.resolve(self);
+                c.result = c.resolve();
             }
 
             assert(c.result != null);
@@ -171,7 +177,7 @@ pub fn flushTimers(self: *Loop) void {
         const completion = t.completion;
         assert(completion.state == .active);
 
-        completion.result = completion.resolve(self);
+        completion.result = completion.resolve();
         completion.state = .idle;
 
         if (completion.callback(self, completion)) {
@@ -193,16 +199,33 @@ pub fn flushCompletions(self: *Loop) void {
         if (completion.callback(self, completion)) {
             assert(completion.operation != .timer);
             completion.result = null;
-            completion.state = .submitted;
-            self.queues.push(.submissions, completion);
+            self.submit(completion);
         }
     }
 }
 
 pub fn flushCancelations(self: *Loop) void {
-    while (self.queues.pop(.cancellations)) |c| {
-        c.result = c.resolve(self);
-        _ = c.callback(self, c);
+    while (self.queues.pop(.cancellations)) |completion| {
+        const c = completion.operation.cancel;
+        switch (c.state) {
+            .canceled, .idle, .completed, .submitted => c.canceled(),
+            .active => switch (c.operation) {
+                .timer => |*timer_op| {
+                    self.timers.remove(timer_op);
+                    c.canceled();
+                    self.queues.push(.completions, c);
+                },
+                .read => {
+                    c.stopped.store(true, .release);
+                },
+                else => {
+                    c.state = .canceled;
+                    self.queues.push(.canceling, c);
+                },
+            },
+        }
+        completion.result = .cancel;
+        _ = completion.callback(self, completion);
     }
 }
 
@@ -226,7 +249,7 @@ pub fn flushCanceled(self: *Loop, kevents: []Kevent) usize {
     return submitted;
 }
 
-pub fn flush_submissions(self: *Loop, kevents: []Kevent) usize {
+pub fn flushSubmissions(self: *Loop, kevents: []Kevent) usize {
     var active: usize = 0;
 
     while (active < kevents.len) {
@@ -308,6 +331,15 @@ pub const Time = struct {
     }
 };
 
+pub fn clampBuffer(len: usize) usize {
+    const limit = switch (builtin.target.os.tag) {
+        .linux => 0x7ffff000,
+        .macos, .ios, .watchos, .tvos => std.math.maxInt(i32),
+        else => std.math.maxInt(isize),
+    };
+    return @min(limit, len);
+}
+
 pub const ReadBuffer = union(enum) {
     slice: []u8,
     array: [32]u8,
@@ -322,6 +354,10 @@ pub const Read = struct {
     buffer: ReadBuffer,
     fd: posix.fd_t,
 };
+
+pub const ReadError = error{
+    Unexpected,
+} || Canceled;
 
 pub const Operation = union(OperationType) {
     noop: void,
@@ -346,16 +382,15 @@ pub const Result = union(OperationType) {
     machport: Canceled!void,
     cancel: void,
     timer: Canceled!void,
-    read: Canceled!usize,
+    read: ReadError!usize,
 };
 
-const State = enum {
+const State = enum(u3) {
     idle,
     submitted,
     canceled,
     active,
     completed,
-    concurrent,
 };
 
 pub const Completion = struct {
@@ -372,6 +407,7 @@ pub const Completion = struct {
 
     next: ?*Completion = null,
     task: Task = .noop,
+    queue: *Mpsc(Completion) = undefined,
     stopped: atomic.Value(bool) = .init(false),
 
     state: State,
@@ -404,43 +440,37 @@ pub const Completion = struct {
         }
     }
 
-    pub fn resolve(self: *Completion, loop: *Loop) Result {
+    pub fn resolve(self: *Completion) Result {
         switch (self.operation) {
-            .noop => panic(
+            .noop, .cancel => panic(
                 "{s} operation try to resolve",
                 .{@tagName(self.operation)},
             ),
             .machport => return .{ .machport = {} },
             .timer => return .{ .timer = {} },
-            .cancel => |c| {
-                switch (c.state) {
-                    .canceled => {},
-                    .idle => {
-                        if (c.operation == .timer) {
-                            c.canceled();
-                        }
-                    },
-                    .completed, .submitted => c.canceled(),
-                    .active => {
-                        switch (c.operation) {
-                            .timer => |*timer_op| {
-                                loop.timers.remove(timer_op);
-                                c.canceled();
-                                loop.queues.push(.completions, c);
-                            },
-                            else => {
-                                c.state = .canceled;
-                                loop.queues.push(.canceling, c);
-                            },
-                        }
-                    },
-                    .concurrent => unreachable,
-                }
+            .read => |*data| {
+                const buffer = switch (data.buffer) {
+                    .slice => |slice| slice,
+                    .array => |*array| array[0..array.len],
+                };
 
-                return .cancel;
+                while (true) {
+                    const rc = system.read(data.fd, buffer.ptr, clampBuffer(buffer.len));
+                    return switch (posix.errno(rc)) {
+                        .SUCCESS => .{ .read = @intCast(rc) },
+                        .INTR => continue,
+                        .FAULT => unreachable,
+                        else => .{ .read = error.Unexpected },
+                    };
+                }
             },
-            .read => unreachable,
         }
+    }
+
+    pub fn taskCallback(task: *Task) void {
+        const self: *Completion = @fieldParentPtr("task", task);
+        if (!self.stopped.load(.acquire)) self.result = self.resolve();
+        self.queue.push(self);
     }
 
     pub fn canceled(self: *Completion) void {
@@ -451,6 +481,27 @@ pub const Completion = struct {
             .timer => self.result = .{ .timer = error.Canceled },
             .read => self.result = .{ .read = error.Canceled },
         }
+    }
+
+    pub fn set(
+        self: *Completion,
+        callback: anytype,
+        comptime op_tag: meta.Tag(Operation),
+        op_data: @FieldType(Operation, @tagName(op_tag)),
+    ) void {
+        const TypeErased = struct {
+            fn complete(loop: *Loop, _completion: *Completion) bool {
+                const res = @field(_completion.result.?, @tagName(op_tag));
+
+                return @call(.always_inline, callback, .{ _completion, loop, res });
+            }
+        };
+
+        self.* = .{
+            .state = .idle,
+            .operation = @unionInit(Operation, @tagName(op_tag), op_data),
+            .callback = TypeErased.complete,
+        };
     }
 };
 
@@ -484,29 +535,18 @@ const Timer = struct {
     }
 };
 
-pub fn submit(
-    self: *Loop,
-    completion: *Completion,
-    callback: anytype,
-    comptime op_tag: meta.Tag(Operation),
-    op_data: @FieldType(Operation, @tagName(op_tag)),
-) void {
-    const TypeErased = struct {
-        fn complete(loop: *Loop, _completion: *Completion) bool {
-            const res = @field(_completion.result.?, @tagName(op_tag));
-
-            return @call(.always_inline, callback, .{ _completion, loop, res });
-        }
-    };
-
-    completion.* = .{
-        .state = .idle,
-        .operation = @unionInit(Operation, @tagName(op_tag), op_data),
-        .callback = TypeErased.complete,
-    };
-
-    switch (op_tag) {
-        .read => unreachable,
+pub fn submit(self: *Loop, completion: *Completion) void {
+    switch (completion.operation) {
+        .read => {
+            completion.queue = &self.tasks;
+            completion.task = .{
+                .callback = Completion.taskCallback,
+            };
+            completion.state = .active;
+            self.inflight += 1;
+            //TODO: handle the push error
+            self.scheduler.push(&completion.task) catch unreachable;
+        },
         .cancel => {
             completion.state = .submitted;
             self.queues.push(.cancellations, completion);
@@ -531,12 +571,13 @@ pub fn mach(
     function: anytype,
     data: MachPort,
 ) void {
-    self.submit(
-        completion,
+    completion.set(
         function,
         .machport,
         data,
     );
+
+    self.submit(completion);
 }
 
 pub fn cancel(
@@ -545,12 +586,13 @@ pub fn cancel(
     function: anytype,
     target: *Completion,
 ) void {
-    self.submit(
-        completion,
+    completion.set(
         function,
         .cancel,
         target,
     );
+
+    self.submit(completion);
 }
 
 pub fn timer(
@@ -559,8 +601,7 @@ pub fn timer(
     callback: anytype,
     ms: u64,
 ) void {
-    self.submit(
-        completion,
+    completion.set(
         callback,
         .timer,
         .{
@@ -569,6 +610,8 @@ pub fn timer(
             .ms = ms,
         },
     );
+
+    self.submit(completion);
 }
 
 pub fn await(
@@ -653,12 +696,13 @@ pub fn await(
             }
         };
 
-    self.submit(
-        completion,
+    completion.set(
         TypeErased.complete,
         .machport,
         .{ .port = mach_port, .buffer = .{ .array = undefined } },
     );
+
+    self.submit(completion);
 
     return .{ .port = mach_port };
 }
