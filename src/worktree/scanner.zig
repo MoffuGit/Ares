@@ -258,13 +258,32 @@ fn initialScan(
     try self.pushTask(task);
 }
 
+//we need to handle the git ignore stack,
+//we are going to make an structure that let us make a git ignore
+//stack for every given path, once we have that we can make the scan request
+//path, the reasong why we need the ignore strucutr efirst is because at this point
+//we would need to read/load the ignore files again, even if we do that on a prev
+//scan, maybe we could use a hashmap and add an entry for every path that we know has a
+//git ignore file
 fn scanRequest(self: *Scanner, subscription: u64, path: ChunkedPath) !void {
     //load any pending directory
+    //this would take every ancestor of the path,
+    //see if we aready have an entry for the ancestor
+    //and see if the entry kind is unloaded, if it is unloaded we would
+    //load the directory into the snapshot,
     _ = subscription;
     _ = path;
     //push the scan id up
     _ = self.scan_id.fetchAdd(1, .release);
     //reload the paths
+    //this would load the new metadata for the path,
+    //if there is no metadata we would need to remove the entry
+    //and in the case of directories, remove every child of it(remove path)
+    //on the othe rhand, with the new metadata we would need to update
+    //the existing entry, one detail, this part should not trigger a re scan
+    //of the directories, the reason is because we are not currently handling events,
+    //any request is for a change made by the user, we know what happening with those
+    //changes
 
     //send status update
     try self.pushUpdate(self.task_count.load(.acquire) > 0);
