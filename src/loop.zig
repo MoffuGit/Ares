@@ -76,7 +76,6 @@ pub fn deinit(self: *Loop) void {
 pub fn done(self: *Loop) bool {
     return self.stopped or (self.queues.empty(.submissions) and
         self.queues.empty(.completions) and
-        self.timers.peek() == null and
         self.inflight == 0);
 }
 
@@ -106,6 +105,7 @@ pub fn tick(self: *Loop, wait: bool) !void {
                 .timer => |*timer_op| {
                     self.timers.remove(timer_op);
                     target.canceled();
+                    self.inflight -= 1;
                     self.queues.push(.completions, target);
                 },
                 .read => {
@@ -207,11 +207,14 @@ pub fn tick(self: *Loop, wait: bool) !void {
         completion.result = completion.resolve();
         completion.state = .idle;
 
+        self.inflight -= 1;
+
         if (completion.callback(self, completion)) {
             t.next = self.time.next_tick(t.ms);
             self.timers.insert(t);
             completion.state = .active;
             completion.result = null;
+            self.inflight += 1;
         }
     }
 
@@ -313,6 +316,7 @@ pub fn submit(self: *Loop, completion: *Completion) void {
             const c_timer = completion.operation.timer;
             completion.operation.timer.next = self.time.next_tick(c_timer.ms);
             completion.state = .active;
+            self.inflight += 1;
 
             self.timers.insert(&completion.operation.timer);
         },
