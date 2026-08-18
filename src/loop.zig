@@ -32,7 +32,6 @@ time: Time,
 scheduler: *Scheduler,
 tasks: Mpsc(Completion),
 queues: MultiQueue(union(enum) {
-    timers: Completion,
     canceling: Completion,
     submissions: Completion,
     completions: Completion,
@@ -74,6 +73,17 @@ pub fn deinit(self: *Loop) void {
     self.kq = -1;
 }
 
+pub fn done(self: *Loop) bool {
+    return self.stopped or (self.queues.empty(.submissions) and
+        self.queues.empty(.completions) and
+        self.timers.peek() == null and
+        self.inflight == 0);
+}
+
+pub fn stop(self: *Loop) void {
+    self.stopped = true;
+}
+
 pub const RunMode = enum {
     no_wait,
     until_done,
@@ -81,57 +91,88 @@ pub const RunMode = enum {
 
 pub fn run(self: *Loop, mode: RunMode) !void {
     switch (mode) {
-        .no_wait => try self.flush(),
-        .until_done => while (!self.done()) try self.flush(),
+        .no_wait => try self.tick(false),
+        .until_done => while (!self.done()) try self.tick(true),
     }
 }
 
-pub fn done(self: *Loop) bool {
-    return self.stopped or
-        (self.queues.empty(.submissions) and
-            self.queues.empty(.completions) and
-            self.queues.empty(.timers) and
-            self.timers.peek() == null and
-            self.inflight == 0);
-}
-
-pub fn stop(self: *Loop) void {
-    self.stopped = true;
-}
-
-pub fn flush(self: *Loop) !void {
-    self.flushCancelations();
-    self.flushTimers();
-
-    while (self.tasks.pop()) |c| {
-        if (c.stopped.raw) c.canceled();
-        c.state = .completed;
-        self.inflight -= 1;
-        self.queues.push(.completions, c);
+pub fn tick(self: *Loop, wait: bool) !void {
+    while (self.queues.pop(.cancellations)) |completion| {
+        const target: *Completion = completion.operation.cancel;
+        switch (target.state) {
+            .canceled, .idle => {},
+            .completed, .submitted => target.canceled(),
+            .active => switch (target.operation) {
+                .timer => |*timer_op| {
+                    self.timers.remove(timer_op);
+                    target.canceled();
+                    self.queues.push(.completions, target);
+                },
+                .read => {
+                    target.stopped.store(true, .release);
+                },
+                else => {
+                    target.state = .canceled;
+                    self.queues.push(.canceling, target);
+                },
+            },
+        }
+        completion.result = .cancel;
+        _ = completion.callback(self, completion);
     }
 
-    var events: [256]Kevent = undefined;
+    var kevents: [256]Kevent = undefined;
 
-    const canceled = self.flushCanceled(&events);
-    const active = if (canceled < events.len)
-        self.flushSubmissions(events[canceled..])
-    else
-        0;
-    const submitted = canceled + active;
+    while (!self.queues.empty(.canceling) or
+        !self.queues.empty(.submissions))
+    {
+        var submitted: usize = 0;
 
-    if (submitted > 0 or self.queues.empty(.completions)) {
+        while (submitted < kevents.len) {
+            const event = &kevents[submitted];
+            const completion = self.queues.pop(.canceling) orelse break;
+            submitted += 1;
+
+            assert(completion.state == .canceled);
+            self.inflight -= 1;
+
+            completion.kevent(event);
+            event.flags = std.c.EV.DELETE;
+            completion.canceled();
+            self.queues.push(.completions, completion);
+        }
+
+        var active: usize = 0;
+
+        while (submitted < kevents.len) {
+            const completion = self.queues.pop(.submissions) orelse break;
+
+            if (completion.state == .completed) {
+                self.queues.push(.completions, completion);
+                continue;
+            }
+
+            assert(completion.state == .submitted);
+
+            const event = &kevents[active];
+            completion.kevent(event);
+            completion.state = .active;
+            active += 1;
+            submitted += 1;
+        }
+
         var timeout = std.mem.zeroes(posix.timespec);
 
         const completed = try kevent(
             self.kq,
-            events[0..submitted],
-            events[0..events.len],
+            kevents[0..submitted],
+            kevents[0..kevents.len],
             &timeout,
         );
 
         self.inflight += active;
 
-        for (events[0..completed]) |ev| {
+        for (kevents[0..completed]) |ev| {
             if (ev.udata == 0) continue;
 
             if (ev.flags & std.c.EV.DELETE != 0) continue;
@@ -152,20 +193,6 @@ pub fn flush(self: *Loop) !void {
         }
     }
 
-    self.flushCompletions();
-}
-
-pub fn flushTimers(self: *Loop) void {
-    while (self.queues.pop(.timers)) |completion| {
-        if (completion.state == .completed) {
-            continue;
-        }
-
-        assert(completion.state == .submitted);
-        completion.state = .active;
-        self.timers.insert(&completion.operation.timer);
-    }
-
     self.time.update();
 
     const now_timer: Timer = .{ .next = self.time.now, .ms = 0, .completion = undefined };
@@ -182,14 +209,21 @@ pub fn flushTimers(self: *Loop) void {
 
         if (completion.callback(self, completion)) {
             t.next = self.time.next_tick(t.ms);
-            self.queues.push(.timers, completion);
-            completion.state = .submitted;
+            self.timers.insert(t);
+            completion.state = .active;
             completion.result = null;
         }
     }
-}
 
-pub fn flushCompletions(self: *Loop) void {
+    while (self.tasks.pop()) |c| {
+        if (c.stopped.raw) c.canceled();
+        c.state = .completed;
+        self.inflight -= 1;
+        self.queues.push(.completions, c);
+    }
+
+    //This should try to disarm the event of
+    //completions that have it and return disarm
     while (self.queues.pop(.completions)) |completion| {
         assert(completion.state == .completed);
         assert(completion.result != null);
@@ -202,72 +236,88 @@ pub fn flushCompletions(self: *Loop) void {
             self.submit(completion);
         }
     }
-}
 
-pub fn flushCancelations(self: *Loop) void {
-    while (self.queues.pop(.cancellations)) |completion| {
-        const c = completion.operation.cancel;
-        switch (c.state) {
-            .canceled, .idle, .completed, .submitted => c.canceled(),
-            .active => switch (c.operation) {
-                .timer => |*timer_op| {
-                    self.timers.remove(timer_op);
-                    c.canceled();
-                    self.queues.push(.completions, c);
-                },
-                .read => {
-                    c.stopped.store(true, .release);
-                },
-                else => {
-                    c.state = .canceled;
-                    self.queues.push(.canceling, c);
-                },
-            },
-        }
-        completion.result = .cancel;
-        _ = completion.callback(self, completion);
-    }
-}
+    _ = wait;
 
-pub fn flushCanceled(self: *Loop, kevents: []Kevent) usize {
-    var submitted: usize = 0;
+    // const timeout: ?posix.timespec = timeout: {
+    //     if (!wait) break :timeout std.mem.zeroes(posix.timespec);
+    //
+    //     // If we have a timer, we want to set the timeout to our next
+    //     // timer value. If we have no timer, we wait forever.
+    //     const t = self.timers.peek() orelse break :timeout null;
+    //
+    //     // Determine the time in milliseconds.
+    //     const ms_now = @as(u64, @intCast(self.time.now.sec)) * std.time.ms_per_s +
+    //         @as(u64, @intCast(self.time.now.nsec)) / std.time.ns_per_ms;
+    //     const ms_next = @as(u64, @intCast(t.next.sec)) * std.time.ms_per_s +
+    //         @as(u64, @intCast(t.next.nsec)) / std.time.ns_per_ms;
+    //     const ms = ms_next -| ms_now;
+    //
+    //     // Convert to s/ns for the timespec
+    //     const sec = ms / std.time.ms_per_s;
+    //     const nsec = (ms % std.time.ms_per_s) * std.time.ns_per_ms;
+    //     break :timeout .{ .sec = @intCast(sec), .nsec = @intCast(nsec) };
+    // };
 
-    while (submitted < kevents.len) {
-        const event = &kevents[submitted];
-        const completion = self.queues.pop(.canceling) orelse break;
-        submitted += 1;
+    const timeout = std.mem.zeroes(posix.timespec);
+    const completed = try kevent(
+        self.kq,
+        kevents[0..0],
+        kevents[0..kevents.len],
+        &timeout,
+        // if (timeout) |*t| t else null,
+    );
 
-        assert(completion.state == .canceled);
+    for (kevents[0..completed]) |ev| {
+        if (ev.udata == 0) continue;
+
+        if (ev.flags & std.c.EV.DELETE != 0) continue;
+
         self.inflight -= 1;
 
-        completion.kevent(event);
-        event.flags = std.c.EV.DELETE;
-        completion.canceled();
-        self.queues.push(.completions, completion);
-    }
+        const c: *Completion = @ptrFromInt(@as(usize, @intCast(ev.udata)));
 
-    return submitted;
-}
-
-pub fn flushSubmissions(self: *Loop, kevents: []Kevent) usize {
-    var active: usize = 0;
-
-    while (active < kevents.len) {
-        const completion = self.queues.pop(.submissions) orelse break;
-
-        assert(completion.state == .submitted or completion.state == .completed);
-        if (completion.state == .completed) {
-            self.queues.push(.completions, completion);
-            continue;
+        if (ev.flags & std.c.EV.ERROR != 0) {
+            @panic("something go wrong with the kqueue submisssion");
+        } else {
+            c.result = c.resolve();
         }
 
-        const event = &kevents[active];
-        completion.kevent(event);
-        completion.state = .active;
-        active += 1;
+        assert(c.result != null);
+        c.state = .completed;
+        self.queues.push(.completions, c);
     }
+}
 
-    return active;
+pub fn submit(self: *Loop, completion: *Completion) void {
+    switch (completion.operation) {
+        .read => {
+            completion.queue = &self.tasks;
+            completion.task = .{
+                .callback = Completion.taskCallback,
+            };
+            completion.state = .active;
+            self.inflight += 1;
+            //TODO: handle the push error
+            self.scheduler.push(&completion.task) catch unreachable;
+        },
+        .cancel => {
+            completion.state = .submitted;
+            self.queues.push(.cancellations, completion);
+        },
+        .machport => {
+            completion.state = .submitted;
+            self.queues.push(.submissions, completion);
+        },
+        .timer => {
+            const c_timer = completion.operation.timer;
+            completion.operation.timer.next = self.time.next_tick(c_timer.ms);
+            completion.state = .active;
+
+            self.timers.insert(&completion.operation.timer);
+        },
+        .noop => unreachable,
+    }
 }
 
 fn kevent(
@@ -534,36 +584,6 @@ const Timer = struct {
             return max;
     }
 };
-
-pub fn submit(self: *Loop, completion: *Completion) void {
-    switch (completion.operation) {
-        .read => {
-            completion.queue = &self.tasks;
-            completion.task = .{
-                .callback = Completion.taskCallback,
-            };
-            completion.state = .active;
-            self.inflight += 1;
-            //TODO: handle the push error
-            self.scheduler.push(&completion.task) catch unreachable;
-        },
-        .cancel => {
-            completion.state = .submitted;
-            self.queues.push(.cancellations, completion);
-        },
-        .machport => {
-            completion.state = .submitted;
-            self.queues.push(.submissions, completion);
-        },
-        .timer => {
-            completion.state = .submitted;
-            const c_timer = completion.operation.timer;
-            completion.operation.timer.next = self.time.next_tick(c_timer.ms);
-            self.queues.push(.timers, completion);
-        },
-        .noop => unreachable,
-    }
-}
 
 pub fn mach(
     self: *Loop,
