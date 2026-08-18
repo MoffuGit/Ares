@@ -8,8 +8,16 @@
 import Cocoa
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    var app: Odyssey.App
+    
+    override init() {
+        app = Odyssey.App()
+        super.init()
+    }
+    
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // Insert code here to initialize your application
+        let controller = WindowController(appDelegate: self);
+        controller.showWindow(nil);
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {

@@ -8,9 +8,4 @@ guard odyssey_init(CommandLine.argc, CommandLine.unsafeArgv) == 0 else {
     exit(1)
 }
 
-guard odyssey_db_start() == 0 else {
-    Odyssey.logger.critical("odyssey_db_start failed")
-    exit(1)
-}
-
 _ = NSApplicationMain(CommandLine.argc, CommandLine.unsafeArgv)
