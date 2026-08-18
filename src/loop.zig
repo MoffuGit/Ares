@@ -238,17 +238,14 @@ pub fn tick(self: *Loop, wait: bool) !void {
         completion.state = .idle;
 
         if (completion.callback(self, completion)) {
-            assert(completion.operation != .timer);
             completion.result = null;
             self.submit(completion);
         }
     }
 
-    const timeout: ?posix.timespec = timeout: {
-        if (!should_wait) break :timeout std.mem.zeroes(posix.timespec);
+    if (!should_wait or self.inflight == 0) return;
 
-        // If we have a timer, we want to set the timeout to our next
-        // timer value. If we have no timer, we wait forever.
+    const timeout: ?posix.timespec = timeout: {
         const t = self.timers.peek() orelse break :timeout null;
 
         // Determine the time in milliseconds.
@@ -287,8 +284,12 @@ pub fn tick(self: *Loop, wait: bool) !void {
         }
 
         assert(c.result != null);
-        c.state = .completed;
-        self.queues.push(.completions, c);
+        c.state = .idle;
+
+        if (c.callback(self, c)) {
+            c.result = null;
+            self.submit(c);
+        }
     }
 }
 
