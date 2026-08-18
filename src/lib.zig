@@ -228,7 +228,7 @@ pub export fn odyssey_app_free(app: *App) void {
 }
 
 pub export fn odyssey_app_flush(app: *App) void {
-    app.flush(.no_wait);
+    app.run(.no_wait) catch {};
 }
 
 pub export fn odyssey_drop_entity(entity: ExternEntity) void {
