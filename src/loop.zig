@@ -92,12 +92,14 @@ pub fn stop(self: *Loop) void {
 
 pub const RunMode = enum {
     no_wait,
+    once,
     until_done,
 };
 
 pub fn run(self: *Loop, mode: RunMode) !void {
     switch (mode) {
         .no_wait => try self.tick(false),
+        .once => try self.tick(true),
         .until_done => while (!self.done()) try self.tick(true),
     }
 }
