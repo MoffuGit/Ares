@@ -28,6 +28,7 @@ pub const Loop = @This();
 
 kq: posix.fd_t,
 
+wakeup: Wakeup,
 time: Time,
 scheduler: *Scheduler,
 tasks: Mpsc(Completion),
@@ -52,6 +53,7 @@ pub fn init(self: *Loop, scheduler: *Scheduler, io: Io) !void {
 
     self.* = .{
         .tasks = undefined,
+        .wakeup = undefined,
         .scheduler = scheduler,
         .io = io,
         .kq = kq,
@@ -62,8 +64,13 @@ pub fn init(self: *Loop, scheduler: *Scheduler, io: Io) !void {
         .time = undefined,
     };
 
+    self.wakeup = try .init();
+    errdefer self.wakeup.deinit();
+
     self.tasks.init();
     self.queues.init();
+
+    try self.wakeup.register(self);
 }
 
 pub fn deinit(self: *Loop) void {
@@ -296,7 +303,7 @@ pub fn tick(self: *Loop, wait: bool) !void {
 pub fn submit(self: *Loop, completion: *Completion) void {
     switch (completion.operation) {
         .read => {
-            completion.queue = &self.tasks;
+            completion.loop = self;
             completion.task = .{
                 .callback = Completion.taskCallback,
             };
@@ -462,7 +469,7 @@ pub const Completion = struct {
 
     next: ?*Completion = null,
     task: Task = .noop,
-    queue: *Mpsc(Completion) = undefined,
+    loop: *Loop = undefined,
     stopped: atomic.Value(bool) = .init(false),
 
     state: State,
@@ -525,7 +532,8 @@ pub const Completion = struct {
     pub fn taskCallback(task: *Task) void {
         const self: *Completion = @fieldParentPtr("task", task);
         if (!self.stopped.load(.acquire)) self.result = self.resolve();
-        self.queue.push(self);
+        self.loop.tasks.push(self);
+        self.loop.wakeup.wake() catch unreachable;
     }
 
     pub fn canceled(self: *Completion) void {
@@ -658,84 +666,56 @@ pub fn read(
     self.submit(completion);
 }
 
+const Mach = struct {
+    const mach_port_flavor_t = c_int;
+
+    extern "c" fn mach_port_set_attributes(
+        task: system.ipc_space_t,
+        name: system.mach_port_name_t,
+        flavor: mach_port_flavor_t,
+        info: *anyopaque,
+        count: system.mach_msg_type_number_t,
+    ) posix.system.kern_return_t;
+
+    fn drain(port: posix.system.mach_port_name_t) void {
+        var message: struct {
+            header: system.mach_msg_header_t,
+        } = undefined;
+
+        while (true) {
+            switch (system.mach_msg(
+                &message.header,
+                .{ .RCV = .{ .TIMEOUT = true } },
+                0,
+                @sizeOf(@TypeOf(message)),
+                port,
+                system.MACH.MSG.TIMEOUT_NONE,
+                system.MACH.PORT.NULL,
+            )) {
+                .RCV_TIMED_OUT => return,
+                .SUCCESS => {},
+                .RCV_TOO_LARGE => {},
+                else => |err| {
+                    log.warn("mach msg drain err, may duplicate async wakeups err={}", .{err});
+                    return;
+                },
+            }
+        }
+    }
+};
+
 pub fn await(
     self: *Loop,
     completion: *Completion,
     function: anytype,
 ) !Waker {
-    const mach_self = system.mach_task_self();
-    var mach_port: system.mach_port_name_t = undefined;
-    if (system.mach_port_allocate(
-        mach_self,
-        system.MACH.PORT.RIGHT.RECEIVE,
-        &mach_port,
-    ) != 0) {
-        return error.MachPortAllocFailed;
-    }
-    errdefer _ = system.mach_port_deallocate(mach_self, mach_port);
-
-    if (system.mach_port_insert_right(
-        mach_self,
-        mach_port,
-        mach_port,
-        system.MACH.MSG.TYPE.MAKE_SEND,
-    ) != 0) {
-        return error.MachPortAllocFailed;
-    }
-
-    const mach_port_limits = extern struct { mpl_qlimit: system.natural_t };
-    const MACH_PORT_LIMITS_INFO = 1;
-
-    const Mach = struct {
-        const mach_port_flavor_t = c_int;
-
-        extern "c" fn mach_port_set_attributes(
-            task: system.ipc_space_t,
-            name: system.mach_port_name_t,
-            flavor: mach_port_flavor_t,
-            info: *anyopaque,
-            count: system.mach_msg_type_number_t,
-        ) posix.system.kern_return_t;
-    };
-    var limits: mach_port_limits = .{ .mpl_qlimit = 1 };
-    if (Mach.mach_port_set_attributes(
-        mach_self,
-        mach_port,
-        MACH_PORT_LIMITS_INFO,
-        &limits,
-        @sizeOf(@TypeOf(limits)),
-    ) != 0) return error.MachPortAllocFailed;
+    const waker: Waker = try .init();
 
     const TypeErased =
         struct {
-            fn drain(port: posix.system.mach_port_name_t) void {
-                var message: struct {
-                    header: system.mach_msg_header_t,
-                } = undefined;
-
-                while (true) {
-                    switch (system.mach_msg(
-                        &message.header,
-                        .{ .RCV = .{ .TIMEOUT = true } },
-                        0,
-                        @sizeOf(@TypeOf(message)),
-                        port,
-                        system.MACH.MSG.TIMEOUT_NONE,
-                        system.MACH.PORT.NULL,
-                    )) {
-                        .RCV_TIMED_OUT => return,
-                        .SUCCESS => {},
-                        .RCV_TOO_LARGE => {},
-                        else => |err| {
-                            log.warn("mach msg drain err, may duplicate async wakeups err={}", .{err});
-                            return;
-                        },
-                    }
-                }
-            }
-
             fn complete(c: *Completion, loop: *Loop, res: Canceled!void) bool {
-                drain(c.operation.machport.port);
+                Mach.drain(c.operation.machport.port);
+
                 return @call(.always_inline, function, .{ c, loop, res });
             }
         };
@@ -743,16 +723,95 @@ pub fn await(
     completion.set(
         TypeErased.complete,
         .machport,
-        .{ .port = mach_port, .buffer = .{ .array = undefined } },
+        .{ .port = waker.port, .buffer = .{ .array = undefined } },
     );
 
     self.submit(completion);
 
-    return .{ .port = mach_port };
+    return waker;
 }
+
+const Wakeup = struct {
+    waker: Waker,
+    buffer: [32]u8,
+
+    pub fn init() !Wakeup {
+        const waker: Waker = try .init();
+
+        return .{ .waker = waker, .buffer = undefined };
+    }
+
+    pub fn deinit(self: *Wakeup) void {
+        self.waker.close();
+    }
+
+    pub fn wake(self: *Wakeup) !void {
+        try self.waker.wake();
+    }
+
+    pub fn register(self: *Wakeup, loop: *Loop) !void {
+        const events = [_]Kevent{.{
+            .ident = @as(usize, @intCast(self.waker.port)),
+            .filter = std.c.EVFILT.MACHPORT,
+            .flags = std.c.EV.ADD | std.c.EV.ENABLE,
+            .fflags = @bitCast(std.c.MACH.RCV{ .MSG = true }),
+            .data = 0,
+            .udata = 0,
+            .ext = .{
+                @intFromPtr(&self.buffer),
+                self.buffer.len,
+            },
+        }};
+        const n = try kevent(
+            loop.kq,
+            &events,
+            events[0..0],
+            null,
+        );
+        assert(n == 0);
+    }
+};
 
 pub const Waker = struct {
     port: system.mach_port_name_t,
+
+    pub fn init() !Waker {
+        const mach_self = system.mach_task_self();
+        var mach_port: system.mach_port_name_t = undefined;
+        if (system.mach_port_allocate(
+            mach_self,
+            system.MACH.PORT.RIGHT.RECEIVE,
+            &mach_port,
+        ) != 0) {
+            return error.MachPortAllocFailed;
+        }
+        errdefer _ = system.mach_port_deallocate(mach_self, mach_port);
+
+        if (system.mach_port_insert_right(
+            mach_self,
+            mach_port,
+            mach_port,
+            system.MACH.MSG.TYPE.MAKE_SEND,
+        ) != 0) {
+            return error.MachPortAllocFailed;
+        }
+
+        const mach_port_limits = extern struct { mpl_qlimit: system.natural_t };
+        const MACH_PORT_LIMITS_INFO = 1;
+
+        var limits: mach_port_limits = .{ .mpl_qlimit = 1 };
+        if (Mach.mach_port_set_attributes(
+            mach_self,
+            mach_port,
+            MACH_PORT_LIMITS_INFO,
+            &limits,
+            @sizeOf(@TypeOf(limits)),
+        ) != 0) return error.MachPortAllocFailed;
+
+        return .{
+            .port = mach_port,
+        };
+    }
 
     pub fn wake(self: *const Waker) !void {
         var msg: posix.system.mach_msg_header_t = .{
@@ -1091,48 +1150,45 @@ test "cancel timer" {
     try testing.expect(cancellation.called);
 }
 
-//We need to add a waker that does not add into inflight,
-//this is an special waker that we dont use for keeping hte loop alive
-//only when there are task we would stay alive
-// test "read completion" {
-//     const ReadTest = struct {
-//         readed: usize = 0,
-//         completion: Completion = .noop,
-//
-//         fn reader(c: *Completion, _: *Loop, res: ReadError!usize) bool {
-//             const readed = res catch return false;
-//             const parent: *@This() = @fieldParentPtr("completion", c);
-//             parent.readed = readed;
-//             return false;
-//         }
-//     };
-//
-//     const io = testing.io;
-//     const gpa = testing.allocator;
-//
-//     var arena: std.heap.ArenaAllocator = .init(gpa);
-//     defer arena.deinit();
-//
-//     var scheduler: Scheduler = undefined;
-//     try scheduler.init(arena.allocator(), io);
-//     defer scheduler.deinit();
-//
-//     var loop: Loop = undefined;
-//     try loop.init(&scheduler, io);
-//     defer loop.deinit();
-//
-//     var temp = std.testing.tmpDir(.{});
-//     defer temp.cleanup();
-//
-//     const file = try temp.dir.createFile(io, "temporal_file", .{ .read = true });
-//     try file.writePositionalAll(io, "expected text", 0);
-//
-//     var buffer: [1024]u8 = undefined;
-//     var reader: ReadTest = .{};
-//
-//     loop.read(&reader.completion, ReadTest.reader, file.handle, .{ .slice = &buffer });
-//
-//     try loop.run(.until_done);
-//
-//     try testing.expectEqualStrings("expected text", buffer[0..reader.readed]);
-// }
+test "read completion" {
+    const ReadTest = struct {
+        readed: usize = 0,
+        completion: Completion = .noop,
+
+        fn reader(c: *Completion, _: *Loop, res: ReadError!usize) bool {
+            const readed = res catch return false;
+            const parent: *@This() = @fieldParentPtr("completion", c);
+            parent.readed = readed;
+            return false;
+        }
+    };
+
+    const io = testing.io;
+    const gpa = testing.allocator;
+
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+
+    var scheduler: Scheduler = undefined;
+    try scheduler.init(arena.allocator(), io);
+    defer scheduler.deinit();
+
+    var loop: Loop = undefined;
+    try loop.init(&scheduler, io);
+    defer loop.deinit();
+
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+
+    const file = try temp.dir.createFile(io, "temporal_file", .{ .read = true });
+    try file.writePositionalAll(io, "expected text", 0);
+
+    var buffer: [1024]u8 = undefined;
+    var reader: ReadTest = .{};
+
+    loop.read(&reader.completion, ReadTest.reader, file.handle, .{ .slice = &buffer });
+
+    try loop.run(.until_done);
+
+    try testing.expectEqualStrings("expected text", buffer[0..reader.readed]);
+}
