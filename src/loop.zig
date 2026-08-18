@@ -250,9 +250,8 @@ pub fn tick(self: *Loop, wait: bool) !void {
         }
     }
 
-    if (!should_wait or self.inflight == 0) return;
-
     const timeout: ?posix.timespec = timeout: {
+        if (!should_wait) break :timeout std.mem.zeroes(posix.timespec);
         const t = self.timers.peek() orelse break :timeout null;
 
         // Determine the time in milliseconds.
