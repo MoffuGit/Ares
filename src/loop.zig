@@ -678,6 +678,11 @@ const Mach = struct {
         count: system.mach_msg_type_number_t,
     ) posix.system.kern_return_t;
 
+    extern "c" fn mach_port_destroy(
+        task: posix.system.ipc_space_t,
+        name: posix.system.mach_port_name_t,
+    ) posix.system.kern_return_t;
+
     fn drain(port: posix.system.mach_port_name_t) void {
         var message: struct {
             header: system.mach_msg_header_t,
@@ -696,6 +701,7 @@ const Mach = struct {
                 .RCV_TIMED_OUT => return,
                 .SUCCESS => {},
                 .RCV_TOO_LARGE => {},
+                .RCV_INVALID_NAME => return,
                 else => |err| {
                     log.warn("mach msg drain err, may duplicate async wakeups err={}", .{err});
                     return;
@@ -786,7 +792,7 @@ pub const Waker = struct {
         ) != 0) {
             return error.MachPortAllocFailed;
         }
-        errdefer _ = system.mach_port_deallocate(mach_self, mach_port);
+        errdefer _ = Mach.mach_port_destroy(mach_self, mach_port);
 
         if (system.mach_port_insert_right(
             mach_self,
@@ -847,7 +853,7 @@ pub const Waker = struct {
     }
 
     pub fn close(self: *const Waker) void {
-        _ = system.mach_port_deallocate(
+        _ = Mach.mach_port_destroy(
             posix.system.mach_task_self(),
             self.port,
         );
