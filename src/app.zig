@@ -113,27 +113,9 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !*T {
 
     const any: AnyEntity = .init(&self.entities, id, TypeInfo.init(T));
 
-    self.entities.startUpdate(any.id);
-    defer self.entities.endUpdate(any.id);
-
     try @call(.always_inline, function, .{ ptr, any, self } ++ args);
 
     return ptr;
-}
-
-pub const Update = struct {
-    any: AnyEntity,
-    app: *App,
-
-    pub fn end(self: *const @This()) void {
-        self.app.entities.endUpdate(self.any.id);
-    }
-};
-
-pub fn update(self: *App, entity: anytype) Update {
-    self.entities.startUpdate(entity.any.id);
-
-    return .{ .any = entity.any, .app = self };
 }
 
 pub fn run(self: *App, mode: Loop.RunMode) !void {
@@ -469,13 +451,8 @@ test "creates/drops entities" {
         const ptr = try app.new(TestStruct, TestStruct.init, .{});
         entity.* = ptr.any;
 
-        {
-            const up = app.update(ptr);
-            defer up.end();
-
-            ptr.set_index(index);
-            ptr.inc();
-        }
+        ptr.set_index(index);
+        ptr.inc();
     }
 
     for (entities, 0..) |entity, index| {
@@ -513,13 +490,8 @@ test "Observe entities" {
 
     var index: usize = 0;
 
-    {
-        const up = app.update(observed);
-        defer up.end();
-
-        observed.set_index(index);
-        observed.inc();
-    }
+    observed.set_index(index);
+    observed.inc();
     app.notify(observed);
 
     try testing.expect(!observer.run);
@@ -528,13 +500,8 @@ test "Observe entities" {
 
     index = 1;
 
-    {
-        const up = app.update(observed);
-        defer up.end();
-
-        observed.set_index(index);
-        observed.inc();
-    }
+    observed.set_index(index);
+    observed.inc();
     app.notify(observed);
 
     app.flush();
@@ -703,13 +670,9 @@ test "Observe entities drop before enable" {
 
     var index: usize = 0;
 
-    {
-        const up = app.update(observed);
-        defer up.end();
+    observed.set_index(index);
+    observed.inc();
 
-        observed.set_index(index);
-        observed.inc();
-    }
     app.notify(observed);
 
     try testing.expect(!observer.run);
@@ -719,13 +682,9 @@ test "Observe entities drop before enable" {
 
     index = 1;
 
-    {
-        const up = app.update(observed);
-        defer up.end();
+    observed.set_index(index);
+    observed.inc();
 
-        observed.set_index(index);
-        observed.inc();
-    }
     app.notify(observed);
 
     app.flush();

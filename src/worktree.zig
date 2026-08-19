@@ -129,9 +129,6 @@ fn handleEvents(c: *Completion, _: *Loop, res: anyerror!void) bool {
 
     const self: *Worktree = @fieldParentPtr("await", c);
 
-    const update = self.app.update(self);
-    defer update.end();
-
     while (self.events.pop()) |event| {
         switch (event) {
             .started => {

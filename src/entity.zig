@@ -46,22 +46,16 @@ pub const AnyEntity = struct {
 
 pub const EntityStore = struct {
     const Entities = slotmap.SlotMap(*anyopaque);
-    const Updates = slotmap.SecondaryMap(bool);
 
     entities: Entities,
-    updates: Updates,
     dropped: std.ArrayList(AnyEntity),
 
     pub fn init(self: *@This(), arena: Allocator, capacity: usize) !void {
         var entities = try Entities.init(arena, capacity);
         errdefer entities.deinit(arena);
 
-        var updates = try Updates.init(arena, capacity);
-        errdefer updates.deinit(arena);
-
         self.* = .{
             .entities = entities,
-            .updates = updates,
             .dropped = try .initCapacity(arena, capacity),
         };
     }
@@ -75,19 +69,10 @@ pub const EntityStore = struct {
         return ptr.*;
     }
 
-    pub fn startUpdate(self: *@This(), id: EntityId) void {
-        if (self.updates.put(id, true) orelse false) @panic("Double Started Update");
-    }
-
-    pub fn endUpdate(self: *@This(), id: EntityId) void {
-        if (!(self.updates.put(id, false) orelse true)) @panic("Double Ended Update");
-    }
-
     pub fn popDrop(self: *@This()) ?struct { *anyopaque, EntityId, TypeId } {
         const entity = self.dropped.pop() orelse return null;
 
         const ptr = self.entities.remove(entity.id) orelse @panic("Dropping non existing entity");
-        _ = self.updates.remove(entity.id);
 
         return .{ ptr, entity.id, entity.type_id };
     }
@@ -102,7 +87,6 @@ pub const EntityStore = struct {
 
         while (self.dropped.pop()) |entity| {
             const ptr = self.entities.remove(entity.id) orelse continue;
-            _ = self.updates.remove(entity.id);
             try entities.append(gpa, .{ ptr, entity.id, entity.type_id });
         }
 
