@@ -51,14 +51,11 @@ listeners: Listeners,
 receivers: Receivers,
 observers: Observers,
 chunks: ChunkAllocator,
-peding_updates: u16,
 scheduler: Scheduler,
 
 loop: Loop,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
-
-flushing: bool,
 
 pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     self.* = .{
@@ -70,8 +67,6 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
         .receivers = undefined,
         .chunks = undefined,
         .loop = undefined,
-        .peding_updates = 0,
-        .flushing = false,
         .gpa = gpa,
         .arena = .init(gpa),
         .events = .{},
@@ -118,9 +113,6 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !*T {
 
     const any: AnyEntity = .init(&self.entities, id, TypeInfo.init(T));
 
-    self.peding_updates += 1;
-    defer self.peding_updates -= 1;
-
     self.entities.startUpdate(any.id);
     defer self.entities.endUpdate(any.id);
 
@@ -135,15 +127,10 @@ pub const Update = struct {
 
     pub fn end(self: *const @This()) void {
         self.app.entities.endUpdate(self.any.id);
-        if (self.app.peding_updates == 1) {
-            self.app.flush();
-        }
-        self.app.peding_updates -= 1;
     }
 };
 
 pub fn update(self: *App, entity: anytype) Update {
-    self.peding_updates += 1;
     self.entities.startUpdate(entity.any.id);
 
     return .{ .any = entity.any, .app = self };
@@ -151,6 +138,7 @@ pub fn update(self: *App, entity: anytype) Update {
 
 pub fn run(self: *App, mode: Loop.RunMode) !void {
     try self.loop.run(mode);
+    self.flush();
 }
 
 pub fn stop(self: *App) void {
@@ -158,11 +146,6 @@ pub fn stop(self: *App) void {
 }
 
 pub fn flush(self: *App) void {
-    if (self.flushing) return;
-
-    self.flushing = true;
-    defer self.flushing = false;
-
     self.flushDeferred();
     self.destroyDroppedEntities();
     self.flushNotifications();
