@@ -81,7 +81,7 @@ test "benchmark: Worktree initial scan" {
 
         try app.observe(worktree, WorktreeObserver.callback, &observer.observer);
 
-        while (observer.scanning) try app.run(.once);
+        while (observer.scanning) app.run(.once);
 
         durations[idx] = bench.stop(io);
 

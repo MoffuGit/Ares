@@ -96,7 +96,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
 }
 
 pub fn deinit(self: *App) void {
-    self.run(.until_done) catch |err| log.err("Loop err={}", .{err});
+    self.run(.until_done);
     self.scheduler.deinit();
     self.receivers.deinit();
     self.arena.deinit();
@@ -118,8 +118,8 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !*T {
     return ptr;
 }
 
-pub fn run(self: *App, mode: Loop.RunMode) !void {
-    try self.loop.run(mode);
+pub fn run(self: *App, mode: Loop.RunMode) void {
+    self.loop.run(mode) catch |err| log.err("Loop err={}", .{err});
     self.flush();
 }
 

@@ -146,6 +146,7 @@ fn handleEvents(c: *Completion, _: *Loop, res: anyerror!void) bool {
             },
         }
     }
+
     self.app.notify(self);
 
     return true;
