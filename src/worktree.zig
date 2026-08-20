@@ -158,7 +158,7 @@ test "Worktree" {
     const chromium_path = @import("test_options").chromium_path;
 
     var app: App = undefined;
-    try app.init(gpa, io);
+    try app.init(gpa, io, .{});
     defer app.deinit();
 
     const worktree = try app.new(

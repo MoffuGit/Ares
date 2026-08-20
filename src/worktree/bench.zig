@@ -41,7 +41,7 @@ test "benchmark: Worktree initial scan" {
     const io = global.state.threaded.io();
 
     var app: App = undefined;
-    try app.init(gpa, io);
+    try app.init(gpa, io, .{});
     defer app.deinit();
 
     const arena = app.arena.allocator();

@@ -52,14 +52,27 @@ receivers: Receivers,
 observers: Observers,
 chunks: ChunkAllocator,
 scheduler: Scheduler,
+runtime: Runtime,
 
 loop: Loop,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
-pub fn init(self: *App, gpa: Allocator, io: Io) !void {
+pub const Runtime = struct {
+    fn noop(_: ?*anyopaque) callconv(.c) void {}
+
+    userdata: ?*anyopaque = null,
+    event_callback: *const fn (?*anyopaque) callconv(.c) void = noop,
+
+    pub fn flush(self: *Runtime) void {
+        self.event_callback(self.userdata);
+    }
+};
+
+pub fn init(self: *App, gpa: Allocator, io: Io, runtime: Runtime) !void {
     self.* = .{
         .io = io,
+        .runtime = runtime,
         .notifications = undefined,
         .entities = undefined,
         .observers = undefined,
@@ -443,7 +456,7 @@ test "creates/drops entities" {
     const entity_count = 32;
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(allocator, io, .{});
     defer app.deinit();
 
     var entities: [entity_count]AnyEntity = undefined;
@@ -469,7 +482,7 @@ test "Observe entities" {
     const io = testing.io;
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(allocator, io, .{});
     defer app.deinit();
 
     const observed = try app.new(TestStruct, TestStruct.init, .{});
@@ -521,7 +534,7 @@ test "Listen entities events" {
     };
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(allocator, io, .{});
     defer app.deinit();
 
     const listened = try app.new(TestStruct, TestStruct.init, .{});
@@ -575,7 +588,7 @@ test "Queued receiver event targets a typed subscription" {
     };
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(allocator, io, .{});
     defer app.deinit();
 
     const dispatcher = try app.new(TestStruct, TestStruct.init, .{});
@@ -621,7 +634,7 @@ test "Dropping a receiver removes subscriptions before queued delivery" {
     };
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(allocator, io, .{});
     defer app.deinit();
 
     const dispatcher = try app.new(TestStruct, TestStruct.init, .{});
@@ -661,7 +674,7 @@ test "Observe entities drop before enable" {
     };
 
     var app: App = undefined;
-    try app.init(allocator, io);
+    try app.init(allocator, io, .{});
     defer app.deinit();
 
     const observed = try app.new(TestStruct, TestStruct.init, .{});
