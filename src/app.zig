@@ -58,7 +58,7 @@ loop: Loop,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
-pub const Runtime = struct {
+pub const Runtime = extern struct {
     fn noop(_: ?*anyopaque) callconv(.c) void {}
 
     userdata: ?*anyopaque = null,

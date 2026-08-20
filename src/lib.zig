@@ -5,6 +5,7 @@ const heap = std.heap;
 const builtin = @import("builtin");
 
 const App = @import("app.zig");
+const Runtime = App.Runtime;
 const db = @import("db.zig");
 const ent = @import("entity.zig");
 const global = @import("global.zig");
@@ -87,20 +88,21 @@ pub export fn odyssey_deinit() void {
     global.state.deinit();
 }
 
-pub export fn odyssey_app_new() ?*App {
-    return app_new() catch |err| {
+pub export fn odyssey_app_new(runtime: *const Runtime) ?*App {
+    return app_new(runtime) catch |err| {
         log.err("error initializing app: {}", .{err});
         return null;
     };
 }
 
-fn app_new() !*App {
+fn app_new(runtime: *const Runtime) !*App {
     var app = try state.gpa.create(App);
     errdefer state.gpa.destroy(app);
 
     try app.init(
         state.gpa,
         state.threaded.io(),
+        runtime.*,
     );
 
     return app;

@@ -26,9 +26,16 @@ void odyssey_deinit(void);
 /////////////
 //~ App Types
 
+typedef void (*odyssey_runtime_cb)(void*);
+
+typedef  struct {
+    void* userdata;
+    odyssey_runtime_cb event_callback;
+} odyssey_runtime_s;
+
 typedef void* odyssey_app_t;
 
-odyssey_app_t odyssey_app_new();
+odyssey_app_t odyssey_app_new(const odyssey_runtime_s*);
 void odyssey_app_free(odyssey_app_t);
 
 #ifdef __cplusplus
