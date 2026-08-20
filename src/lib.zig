@@ -108,6 +108,12 @@ fn app_new(runtime: *const Runtime) !*App {
     return app;
 }
 
+pub export fn odyssey_app_run(app: *App) void {
+    app.submitTick();
+
+    app.run(.until_done);
+}
+
 pub export fn odyssey_app_free(app: *App) void {
     app.deinit();
     state.gpa.destroy(app);
