@@ -16,13 +16,18 @@ extension Odyssey {
             }
         }
 
-        init() {
-            guard let app = odyssey_app_new() else {
+        init(runtime: inout odyssey_runtime_s) {
+            guard let app = odyssey_app_new(&runtime) else {
                 logger.critical("odyssey_app_new failed")
                 return
             }
 
             self.app = app
+        }
+        
+        func run() {
+            guard let app = self.app else {return}
+            odyssey_app_run(app)
         }
 
         deinit {

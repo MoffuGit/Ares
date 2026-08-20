@@ -36,6 +36,7 @@ typedef  struct {
 typedef void* odyssey_app_t;
 
 odyssey_app_t odyssey_app_new(const odyssey_runtime_s*);
+void odyssey_app_run(odyssey_app_t);
 void odyssey_app_free(odyssey_app_t);
 
 #ifdef __cplusplus
