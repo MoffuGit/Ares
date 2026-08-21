@@ -1,6 +1,4 @@
 const c = @import("c");
-const root = @import("root.zig");
-
 pub const Flags = c.RGFW_windowFlags;
 pub const WindowNoBorder = c.RGFW_windowNoBorder;
 pub const WindowNoResize = c.RGFW_windowNoResize;
@@ -22,22 +20,24 @@ pub const WindowCaptureMouse = c.RGFW_windowCaptureMouse;
 pub const WindowOpenGL = c.RGFW_windowOpenGL;
 pub const WindowEGL = c.RGFW_windowEGL;
 
+const root = @import("root.zig");
+
 pub const Window = @This();
 
-handle: *c.struct_RGFW_window,
+raw: *c.struct_RGFW_window,
 
 pub fn init(self: *Window, name: [:0]const u8, x: i32, y: i32, w: i32, h: i32, flags: Flags) !void {
     const handle = c.RGFW_createWindow(name, x, y, w, h, flags) orelse return error.CreateWindowError;
 
     self.* = .{
-        .handle = handle,
+        .raw = handle,
     };
 }
 
-pub fn shouldClose(self: *Window) bool {
-    return c.RGFW_window_shouldClose(self.handle) == root.RGFWTrue;
+pub fn deinit(self: *Window) void {
+    c.RGFW_window_close(self.raw);
 }
 
-pub fn deinit(self: *Window) void {
-    c.RGFW_window_close(self.handle);
+pub fn shouldClose(self: *Window) bool {
+    return c.RGFW_window_shouldClose(self.raw) == root.RGFWTrue;
 }

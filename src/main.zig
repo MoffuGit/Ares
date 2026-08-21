@@ -10,14 +10,6 @@ pub fn main(init: std.process.Init) !void {
     try app.init(gpa, io, .{});
     defer app.deinit();
 
-    try rgfw.init("example", 0);
-    defer rgfw.deinit();
-
-    var window: rgfw.Window = undefined;
-    try window.init("a window", 0, 0, 800, 600, Window.WindowCenter | Window.WindowNoResize);
-    defer window.deinit();
-
-    while (!window.shouldClose()) {
-        rgfw.pollEvents();
-    }
+    app.setTimer();
+    app.run(.until_done);
 }

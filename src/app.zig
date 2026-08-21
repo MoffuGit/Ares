@@ -7,6 +7,8 @@ const Io = std.Io;
 const assert = std.debug.assert;
 const heap = std.heap;
 
+const rgfw = @import("rgfw");
+
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const constants = @import("constants.zig");
@@ -52,14 +54,21 @@ receivers: Receivers,
 observers: Observers,
 chunks: ChunkAllocator,
 scheduler: Scheduler,
+window: rgfw.Window,
 
 loop: Loop,
+tick_h: Completion,
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
 const Options = struct {};
 
 pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
+    try rgfw.init("Odyssey", 0);
+    errdefer rgfw.deinit();
+
     self.* = .{
+        .window = undefined,
+        .tick_h = .noop,
         .io = io,
         .notifications = undefined,
         .entities = undefined,
@@ -94,15 +103,37 @@ pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
 
     try self.loop.init(&self.scheduler, self.io);
     errdefer self.loop.deinit();
+
+    try self.window.init("Odyssey", 0, 0, 800, 600, rgfw.Window.WindowCenter | rgfw.Window.WindowFocus);
 }
 
 pub fn deinit(self: *App) void {
+    self.window.deinit();
     self.run(.until_done);
     self.flush();
     self.scheduler.deinit();
     self.receivers.deinit();
     self.arena.deinit();
     self.loop.deinit();
+    rgfw.deinit();
+}
+
+pub fn setTimer(self: *App) void {
+    self.loop.timer(&self.tick_h, tick, 16);
+}
+
+pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
+    res catch loop.stop();
+    const self: *App = @fieldParentPtr("tick_h", completion);
+
+    if (self.window.shouldClose()) loop.stop();
+
+    var event: rgfw.Event = undefined;
+    while (rgfw.checkEvent(&event)) {}
+
+    self.flush();
+
+    return true;
 }
 
 pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !*T {
