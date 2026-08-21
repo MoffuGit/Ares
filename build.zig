@@ -17,6 +17,21 @@ pub fn build(b: *std.Build) void {
     });
     exe_tests.step.dependOn(clone_chromium);
     b.step("test", "Run tests").dependOn(&b.addRunArtifact(exe_tests).step);
+
+    const exe = b.addExecutable(.{
+        .name = "odyssey",
+        .root_module = rootModule(b, target, optimize, "src/main.zig"),
+    });
+
+    const run_cmd = b.addRunArtifact(exe);
+    run_cmd.step.dependOn(b.getInstallStep());
+
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
+
+    const run_step = b.step("run", "Run the app");
+    run_step.dependOn(&run_cmd.step);
 }
 
 fn rootModule(
@@ -35,6 +50,23 @@ fn rootModule(
         .optimize = optimize,
     });
 
+    const translate_c = b.addTranslateC(.{
+        .optimize = optimize,
+        .target = target,
+        .root_source_file = b.path("lib/RGFW.h"),
+    });
+
+    const c_mod = translate_c.createModule();
+
+    c_mod.addCSourceFile(.{
+        .file = b.path("lib/RGFW.c"),
+    });
+    c_mod.linkFramework("Cocoa", .{});
+    c_mod.linkFramework("CoreVideo", .{});
+    c_mod.linkFramework("IOKit", .{});
+    c_mod.addCMacro("RGFW_MACOS", "");
+    c_mod.addIncludePath(b.path("lib"));
+
     const mod = b.createModule(.{
         .root_source_file = b.path(root_source),
         .target = target,
@@ -48,15 +80,16 @@ fn rootModule(
             }).module("zlob_core") },
             .{ .name = "zqlite", .module = zqlite.module("zqlite") },
             .{ .name = "objc", .module = objc.module("objc") },
+            .{ .name = "c", .module = c_mod },
         },
     });
+
     const default_sqlite3_build = [_][]const u8{"-std=c99"};
 
     mod.addCSourceFile(.{
         .file = b.path("lib/sqlite3.c"),
         .flags = &default_sqlite3_build,
     });
-    mod.addIncludePath(b.path("lib"));
 
     addTestOptions(mod, b);
 

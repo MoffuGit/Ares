@@ -52,29 +52,18 @@ receivers: Receivers,
 observers: Observers,
 chunks: ChunkAllocator,
 scheduler: Scheduler,
-runtime: Runtime,
 
 loop: Loop,
 tick_h: Completion,
 
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
-pub const Runtime = extern struct {
-    fn noop(_: ?*anyopaque) callconv(.c) void {}
+const Options = struct {};
 
-    userdata: ?*anyopaque = null,
-    event_callback: *const fn (?*anyopaque) callconv(.c) void = noop,
-
-    pub fn flush(self: *Runtime) void {
-        self.event_callback(self.userdata);
-    }
-};
-
-pub fn init(self: *App, gpa: Allocator, io: Io, runtime: Runtime) !void {
+pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     self.* = .{
         .io = io,
         .tick_h = .noop,
-        .runtime = runtime,
         .notifications = undefined,
         .entities = undefined,
         .observers = undefined,
@@ -131,7 +120,6 @@ fn tick(c: *Completion, loop: *Loop, res: anyerror!void) bool {
 
     const self: *App = @fieldParentPtr("tick_h", c);
 
-    self.runtime.flush();
     self.flush();
 
     return true;
