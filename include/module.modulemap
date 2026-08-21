@@ -1,4 +1,0 @@
-module OdysseyKit {
-    umbrella header "odyssey.h"
-    export *
-}

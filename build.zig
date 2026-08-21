@@ -1,6 +1,4 @@
 const std = @import("std");
-const XCFrameworkStep = @import("build/XCFrameworkStep.zig");
-const LibtoolStep = @import("build/LibtoolStep.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -19,74 +17,6 @@ pub fn build(b: *std.Build) void {
     });
     exe_tests.step.dependOn(clone_chromium);
     b.step("test", "Run tests").dependOn(&b.addRunArtifact(exe_tests).step);
-
-    const mod = rootModule(
-        b,
-        target,
-        optimize,
-        "src/lib.zig",
-    );
-
-    // if (b.lazyDependency("macos", .{
-    //     .target = target,
-    //     .optimize = optimize,
-    // })) |macos_dep| {
-    //     mod.addImport(
-    //         "macos",
-    //         macos_dep.module("macos"),
-    //     );
-    //     mod.linkLibrary(
-    //         macos_dep.artifact("macos"),
-    //     );
-    // }
-
-    const lib = b.addLibrary(.{
-        .name = "odyssey",
-        .root_module = mod,
-    });
-
-    const lib_install = b.addInstallArtifact(lib, .{});
-    const lib_step = b.step("lib", "Compile and Install XCFramework Odyssey Kit");
-
-    if (lib_install.emitted_bin) |lazy_path| {
-        var libs: std.ArrayList(std.Build.LazyPath) = .empty;
-        libs.append(b.allocator, lazy_path) catch {
-            @panic("We cannot append the lib");
-        };
-
-        const libtool = LibtoolStep.create(
-            b,
-            .{
-                .name = "odyssey",
-                .out_name = "libodyssey-aarch64-bundle.a",
-                .sources = libs.items,
-                .extract_objects = true,
-            },
-        );
-
-        libtool.step.dependOn(&lib_install.step);
-
-        const xcframework = XCFrameworkStep.create(
-            b,
-            .{
-                .name = "OdysseyKit",
-                .libraries = &.{
-                    XCFrameworkStep.Library{
-                        .library = libtool.output,
-                        .headers = .{ .cwd_relative = "include" },
-                        .dsym = null,
-                    },
-                },
-                .out_path = "macos/OdysseyKit.xcframework",
-            },
-        );
-
-        xcframework.step.dependOn(libtool.step);
-
-        lib_step.dependOn(xcframework.step);
-    }
-
-    lib_step.dependOn(&lib_install.step);
 }
 
 fn rootModule(
