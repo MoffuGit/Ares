@@ -50,22 +50,10 @@ fn rootModule(
         .optimize = optimize,
     });
 
-    const translate_c = b.addTranslateC(.{
-        .optimize = optimize,
+    const rgfw = b.dependency("rgfw", .{
         .target = target,
-        .root_source_file = b.path("lib/RGFW.h"),
+        .optimize = optimize,
     });
-
-    const c_mod = translate_c.createModule();
-
-    c_mod.addCSourceFile(.{
-        .file = b.path("lib/RGFW.c"),
-    });
-    c_mod.linkFramework("Cocoa", .{});
-    c_mod.linkFramework("CoreVideo", .{});
-    c_mod.linkFramework("IOKit", .{});
-    c_mod.addCMacro("RGFW_MACOS", "");
-    c_mod.addIncludePath(b.path("lib"));
 
     const mod = b.createModule(.{
         .root_source_file = b.path(root_source),
@@ -80,7 +68,7 @@ fn rootModule(
             }).module("zlob_core") },
             .{ .name = "zqlite", .module = zqlite.module("zqlite") },
             .{ .name = "objc", .module = objc.module("objc") },
-            .{ .name = "c", .module = c_mod },
+            .{ .name = "rgfw", .module = rgfw.module("rgfw") },
         },
     });
 

@@ -1,6 +1,7 @@
 const std = @import("std");
 const App = @import("app.zig");
-const c = @import("c");
+const rgfw = @import("rgfw");
+const c = rgfw.c;
 
 pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
