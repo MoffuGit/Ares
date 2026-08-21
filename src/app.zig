@@ -9,6 +9,7 @@ const heap = std.heap;
 
 const rgfw = @import("rgfw");
 
+const Window = @import("window.zig").Window;
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const constants = @import("constants.zig");
@@ -54,7 +55,7 @@ receivers: Receivers,
 observers: Observers,
 chunks: ChunkAllocator,
 scheduler: Scheduler,
-window: rgfw.Window,
+window: Window,
 
 loop: Loop,
 tick_h: Completion,
@@ -63,9 +64,6 @@ notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 const Options = struct {};
 
 pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
-    try rgfw.init("Odyssey", 0);
-    errdefer rgfw.deinit();
-
     self.* = .{
         .window = undefined,
         .tick_h = .noop,
@@ -115,10 +113,9 @@ pub fn deinit(self: *App) void {
     self.receivers.deinit();
     self.arena.deinit();
     self.loop.deinit();
-    rgfw.deinit();
 }
 
-pub fn setTimer(self: *App) void {
+pub fn setTickTimer(self: *App) void {
     self.loop.timer(&self.tick_h, tick, 16);
 }
 
