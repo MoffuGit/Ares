@@ -6,10 +6,10 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const assert = std.debug.assert;
 const heap = std.heap;
-const builtin = @import("builtin");
 
 const rgfw = @import("rgfw");
 
+const Window = @import("window.zig").Window;
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const constants = @import("constants.zig");
@@ -32,7 +32,6 @@ const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
 
-const Window = if (builtin.is_test) TestWindow else rgfw.Window;
 const CHUNK_SIZES: []const chunk_pool.PoolConfig = &.{
     .{ 50, 128 },
     .{ 50, 256 },
@@ -463,22 +462,6 @@ pub fn timer(self: *App, c: *Completion, function: anytype, ms: u64) void {
 pub fn cancel(self: *App, completion: *Completion, function: anytype, target: *Completion) void {
     self.loop.cancel(completion, function, target);
 }
-
-const TestWindow = struct {
-    pub fn init(self: *@This(), name: [:0]const u8, x: i32, y: i32, w: i32, h: i32, flags: rgfw.Window.Flags) !void {
-        _ = self;
-        _ = name;
-        _ = x;
-        _ = y;
-        _ = w;
-        _ = h;
-        _ = flags;
-    }
-
-    pub fn deinit(self: *@This()) void {
-        _ = self;
-    }
-};
 
 const TestStruct = struct {
     index: usize,
