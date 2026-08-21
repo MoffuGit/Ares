@@ -54,8 +54,6 @@ chunks: ChunkAllocator,
 scheduler: Scheduler,
 
 loop: Loop,
-tick_h: Completion,
-
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
 const Options = struct {};
@@ -63,7 +61,6 @@ const Options = struct {};
 pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     self.* = .{
         .io = io,
-        .tick_h = .noop,
         .notifications = undefined,
         .entities = undefined,
         .observers = undefined,
@@ -106,23 +103,6 @@ pub fn deinit(self: *App) void {
     self.receivers.deinit();
     self.arena.deinit();
     self.loop.deinit();
-}
-
-pub fn submitTick(self: *App) void {
-    self.loop.timer(&self.tick_h, tick, 16);
-}
-
-fn tick(c: *Completion, loop: *Loop, res: anyerror!void) bool {
-    res catch {
-        loop.stop();
-        return false;
-    };
-
-    const self: *App = @fieldParentPtr("tick_h", c);
-
-    self.flush();
-
-    return true;
 }
 
 pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !*T {
