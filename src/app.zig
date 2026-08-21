@@ -58,6 +58,9 @@ chunks: ChunkAllocator,
 scheduler: Scheduler,
 window: Window,
 
+flushing: bool,
+pending_updates: u8,
+
 loop: Loop,
 tick_h: Completion,
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
@@ -66,6 +69,8 @@ const Options = struct {};
 
 pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     self.* = .{
+        .flushing = false,
+        .pending_updates = 0,
         .window = undefined,
         .tick_h = .noop,
         .io = io,
@@ -127,7 +132,6 @@ pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
     if (self.window.shouldClose()) loop.stop();
 
     rgfw.pollEvents();
-    self.flush();
 
     return true;
 }
@@ -140,11 +144,23 @@ pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !*T {
     const id = self.entities.insert(ptr);
     errdefer self.entities.recycle(id);
 
+    self.update();
+    defer self.endUpdate();
+
     const any: AnyEntity = .init(&self.entities, id, TypeInfo.init(T));
 
     try @call(.always_inline, function, .{ ptr, any, self } ++ args);
 
     return ptr;
+}
+
+pub fn update(self: *App) void {
+    self.pending_updates += 1;
+}
+
+pub fn endUpdate(self: *App) void {
+    self.pending_updates -= 1;
+    if (self.pending_updates == 0) self.flush();
 }
 
 pub fn run(self: *App, mode: Loop.RunMode) void {
@@ -156,6 +172,11 @@ pub fn stop(self: *App) void {
 }
 
 pub fn flush(self: *App) void {
+    if (self.flushing) return;
+
+    self.flushing = true;
+    defer self.flushing = false;
+
     self.flushDeferred();
     self.destroyDroppedEntities();
     self.flushNotifications();
