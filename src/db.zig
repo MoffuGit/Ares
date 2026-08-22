@@ -7,7 +7,6 @@ const zqlite = @import("zqlite");
 const constanst = @import("constants.zig");
 const DB_NAME = constanst.DB_NAME;
 const global = @import("global.zig");
-const os = @import("os.zig");
 
 const log = std.log.scoped(.database);
 
@@ -21,28 +20,8 @@ fn onFirstConnection(_conn: zqlite.Conn, _: ?*anyopaque) !void {
     try _conn.execNoArgs(WORKSPACE_SCHEMA);
 }
 
-pub fn init(gpa: Allocator) !void {
-    const path = os.appSupportPath(gpa, DB_NAME) catch |err| {
-        log.err("error resolving db path: {}", .{err});
-        return err;
-    };
-    defer gpa.free(path);
-
-    try std.Io.Dir.cwd().createDirPath(global.state.threaded.io(), std.fs.path.dirname(path).?);
-
-    const slice = try gpa.dupeSentinel(u8, path, 0);
-    defer gpa.free(slice);
-
-    log.debug("DB PATH={s}", .{slice});
-
-    pool = try zqlite.Pool.init(gpa, .{
-        .size = 100,
-        .flags = zqlite.OpenFlags.Create |
-            zqlite.OpenFlags.ReadWrite |
-            zqlite.OpenFlags.EXResCode,
-        .path = slice,
-        .on_first_connection = onFirstConnection,
-    });
+pub fn init(_: Allocator) !void {
+    unreachable;
 }
 
 pub fn deinit() void {
