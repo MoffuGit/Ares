@@ -72,6 +72,8 @@ fn rootModule(
         },
     });
 
+    mod.linkFramework("Metal", .{});
+
     const default_sqlite3_build = [_][]const u8{"-std=c99"};
 
     mod.addCSourceFile(.{

@@ -34,6 +34,10 @@ pub fn init(self: *Window, name: [:0]const u8, x: i32, y: i32, w: i32, h: i32, f
     };
 }
 
+pub fn NSWindow(self: *Window) ?*anyopaque {
+    return c.RGFW_window_getWindow_OSX(self.raw);
+}
+
 pub fn deinit(self: *Window) void {
     c.RGFW_window_close(self.raw);
 }

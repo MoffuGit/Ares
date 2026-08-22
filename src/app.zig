@@ -9,6 +9,7 @@ const heap = std.heap;
 
 const rgfw = @import("rgfw");
 
+const Renderer = @import("renderer.zig").Renderer;
 const Window = @import("window.zig").Window;
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
@@ -56,6 +57,7 @@ observers: Observers,
 chunks: ChunkAllocator,
 scheduler: Scheduler,
 window: Window,
+renderer: Renderer,
 
 flushing: bool,
 pending_updates: u8,
@@ -68,6 +70,7 @@ const Options = struct {};
 
 pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     self.* = .{
+        .renderer = undefined,
         .flushing = false,
         .pending_updates = 0,
         .window = undefined,
@@ -108,9 +111,13 @@ pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     errdefer self.loop.deinit();
 
     try self.window.init("Odyssey", 0, 0, 800, 600, rgfw.Window.WindowCenter | rgfw.Window.WindowFocus);
+    errdefer self.window.deinit();
+
+    try self.renderer.init(&self.window);
 }
 
 pub fn deinit(self: *App) void {
+    self.renderer.deinit();
     self.window.deinit();
     self.run(.until_done);
     self.flush();
