@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) void {
         .sources = &.{b.path("src/shader/shader.metal")},
     });
 
-    root_module.addAnonymousImport("ares_metallib", .{
+    root_module.addAnonymousImport("odyssey_metallib", .{
         .root_source_file = metallib.?.output,
     });
 

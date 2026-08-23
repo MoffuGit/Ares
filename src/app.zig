@@ -113,7 +113,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     try self.window.init("Odyssey", 0, 0, 800, 600, rgfw.Window.WindowCenter | rgfw.Window.WindowFocus);
     errdefer self.window.deinit();
 
-    try self.renderer.init(&self.window);
+    try self.renderer.init(&self.window, io);
 }
 
 pub fn deinit(self: *App) void {

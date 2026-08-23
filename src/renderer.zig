@@ -1,9 +1,11 @@
 const builtin = @import("builtin");
+const Io = std.Io;
 const Window = @import("window.zig").Window;
 const objc = @import("objc");
 const std = @import("std");
 const assert = std.debug.assert;
 const c = @import("c");
+const macos = @import("macos");
 
 //https://developer.apple.com/documentation/coregraphics/cgdirectdisplaycopycurrentmetaldevice(_:)?language=objc
 extern "c" fn CGDirectDisplayCopyCurrentMetalDevice(c_uint) ?*anyopaque;
@@ -154,8 +156,9 @@ pub const MTLPixelFormat = enum(c_ulong) {
 pub const Renderer = if (builtin.is_test) NoopRenderer else struct {
     device: objc.Object,
     queue: objc.Object,
+    library: objc.Object,
 
-    pub fn init(self: *@This(), window: *Window) !void {
+    pub fn init(self: *@This(), window: *Window, io: Io) !void {
         const win = window.NSWindow() orelse return error.MissingNSWindow;
         const NSWindow = objc.Object.fromId(win);
         const NSScreen = NSWindow.getProperty(objc.Object, "screen");
@@ -181,22 +184,61 @@ pub const Renderer = if (builtin.is_test) NoopRenderer else struct {
         const queue = device.msgSend(objc.Object, objc.sel("newCommandQueue"), .{});
         errdefer queue.release();
 
+        const Library = try initLibrary(device, io);
+
         self.* = .{
             .device = device,
             .queue = queue,
+            .library = Library,
         };
     }
 
     pub fn deinit(self: *@This()) void {
         self.queue.release();
+        self.library.release();
     }
 };
 
-const Device = struct {
-    obj: objc.Object,
-};
+/// Initialize the MTLLibrary. A MTLLibrary is a collection of shaders.
+fn initLibrary(device: objc.Object, io: Io) !objc.Object {
+    const start = std.Io.Timestamp.now(io, .real);
+
+    const data = try macos.dispatch.Data.create(
+        @embedFile("odyssey_metallib"),
+        macos.dispatch.queue.getMain(),
+        macos.dispatch.Data.DESTRUCTOR_DEFAULT,
+    );
+    defer data.release();
+
+    var err: ?*anyopaque = null;
+    const library = device.msgSend(
+        objc.Object,
+        objc.sel("newLibraryWithData:error:"),
+        .{
+            data,
+            &err,
+        },
+    );
+    try checkError(err);
+
+    const end = std.Io.Timestamp.untilNow(start, io, .real);
+    std.log.debug("shader library loaded time={}us", .{end.toNanoseconds()});
+
+    return library;
+}
 
 pub const NoopRenderer = struct {
-    pub fn init(_: *@This(), _: *Window) !void {}
+    pub fn init(_: *@This(), _: *Window, _: Io) !void {}
     pub fn deinit(_: *@This()) void {}
 };
+
+fn checkError(err_: ?*anyopaque) !void {
+    const nserr = objc.Object.fromId(err_ orelse return);
+    const str = @as(
+        *macos.foundation.String,
+        @ptrCast(nserr.getProperty(?*anyopaque, "localizedDescription").?),
+    );
+
+    std.log.err("metal error={s}", .{str.cstringPtr(.ascii).?});
+    return error.MetalFailed;
+}
