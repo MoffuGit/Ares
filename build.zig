@@ -1,4 +1,5 @@
 const std = @import("std");
+const MetallibStep = @import("build/MetalLibStep.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -18,9 +19,20 @@ pub fn build(b: *std.Build) void {
     exe_tests.step.dependOn(clone_chromium);
     b.step("test", "Run tests").dependOn(&b.addRunArtifact(exe_tests).step);
 
+    const root_module = rootModule(b, target, optimize, "src/main.zig");
+
+    const metallib = MetallibStep.create(b, .{
+        .name = "Odyssey",
+        .sources = &.{b.path("src/shader/shader.metal")},
+    });
+
+    root_module.addAnonymousImport("ares_metallib", .{
+        .root_source_file = metallib.?.output,
+    });
+
     const exe = b.addExecutable(.{
         .name = "odyssey",
-        .root_module = rootModule(b, target, optimize, "src/main.zig"),
+        .root_module = root_module,
     });
 
     const run_cmd = b.addRunArtifact(exe);
@@ -31,6 +43,7 @@ pub fn build(b: *std.Build) void {
     }
 
     const run_step = b.step("run", "Run the app");
+    run_step.dependOn(metallib.?.step);
     run_step.dependOn(&run_cmd.step);
 }
 
@@ -55,6 +68,11 @@ fn rootModule(
         .optimize = optimize,
     });
 
+    const macos = b.dependency("macos", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const mod = b.createModule(.{
         .root_source_file = b.path(root_source),
         .target = target,
@@ -69,6 +87,7 @@ fn rootModule(
             .{ .name = "zqlite", .module = zqlite.module("zqlite") },
             .{ .name = "objc", .module = objc.module("objc") },
             .{ .name = "rgfw", .module = rgfw.module("rgfw") },
+            .{ .name = "macos", .module = macos.module("macos") },
         },
     });
 

@@ -38,6 +38,10 @@ pub fn NSWindow(self: *Window) ?*anyopaque {
     return c.RGFW_window_getWindow_OSX(self.raw);
 }
 
+pub fn NSView(self: *Window) ?*anyopaque {
+    return c.RGFW_window_getView_OSX(self.raw);
+}
+
 pub fn deinit(self: *Window) void {
     c.RGFW_window_close(self.raw);
 }

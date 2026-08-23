@@ -33,6 +33,8 @@
     // internet connectivity.
     .dependencies = .{
         .rgfw = .{ .path = "./zig-pkg/rgfw" },
+        .macos = .{ .path = "./zig-pkg/macos" },
+        .apple_sdk = .{ .path = "./zig-pkg/apple-sdk" },
         .zqlite = .{
             .url = "git+https://github.com/karlseguin/zqlite.zig?ref=master#5ac4cabe95a6d7faa7baf0da8057a8e6e8a227a1",
             .hash = "zqlite-0.0.1-RWLaY64xnAAxsD2YNT8QqPMJUuaFv2GOzFRR4aGypJv3",
