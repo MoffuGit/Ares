@@ -42,6 +42,10 @@ pub fn NSView(self: *Window) ?*anyopaque {
     return c.RGFW_window_getView_OSX(self.raw);
 }
 
+pub fn sizeInPixels(self: *Window, w: *i32, h: *i32) bool {
+    return c.RGFW_window_getSizeInPixels(self.raw, w, h) == root.RGFWTrue;
+}
+
 pub fn deinit(self: *Window) void {
     c.RGFW_window_close(self.raw);
 }

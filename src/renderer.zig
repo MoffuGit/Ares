@@ -9,11 +9,13 @@ const macos = @import("macos");
 const mtl = @import("api.zig");
 const Pipeline = @import("pipeline.zig");
 const Shaders = @import("shaders.zig").Shaders;
+const RenderPass = @import("render_pass.zig");
 
 //https://developer.apple.com/documentation/coregraphics/cgdirectdisplaycopycurrentmetaldevice(_:)?language=objc
 extern "c" fn CGDirectDisplayCopyCurrentMetalDevice(c_uint) ?*anyopaque;
 
 pub const Renderer = if (builtin.is_test) NoopRenderer else struct {
+    layer: objc.Object,
     device: objc.Object,
     queue: objc.Object,
     shaders: Shaders,
@@ -47,6 +49,7 @@ pub const Renderer = if (builtin.is_test) NoopRenderer else struct {
         const shaders = try Shaders.init(device, .bgra8unorm, io);
 
         self.* = .{
+            .layer = layer,
             .device = device,
             .queue = queue,
             .shaders = shaders,
@@ -58,8 +61,33 @@ pub const Renderer = if (builtin.is_test) NoopRenderer else struct {
         self.shaders.deinit();
     }
 
-    pub fn draw(self: *@This()) void {
-        _ = self;
+    pub fn draw(self: *@This(), window: *Window) void {
+        var width: i32, var height: i32 = .{ 0, 0 };
+        if (!window.sizeInPixels(&width, &height)) unreachable;
+
+        self.layer.msgSend(void, "drawableSize", .{ width, height });
+        const drawable = self.layer.msgSend(objc.Object, "nextDrawable", .{});
+        const texture = drawable.msgSend(objc.Object, "texture", .{});
+
+        const buffer = self.queue.msgSend(
+            objc.Object,
+            objc.sel("commandBuffer"),
+            .{},
+        );
+
+        const pass = RenderPass.begin(.{
+            .command_buffer = buffer,
+            .attachments = &.{
+                .{
+                    .texture = texture,
+                    .clear_color = .{ 1.0, 0.0, 0.0, 1.0 },
+                },
+            },
+        });
+
+        pass.complete();
+        buffer.msgSend(void, "presentDrawable:", .{drawable});
+        buffer.msgSend(void, objc.sel("commit"), .{});
     }
 };
 

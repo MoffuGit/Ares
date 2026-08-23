@@ -139,7 +139,7 @@ pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
 
     rgfw.pollEvents();
 
-    self.renderer.draw();
+    self.renderer.draw(&self.window);
 
     return true;
 }
