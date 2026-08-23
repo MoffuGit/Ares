@@ -9,14 +9,21 @@ const Pipeline = @import("Pipeline.zig");
 
 const log = std.log.scoped(.metal);
 
+pub const VertexInput = extern struct {
+    position: [3]f32 align(16), // Corresponds to float3 position [[attribute(0)]]
+    color: [4]f32 align(16), // Corresponds to float4 color [[attribute(1)]]
+
+};
+
 const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
     &.{
         .{
-            "simple",
+            "bg_color",
             .{
-                .vertex_fn = "v_simple",
-                .fragment_fn = "f_simple",
+                .vertex_fn = "vertexShader",
+                .fragment_fn = "fragmentShader",
                 .blending_enabled = false,
+                .vertex_attributes = VertexInput,
             },
         },
     };

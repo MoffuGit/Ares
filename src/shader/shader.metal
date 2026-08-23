@@ -2,17 +2,23 @@
 
 using namespace metal;
 
-vertex float4 v_simple(
-    constant float4* in  [[buffer(0)]],
-    uint             vid [[vertex_id]]
-)
-{
-    return in[vid];
+struct VertexInput {
+    float3 position [[attribute(0)]];
+    float4 color [[attribute(1)]];
+};
+
+struct VertexOutput {
+    float4 position [[position]];
+    float4 color;
+};
+
+vertex VertexOutput vertexShader(VertexInput in [[stage_in]]) {
+    VertexOutput out;
+    out.position = float4(in.position, 1.0f);
+    out.color = in.color;
+    return out;
 }
 
-fragment float4 f_simple(
-    float4 in [[stage_in]]
-)
-{
-    return float4(1, 0, 0, 1);
+fragment float4 fragmentShader(VertexOutput in [[stage_in]]) {
+    return in.color;
 }

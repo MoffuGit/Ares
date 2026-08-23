@@ -369,3 +369,32 @@ pub extern "c" fn MTLCopyAllDevices() ?*anyopaque;
 
 /// https://developer.apple.com/documentation/metal/1433401-mtlcreatesystemdefaultdevice
 pub extern "c" fn MTLCreateSystemDefaultDevice() ?*anyopaque;
+
+pub const MTLResourceOptions = packed struct(c_ulong) {
+    /// https://developer.apple.com/documentation/metal/mtlcpucachemode?language=objc
+    cpu_cache_mode: CPUCacheMode = .default,
+    /// https://developer.apple.com/documentation/metal/mtlstoragemode?language=objc
+    storage_mode: StorageMode,
+    /// https://developer.apple.com/documentation/metal/mtlhazardtrackingmode?language=objc
+    hazard_tracking_mode: HazardTrackingMode = .default,
+
+    _pad: @Int(.unsigned, @bitSizeOf(c_ulong) - 10) = 0,
+
+    pub const CPUCacheMode = enum(u4) {
+        default = 0,
+        write_combined = 1,
+    };
+
+    pub const StorageMode = enum(u4) {
+        shared = 0,
+        managed = 1,
+        private = 2,
+        memoryless = 3,
+    };
+
+    pub const HazardTrackingMode = enum(u2) {
+        default = 0,
+        untracked = 1,
+        tracked = 2,
+    };
+};

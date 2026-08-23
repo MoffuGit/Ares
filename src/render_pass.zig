@@ -183,12 +183,12 @@ pub fn step(self: *const Self, s: Step) void {
         self.encoder.msgSend(
             void,
             objc.sel("setVertexTexture:atIndex:"),
-            .{ tex.texture.value, @as(c_ulong, i) },
+            .{ tex.value, @as(c_ulong, i) },
         );
         self.encoder.msgSend(
             void,
             objc.sel("setFragmentTexture:atIndex:"),
-            .{ tex.texture.value, @as(c_ulong, i) },
+            .{ tex.value, @as(c_ulong, i) },
         );
     };
 

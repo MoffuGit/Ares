@@ -128,7 +128,7 @@ pub fn deinit(self: *App) void {
 }
 
 pub fn setTickTimer(self: *App) void {
-    self.loop.timer(&self.tick_h, tick, 16);
+    self.loop.timer(&self.tick_h, tick, 8);
 }
 
 pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
