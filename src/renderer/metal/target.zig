@@ -1,8 +1,9 @@
 const objc = @import("objc");
-const c = @import("c.zig");
 
 const Metal = @import("../metal.zig");
 const Handler = Metal.Handler;
+const c = @import("c.zig");
+
 pub const Target = @This();
 
 drawable: objc.Object,
@@ -21,5 +22,4 @@ pub fn present(self: *Target) void {
 
 pub fn deinit(self: *Target) void {
     self.drawable.release();
-    self.texture.release();
 }

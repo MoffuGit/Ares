@@ -54,6 +54,9 @@ pub const Renderer = renderer: {
             var frame_state = state.swap_chain.nextFrame();
             frame_state.target.init(state.handler);
 
+            self.api.start();
+            defer self.api.end();
+
             var frame = self.api.beginFrame(state, &frame_state.target);
             var pass = frame.renderPass(&.{
                 .{

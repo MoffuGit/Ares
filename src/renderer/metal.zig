@@ -1,12 +1,16 @@
 //LICENSE: [GHOSTTY]
 
+const std = @import("std");
+const assert = std.debug.assert;
+
 const objc = @import("objc");
 const rgfw = @import("rgfw");
 const Window = rgfw.Window;
 
 const Renderer = @import("../renderer.zig").Renderer;
-const c = @import("metal/c.zig");
 const RenderState = Renderer.RenderState;
+const c = @import("metal/c.zig");
+pub const Frame = @import("metal/frame.zig");
 pub const Pipeline = @import("metal/pipeline.zig");
 pub const RenderPass = @import("metal/render_pass.zig");
 const shaders = @import("metal/shaders.zig");
@@ -14,7 +18,6 @@ pub const Shaders = shaders.Shaders;
 pub const VertexInput = shaders.VertexInput;
 pub const VertexBuffer = shaders.VertexBuffer;
 pub const Target = @import("metal/target.zig");
-pub const Frame = @import("metal/frame.zig");
 
 pub const Metal = @This();
 
@@ -46,7 +49,7 @@ pub const Handler = struct {
 device: objc.Object,
 queue: objc.Object,
 
-autorelease_pool: *objc.AutoreleasePool,
+autorelease_pool: ?*objc.AutoreleasePool,
 
 pub fn init(self: *Metal) !void {
     var chosen_device: ?objc.Object = null;
@@ -70,8 +73,19 @@ pub fn init(self: *Metal) !void {
     self.* = .{
         .device = device,
         .queue = queue,
-        .autorelease_pool = undefined,
+        .autorelease_pool = null,
     };
+}
+
+pub fn start(self: *Metal) void {
+    assert(self.autorelease_pool == null);
+    self.autorelease_pool = .init();
+}
+
+pub fn end(self: *Metal) void {
+    assert(self.autorelease_pool != null);
+    self.autorelease_pool.?.deinit();
+    self.autorelease_pool = null;
 }
 
 pub fn beginFrame(self: *Metal, state: *RenderState, target: *Target) Frame {

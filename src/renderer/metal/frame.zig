@@ -1,17 +1,19 @@
 //! LICENSE: [GHOSTTY]
 //! Wrapper for handling render passes.
-const Frame = @This();
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+
 const objc = @import("objc");
 
-const c = @import("c.zig");
 const Renderer = @import("../../renderer.zig").Renderer;
 const RenderState = Renderer.RenderState;
 const Metal = @import("../metal.zig");
-const Target = @import("target.zig");
+const c = @import("c.zig");
 const RenderPass = @import("render_pass.zig");
+const Target = @import("target.zig");
+
+const Frame = @This();
 
 const log = std.log.scoped(.metal);
 
