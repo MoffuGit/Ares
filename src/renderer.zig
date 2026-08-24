@@ -46,6 +46,9 @@ pub const Renderer = renderer: {
         }
 
         pub fn render(self: *@This(), window: *Window, state: *RenderState) !void {
+            self.api.start();
+            defer self.api.end();
+
             var width: i32, var height: i32 = .{ 0, 0 };
             assert(window.sizeInPixels(&width, &height));
 
@@ -53,9 +56,6 @@ pub const Renderer = renderer: {
 
             var frame_state = state.swap_chain.nextFrame();
             frame_state.target.init(state.handler);
-
-            self.api.start();
-            defer self.api.end();
 
             var frame = self.api.beginFrame(state, &frame_state.target);
             var pass = frame.renderPass(&.{

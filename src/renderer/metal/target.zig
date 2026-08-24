@@ -10,7 +10,7 @@ drawable: objc.Object,
 texture: objc.Object,
 
 pub fn init(self: *Target, handler: Handler) void {
-    const drawable = handler.layer.msgSend(objc.Object, "nextDrawable", .{});
+    const drawable = handler.layer.msgSend(objc.Object, "nextDrawable", .{}).retain();
     const texture = drawable.msgSend(objc.Object, "texture", .{});
 
     self.* = .{ .drawable = drawable, .texture = texture };
