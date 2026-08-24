@@ -139,7 +139,7 @@ pub fn deinit(self: *App) void {
     self.loop.deinit();
 }
 
-pub fn setMainCompletion(self: *App) void {
+pub fn setMainFn(self: *App) void {
     self.loop.timer(&self.tick_h, tick, 8);
 }
 
