@@ -7,7 +7,7 @@ const Io = std.Io;
 const datastruct = @import("datastruct.zig");
 const slotmap = datastruct.slotmap;
 pub const EntityId = slotmap.Key;
-const typeId = @import("typeId.zig");
+const typeId = @import("type_id.zig");
 const TypeId = typeId.TypeId;
 const TypeInfo = typeId.TypeInfo;
 
