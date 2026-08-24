@@ -1,9 +1,9 @@
 const builtin = @import("builtin");
 const rgfw = @import("rgfw");
 
-pub const Window = if (builtin.is_test) NoopWindow else rgfw.Window;
+pub const Window = if (builtin.is_test) TestWindow else rgfw.Window;
 
-const NoopWindow = struct {
+const TestWindow = struct {
     pub fn init(
         _: *@This(),
         _: [:0]const u8,
