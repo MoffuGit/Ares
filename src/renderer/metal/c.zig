@@ -1,3 +1,4 @@
+//! LICENSE: [GHOSTTY]
 //! This file contains the definitions of the Metal API that we use.
 //!
 //! Because the online Apple developer docs have recently (as of January 2025)
@@ -369,6 +370,9 @@ pub extern "c" fn MTLCopyAllDevices() ?*anyopaque;
 
 /// https://developer.apple.com/documentation/metal/1433401-mtlcreatesystemdefaultdevice
 pub extern "c" fn MTLCreateSystemDefaultDevice() ?*anyopaque;
+
+//https://developer.apple.com/documentation/coregraphics/cgdirectdisplaycopycurrentmetaldevice(_:)?language=objc
+extern "c" fn CGDirectDisplayCopyCurrentMetalDevice(c_uint) ?*anyopaque;
 
 pub const MTLResourceOptions = packed struct(c_ulong) {
     /// https://developer.apple.com/documentation/metal/mtlcpucachemode?language=objc

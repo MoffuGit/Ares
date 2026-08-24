@@ -1,12 +1,13 @@
+//! LICENSE: [GHOSTTY]
 //! Wrapper for handling render pipelines.
-const Self = @This();
+const Pipeline = @This();
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const macos = @import("macos");
 const objc = @import("objc");
 
-const mtl = @import("api.zig");
+const c = @import("c.zig");
 
 const log = std.log.scoped(.metal);
 
@@ -26,14 +27,14 @@ pub const Options = struct {
     fragment_library: objc.Object,
 
     /// Vertex step function
-    step_fn: mtl.MTLVertexStepFunction = .per_vertex,
+    step_fn: c.MTLVertexStepFunction = .per_vertex,
 
     /// Info about the color attachments used by this render pipeline.
     attachments: []const Attachment,
 
     /// Describes a color attachment.
     pub const Attachment = struct {
-        pixel_format: mtl.MTLPixelFormat,
+        pixel_format: c.MTLPixelFormat,
         blending_enabled: bool = true,
     };
 };
@@ -41,7 +42,7 @@ pub const Options = struct {
 /// MTLRenderPipelineState
 state: objc.Object,
 
-pub fn init(comptime VertexAttributes: ?type, opts: Options) !Self {
+pub fn init(comptime VertexAttributes: ?type, opts: Options) !Pipeline {
     // Create our descriptor
     const desc = init: {
         const Class = objc.getClass("MTLRenderPipelineDescriptor").?;
@@ -125,12 +126,12 @@ pub fn init(comptime VertexAttributes: ?type, opts: Options) !Self {
         attachment.setProperty("blendingEnabled", at.blending_enabled);
         // We always use premultiplied alpha blending for now.
         if (at.blending_enabled) {
-            attachment.setProperty("rgbBlendOperation", @intFromEnum(mtl.MTLBlendOperation.add));
-            attachment.setProperty("alphaBlendOperation", @intFromEnum(mtl.MTLBlendOperation.add));
-            attachment.setProperty("sourceRGBBlendFactor", @intFromEnum(mtl.MTLBlendFactor.one));
-            attachment.setProperty("sourceAlphaBlendFactor", @intFromEnum(mtl.MTLBlendFactor.one));
-            attachment.setProperty("destinationRGBBlendFactor", @intFromEnum(mtl.MTLBlendFactor.one_minus_source_alpha));
-            attachment.setProperty("destinationAlphaBlendFactor", @intFromEnum(mtl.MTLBlendFactor.one_minus_source_alpha));
+            attachment.setProperty("rgbBlendOperation", @intFromEnum(c.MTLBlendOperation.add));
+            attachment.setProperty("alphaBlendOperation", @intFromEnum(c.MTLBlendOperation.add));
+            attachment.setProperty("sourceRGBBlendFactor", @intFromEnum(c.MTLBlendFactor.one));
+            attachment.setProperty("sourceAlphaBlendFactor", @intFromEnum(c.MTLBlendFactor.one));
+            attachment.setProperty("destinationRGBBlendFactor", @intFromEnum(c.MTLBlendFactor.one_minus_source_alpha));
+            attachment.setProperty("destinationAlphaBlendFactor", @intFromEnum(c.MTLBlendFactor.one_minus_source_alpha));
         }
     }
 
@@ -147,7 +148,7 @@ pub fn init(comptime VertexAttributes: ?type, opts: Options) !Self {
     return .{ .state = pipeline_state };
 }
 
-pub fn deinit(self: *const Self) void {
+pub fn deinit(self: *const Pipeline) void {
     self.state.release();
 }
 
@@ -163,21 +164,21 @@ fn autoAttribute(T: type, attrs: objc.Object) void {
 
         // Very incomplete list, expand as necessary.
         const format = switch (FT) {
-            [4]u8 => mtl.MTLVertexFormat.uchar4,
-            [2]u16 => mtl.MTLVertexFormat.ushort2,
-            [2]i16 => mtl.MTLVertexFormat.short2,
-            f32 => mtl.MTLVertexFormat.float,
-            [2]f32 => mtl.MTLVertexFormat.float2,
-            [3]f32 => mtl.MTLVertexFormat.float3,
-            [4]f32 => mtl.MTLVertexFormat.float4,
-            i32 => mtl.MTLVertexFormat.int,
-            [2]i32 => mtl.MTLVertexFormat.int2,
-            [4]i32 => mtl.MTLVertexFormat.int2,
-            u32 => mtl.MTLVertexFormat.uint,
-            [2]u32 => mtl.MTLVertexFormat.uint2,
-            [4]u32 => mtl.MTLVertexFormat.uint4,
-            u8 => mtl.MTLVertexFormat.uchar,
-            i8 => mtl.MTLVertexFormat.char,
+            [4]u8 => c.MTLVertexFormat.uchar4,
+            [2]u16 => c.MTLVertexFormat.ushort2,
+            [2]i16 => c.MTLVertexFormat.short2,
+            f32 => c.MTLVertexFormat.float,
+            [2]f32 => c.MTLVertexFormat.float2,
+            [3]f32 => c.MTLVertexFormat.float3,
+            [4]f32 => c.MTLVertexFormat.float4,
+            i32 => c.MTLVertexFormat.int,
+            [2]i32 => c.MTLVertexFormat.int2,
+            [4]i32 => c.MTLVertexFormat.int2,
+            u32 => c.MTLVertexFormat.uint,
+            [2]u32 => c.MTLVertexFormat.uint2,
+            [4]u32 => c.MTLVertexFormat.uint4,
+            u8 => c.MTLVertexFormat.uchar,
+            i8 => c.MTLVertexFormat.char,
             else => comptime unreachable,
         };
 

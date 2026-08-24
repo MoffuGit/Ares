@@ -1,13 +1,13 @@
+//! LICENSE: [GHOSTTY]
 //! Wrapper for handling render passes.
-const Self = @This();
+const RenderPass = @This();
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const objc = @import("objc");
 
-const mtl = @import("api.zig");
-const Pipeline = @import("Pipeline.zig");
-const Sampler = @import("sampler.zig");
+const c = @import("c.zig");
+const Pipeline = @import("pipeline.zig");
 
 const log = std.log.scoped(.metal);
 
@@ -33,14 +33,11 @@ pub const Step = struct {
     /// MTLBuffer
     buffers: []const ?objc.Object = &.{},
     textures: []const ?objc.Object = &.{},
-    /// Set of samplers to use for this step. The index maps to an index
-    /// of a fragment texture, set via setFragmentSamplerState(_:index:).
-    samplers: []const ?Sampler = &.{},
     draw: Draw,
 
     /// Describes the draw call for this step.
     pub const Draw = struct {
-        type: mtl.MTLPrimitiveType,
+        type: c.MTLPrimitiveType,
         vertex_count: usize,
         instance_count: usize = 1,
     };
@@ -52,7 +49,7 @@ encoder: objc.Object,
 /// Begin a render pass.
 pub fn begin(
     opts: Options,
-) Self {
+) RenderPass {
     // Create a pass descriptor
     const desc = desc: {
         const MTLRenderPassDescriptor = objc.getClass("MTLRenderPassDescriptor").?;
@@ -76,7 +73,7 @@ pub fn begin(
             attachment.setProperty(
                 "loadAction",
                 @intFromEnum(@as(
-                    mtl.MTLLoadAction,
+                    c.MTLLoadAction,
                     if (at.clear_color != null)
                         .clear
                     else
@@ -85,16 +82,16 @@ pub fn begin(
             );
             attachment.setProperty(
                 "storeAction",
-                @intFromEnum(mtl.MTLStoreAction.store),
+                @intFromEnum(c.MTLStoreAction.store),
             );
             attachment.setProperty("texture", at.texture);
-            if (at.clear_color) |c| attachment.setProperty(
+            if (at.clear_color) |color| attachment.setProperty(
                 "clearColor",
-                mtl.MTLClearColor{
-                    .red = c[0],
-                    .green = c[1],
-                    .blue = c[2],
-                    .alpha = c[3],
+                c.MTLClearColor{
+                    .red = color[0],
+                    .green = color[1],
+                    .blue = color[2],
+                    .alpha = color[3],
                 },
             );
         }
@@ -113,7 +110,7 @@ pub fn begin(
 }
 
 /// Add a step to this render pass.
-pub fn step(self: *const Self, s: Step) void {
+pub fn step(self: *const RenderPass, s: Step) void {
     if (s.draw.instance_count == 0) return;
 
     // Set pipeline state
@@ -192,15 +189,6 @@ pub fn step(self: *const Self, s: Step) void {
         );
     };
 
-    // Set samplers.
-    for (s.samplers, 0..) |samp, i| if (samp) |sampler| {
-        self.encoder.msgSend(
-            void,
-            objc.sel("setFragmentSamplerState:atIndex:"),
-            .{ sampler.sampler.value, @as(c_ulong, i) },
-        );
-    };
-
     // Draw!
     self.encoder.msgSend(
         void,
@@ -216,6 +204,6 @@ pub fn step(self: *const Self, s: Step) void {
 
 /// Complete this render pass.
 /// This struct can no longer be used after calling this.
-pub fn complete(self: *const Self) void {
+pub fn complete(self: *const RenderPass) void {
     self.encoder.msgSend(void, objc.sel("endEncoding"), .{});
 }

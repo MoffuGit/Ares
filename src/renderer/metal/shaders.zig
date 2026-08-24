@@ -1,13 +1,18 @@
 const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
+
 const macos = @import("macos");
 const objc = @import("objc");
 
-const mtl = @import("api.zig");
+const buffer = @import("buffer.zig");
+const Buffer = buffer.Buffer;
+const c = @import("c.zig");
 const Pipeline = @import("Pipeline.zig");
 
 const log = std.log.scoped(.metal);
+
+pub const VertexBuffer = Buffer(VertexInput);
 
 pub const VertexInput = extern struct {
     position: [3]f32 align(16), // Corresponds to float3 position [[attribute(0)]]
@@ -34,14 +39,14 @@ const PipelineDescription = struct {
     vertex_attributes: ?type = null,
     vertex_fn: []const u8,
     fragment_fn: []const u8,
-    step_fn: mtl.MTLVertexStepFunction = .per_vertex,
+    step_fn: c.MTLVertexStepFunction = .per_vertex,
     blending_enabled: bool,
 
     fn initPipeline(
         self: PipelineDescription,
         device: objc.Object,
         library: objc.Object,
-        pixel_format: mtl.MTLPixelFormat,
+        pixel_format: c.MTLPixelFormat,
     ) !Pipeline {
         return try .init(self.vertex_attributes, .{
             .device = device,
@@ -85,10 +90,11 @@ pub const Shaders = struct {
 
     /// Initialize our shader set.
     pub fn init(
+        self: *Shaders,
         device: objc.Object,
-        pixel_format: mtl.MTLPixelFormat,
+        pixel_format: c.MTLPixelFormat,
         io: Io,
-    ) !Shaders {
+    ) !void {
         const library = try initLibrary(device, io);
         errdefer library.msgSend(void, objc.sel("release"), .{});
 
@@ -111,7 +117,7 @@ pub const Shaders = struct {
             initialized_pipelines += 1;
         }
 
-        return .{
+        self.* = .{
             .library = library,
             .pipelines = pipelines,
         };
@@ -154,90 +160,6 @@ fn initLibrary(device: objc.Object, io: Io) !objc.Object {
     log.debug("shader library loaded time={}us", .{start.untilNow(io, .awake).toMicroseconds()});
 
     return library;
-}
-
-/// Initialize our custom shader pipelines.
-///
-/// The shaders argument is a set of shader source code, not file paths.
-fn initPostPipelines(
-    alloc: Allocator,
-    device: objc.Object,
-    library: objc.Object,
-    shaders: []const [:0]const u8,
-    pixel_format: mtl.MTLPixelFormat,
-) ![]const Pipeline {
-    // If we have no shaders, do nothing.
-    if (shaders.len == 0) return &.{};
-
-    // Keeps track of how many shaders we successfully wrote.
-    var i: usize = 0;
-
-    // Initialize our result set. If any error happens, we undo everything.
-    var pipelines = try alloc.alloc(Pipeline, shaders.len);
-    errdefer {
-        for (pipelines[0..i]) |pipeline| {
-            pipeline.deinit();
-        }
-        alloc.free(pipelines);
-    }
-
-    // Build each shader. Note we don't use "0.." to build our index
-    // because we need to keep track of our length to clean up above.
-    for (shaders) |source| {
-        pipelines[i] = try initPostPipeline(
-            device,
-            library,
-            source,
-            pixel_format,
-        );
-        i += 1;
-    }
-
-    return pipelines;
-}
-
-/// Initialize a single custom shader pipeline from shader source.
-fn initPostPipeline(
-    device: objc.Object,
-    library: objc.Object,
-    data: [:0]const u8,
-    pixel_format: mtl.MTLPixelFormat,
-) !Pipeline {
-    // Create our library which has the shader source
-    const post_library = library: {
-        const source = try macos.foundation.String.createWithBytes(
-            data,
-            .utf8,
-            false,
-        );
-        defer source.release();
-
-        var err: ?*anyopaque = null;
-        const post_library = device.msgSend(
-            objc.Object,
-            objc.sel("newLibraryWithSource:options:error:"),
-            .{ source, @as(?*anyopaque, null), &err },
-        );
-        try checkError(err);
-        errdefer post_library.msgSend(void, objc.sel("release"), .{});
-
-        break :library post_library;
-    };
-    defer post_library.msgSend(void, objc.sel("release"), .{});
-
-    return try Pipeline.init(null, .{
-        .device = device,
-        .vertex_fn = "full_screen_vertex",
-        .fragment_fn = "main0",
-        .vertex_library = library,
-        .fragment_library = post_library,
-        .attachments = &.{
-            .{
-                .pixel_format = pixel_format,
-                .blending_enabled = false,
-            },
-        },
-    });
 }
 
 fn checkError(err_: ?*anyopaque) !void {
