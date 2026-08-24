@@ -9,8 +9,6 @@ const heap = std.heap;
 
 const rgfw = @import("rgfw");
 
-const Renderer = @import("renderer.zig").Renderer;
-const Window = @import("window.zig").Window;
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const constants = @import("constants.zig");
@@ -26,12 +24,14 @@ const EntityStore = ent.EntityStore;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const Waker = Loop.Waker;
+const Renderer = @import("renderer.zig").Renderer;
 const Scheduler = @import("scheduler.zig");
 const subs = @import("subscription.zig");
 const Subscriptions = subs.Subscriptions;
 const typeId = @import("typeId.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
+const Window = @import("window.zig").Window;
 
 const CHUNK_SIZES: []const chunk_pool.PoolConfig = &.{
     .{ 50, 128 },
@@ -110,10 +110,22 @@ pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     try self.loop.init(&self.scheduler, self.io);
     errdefer self.loop.deinit();
 
-    try self.window.init("Odyssey", 0, 0, 800, 600, rgfw.Window.WindowCenter | rgfw.Window.WindowFocus);
-    errdefer self.window.deinit();
+    try self.renderer.init(io);
+    errdefer self.renderer.deinit();
 
-    try self.renderer.init(&self.window, io);
+    try self.window.init(
+        .{
+            .name = "Odyssey",
+            .x = 0,
+            .y = 0,
+            .width = 800,
+            .height = 600,
+            .flags = rgfw.Window.WindowCenter | rgfw.Window.WindowFocus,
+        },
+        &self.renderer,
+        io,
+    );
+    errdefer self.window.deinit();
 }
 
 pub fn deinit(self: *App) void {
@@ -135,12 +147,13 @@ pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
     res catch loop.stop();
     const self: *App = @fieldParentPtr("tick_h", completion);
 
-    if (self.window.shouldClose()) loop.stop();
+    if (self.window.os.shouldClose()) loop.stop();
 
     rgfw.pollEvents();
 
-    //this leak memory, as expected
-    // self.renderer.draw(&self.window);
+    self.renderer.render(&self.window.os, &self.window.state) catch |err| {
+        log.err("Render err={}", .{err});
+    };
 
     return true;
 }

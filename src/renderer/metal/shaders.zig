@@ -8,7 +8,7 @@ const objc = @import("objc");
 const buffer = @import("buffer.zig");
 const Buffer = buffer.Buffer;
 const c = @import("c.zig");
-const Pipeline = @import("Pipeline.zig");
+const Pipeline = @import("pipeline.zig");
 
 const log = std.log.scoped(.metal);
 

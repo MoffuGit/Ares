@@ -8,6 +8,7 @@ const objc = @import("objc");
 
 const c = @import("c.zig");
 const Pipeline = @import("pipeline.zig");
+const Target = @import("target.zig");
 
 const log = std.log.scoped(.metal);
 
@@ -17,12 +18,12 @@ pub const Options = struct {
     command_buffer: objc.Object,
     /// Color attachments for this render pass.
     attachments: []const Attachment,
+};
 
-    /// Describes a color attachment.
-    pub const Attachment = struct {
-        texture: objc.Object,
-        clear_color: ?[4]f64 = null,
-    };
+/// Describes a color attachment.
+pub const Attachment = struct {
+    target: Target,
+    clear_color: ?[4]f64 = null,
 };
 
 /// Describes a step in a render pass.
@@ -63,7 +64,7 @@ pub fn begin(
         const attachments = objc.Object.fromId(
             desc.getProperty(?*anyopaque, "colorAttachments"),
         );
-        for (opts.attachments, 0..) |at, i| {
+        for (opts.attachments, 0..) |attch, i| {
             const attachment = attachments.msgSend(
                 objc.Object,
                 objc.sel("objectAtIndexedSubscript:"),
@@ -74,7 +75,7 @@ pub fn begin(
                 "loadAction",
                 @intFromEnum(@as(
                     c.MTLLoadAction,
-                    if (at.clear_color != null)
+                    if (attch.clear_color != null)
                         .clear
                     else
                         .load,
@@ -84,8 +85,8 @@ pub fn begin(
                 "storeAction",
                 @intFromEnum(c.MTLStoreAction.store),
             );
-            attachment.setProperty("texture", at.texture);
-            if (at.clear_color) |color| attachment.setProperty(
+            attachment.setProperty("texture", attch.target.texture);
+            if (attch.clear_color) |color| attachment.setProperty(
                 "clearColor",
                 c.MTLClearColor{
                     .red = color[0],
