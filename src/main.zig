@@ -15,6 +15,6 @@ pub fn main(init: std.process.Init) !void {
     try app.init(gpa, io, .{});
     defer app.deinit();
 
-    app.setTickTimer();
+    app.setMainFn();
     app.run(.until_done);
 }
