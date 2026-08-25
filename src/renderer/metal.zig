@@ -3,6 +3,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
+const macos = @import("macos");
 const objc = @import("objc");
 const win = @import("../window.zig");
 const Window = win.Window;
@@ -27,13 +28,18 @@ pub const Handler = struct {
     layer: objc.Object,
 
     pub fn setSize(self: *Handler, width: i32, height: i32) void {
-        self.layer.msgSend(void, "drawableSize", .{ width, height });
+        const size: macos.graphics.Size = .{
+            .width = @floatFromInt(width),
+            .height = @floatFromInt(height),
+        };
+        self.layer.msgSend(void, "setDrawableSize:", .{size});
     }
 
     pub fn init(self: *@This(), api: Metal, window: *Window) void {
         const CAMetalLayer = objc.getClass("CAMetalLayer").?;
 
         const layer = CAMetalLayer.msgSend(objc.Object, "layer", .{});
+        layer.setProperty("contentsGravity", macos.animation.kCAGravityTopLeft);
         layer.setProperty("device", api.device);
         layer.setProperty("pixelFormat", @intFromEnum(c.MTLPixelFormat.bgra8unorm));
 
