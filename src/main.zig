@@ -28,9 +28,9 @@ pub fn main(init: std.process.Init) !void {
     };
 
     const chunks = app.chunks.allocator();
-    const state = try chunks.create(WindowState);
+    const window_state = try chunks.create(WindowState);
 
-    try state.init(.{
+    try window_state.init(.{
         .name = "Odyssey",
         .x = 0,
         .y = 0,
@@ -39,9 +39,9 @@ pub fn main(init: std.process.Init) !void {
         .flags = win.WindowCenter | win.WindowFocus,
         .userdata = &context,
     }, &app.renderer);
-    errdefer state.deinit();
+    errdefer window_state.deinit();
 
-    app.window_states.append(state);
+    app.window_states.append(window_state);
 
     app.timer(&context.tick_h, tick, 8);
     app.run(.until_done);
