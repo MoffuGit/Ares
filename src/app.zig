@@ -178,8 +178,7 @@ pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
 
     while (self.window_states.pop()) |state| {
         if (state.win.shouldClose()) {
-            state.win.deinit();
-            state.handler.deinit();
+            state.deinit();
 
             chunks.destroy(state);
         } else {

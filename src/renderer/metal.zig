@@ -186,5 +186,6 @@ const FrameState = struct {
 
     pub fn deinit(self: *FrameState) void {
         self.vertex.deinit();
+        self.uniforms.deinit();
     }
 };
