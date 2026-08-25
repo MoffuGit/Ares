@@ -25,7 +25,7 @@ const log = std.log.scoped(.render);
 
 pub const Renderer = renderer: {
     if (!builtin.is_test) break :renderer struct {
-        pub const Handler = Metal.Handler;
+        pub const Handle = Metal.Handle;
 
         api: Metal,
         shaders: Shaders,
@@ -48,7 +48,7 @@ pub const Renderer = renderer: {
             self.api.deinit();
         }
 
-        pub fn render(self: *@This(), window: *Window, handler: *Handler) !void {
+        pub fn render(self: *@This(), window: *Window, handler: *Handle) !void {
             self.api.start();
             defer self.api.end();
 

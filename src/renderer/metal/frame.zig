@@ -6,7 +6,7 @@ const Allocator = std.mem.Allocator;
 
 const objc = @import("objc");
 
-const Handler = @import("../metal.zig").Handler;
+const Handle = @import("../metal.zig").Handle;
 const Metal = @import("../metal.zig");
 const c = @import("c.zig");
 const RenderPass = @import("render_pass.zig");
@@ -23,7 +23,7 @@ block: CompletionBlock.Context,
 
 pub fn begin(
     queue: objc.Object,
-    handler: *Handler,
+    handler: *Handle,
     target: *Target,
 ) Frame {
     const buffer = queue.msgSend(
@@ -48,7 +48,7 @@ pub fn begin(
 /// This is the block type used for the addCompletedHandler callback.
 const CompletionBlock = objc.Block(
     struct {
-        handler: *Handler,
+        handler: *Handle,
         target: *Target,
     },
     .{},

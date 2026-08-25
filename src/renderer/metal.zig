@@ -69,7 +69,7 @@ pub fn end(self: *Metal) void {
     self.autorelease_pool = null;
 }
 
-pub fn beginFrame(self: *Metal, handler: *Handler, target: *Target) Frame {
+pub fn beginFrame(self: *Metal, handler: *Handle, target: *Target) Frame {
     return .begin(self.queue, handler, target);
 }
 
@@ -78,7 +78,7 @@ pub fn deinit(self: *Metal) void {
     self.queue.release();
 }
 
-pub const Handler = struct {
+pub const Handle = struct {
     layer: objc.Object,
     swap_chain: SwapChain,
 
@@ -98,7 +98,7 @@ pub const Handler = struct {
         try self.swap_chain.init(renderer.api);
     }
 
-    pub fn frameState(self: *Handler) *FrameState {
+    pub fn frameState(self: *Handle) *FrameState {
         const state = self.swap_chain.nextFrame();
         state.target.init(self);
 
@@ -109,7 +109,7 @@ pub const Handler = struct {
         self.layer.release();
     }
 
-    pub fn setSize(self: *Handler, width: i32, height: i32) void {
+    pub fn setSize(self: *Handle, width: i32, height: i32) void {
         const size: macos.graphics.Size = .{
             .width = @floatFromInt(width),
             .height = @floatFromInt(height),

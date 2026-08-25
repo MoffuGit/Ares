@@ -55,9 +55,8 @@ receivers: Receivers,
 observers: Observers,
 chunks: ChunkAllocator,
 scheduler: Scheduler,
-window: Window,
-handler: Renderer.Handler,
 renderer: Renderer,
+window_states: SinglyLinkedList(WindowState),
 
 flushing: bool,
 pending_updates: u8,
@@ -70,11 +69,10 @@ const Options = struct {};
 
 pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     self.* = .{
+        .window_states = .{},
         .renderer = undefined,
-        .handler = undefined,
         .flushing = false,
         .pending_updates = 0,
-        .window = undefined,
         .tick_h = .noop,
         .io = io,
         .notifications = undefined,
@@ -114,23 +112,28 @@ pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     try self.renderer.init(io);
     errdefer self.renderer.deinit();
 
-    try self.window.init(
-        "Odyssey",
-        0,
-        0,
-        800,
-        600,
-        win.WindowCenter | win.WindowFocus,
-    );
-    errdefer self.window.deinit();
+    const state = try chunks.create(WindowState);
+    state.* = .{
+        .win = undefined,
+        .handler = undefined,
+    };
 
-    try self.handler.init(&self.renderer, &self.window);
+    try state.win.init("Odyssey", 0, 0, 800, 600, win.WindowCenter | win.WindowFocus);
+    errdefer state.win.deinit();
+
+    try state.handler.init(&self.renderer, &state.win);
+
+    self.window_states.append(state);
 }
 
 pub fn deinit(self: *App) void {
     self.renderer.deinit();
-    self.window.deinit();
-    self.handler.deinit();
+
+    while (self.window_states.pop()) |state| {
+        state.handler.deinit();
+        state.win.deinit();
+    }
+
     self.run(.until_done);
     self.flush();
     self.scheduler.deinit();
@@ -138,6 +141,13 @@ pub fn deinit(self: *App) void {
     self.arena.deinit();
     self.loop.deinit();
 }
+
+const WindowState = struct {
+    next: ?*WindowState = null,
+
+    win: Window,
+    handler: Renderer.Handle,
+};
 
 pub fn setMainFn(self: *App) void {
     self.loop.timer(&self.tick_h, tick, 8);
@@ -147,12 +157,27 @@ pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
     res catch loop.stop();
     const self: *App = @fieldParentPtr("tick_h", completion);
 
-    if (self.window.shouldClose()) loop.stop();
+    if (self.window_states.empty()) loop.stop();
 
     const c = @import("c");
     c.RGFW_pollEvents();
 
-    self.renderer.render(&self.window, &self.handler) catch |err| log.err("{}", .{err});
+    var states: SinglyLinkedList(WindowState) = .{};
+    const chunks = self.chunks.allocator();
+
+    while (self.window_states.pop()) |state| {
+        if (state.win.shouldClose()) {
+            state.win.deinit();
+            state.handler.deinit();
+
+            chunks.destroy(state);
+        } else {
+            self.renderer.render(&state.win, &state.handler) catch |err| log.err("{}", .{err});
+            states.append(state);
+        }
+    }
+
+    self.window_states = states;
 
     return true;
 }
