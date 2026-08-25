@@ -1,4 +1,5 @@
 const std = @import("std");
+const assert = std.debug.assert;
 
 const App = @import("app.zig");
 const WindowState = App.WindowState;
@@ -9,7 +10,6 @@ const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const win = @import("window.zig");
 const Window = win.Window;
-const assert = std.debug.assert;
 
 const log = std.log.scoped(.main);
 
@@ -29,7 +29,7 @@ pub fn main(init: std.process.Init) !void {
         .tick_h = .noop,
     };
 
-    win.setEventCallback(win.WindowResized, windowResize);
+    // win.setEventCallback(win.WindowResized, windowResize);
 
     const chunks = app.chunks.allocator();
     const window_state = try chunks.create(WindowState);
@@ -90,17 +90,17 @@ pub fn _tick(app: *App) !void {
     app.states = states;
 }
 
-pub fn windowResize(event: [*c]const win.Event) callconv(.c) void {
-    const window: Window = .{ .raw = event.*.common.win };
-    const context: *Context = @ptrCast(@alignCast(window.userdata()));
-    const app = context.app;
-
-    var curr: ?*WindowState = app.states.head;
-
-    while (curr) |state| : (curr = state.next) {
-        if (state.win.raw == window.raw) {
-            app.renderer.render(&state.win, &state.handler) catch {};
-            break;
-        }
-    }
-}
+// pub fn windowResize(event: [*c]const win.Event) callconv(.c) void {
+//     const window: Window = .{ .raw = event.*.common.win };
+//     const context: *Context = @ptrCast(@alignCast(window.userdata()));
+//     const app = context.app;
+//
+//     var curr: ?*WindowState = app.states.head;
+//
+//     while (curr) |state| : (curr = state.next) {
+//         if (state.win.raw == window.raw) {
+//             app.renderer.render(&state.win, &state.handler) catch {};
+//             break;
+//         }
+//     }
+// }
