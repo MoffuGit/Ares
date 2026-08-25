@@ -110,13 +110,6 @@ pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
 
     try self.renderer.init(io);
     errdefer self.renderer.deinit();
-
-    const state = try chunks.create(WindowState);
-
-    try state.init(&self.renderer);
-    errdefer state.deinit();
-
-    self.window_states.append(state);
 }
 
 pub fn deinit(self: *App) void {
@@ -141,13 +134,13 @@ pub const WindowState = struct {
     win: Window,
     handler: RenderHandle,
 
-    pub fn init(self: *WindowState, renderer: *Renderer) !void {
+    pub fn init(self: *WindowState, opts: win.Options, renderer: *Renderer) !void {
         self.* = .{
             .win = undefined,
             .handler = undefined,
         };
 
-        try self.win.init("Odyssey", 0, 0, 800, 600, win.WindowCenter | win.WindowFocus);
+        try self.win.init(opts);
         errdefer self.win.deinit();
 
         try self.handler.init(renderer, &self.win);

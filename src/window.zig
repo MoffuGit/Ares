@@ -60,31 +60,38 @@ pub const MouseMisc5 = c.RGFW_mouseMisc5;
 pub const MouseFinal = c.RGFW_mouseFinal;
 pub const pollEvents = c.RGFW_pollEvents;
 
+pub const Options = struct {
+    name: [:0]const u8,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    flags: Flags,
+    userdata: ?*anyopaque,
+};
+
 pub const Window = window: {
     if (!builtin.is_test) break :window struct {
         win: *c.struct_RGFW_window,
 
         pub fn init(
             self: *@This(),
-            name: [:0]const u8,
-            x: i32,
-            y: i32,
-            width: i32,
-            height: i32,
-            flags: Flags,
+            opts: Options,
         ) !void {
             self.* = .{
                 .win = undefined,
             };
 
             self.win = c.RGFW_createWindow(
-                name,
-                x,
-                y,
-                width,
-                height,
-                flags,
+                opts.name,
+                opts.x,
+                opts.y,
+                opts.width,
+                opts.height,
+                opts.flags,
             ) orelse return error.RGFWCreation;
+
+            c.RGFW_window_setUserPtr(self.win, opts.userdata);
         }
 
         pub fn deinit(self: *@This()) void {
@@ -117,12 +124,7 @@ pub const Window = window: {
     break :window struct {
         pub fn init(
             _: *@This(),
-            _: [:0]const u8,
-            _: i32,
-            _: i32,
-            _: i32,
-            _: i32,
-            _: Flags,
+            _: Options,
         ) !void {}
 
         pub fn deinit(self: *@This()) void {

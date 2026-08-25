@@ -27,8 +27,23 @@ pub fn main(init: std.process.Init) !void {
         .tick_h = .noop,
     };
 
-    app.timer(&context.tick_h, tick, 8);
+    const chunks = app.chunks.allocator();
+    const state = try chunks.create(WindowState);
 
+    try state.init(.{
+        .name = "Odyssey",
+        .x = 0,
+        .y = 0,
+        .width = 800,
+        .height = 600,
+        .flags = win.WindowCenter | win.WindowFocus,
+        .userdata = &context,
+    }, &app.renderer);
+    errdefer state.deinit();
+
+    app.window_states.append(state);
+
+    app.timer(&context.tick_h, tick, 8);
     app.run(.until_done);
 }
 
