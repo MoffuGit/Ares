@@ -22,11 +22,10 @@ buffer: objc.Object,
 block: CompletionBlock.Context,
 
 pub fn begin(
-    queue: objc.Object,
     handler: *Handle,
-    target: *Target,
+    api: Metal,
 ) Frame {
-    const buffer = queue.msgSend(
+    const buffer = api.queue.msgSend(
         objc.Object,
         objc.sel("commandBuffer"),
         .{},
@@ -35,10 +34,7 @@ pub fn begin(
     // Create our block to register for completion updates.
     // The block is deallocated by the objC runtime on success.
     const block = CompletionBlock.init(
-        .{
-            .handler = handler,
-            .target = target,
-        },
+        .{ .handler = handler },
         &bufferCompleted,
     );
 
@@ -47,10 +43,7 @@ pub fn begin(
 
 /// This is the block type used for the addCompletedHandler callback.
 const CompletionBlock = objc.Block(
-    struct {
-        handler: *Handle,
-        target: *Target,
-    },
+    struct { handler: *Handle },
     .{},
     void,
 );
@@ -58,9 +51,7 @@ const CompletionBlock = objc.Block(
 fn bufferCompleted(
     block: *const CompletionBlock.Context,
 ) callconv(.c) void {
-    block.target.present();
     block.handler.swap_chain.releaseFrame();
-    block.target.deinit();
 }
 
 /// Add a render pass to this frame with the provided attachments.
@@ -75,12 +66,13 @@ pub inline fn renderPass(
     });
 }
 
-pub inline fn complete(self: *Frame) void {
+pub inline fn complete(self: *Frame, target: *Target) void {
     self.buffer.msgSend(
         void,
         objc.sel("addCompletedHandler:"),
         .{&self.block},
     );
 
+    self.buffer.msgSend(void, "presentDrawable:", .{target.drawable});
     self.buffer.msgSend(void, objc.sel("commit"), .{});
 }

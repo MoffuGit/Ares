@@ -69,10 +69,6 @@ pub fn end(self: *Metal) void {
     self.autorelease_pool = null;
 }
 
-pub fn beginFrame(self: *Metal, handler: *Handle, target: *Target) Frame {
-    return .begin(self.queue, handler, target);
-}
-
 pub fn deinit(self: *Metal) void {
     self.device.release();
     self.queue.release();
@@ -99,10 +95,18 @@ pub const Handle = struct {
     }
 
     pub fn frameState(self: *Handle) *FrameState {
-        const state = self.swap_chain.nextFrame();
-        state.target.init(self);
+        return self.swap_chain.nextFrame();
+    }
 
-        return state;
+    pub fn frame(self: *Handle, renderer: *Renderer) Frame {
+        return .begin(self, renderer.api);
+    }
+
+    pub fn target(self: *Handle) Target {
+        const drawable = self.layer.msgSend(objc.Object, "nextDrawable", .{});
+        const texture = drawable.msgSend(objc.Object, "texture", .{});
+
+        return .{ .drawable = drawable, .texture = texture };
     }
 
     pub fn deinit(self: *@This()) void {
@@ -158,13 +162,11 @@ const SwapChain = struct {
 const FrameState = struct {
     vertex: VertexBuffer,
     uniforms: UniformsBuffer,
-    target: Target = undefined,
 
     pub fn init(self: *FrameState, api: Metal) !void {
         self.* = .{
             .uniforms = undefined,
             .vertex = undefined,
-            .target = undefined,
         };
 
         try self.vertex.init(.{

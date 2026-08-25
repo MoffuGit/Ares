@@ -58,13 +58,18 @@ pub const Renderer = renderer: {
             handler.setSize(width, height);
 
             var state = handler.frameState();
-            var frame = self.api.beginFrame(handler, &state.target);
+            var target = handler.target();
+
+            var frame = handler.frame(self);
+            defer frame.complete(&target);
+
             var pass = frame.renderPass(&.{
                 .{
-                    .target = state.target,
-                    .clear_color = .{ 1.0, 1.0, 1.0, 1.0 },
+                    .target = target,
+                    .clear_color = .{ 1.0, 0.0, 0.0, 1.0 },
                 },
             });
+            defer pass.complete();
 
             const vertices = [_]VertexInput{
                 .{
@@ -81,6 +86,7 @@ pub const Renderer = renderer: {
             const uniforms = Uniforms{
                 .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
             };
+
             try state.uniforms.sync(&.{uniforms});
 
             pass.step(.{
@@ -93,9 +99,6 @@ pub const Renderer = renderer: {
                     .instance_count = vertices.len,
                 },
             });
-
-            pass.complete();
-            frame.complete();
         }
     };
 
