@@ -107,6 +107,7 @@ pub const Handle = struct {
 
     pub fn deinit(self: *@This()) void {
         self.layer.release();
+        self.swap_chain.deinit();
     }
 
     pub fn setSize(self: *Handle, width: i32, height: i32) void {

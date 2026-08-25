@@ -23,6 +23,7 @@ const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const Waker = Loop.Waker;
 const Renderer = @import("renderer.zig").Renderer;
+const RenderHandle = Renderer.Handle;
 const Scheduler = @import("scheduler.zig");
 const subs = @import("subscription.zig");
 const Subscriptions = subs.Subscriptions;
@@ -113,15 +114,9 @@ pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     errdefer self.renderer.deinit();
 
     const state = try chunks.create(WindowState);
-    state.* = .{
-        .win = undefined,
-        .handler = undefined,
-    };
 
-    try state.win.init("Odyssey", 0, 0, 800, 600, win.WindowCenter | win.WindowFocus);
-    errdefer state.win.deinit();
-
-    try state.handler.init(&self.renderer, &state.win);
+    try state.init(&self.renderer);
+    errdefer state.deinit();
 
     self.window_states.append(state);
 }
@@ -146,7 +141,24 @@ const WindowState = struct {
     next: ?*WindowState = null,
 
     win: Window,
-    handler: Renderer.Handle,
+    handler: RenderHandle,
+
+    pub fn init(self: *WindowState, renderer: *Renderer) !void {
+        self.* = .{
+            .win = undefined,
+            .handler = undefined,
+        };
+
+        try self.win.init("Odyssey", 0, 0, 800, 600, win.WindowCenter | win.WindowFocus);
+        errdefer self.win.deinit();
+
+        try self.handler.init(renderer, &self.win);
+    }
+
+    pub fn deinit(self: *WindowState) void {
+        self.handler.deinit();
+        self.win.deinit();
+    }
 };
 
 pub fn setMainFn(self: *App) void {
@@ -159,8 +171,7 @@ pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
 
     if (self.window_states.empty()) loop.stop();
 
-    const c = @import("c");
-    c.RGFW_pollEvents();
+    win.pollEvents();
 
     var states: SinglyLinkedList(WindowState) = .{};
     const chunks = self.chunks.allocator();
@@ -498,12 +509,12 @@ pub fn dispatch(self: *App, entity: anytype, id: u32, comptime E: type) !*E {
     return ptr;
 }
 
-pub fn await(self: *App, c: *Completion, function: anytype) !Waker {
-    return try self.loop.await(c, function);
+pub fn await(self: *App, completion: *Completion, function: anytype) !Waker {
+    return try self.loop.await(completion, function);
 }
 
-pub fn timer(self: *App, c: *Completion, function: anytype, ms: u64) void {
-    self.loop.timer(c, function, ms);
+pub fn timer(self: *App, completion: *Completion, function: anytype, ms: u64) void {
+    self.loop.timer(completion, function, ms);
 }
 
 pub fn cancel(self: *App, completion: *Completion, function: anytype, target: *Completion) void {

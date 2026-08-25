@@ -58,6 +58,7 @@ pub const MouseMisc3 = c.RGFW_mouseMisc3;
 pub const MouseMisc4 = c.RGFW_mouseMisc4;
 pub const MouseMisc5 = c.RGFW_mouseMisc5;
 pub const MouseFinal = c.RGFW_mouseFinal;
+pub const pollEvents = c.RGFW_pollEvents;
 
 pub const Window = window: {
     if (!builtin.is_test) break :window struct {
