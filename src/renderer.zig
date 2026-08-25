@@ -103,7 +103,9 @@ pub const Renderer = renderer: {
     };
 
     break :renderer struct {
-        pub const Handler = struct {};
+        pub const Handle = struct {
+            pub fn deinit(_: *@This()) void {}
+        };
 
         pub fn init(_: *Renderer, _: Io) !void {}
 
