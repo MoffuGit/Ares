@@ -171,7 +171,7 @@ const FrameState = struct {
             .device = api.device,
             .resource_options = .{
                 .cpu_cache_mode = .write_combined,
-                .storage_mode = .managed,
+                .storage_mode = .shared,
             },
         }, 1);
 
@@ -179,7 +179,7 @@ const FrameState = struct {
             .device = api.device,
             .resource_options = .{
                 .cpu_cache_mode = .write_combined,
-                .storage_mode = .managed,
+                .storage_mode = .shared,
             },
         }, 1);
     }
