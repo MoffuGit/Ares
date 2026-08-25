@@ -13,9 +13,10 @@ const Pipeline = @import("pipeline.zig");
 const log = std.log.scoped(.metal);
 
 pub const VertexBuffer = Buffer(VertexInput);
+pub const UniformsBuffer = Buffer(Uniforms);
 
 pub const VertexInput = extern struct {
-    position: [3]f32 align(16), // Corresponds to float3 position [[attribute(0)]]
+    position: [4]f32 align(16), // Corresponds to float3 position [[attribute(0)]]
     color: [4]f32 align(16), // Corresponds to float4 color [[attribute(1)]]
 
 };
@@ -28,10 +29,15 @@ const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
                 .vertex_fn = "vertexShader",
                 .fragment_fn = "fragmentShader",
                 .blending_enabled = false,
+                .step_fn = .per_instance,
                 .vertex_attributes = VertexInput,
             },
         },
     };
+
+pub const Uniforms = extern struct {
+    viewport_size: [2]f32 align(8),
+};
 
 /// All the comptime-known info about a pipeline, so that
 /// we can define them ahead-of-time in an ergonomic way.

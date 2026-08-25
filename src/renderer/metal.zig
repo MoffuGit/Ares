@@ -17,6 +17,8 @@ const shaders = @import("metal/shaders.zig");
 pub const Shaders = shaders.Shaders;
 pub const VertexInput = shaders.VertexInput;
 pub const VertexBuffer = shaders.VertexBuffer;
+pub const UniformsBuffer = shaders.UniformsBuffer;
+pub const Uniforms = shaders.Uniforms;
 pub const Target = @import("metal/target.zig");
 
 pub const Metal = @This();

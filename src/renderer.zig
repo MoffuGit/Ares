@@ -12,6 +12,8 @@ const rgfw = @import("rgfw");
 const Window = rgfw.Window;
 
 const Metal = @import("renderer/metal.zig");
+const UniformsBuffer = Metal.UniformsBuffer;
+const Uniforms = Metal.Uniforms;
 const VertexBuffer = Metal.VertexBuffer;
 const VertexInput = Metal.VertexInput;
 const Shaders = Metal.Shaders;
@@ -65,20 +67,29 @@ pub const Renderer = renderer: {
                 },
             });
 
-            const triangle_vertices = [_]VertexInput{
-                .{ .position = .{ 0.0, 0.5, 0.0 }, .color = .{ 1.0, 0.0, 0.0, 1.0 } }, // Top vertex (Red)
-                .{ .position = .{ -0.5, -0.5, 0.0 }, .color = .{ 0.0, 1.0, 0.0, 1.0 } }, // Bottom-left vertex (Green)
-                .{ .position = .{ 0.5, -0.5, 0.0 }, .color = .{ 0.0, 0.0, 1.0, 1.0 } }, // Bottom-right vertex (Blue)
+            const vertices = [_]VertexInput{
+                .{ .position = .{ 10.0, 10.0, 110.0, 110.0 }, .color = .{ 1.0, 0.0, 0.0, 1.0 } },
+                .{ .position = .{ 120.0, 120.0, 210.0, 210.0 }, .color = .{ 0.0, 1.0, 0.0, 1.0 } },
+                .{ .position = .{ 140.0, 140.0, 240.0, 240.0 }, .color = .{ 0.0, 0.0, 1.0, 1.0 } },
             };
 
-            try frame_state.buffer.sync(&triangle_vertices);
+            try frame_state.vertex.sync(&vertices);
 
-            pass.step(.{ .pipeline = self.shaders.pipelines.bg_color, .buffers = &.{
-                frame_state.buffer.buffer,
-            }, .draw = .{
-                .vertex_count = 3,
-                .type = .triangle,
-            } });
+            const uniforms = Uniforms{
+                .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
+            };
+            try frame_state.uniforms.sync(&.{uniforms});
+
+            pass.step(.{
+                .pipeline = self.shaders.pipelines.bg_color,
+                .buffers = &.{frame_state.vertex.buffer},
+                .uniforms = frame_state.uniforms.buffer,
+                .draw = .{
+                    .vertex_count = 4,
+                    .type = .triangle_strip,
+                    .instance_count = vertices.len,
+                },
+            });
 
             pass.complete();
             frame.complete();
@@ -120,16 +131,26 @@ pub const Renderer = renderer: {
             }
 
             const FrameState = struct {
-                buffer: VertexBuffer,
+                vertex: VertexBuffer,
+                uniforms: UniformsBuffer,
                 target: Target = undefined,
 
                 pub fn init(self: *FrameState, api: Metal) !void {
                     self.* = .{
-                        .buffer = undefined,
+                        .uniforms = undefined,
+                        .vertex = undefined,
                         .target = undefined,
                     };
 
-                    try self.buffer.init(.{
+                    try self.vertex.init(.{
+                        .device = api.device,
+                        .resource_options = .{
+                            .cpu_cache_mode = .write_combined,
+                            .storage_mode = .managed,
+                        },
+                    }, 1);
+
+                    try self.uniforms.init(.{
                         .device = api.device,
                         .resource_options = .{
                             .cpu_cache_mode = .write_combined,
@@ -139,7 +160,7 @@ pub const Renderer = renderer: {
                 }
 
                 pub fn deinit(self: *FrameState) void {
-                    self.buffer.deinit();
+                    self.vertex.deinit();
                 }
             };
         };
