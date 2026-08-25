@@ -1,4 +1,5 @@
 //LICENSE: [GHOSTTY]
+//LICENSE: [RADDEBUGGER]
 
 const std = @import("std");
 const assert = std.debug.assert;
@@ -66,9 +67,13 @@ pub const Renderer = renderer: {
             });
 
             const vertices = [_]VertexInput{
-                .{ .position = .{ 10.0, 10.0, 110.0, 110.0 }, .color = .{ 1.0, 0.0, 0.0, 1.0 } },
-                .{ .position = .{ 120.0, 120.0, 210.0, 210.0 }, .color = .{ 0.0, 1.0, 0.0, 1.0 } },
-                .{ .position = .{ 140.0, 140.0, 240.0, 240.0 }, .color = .{ 0.0, 0.0, 1.0, 1.0 } },
+                .{
+                    .position = .{ 10.0, 10.0, 110.0, 110.0 },
+                    .color_0 = .{ 1.0, 0.0, 0.0, 1.0 },
+                    .color_1 = .{ 1.0, 0.0, 0.0, 1.0 },
+                    .color_2 = .{ 1.0, 0.0, 1.0, 1.0 },
+                    .color_3 = .{ 1.0, 0.0, 1.0, 1.0 },
+                },
             };
 
             try state.vertex.sync(&vertices);

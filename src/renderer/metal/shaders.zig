@@ -15,10 +15,14 @@ const log = std.log.scoped(.metal);
 pub const VertexBuffer = Buffer(VertexInput);
 pub const UniformsBuffer = Buffer(Uniforms);
 
-pub const VertexInput = extern struct {
-    position: [4]f32 align(16), // Corresponds to float3 position [[attribute(0)]]
-    color: [4]f32 align(16), // Corresponds to float4 color [[attribute(1)]]
+//LICENSE: [RADDEBUGGER]
 
+pub const VertexInput = extern struct {
+    position: [4]f32 align(16),
+    color_0: [4]f32 align(16),
+    color_1: [4]f32 align(16),
+    color_2: [4]f32 align(16),
+    color_3: [4]f32 align(16),
 };
 
 const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =

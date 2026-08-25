@@ -63,7 +63,6 @@ flushing: bool,
 pending_updates: u8,
 
 loop: Loop,
-tick_h: Completion,
 notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 
 const Options = struct {};
@@ -74,7 +73,6 @@ pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
         .renderer = undefined,
         .flushing = false,
         .pending_updates = 0,
-        .tick_h = .noop,
         .io = io,
         .notifications = undefined,
         .entities = undefined,
@@ -137,7 +135,7 @@ pub fn deinit(self: *App) void {
     self.loop.deinit();
 }
 
-const WindowState = struct {
+pub const WindowState = struct {
     next: ?*WindowState = null,
 
     win: Window,
@@ -160,37 +158,6 @@ const WindowState = struct {
         self.win.deinit();
     }
 };
-
-pub fn setMainFn(self: *App) void {
-    self.loop.timer(&self.tick_h, tick, 8);
-}
-
-pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
-    res catch loop.stop();
-    const self: *App = @fieldParentPtr("tick_h", completion);
-
-    if (self.window_states.empty()) loop.stop();
-
-    win.pollEvents();
-
-    var states: SinglyLinkedList(WindowState) = .{};
-    const chunks = self.chunks.allocator();
-
-    while (self.window_states.pop()) |state| {
-        if (state.win.shouldClose()) {
-            state.deinit();
-
-            chunks.destroy(state);
-        } else {
-            self.renderer.render(&state.win, &state.handler) catch |err| log.err("{}", .{err});
-            states.append(state);
-        }
-    }
-
-    self.window_states = states;
-
-    return true;
-}
 
 pub fn new(self: *App, comptime T: type, function: anytype, args: anytype) !*T {
     const alloc = self.chunks.allocator();

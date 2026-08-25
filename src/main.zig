@@ -1,12 +1,19 @@
 const std = @import("std");
+
 const App = @import("app.zig");
-const rgfw = @import("rgfw");
-const Window = rgfw.Window;
-const state = &@import("global.zig").state;
+const WindowState = App.WindowState;
+const datastruct = @import("datastruct.zig");
+const SinglyLinkedList = datastruct.SinglyLinkedList;
+const global = @import("global.zig");
+const Loop = @import("loop.zig");
+const Completion = Loop.Completion;
+const win = @import("window.zig");
+
+const log = std.log.scoped(.main);
 
 pub fn main(init: std.process.Init) !void {
-    try state.init();
-    defer state.deinit();
+    try global.state.init();
+    defer global.state.deinit();
 
     const gpa = init.gpa;
     const io = init.io;
@@ -15,6 +22,46 @@ pub fn main(init: std.process.Init) !void {
     try app.init(gpa, io, .{});
     defer app.deinit();
 
-    app.setMainFn();
+    var context: Context = .{
+        .app = &app,
+        .tick_h = .noop,
+    };
+
+    app.timer(&context.tick_h, tick, 8);
+
     app.run(.until_done);
+}
+
+const Context = struct {
+    app: *App,
+    tick_h: Completion,
+};
+
+pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
+    res catch loop.stop();
+
+    const context: *Context = @fieldParentPtr("tick_h", completion);
+    const app = context.app;
+    const chunks = app.chunks.allocator();
+
+    if (app.window_states.empty()) loop.stop();
+
+    win.pollEvents();
+
+    var states: SinglyLinkedList(WindowState) = .{};
+
+    while (app.window_states.pop()) |state| {
+        if (state.win.shouldClose()) {
+            state.deinit();
+
+            chunks.destroy(state);
+        } else {
+            app.renderer.render(&state.win, &state.handler) catch |err| log.err("{}", .{err});
+            states.append(state);
+        }
+    }
+
+    app.window_states = states;
+
+    return true;
 }

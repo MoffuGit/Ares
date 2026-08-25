@@ -4,7 +4,10 @@ using namespace metal;
 
 struct VertexInput {
     float4 position [[attribute(0)]];
-    float4 color [[attribute(1)]];
+    float4 color_0  [[attribute(1)]];
+    float4 color_1  [[attribute(2)]];
+    float4 color_2  [[attribute(3)]];
+    float4 color_3  [[attribute(4)]];
 };
 
 struct VertexOutput {
@@ -27,6 +30,8 @@ vertex VertexOutput vertexShader(
     float2 center    = (in.position.zw + in.position.xy) / 2.0;
     float2 position  = vertices[v_id] * half_size + center;
 
+    float4x4 colors = float4x4(in.color_0, in.color_1, in.color_2, in.color_3);
+
     VertexOutput out;
     out.position = float4(
         2.0f * position.x / uniforms.viewport_size.x - 1.0f,
@@ -34,7 +39,7 @@ vertex VertexOutput vertexShader(
         0.0f,
         1.0f
     );
-    out.color = in.color;
+    out.color = colors[v_id];
     return out;
 }
 
