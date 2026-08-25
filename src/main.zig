@@ -42,9 +42,16 @@ pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
 
     const context: *Context = @fieldParentPtr("tick_h", completion);
     const app = context.app;
+
+    _tick(app) catch loop.stop();
+
+    return true;
+}
+
+pub fn _tick(app: *App) !void {
     const chunks = app.chunks.allocator();
 
-    if (app.window_states.empty()) loop.stop();
+    if (app.window_states.empty()) app.stop();
 
     win.pollEvents();
 
@@ -56,12 +63,10 @@ pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
 
             chunks.destroy(state);
         } else {
-            app.renderer.render(&state.win, &state.handler) catch |err| log.err("{}", .{err});
+            try app.renderer.render(&state.win, &state.handler);
             states.append(state);
         }
     }
 
     app.window_states = states;
-
-    return true;
 }
