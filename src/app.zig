@@ -57,7 +57,7 @@ observers: Observers,
 chunks: ChunkAllocator,
 scheduler: Scheduler,
 renderer: Renderer,
-window_states: SinglyLinkedList(WindowState),
+states: SinglyLinkedList(WindowState),
 
 flushing: bool,
 pending_updates: u8,
@@ -69,7 +69,7 @@ const Options = struct {};
 
 pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     self.* = .{
-        .window_states = .{},
+        .states = .{},
         .renderer = undefined,
         .flushing = false,
         .pending_updates = 0,
@@ -114,12 +114,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
 
 pub fn deinit(self: *App) void {
     self.renderer.deinit();
-
-    while (self.window_states.pop()) |state| {
-        state.handler.deinit();
-        state.win.deinit();
-    }
-
+    while (self.states.pop()) |state| state.deinit();
     self.run(.until_done);
     self.flush();
     self.scheduler.deinit();
