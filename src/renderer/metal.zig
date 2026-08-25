@@ -5,11 +5,11 @@ const assert = std.debug.assert;
 
 const macos = @import("macos");
 const objc = @import("objc");
-const win = @import("../window.zig");
-const Window = win.Window;
 
 const Renderer = @import("../renderer.zig").Renderer;
 const RenderState = Renderer.RenderState;
+const win = @import("../window.zig");
+const Window = win.Window;
 const c = @import("metal/c.zig");
 pub const Frame = @import("metal/frame.zig");
 pub const Pipeline = @import("metal/pipeline.zig");

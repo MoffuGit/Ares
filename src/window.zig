@@ -1,33 +1,3 @@
-const std = @import("std");
-const Io = std.Io;
-const builtin = @import("builtin");
-
-const c = @import("c");
-pub const Flags = c.RGFW_windowFlags;
-pub const WindowNoBorder = c.RGFW_windowNoBorder;
-pub const WindowNoResize = c.RGFW_windowNoResize;
-pub const WindowAllowDND = c.RGFW_windowAllowDND;
-pub const WindowHideMouse = c.RGFW_windowHideMouse;
-pub const WindowFullScreen = c.RGFW_windowFullscreen;
-pub const WindowTranslucent = c.RGFW_windowTranslucent;
-pub const WindowCenter = c.RGFW_windowCenter;
-pub const WindowRawMouse = c.RGFW_windowRawMouse;
-pub const WindowScaleToMonitor = c.RGFW_windowScaleToMonitor;
-pub const WindowHide = c.RGFW_windowHide;
-pub const WindowMaximize = c.RGFW_windowMaximize;
-pub const WindowCenterCurosr = c.RGFW_windowCenterCursor;
-pub const WindowFloating = c.RGFW_windowFloating;
-pub const WindowFocusOnShow = c.RGFW_windowFocusOnShow;
-pub const WindowMinimize = c.RGFW_windowMinimize;
-pub const WindowFocus = c.RGFW_windowFocus;
-pub const WindowCaptureMouse = c.RGFW_windowCaptureMouse;
-pub const WindowOpenGL = c.RGFW_windowOpenGL;
-pub const WindowEGL = c.RGFW_windowEGL;
-
-const rd = @import("renderer.zig");
-const Renderer = rd.Renderer;
-const RenderState = Renderer.RenderState;
-
 pub const Options = struct {
     name: [:0]const u8,
     x: i32,
@@ -125,42 +95,32 @@ pub const Window = window: {
     };
 };
 
-// pub fn setUserPtr(window: *Window, ptr: ?*anyopaque) void {
-//     c.RGFW_window_setUserPtr(window, ptr);
-// }
-//
-// pub fn getUserPtr(window: *Window) ?*anyopaque {
-//     return c.RGFW_window_getUserPtr(window);
-// }
-//
-// pub const InitFlags = c.RGFW_initFlags;
-// pub const InitOpenGl = c.RGFW_initOpenGL;
-// pub const InitEGL = c.RGFW_initEGL;
-// pub const InitVulkan = c.RGFW_initVulkan;
-//
-// pub const window = @import("window.zig");
-//
-// pub fn init(className: [:0]const u8, flags: InitFlags) !void {
-//     const status = c.RGFW_init(className, flags);
-//     if (status != 0) return error.InitError;
-// }
-//
-// pub fn deinit() void {
-//     c.RGFW_deinit();
-// }
-//
-// pub fn pollEvents() void {
-//     c.RGFW_pollEvents();
-// }
-//
-// const EventCallback = c.RGFW_genericFunc;
-//
-// pub fn setEventCallback(event_type: u8, function: EventCallback) void {
-//     _ = c.RGFW_setEventCallback(event_type, function);
-// }
-//
-pub const Event = c.RGFW_event;
+const std = @import("std");
+const Io = std.Io;
+const builtin = @import("builtin");
 
+const c = @import("c");
+pub const Flags = c.RGFW_windowFlags;
+pub const WindowNoBorder = c.RGFW_windowNoBorder;
+pub const WindowNoResize = c.RGFW_windowNoResize;
+pub const WindowAllowDND = c.RGFW_windowAllowDND;
+pub const WindowHideMouse = c.RGFW_windowHideMouse;
+pub const WindowFullScreen = c.RGFW_windowFullscreen;
+pub const WindowTranslucent = c.RGFW_windowTranslucent;
+pub const WindowCenter = c.RGFW_windowCenter;
+pub const WindowRawMouse = c.RGFW_windowRawMouse;
+pub const WindowScaleToMonitor = c.RGFW_windowScaleToMonitor;
+pub const WindowHide = c.RGFW_windowHide;
+pub const WindowMaximize = c.RGFW_windowMaximize;
+pub const WindowCenterCurosr = c.RGFW_windowCenterCursor;
+pub const WindowFloating = c.RGFW_windowFloating;
+pub const WindowFocusOnShow = c.RGFW_windowFocusOnShow;
+pub const WindowMinimize = c.RGFW_windowMinimize;
+pub const WindowFocus = c.RGFW_windowFocus;
+pub const WindowCaptureMouse = c.RGFW_windowCaptureMouse;
+pub const WindowOpenGL = c.RGFW_windowOpenGL;
+pub const WindowEGL = c.RGFW_windowEGL;
+pub const Event = c.RGFW_event;
 pub const EventNone = c.RGFW_eventNone;
 pub const KeyPressed = c.RGFW_keyPressed;
 pub const KeyReleased = c.RGFW_keyReleased;
@@ -186,7 +146,6 @@ pub const DataDrag = c.RGFW_dataDrag;
 pub const ScaleUpdated = c.RGFW_scaleUpdated;
 pub const MonitorConnected = c.RGFW_monitorConnected;
 pub const MonitorDisconnected = c.RGFW_monitorDisconnected;
-
 pub const MouseLeft = c.RGFW_mouseLeft;
 pub const MouseMiddle = c.RGFW_mouseMiddle;
 pub const MouseRight = c.RGFW_mouseRight;
@@ -196,3 +155,7 @@ pub const MouseMisc3 = c.RGFW_mouseMisc3;
 pub const MouseMisc4 = c.RGFW_mouseMisc4;
 pub const MouseMisc5 = c.RGFW_mouseMisc5;
 pub const MouseFinal = c.RGFW_mouseFinal;
+
+const rd = @import("renderer.zig");
+const Renderer = rd.Renderer;
+const RenderState = Renderer.RenderState;
