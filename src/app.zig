@@ -56,6 +56,7 @@ observers: Observers,
 chunks: ChunkAllocator,
 scheduler: Scheduler,
 window: Window,
+handler: Renderer.Handler,
 renderer: Renderer,
 
 flushing: bool,
@@ -70,6 +71,7 @@ const Options = struct {};
 pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     self.* = .{
         .renderer = undefined,
+        .handler = undefined,
         .flushing = false,
         .pending_updates = 0,
         .window = undefined,
@@ -113,23 +115,22 @@ pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     errdefer self.renderer.deinit();
 
     try self.window.init(
-        .{
-            .name = "Odyssey",
-            .x = 0,
-            .y = 0,
-            .width = 800,
-            .height = 600,
-            .flags = win.WindowCenter | win.WindowFocus,
-        },
-        &self.renderer,
-        io,
+        "Odyssey",
+        0,
+        0,
+        800,
+        600,
+        win.WindowCenter | win.WindowFocus,
     );
     errdefer self.window.deinit();
+
+    try self.handler.init(&self.renderer, &self.window);
 }
 
 pub fn deinit(self: *App) void {
     self.renderer.deinit();
     self.window.deinit();
+    self.handler.deinit();
     self.run(.until_done);
     self.flush();
     self.scheduler.deinit();
@@ -151,9 +152,7 @@ pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
     const c = @import("c");
     c.RGFW_pollEvents();
 
-    self.window.render() catch |err| {
-        log.err("Render err={}", .{err});
-    };
+    self.renderer.render(&self.window, &self.handler) catch |err| log.err("{}", .{err});
 
     return true;
 }

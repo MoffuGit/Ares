@@ -1,13 +1,13 @@
 //LICENSE: [GHOSTTY]
 
 const std = @import("std");
+const Io = std.Io;
 const assert = std.debug.assert;
 
 const macos = @import("macos");
 const objc = @import("objc");
 
 const Renderer = @import("../renderer.zig").Renderer;
-const RenderState = Renderer.RenderState;
 const win = @import("../window.zig");
 const Window = win.Window;
 const c = @import("metal/c.zig");
@@ -24,42 +24,14 @@ pub const Target = @import("metal/target.zig");
 
 pub const Metal = @This();
 
-pub const Handler = struct {
-    layer: objc.Object,
-
-    pub fn setSize(self: *Handler, width: i32, height: i32) void {
-        const size: macos.graphics.Size = .{
-            .width = @floatFromInt(width),
-            .height = @floatFromInt(height),
-        };
-        self.layer.msgSend(void, "setDrawableSize:", .{size});
-    }
-
-    pub fn init(self: *@This(), api: Metal, window: *Window) void {
-        const CAMetalLayer = objc.getClass("CAMetalLayer").?;
-
-        const layer = CAMetalLayer.msgSend(objc.Object, "layer", .{});
-        layer.setProperty("contentsGravity", macos.animation.kCAGravityTopLeft);
-        layer.setProperty("device", api.device);
-        layer.setProperty("pixelFormat", @intFromEnum(c.MTLPixelFormat.bgra8unorm));
-
-        self.* = .{ .layer = layer };
-
-        const view = objc.Object.fromId(window.NSView() orelse unreachable);
-        view.msgSend(void, "setLayer:", .{self.layer});
-    }
-
-    pub fn deinit(self: *@This()) void {
-        self.layer.release();
-    }
-};
+io: Io,
 
 device: objc.Object,
 queue: objc.Object,
 
 autorelease_pool: ?*objc.AutoreleasePool,
 
-pub fn init(self: *Metal) !void {
+pub fn init(self: *Metal, io: Io) !void {
     var chosen_device: ?objc.Object = null;
 
     const devices = objc.Object.fromId(c.MTLCopyAllDevices());
@@ -79,6 +51,7 @@ pub fn init(self: *Metal) !void {
     errdefer queue.release();
 
     self.* = .{
+        .io = io,
         .device = device,
         .queue = queue,
         .autorelease_pool = null,
@@ -96,11 +69,121 @@ pub fn end(self: *Metal) void {
     self.autorelease_pool = null;
 }
 
-pub fn beginFrame(self: *Metal, state: *RenderState, target: *Target) Frame {
-    return .begin(self.queue, state, target);
+pub fn beginFrame(self: *Metal, handler: *Handler, target: *Target) Frame {
+    return .begin(self.queue, handler, target);
 }
 
 pub fn deinit(self: *Metal) void {
     self.device.release();
     self.queue.release();
 }
+
+pub const Handler = struct {
+    layer: objc.Object,
+    swap_chain: SwapChain,
+
+    pub fn init(self: *@This(), renderer: *Renderer, window: *Window) !void {
+        const CAMetalLayer = objc.getClass("CAMetalLayer").?;
+
+        const layer = CAMetalLayer.msgSend(objc.Object, "layer", .{});
+        layer.setProperty("contentsGravity", macos.animation.kCAGravityTopLeft);
+        layer.setProperty("device", renderer.api.device);
+        layer.setProperty("pixelFormat", @intFromEnum(c.MTLPixelFormat.bgra8unorm));
+
+        self.* = .{ .layer = layer, .swap_chain = undefined };
+
+        const view = objc.Object.fromId(window.NSView() orelse unreachable);
+        view.msgSend(void, "setLayer:", .{self.layer});
+
+        try self.swap_chain.init(renderer.api);
+    }
+
+    pub fn frameState(self: *Handler) *FrameState {
+        const state = self.swap_chain.nextFrame();
+        state.target.init(self);
+
+        return state;
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.layer.release();
+    }
+
+    pub fn setSize(self: *Handler, width: i32, height: i32) void {
+        const size: macos.graphics.Size = .{
+            .width = @floatFromInt(width),
+            .height = @floatFromInt(height),
+        };
+        self.layer.msgSend(void, "setDrawableSize:", .{size});
+    }
+};
+
+const SwapChain = struct {
+    const buf_count = 3;
+
+    io: Io,
+    frames: [buf_count]FrameState,
+    frame_index: std.math.IntFittingRange(0, buf_count) = 0,
+    frame_sema: std.Io.Semaphore = .{ .permits = buf_count },
+
+    pub fn init(self: *SwapChain, api: Metal) !void {
+        self.* = .{
+            .io = api.io,
+            .frames = undefined,
+        };
+
+        for (&self.frames) |*frame| {
+            try frame.init(api);
+        }
+    }
+
+    pub fn deinit(self: *SwapChain) void {
+        for (0..buf_count) |_| self.frame_sema.waitUncancelable(self.io);
+        for (&self.frames) |*frame| frame.deinit();
+    }
+
+    pub fn nextFrame(self: *SwapChain) *FrameState {
+        self.frame_sema.waitUncancelable(self.io);
+        errdefer self.frame_sema.post();
+        self.frame_index = (self.frame_index + 1) % buf_count;
+        return &self.frames[self.frame_index];
+    }
+
+    pub fn releaseFrame(self: *SwapChain) void {
+        self.frame_sema.post(self.io);
+    }
+};
+
+const FrameState = struct {
+    vertex: VertexBuffer,
+    uniforms: UniformsBuffer,
+    target: Target = undefined,
+
+    pub fn init(self: *FrameState, api: Metal) !void {
+        self.* = .{
+            .uniforms = undefined,
+            .vertex = undefined,
+            .target = undefined,
+        };
+
+        try self.vertex.init(.{
+            .device = api.device,
+            .resource_options = .{
+                .cpu_cache_mode = .write_combined,
+                .storage_mode = .managed,
+            },
+        }, 1);
+
+        try self.uniforms.init(.{
+            .device = api.device,
+            .resource_options = .{
+                .cpu_cache_mode = .write_combined,
+                .storage_mode = .managed,
+            },
+        }, 1);
+    }
+
+    pub fn deinit(self: *FrameState) void {
+        self.vertex.deinit();
+    }
+};

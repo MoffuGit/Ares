@@ -1,100 +1,3 @@
-pub const Options = struct {
-    name: [:0]const u8,
-    x: i32,
-    y: i32,
-    width: i32,
-    height: i32,
-    flags: Flags,
-};
-
-pub const Window = window: {
-    if (!builtin.is_test) break :window struct {
-        handler: *c.struct_RGFW_window,
-        renderer: *Renderer,
-        state: RenderState,
-
-        pub fn init(
-            self: *@This(),
-            options: Options,
-            renderer: *Renderer,
-            io: Io,
-        ) !void {
-            self.* = .{
-                .handler = undefined,
-                .state = undefined,
-                .renderer = renderer,
-            };
-
-            self.handler = c.RGFW_createWindow(
-                options.name,
-                options.x,
-                options.y,
-                options.width,
-                options.height,
-                options.flags,
-            ) orelse return error.RGFWCreation;
-
-            try self.state.init(renderer, self, io);
-
-            c.RGFW_window_setUserPtr(self.handler, self);
-
-            _ = c.RGFW_setEventCallback(WindowResized, resizeCallback);
-        }
-
-        pub fn resizeCallback(event: [*c]const Event) callconv(.c) void {
-            const win = event.*.common.win;
-            const userdata = c.RGFW_window_getUserPtr(win) orelse unreachable;
-            const self: *@This() = @ptrCast(@alignCast(userdata));
-
-            self.render() catch |err| std.log.err("Render err={}", .{err});
-        }
-
-        pub fn render(self: *@This()) !void {
-            try self.renderer.render(self);
-        }
-
-        pub fn deinit(self: *@This()) void {
-            self.state.deinit();
-            c.RGFW_window_close(self.handler);
-        }
-
-        pub fn shouldClose(self: *@This()) bool {
-            return c.RGFW_window_shouldClose(self.handler) == c.RGFW_TRUE;
-        }
-
-        pub fn NSWindow(self: *@This()) ?*anyopaque {
-            return c.RGFW_window_getWindow_OSX(self.handler);
-        }
-
-        pub fn NSView(self: *@This()) ?*anyopaque {
-            return c.RGFW_window_getView_OSX(self.handler);
-        }
-
-        pub fn sizeInPixels(self: *@This()) ?struct { i32, i32 } {
-            var width: i32, var height: i32 = .{ 0, 0 };
-
-            if (c.RGFW_window_getSizeInPixels(self.handler, &width, &height) == c.RGFW_TRUE) {
-                return .{ width, height };
-            }
-
-            return null;
-        }
-    };
-
-    break :window struct {
-        pub fn init(
-            _: *@This(),
-            _: Options,
-            _: *Renderer,
-            _: Io,
-        ) !void {}
-
-        pub fn deinit(self: *@This()) void {
-            _ = self;
-        }
-    };
-};
-
 const std = @import("std");
 const Io = std.Io;
 const builtin = @import("builtin");
@@ -156,6 +59,73 @@ pub const MouseMisc4 = c.RGFW_mouseMisc4;
 pub const MouseMisc5 = c.RGFW_mouseMisc5;
 pub const MouseFinal = c.RGFW_mouseFinal;
 
-const rd = @import("renderer.zig");
-const Renderer = rd.Renderer;
-const RenderState = Renderer.RenderState;
+pub const Window = window: {
+    if (!builtin.is_test) break :window struct {
+        win: *c.struct_RGFW_window,
+
+        pub fn init(
+            self: *@This(),
+            name: [:0]const u8,
+            x: i32,
+            y: i32,
+            width: i32,
+            height: i32,
+            flags: Flags,
+        ) !void {
+            self.* = .{
+                .win = undefined,
+            };
+
+            self.win = c.RGFW_createWindow(
+                name,
+                x,
+                y,
+                width,
+                height,
+                flags,
+            ) orelse return error.RGFWCreation;
+        }
+
+        pub fn deinit(self: *@This()) void {
+            c.RGFW_window_close(self.win);
+        }
+
+        pub fn shouldClose(self: *@This()) bool {
+            return c.RGFW_window_shouldClose(self.win) == c.RGFW_TRUE;
+        }
+
+        pub fn NSWindow(self: *@This()) ?*anyopaque {
+            return c.RGFW_window_getWindow_OSX(self.win);
+        }
+
+        pub fn NSView(self: *@This()) ?*anyopaque {
+            return c.RGFW_window_getView_OSX(self.win);
+        }
+
+        pub fn sizeInPixels(self: *@This()) ?struct { i32, i32 } {
+            var width: i32, var height: i32 = .{ 0, 0 };
+
+            if (c.RGFW_window_getSizeInPixels(self.win, &width, &height) == c.RGFW_TRUE) {
+                return .{ width, height };
+            }
+
+            return null;
+        }
+    };
+
+    break :window struct {
+        pub fn init(
+            _: *@This(),
+            _: [:0]const u8,
+            _: i32,
+            _: i32,
+            _: i32,
+            _: i32,
+            _: Flags,
+        ) !void {}
+
+        pub fn deinit(self: *@This()) void {
+            _ = self;
+        }
+    };
+};

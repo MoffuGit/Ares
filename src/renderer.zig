@@ -18,7 +18,6 @@ const VertexBuffer = Metal.VertexBuffer;
 const VertexInput = Metal.VertexInput;
 const Shaders = Metal.Shaders;
 const RenderPass = Metal.RenderPass;
-const Handler = Metal.Handler;
 const Target = Metal.Target;
 const Frame = Metal.Frame;
 
@@ -26,6 +25,8 @@ const log = std.log.scoped(.render);
 
 pub const Renderer = renderer: {
     if (!builtin.is_test) break :renderer struct {
+        pub const Handler = Metal.Handler;
+
         api: Metal,
         shaders: Shaders,
 
@@ -35,7 +36,7 @@ pub const Renderer = renderer: {
                 .shaders = undefined,
             };
 
-            try self.api.init();
+            try self.api.init(io);
             errdefer self.api.deinit();
 
             try self.shaders.init(self.api.device, .bgra8unorm, io);
@@ -47,21 +48,19 @@ pub const Renderer = renderer: {
             self.api.deinit();
         }
 
-        pub fn render(self: *@This(), window: *Window) !void {
+        pub fn render(self: *@This(), window: *Window, handler: *Handler) !void {
             self.api.start();
             defer self.api.end();
 
             const width, const height = window.sizeInPixels() orelse return error.MissingWindowSize;
 
-            window.state.handler.setSize(width, height);
+            handler.setSize(width, height);
 
-            var frame_state = window.state.swap_chain.nextFrame();
-            frame_state.target.init(window.state.handler);
-
-            var frame = self.api.beginFrame(&window.state, &frame_state.target);
+            var state = handler.frameState();
+            var frame = self.api.beginFrame(handler, &state.target);
             var pass = frame.renderPass(&.{
                 .{
-                    .target = frame_state.target,
+                    .target = state.target,
                     .clear_color = .{ 1.0, 1.0, 1.0, 1.0 },
                 },
             });
@@ -72,17 +71,17 @@ pub const Renderer = renderer: {
                 .{ .position = .{ 140.0, 140.0, 240.0, 240.0 }, .color = .{ 0.0, 0.0, 1.0, 1.0 } },
             };
 
-            try frame_state.vertex.sync(&vertices);
+            try state.vertex.sync(&vertices);
 
             const uniforms = Uniforms{
                 .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
             };
-            try frame_state.uniforms.sync(&.{uniforms});
+            try state.uniforms.sync(&.{uniforms});
 
             pass.step(.{
                 .pipeline = self.shaders.pipelines.bg_color,
-                .buffers = &.{frame_state.vertex.buffer},
-                .uniforms = frame_state.uniforms.buffer,
+                .buffers = &.{state.vertex.buffer},
+                .uniforms = state.uniforms.buffer,
                 .draw = .{
                     .vertex_count = 4,
                     .type = .triangle_strip,
@@ -93,99 +92,11 @@ pub const Renderer = renderer: {
             pass.complete();
             frame.complete();
         }
-
-        const SwapChain = struct {
-            const buf_count = 3;
-
-            io: Io,
-            frames: [buf_count]FrameState,
-            frame_index: std.math.IntFittingRange(0, buf_count) = 0,
-            frame_sema: std.Io.Semaphore = .{ .permits = buf_count },
-
-            pub fn init(self: *SwapChain, api: Metal, io: Io) !void {
-                self.* = .{
-                    .io = io,
-                    .frames = undefined,
-                };
-
-                for (&self.frames) |*frame| {
-                    try frame.init(api);
-                }
-            }
-
-            pub fn deinit(self: *SwapChain) void {
-                for (0..buf_count) |_| self.frame_sema.waitUncancelable(self.io);
-                for (&self.frames) |*frame| frame.deinit();
-            }
-
-            pub fn nextFrame(self: *SwapChain) *FrameState {
-                self.frame_sema.waitUncancelable(self.io);
-                errdefer self.frame_sema.post();
-                self.frame_index = (self.frame_index + 1) % buf_count;
-                return &self.frames[self.frame_index];
-            }
-
-            pub fn releaseFrame(self: *SwapChain) void {
-                self.frame_sema.post(self.io);
-            }
-
-            const FrameState = struct {
-                vertex: VertexBuffer,
-                uniforms: UniformsBuffer,
-                target: Target = undefined,
-
-                pub fn init(self: *FrameState, api: Metal) !void {
-                    self.* = .{
-                        .uniforms = undefined,
-                        .vertex = undefined,
-                        .target = undefined,
-                    };
-
-                    try self.vertex.init(.{
-                        .device = api.device,
-                        .resource_options = .{
-                            .cpu_cache_mode = .write_combined,
-                            .storage_mode = .managed,
-                        },
-                    }, 1);
-
-                    try self.uniforms.init(.{
-                        .device = api.device,
-                        .resource_options = .{
-                            .cpu_cache_mode = .write_combined,
-                            .storage_mode = .managed,
-                        },
-                    }, 1);
-                }
-
-                pub fn deinit(self: *FrameState) void {
-                    self.vertex.deinit();
-                }
-            };
-        };
-
-        pub const RenderState = struct {
-            handler: Handler,
-            swap_chain: SwapChain,
-
-            pub fn init(self: *@This(), renderer: *Renderer, window: *Window, io: Io) !void {
-                self.* = .{
-                    .handler = undefined,
-                    .swap_chain = undefined,
-                };
-
-                self.handler.init(renderer.api, window);
-                try self.swap_chain.init(renderer.api, io);
-            }
-
-            pub fn deinit(self: *@This()) void {
-                self.handler.deinit();
-                self.swap_chain.deinit();
-            }
-        };
     };
 
     break :renderer struct {
+        pub const Handler = struct {};
+
         pub fn init(_: *Renderer, _: Io) !void {}
 
         pub fn deinit(_: *Renderer) void {}
