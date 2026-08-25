@@ -7,8 +7,6 @@ const Io = std.Io;
 const assert = std.debug.assert;
 const heap = std.heap;
 
-const rgfw = @import("rgfw");
-
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const constants = @import("constants.zig");
@@ -31,7 +29,8 @@ const Subscriptions = subs.Subscriptions;
 const typeId = @import("type_id.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
-const Window = @import("window.zig").Window;
+const win = @import("window.zig");
+const Window = win.Window;
 
 const CHUNK_SIZES: []const chunk_pool.PoolConfig = &.{
     .{ 50, 128 },
@@ -120,7 +119,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
             .y = 0,
             .width = 800,
             .height = 600,
-            .flags = rgfw.Window.WindowCenter | rgfw.Window.WindowFocus,
+            .flags = win.WindowCenter | win.WindowFocus,
         },
         &self.renderer,
         io,
@@ -147,11 +146,12 @@ pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
     res catch loop.stop();
     const self: *App = @fieldParentPtr("tick_h", completion);
 
-    if (self.window.os.shouldClose()) loop.stop();
+    if (self.window.shouldClose()) loop.stop();
 
-    rgfw.pollEvents();
+    const c = @import("c");
+    c.RGFW_pollEvents();
 
-    self.renderer.render(&self.window.os, &self.window.state) catch |err| {
+    self.window.render() catch |err| {
         log.err("Render err={}", .{err});
     };
 

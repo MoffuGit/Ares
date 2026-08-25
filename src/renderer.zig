@@ -8,8 +8,8 @@ const builtin = @import("builtin");
 const c = @import("c");
 const macos = @import("macos");
 const objc = @import("objc");
-const rgfw = @import("rgfw");
-const Window = rgfw.Window;
+const win = @import("window.zig");
+const Window = win.Window;
 
 const Metal = @import("renderer/metal.zig");
 const UniformsBuffer = Metal.UniformsBuffer;
@@ -47,19 +47,18 @@ pub const Renderer = renderer: {
             self.api.deinit();
         }
 
-        pub fn render(self: *@This(), window: *Window, state: *RenderState) !void {
+        pub fn render(self: *@This(), window: *Window) !void {
             self.api.start();
             defer self.api.end();
 
-            var width: i32, var height: i32 = .{ 0, 0 };
-            assert(window.sizeInPixels(&width, &height));
+            const width, const height = window.sizeInPixels() orelse return error.MissingWindowSize;
 
-            state.handler.setSize(width, height);
+            window.state.handler.setSize(width, height);
 
-            var frame_state = state.swap_chain.nextFrame();
-            frame_state.target.init(state.handler);
+            var frame_state = window.state.swap_chain.nextFrame();
+            frame_state.target.init(window.state.handler);
 
-            var frame = self.api.beginFrame(state, &frame_state.target);
+            var frame = self.api.beginFrame(&window.state, &frame_state.target);
             var pass = frame.renderPass(&.{
                 .{
                     .target = frame_state.target,

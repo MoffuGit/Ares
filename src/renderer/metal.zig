@@ -4,8 +4,8 @@ const std = @import("std");
 const assert = std.debug.assert;
 
 const objc = @import("objc");
-const rgfw = @import("rgfw");
-const Window = rgfw.Window;
+const win = @import("../window.zig");
+const Window = win.Window;
 
 const Renderer = @import("../renderer.zig").Renderer;
 const RenderState = Renderer.RenderState;

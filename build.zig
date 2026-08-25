@@ -63,9 +63,16 @@ fn rootModule(
         .optimize = optimize,
     });
 
-    const rgfw = b.dependency("rgfw", .{
-        .target = target,
+    const translate_c = b.addTranslateC(.{
         .optimize = optimize,
+        .target = target,
+        .root_source_file = b.path("lib/RGFW.h"),
+    });
+
+    const c_mod = translate_c.createModule();
+
+    c_mod.addCSourceFile(.{
+        .file = b.path("lib/RGFW.c"),
     });
 
     const macos = b.dependency("macos", .{
@@ -86,11 +93,14 @@ fn rootModule(
             }).module("zlob_core") },
             .{ .name = "zqlite", .module = zqlite.module("zqlite") },
             .{ .name = "objc", .module = objc.module("objc") },
-            .{ .name = "rgfw", .module = rgfw.module("rgfw") },
+            .{ .name = "c", .module = c_mod },
             .{ .name = "macos", .module = macos.module("macos") },
         },
     });
 
+    mod.linkFramework("Cocoa", .{});
+    mod.linkFramework("CoreVideo", .{});
+    mod.linkFramework("IOKit", .{});
     mod.linkFramework("Metal", .{});
 
     const default_sqlite3_build = [_][]const u8{"-std=c99"};
