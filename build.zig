@@ -34,6 +34,7 @@ pub fn build(b: *std.Build) void {
         .name = "odyssey",
         .root_module = root_module,
     });
+    b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
