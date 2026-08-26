@@ -85,6 +85,7 @@ pub const Handle = struct {
         layer.setProperty("contentsGravity", macos.animation.kCAGravityTopLeft);
         layer.setProperty("device", renderer.api.device);
         layer.setProperty("pixelFormat", @intFromEnum(c.MTLPixelFormat.bgra8unorm));
+        layer.setProperty("displaySyncEnabled", false);
 
         self.* = .{ .layer = layer, .swap_chain = undefined };
 
