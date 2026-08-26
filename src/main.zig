@@ -28,7 +28,7 @@ pub fn main(init: std.process.Init) !void {
         .tick_h = .noop,
     };
 
-    win.setEventCallback(win.WindowResized, windowResize);
+    win.setEventCallback(win.WindowResized, windowCallback);
 
     const chunks = app.chunks.allocator();
     const window_state = try chunks.create(WindowState);
@@ -46,7 +46,7 @@ pub fn main(init: std.process.Init) !void {
 
     app.states.append(window_state);
 
-    app.timer(&context.tick_h, tick, 16);
+    app.timer(&context.tick_h, tick, 8);
     app.run(.until_done);
 }
 
@@ -81,7 +81,7 @@ pub fn _tick(app: *App) !void {
 
             chunks.destroy(state);
         } else {
-            try app.renderer.render(&state.win, &state.handler);
+            try app.renderer.render(&state.win, &state.handler, false);
             states.append(state);
         }
     }
@@ -89,7 +89,7 @@ pub fn _tick(app: *App) !void {
     app.states = states;
 }
 
-pub fn windowResize(event: [*c]const win.Event) callconv(.c) void {
+pub fn windowCallback(event: [*c]const win.Event) callconv(.c) void {
     const window: Window = .{ .raw = event.*.common.win };
     const context: *Context = @ptrCast(@alignCast(window.userdata()));
     const app = context.app;
@@ -98,7 +98,7 @@ pub fn windowResize(event: [*c]const win.Event) callconv(.c) void {
 
     while (curr) |state| : (curr = state.next) {
         if (state.win.raw == window.raw) {
-            app.renderer.render(&state.win, &state.handler) catch {};
+            app.renderer.render(&state.win, &state.handler, true) catch {};
             break;
         }
     }

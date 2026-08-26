@@ -49,7 +49,7 @@ pub const Renderer = renderer: {
             self.api.deinit();
         }
 
-        pub fn render(self: *@This(), window: *Window, handler: *Handle) !void {
+        pub fn render(self: *@This(), window: *Window, handler: *Handle, sync: bool) !void {
             self.api.start();
             defer self.api.end();
 
@@ -79,7 +79,7 @@ pub const Renderer = renderer: {
 
             var frame = handler.frame(self);
             var target = handler.target();
-            defer frame.complete(&target);
+            defer frame.complete(&target, sync);
 
             var pass = frame.renderPass(&.{
                 .{
