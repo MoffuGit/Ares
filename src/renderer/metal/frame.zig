@@ -51,7 +51,7 @@ const CompletionBlock = objc.Block(
 fn bufferCompleted(
     block: *const CompletionBlock.Context,
 ) callconv(.c) void {
-    block.handler.swap_chain.releaseFrame();
+    block.handler.swap_chain.releaseFrame(block.handler.io);
 }
 
 /// Add a render pass to this frame with the provided attachments.
@@ -73,15 +73,14 @@ pub inline fn complete(self: *Frame, target: *Target, sync: bool) void {
             objc.sel("addCompletedHandler:"),
             .{&self.block},
         );
-
-        self.buffer.msgSend(void, "presentDrawable:", .{target.drawable});
     }
+
+    self.buffer.msgSend(void, "presentDrawable:", .{target.drawable});
 
     self.buffer.msgSend(void, "commit", .{});
 
     if (sync) {
         self.buffer.msgSend(void, "waitUntilCompleted", .{});
         CompletionBlock.invoke(&self.block, .{});
-        target.drawable.msgSend(void, "present", .{});
     }
 }

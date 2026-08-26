@@ -13,21 +13,6 @@ const Window = win.Window;
 
 const log = std.log.scoped(.main);
 
-//NOTE:
-//the reason why i saw way to many events is because
-//the window timer callback was proabalby runnign after the windowCallback
-//on the case of the snap animations the sysmte was doing somethin like this:
-//
-//window callback
-//      less that 16 ms between this two
-//timer callback
-//      less that 16 ms between this two
-//window callback
-//      less that 16 ms between this two
-//timer callback
-//
-//the last_frame works but i want it to be temporal
-
 pub fn main(init: std.process.Init) !void {
     try global.state.init();
     defer global.state.deinit();
@@ -42,7 +27,6 @@ pub fn main(init: std.process.Init) !void {
     var context: Context = .{
         .app = &app,
         .tick_h = .noop,
-        .last_frame = .now(io, .real),
     };
 
     win.setEventCallback(win.WindowResized, windowCallback);
@@ -63,14 +47,13 @@ pub fn main(init: std.process.Init) !void {
 
     app.states.append(window_state);
 
-    app.timer(&context.tick_h, tick, 8);
+    app.timer(&context.tick_h, tick, 16);
     app.run(.until_done);
 }
 
 const Context = struct {
     app: *App,
     tick_h: Completion,
-    last_frame: Io.Timestamp,
 };
 
 pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
@@ -79,12 +62,7 @@ pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
     const context: *Context = @alignCast(@fieldParentPtr("tick_h", completion));
     const app = context.app;
 
-    const now: Io.Timestamp = .now(app.io, .real);
-
-    if (now.toMilliseconds() - context.last_frame.toMilliseconds() >= 8) {
-        context.last_frame = now;
-        _tick(app) catch loop.stop();
-    }
+    _tick(app) catch loop.stop();
 
     return true;
 }
@@ -104,7 +82,7 @@ pub fn _tick(app: *App) !void {
 
             chunks.destroy(state);
         } else {
-            try app.renderer.render(&state.win, &state.handler, false, app.io);
+            try app.renderer.render(&state.win, &state.handler, false);
             states.append(state);
         }
     }
@@ -117,18 +95,12 @@ pub fn windowCallback(event: [*c]const win.Event) callconv(.c) void {
     const context: *Context = @ptrCast(@alignCast(window.userdata()));
     const app = context.app;
 
-    const now: Io.Timestamp = .now(app.io, .real);
+    var curr: ?*WindowState = app.states.head;
 
-    if (now.toMilliseconds() - context.last_frame.toMilliseconds() >= 8) {
-        context.last_frame = now;
-
-        var curr: ?*WindowState = app.states.head;
-
-        while (curr) |state| : (curr = state.next) {
-            if (state.win.raw == window.raw) {
-                app.renderer.render(&state.win, &state.handler, true, app.io) catch {};
-                break;
-            }
+    while (curr) |state| : (curr = state.next) {
+        if (state.win.raw == window.raw) {
+            app.renderer.render(&state.win, &state.handler, true) catch {};
+            break;
         }
     }
 }

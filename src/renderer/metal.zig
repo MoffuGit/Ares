@@ -75,6 +75,7 @@ pub fn deinit(self: *Metal) void {
 }
 
 pub const Handle = struct {
+    io: Io,
     layer: objc.Object,
     swap_chain: SwapChain,
 
@@ -86,7 +87,7 @@ pub const Handle = struct {
         layer.setProperty("device", renderer.api.device);
         layer.setProperty("pixelFormat", @intFromEnum(c.MTLPixelFormat.bgra8unorm));
 
-        self.* = .{ .layer = layer, .swap_chain = undefined };
+        self.* = .{ .layer = layer, .swap_chain = undefined, .io = renderer.api.io };
 
         const view = objc.Object.fromId(window.NSView() orelse unreachable);
         view.msgSend(void, "setLayer:", .{self.layer});
@@ -95,7 +96,7 @@ pub const Handle = struct {
     }
 
     pub fn frameState(self: *Handle) *FrameState {
-        return self.swap_chain.nextFrame();
+        return self.swap_chain.nextFrame(self.io);
     }
 
     pub fn frame(self: *Handle, renderer: *Renderer) Frame {
@@ -111,7 +112,7 @@ pub const Handle = struct {
 
     pub fn deinit(self: *@This()) void {
         self.layer.release();
-        self.swap_chain.deinit();
+        self.swap_chain.deinit(self.io);
     }
 
     pub fn setSize(self: *Handle, width: i32, height: i32) void {
@@ -126,14 +127,12 @@ pub const Handle = struct {
 const SwapChain = struct {
     const buf_count = 3;
 
-    io: Io,
     frames: [buf_count]FrameState,
     frame_index: std.math.IntFittingRange(0, buf_count) = 0,
     frame_sema: std.Io.Semaphore = .{ .permits = buf_count },
 
     pub fn init(self: *SwapChain, api: Metal) !void {
         self.* = .{
-            .io = api.io,
             .frames = undefined,
         };
 
@@ -142,20 +141,20 @@ const SwapChain = struct {
         }
     }
 
-    pub fn deinit(self: *SwapChain) void {
-        for (0..buf_count) |_| self.frame_sema.waitUncancelable(self.io);
+    pub fn deinit(self: *SwapChain, io: Io) void {
+        for (0..buf_count) |_| self.frame_sema.waitUncancelable(io);
         for (&self.frames) |*frame| frame.deinit();
     }
 
-    pub fn nextFrame(self: *SwapChain) *FrameState {
-        self.frame_sema.waitUncancelable(self.io);
+    pub fn nextFrame(self: *SwapChain, io: Io) *FrameState {
+        self.frame_sema.waitUncancelable(io);
         errdefer self.frame_sema.post();
         self.frame_index = (self.frame_index + 1) % buf_count;
         return &self.frames[self.frame_index];
     }
 
-    pub fn releaseFrame(self: *SwapChain) void {
-        self.frame_sema.post(self.io);
+    pub fn releaseFrame(self: *SwapChain, io: Io) void {
+        self.frame_sema.post(io);
     }
 };
 
