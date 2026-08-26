@@ -49,7 +49,7 @@ pub const Renderer = renderer: {
             self.api.deinit();
         }
 
-        pub fn render(self: *@This(), window: *Window, handler: *Handle, sync: bool) !void {
+        pub fn render(self: *@This(), window: *Window, handler: *Handle, sync: bool, io: Io) !void {
             self.api.start();
             defer self.api.end();
 
@@ -77,14 +77,20 @@ pub const Renderer = renderer: {
 
             try state.uniforms.sync(&.{uniforms});
 
+            const start = Io.Timestamp.now(io, .real);
+
             var frame = handler.frame(self);
             var target = handler.target();
             defer frame.complete(&target, sync);
 
+            const passed = Io.Timestamp.untilNow(start, io, .real);
+
+            log.debug("passed: {}", .{passed.toMilliseconds()});
+
             var pass = frame.renderPass(&.{
                 .{
                     .target = target,
-                    .clear_color = .{ 1.0, 0.0, 0.0, 1.0 },
+                    .clear_color = .{ 1.0, 1.0, 1.0, 1.0 },
                 },
             });
             defer pass.complete();
