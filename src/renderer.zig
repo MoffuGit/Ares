@@ -58,18 +58,9 @@ pub const Renderer = renderer: {
             handler.setSize(width, height);
 
             var state = handler.frameState();
-            var target = handler.target();
 
             var frame = handler.frame(self);
-            defer frame.complete(&target);
-
-            var pass = frame.renderPass(&.{
-                .{
-                    .target = target,
-                    .clear_color = .{ 1.0, 0.0, 0.0, 1.0 },
-                },
-            });
-            defer pass.complete();
+            defer frame.complete();
 
             const vertices = [_]VertexInput{
                 .{
@@ -88,6 +79,17 @@ pub const Renderer = renderer: {
             };
 
             try state.uniforms.sync(&.{uniforms});
+
+            var target = handler.target();
+            defer target.complete(&frame);
+
+            var pass = frame.renderPass(&.{
+                .{
+                    .target = target,
+                    .clear_color = .{ 1.0, 0.0, 0.0, 1.0 },
+                },
+            });
+            defer pass.complete();
 
             pass.step(.{
                 .pipeline = self.shaders.pipelines.bg_color,
