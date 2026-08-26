@@ -59,9 +59,6 @@ pub const Renderer = renderer: {
 
             var state = handler.frameState();
 
-            var frame = handler.frame(self);
-            defer frame.complete();
-
             const vertices = [_]VertexInput{
                 .{
                     .position = .{ 10.0, 10.0, 110.0, 110.0 },
@@ -79,6 +76,9 @@ pub const Renderer = renderer: {
             };
 
             try state.uniforms.sync(&.{uniforms});
+
+            var frame = handler.frame(self);
+            defer frame.complete();
 
             var target = handler.target();
             defer target.complete(&frame);
