@@ -66,12 +66,13 @@ pub inline fn renderPass(
     });
 }
 
-pub inline fn complete(self: *Frame) void {
+pub inline fn complete(self: *Frame, target: *Target) void {
     self.buffer.msgSend(
         void,
         objc.sel("addCompletedHandler:"),
         .{&self.block},
     );
 
-    self.buffer.msgSend(void, objc.sel("commit"), .{});
+    self.buffer.msgSend(void, "presentDrawable:", .{target.drawable});
+    self.buffer.msgSend(void, "commit", .{});
 }

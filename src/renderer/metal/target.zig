@@ -8,7 +8,3 @@ pub const Target = @This();
 
 drawable: objc.Object,
 texture: objc.Object,
-
-pub fn complete(self: *Target, frame: *Frame) void {
-    frame.buffer.msgSend(void, "presentDrawable:", .{self.drawable});
-}

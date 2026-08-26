@@ -77,11 +77,9 @@ pub const Renderer = renderer: {
 
             try state.uniforms.sync(&.{uniforms});
 
-            var frame = handler.frame(self);
-            defer frame.complete();
-
             var target = handler.target();
-            defer target.complete(&frame);
+            var frame = handler.frame(self);
+            defer frame.complete(&target);
 
             var pass = frame.renderPass(&.{
                 .{
