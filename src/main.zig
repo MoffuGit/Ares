@@ -46,7 +46,7 @@ pub fn main(init: std.process.Init) !void {
 
     app.states.append(window_state);
 
-    app.timer(&context.tick_h, tick, 8);
+    app.timer(&context.tick_h, tick, 16);
     app.run(.until_done);
 }
 
