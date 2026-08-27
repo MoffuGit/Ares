@@ -34,25 +34,24 @@ pub const ChunkPool = struct {
     free_list: Index = .none,
     mutex: Io.Mutex,
 
-    pub fn init(self: *ChunkPool, allocator: Allocator, capacity: u32, size: u32) !void {
+    pub fn init(self: *ChunkPool, allocator: Allocator, capacity: u32, chunk_size: u32, alignment: mem.Alignment) !void {
         assert(capacity < math.maxInt(u32));
         assert(capacity > 0);
-        assert(size > 0);
+        assert(chunk_size > 0);
 
-        const alignment: mem.Alignment = .fromByteUnits(size);
-        const len = @as(usize, size) * @as(usize, capacity);
+        const len = @as(usize, chunk_size) * @as(usize, capacity);
         const buffer = (allocator.rawAlloc(
             len,
             alignment,
             @returnAddress(),
         ) orelse return error.OutOfMemory)[0..len];
 
-        log.debug("Chunk Pool size={B} capacity={} size={}", .{ buffer.len, capacity, size });
+        log.debug("Chunk Pool size={B} capacity={} size={}", .{ buffer.len, capacity, chunk_size });
 
         self.* = .{
             .buffer = buffer,
             .alignment = alignment,
-            .chunk_size = size,
+            .chunk_size = chunk_size,
             .mutex = .init,
         };
     }
@@ -149,7 +148,7 @@ pub const ChunkAllocator = struct {
         for (ordered_pools, 0..) |config, index| {
             assert(last != config.@"1");
 
-            try self.pools[index].init(child_alloc, config.@"0", config.@"1");
+            try self.pools[index].init(child_alloc, config.@"0", config.@"1", .fromByteUnits(config.@"1"));
 
             last = config.@"1";
             initialized += 1;
@@ -243,7 +242,7 @@ test "Simple Chunk Pool" {
     const gpa = testing.allocator;
 
     var pool: ChunkPool = undefined;
-    try pool.init(gpa, 2, 128);
+    try pool.init(gpa, 2, 128, .fromByteUnits(128));
     defer pool.deinit(gpa);
 
     const first = pool.alloc() orelse return error.TestUnexpectedResult;
@@ -262,7 +261,7 @@ test "Chunk Pool reuses chunk after capacity is exhausted" {
     const gpa = testing.allocator;
 
     var pool: ChunkPool = undefined;
-    try pool.init(gpa, 3, 128);
+    try pool.init(gpa, 3, 128, .fromByteUnits(128));
     defer pool.deinit(gpa);
 
     const first = pool.alloc() orelse return error.TestUnexpectedResult;
