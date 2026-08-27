@@ -7,7 +7,6 @@ const assert = std.debug.assert;
 const macos = @import("macos");
 const objc = @import("objc");
 
-const Renderer = @import("../renderer.zig").Renderer;
 const win = @import("../window.zig");
 const Window = win.Window;
 const c = @import("metal/c.zig");
@@ -79,35 +78,36 @@ pub const Handle = struct {
     layer: objc.Object,
     swap_chain: SwapChain,
 
-    pub fn init(self: *@This(), renderer: *Renderer, window: *Window) !void {
+    pub fn init(self: *@This(), api: Metal, window: *Window) !void {
         const CAMetalLayer = objc.getClass("CAMetalLayer").?;
 
         const layer = CAMetalLayer.msgSend(objc.Object, "layer", .{});
         layer.setProperty("contentsGravity", macos.animation.kCAGravityTopLeft);
-        layer.setProperty("device", renderer.api.device);
+        layer.setProperty("device", api.device);
         layer.setProperty("pixelFormat", @intFromEnum(c.MTLPixelFormat.bgra8unorm));
 
-        self.* = .{ .layer = layer, .swap_chain = undefined, .io = renderer.api.io };
+        self.* = .{ .layer = layer, .swap_chain = undefined, .io = api.io };
 
         const view = objc.Object.fromId(window.NSView() orelse unreachable);
         view.msgSend(void, "setLayer:", .{self.layer});
 
-        try self.swap_chain.init(renderer.api);
+        try self.swap_chain.init(api);
     }
 
     pub fn frameState(self: *Handle) *FrameState {
         return self.swap_chain.nextFrame(self.io);
     }
 
-    pub fn frame(self: *Handle, renderer: *Renderer) Frame {
-        return .begin(self, renderer.api);
+    pub fn releaseFrame(self: *Handle) void {
+        self.swap_chain.releaseFrame(self.io);
+    }
+
+    pub fn frame(self: *Handle, api: Metal) Frame {
+        return .begin(self, api);
     }
 
     pub fn target(self: *Handle) Target {
-        const drawable = self.layer.msgSend(objc.Object, "nextDrawable", .{});
-        const texture = drawable.msgSend(objc.Object, "texture", .{});
-
-        return .{ .drawable = drawable, .texture = texture };
+        return .init(self.layer);
     }
 
     pub fn deinit(self: *@This()) void {

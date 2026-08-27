@@ -5,6 +5,8 @@ const Allocator = std.mem.Allocator;
 const macos = @import("macos");
 const objc = @import("objc");
 
+const Metal = @import("../metal.zig");
+
 const buffer = @import("buffer.zig");
 const Buffer = buffer.Buffer;
 const c = @import("c.zig");
@@ -101,11 +103,11 @@ pub const Shaders = struct {
     /// Initialize our shader set.
     pub fn init(
         self: *Shaders,
-        device: objc.Object,
+        api: Metal,
         pixel_format: c.MTLPixelFormat,
         io: Io,
     ) !void {
-        const library = try initLibrary(device, io);
+        const library = try initLibrary(api.device, io);
         errdefer library.msgSend(void, objc.sel("release"), .{});
 
         var pipelines: PipelineCollection = undefined;
@@ -120,7 +122,7 @@ pub const Shaders = struct {
 
         inline for (pipeline_descs) |pipeline| {
             @field(pipelines, pipeline[0]) = try pipeline[1].initPipeline(
-                device,
+                api.device,
                 library,
                 pixel_format,
             );

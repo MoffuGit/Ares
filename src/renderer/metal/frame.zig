@@ -51,7 +51,7 @@ const CompletionBlock = objc.Block(
 fn bufferCompleted(
     block: *const CompletionBlock.Context,
 ) callconv(.c) void {
-    block.handler.swap_chain.releaseFrame(block.handler.io);
+    block.handler.releaseFrame();
 }
 
 /// Add a render pass to this frame with the provided attachments.
@@ -74,6 +74,5 @@ pub inline fn complete(self: *Frame, target: *Target) void {
     );
 
     self.buffer.msgSend(void, "presentDrawable:", .{target.drawable});
-
     self.buffer.msgSend(void, "commit", .{});
 }

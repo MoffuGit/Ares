@@ -11,14 +11,9 @@ const macos = @import("macos");
 const objc = @import("objc");
 
 const Metal = @import("renderer/metal.zig");
-const UniformsBuffer = Metal.UniformsBuffer;
 const Uniforms = Metal.Uniforms;
-const VertexBuffer = Metal.VertexBuffer;
 const VertexInput = Metal.VertexInput;
 const Shaders = Metal.Shaders;
-const RenderPass = Metal.RenderPass;
-const Target = Metal.Target;
-const Frame = Metal.Frame;
 const win = @import("window.zig");
 const Window = win.Window;
 
@@ -40,7 +35,7 @@ pub const Renderer = renderer: {
             try self.api.init(io);
             errdefer self.api.deinit();
 
-            try self.shaders.init(self.api.device, .bgra8unorm, io);
+            try self.shaders.init(self.api, .bgra8unorm, io);
             errdefer self.shaders.deinit();
         }
 
@@ -77,14 +72,14 @@ pub const Renderer = renderer: {
 
             try state.uniforms.sync(&.{uniforms});
 
-            var frame = handler.frame(self);
+            var frame = handler.frame(self.api);
             var target = handler.target();
             defer frame.complete(&target);
 
             var pass = frame.renderPass(&.{
                 .{
                     .target = target,
-                    .clear_color = .{ 1.0, 0.0, 0.0, 1.0 },
+                    .clear_color = .{ 0.0, 0.0, 0.0, 1.0 },
                 },
             });
             defer pass.complete();
