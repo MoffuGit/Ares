@@ -106,18 +106,6 @@ pub fn Buffer(comptime T: type) type {
             };
 
             @memcpy(dst, src);
-
-            // If we're using the managed resource storage mode, then
-            // we need to signal Metal to synchronize the buffer data.
-            //
-            // Ref: https://developer.apple.com/documentation/metal/synchronizing-a-managed-resource-in-macos?language=objc
-            if (self.opts.resource_options.storage_mode == .managed) {
-                self.buffer.msgSend(
-                    void,
-                    "didModifyRange:",
-                    .{macos.foundation.Range.init(0, req_bytes)},
-                );
-            }
         }
     };
 }

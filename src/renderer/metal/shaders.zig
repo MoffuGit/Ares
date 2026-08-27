@@ -1,3 +1,5 @@
+//LICENSE: [RADDEBUGGER]
+//LICENSE: [GHOSTTY]
 const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
@@ -16,8 +18,6 @@ const log = std.log.scoped(.metal);
 
 pub const VertexBuffer = Buffer(VertexInput);
 pub const UniformsBuffer = Buffer(Uniforms);
-
-//LICENSE: [RADDEBUGGER]
 
 pub const VertexInput = extern struct {
     position: [4]f32 align(16),
