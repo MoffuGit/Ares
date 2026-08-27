@@ -109,7 +109,10 @@ pub fn _tick(app: *App) !void {
 
             chunks.destroy(state);
         } else {
-            try app.renderer.render(&state.win, &state.handler, false);
+            if (!state.resized) {
+                try app.renderer.render(&state.win, &state.handler, false);
+            }
+            state.resized = false;
 
             states.append(state);
         }
@@ -128,6 +131,7 @@ pub fn windowCallback(event: [*c]const win.Event) callconv(.c) void {
     while (curr) |state| : (curr = state.next) {
         if (state.win.raw == window.raw) {
             app.renderer.render(&state.win, &state.handler, true) catch {};
+            state.resized = true;
             break;
         }
     }
