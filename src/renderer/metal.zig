@@ -82,9 +82,10 @@ pub const Handle = struct {
         const CAMetalLayer = objc.getClass("CAMetalLayer").?;
 
         const layer = CAMetalLayer.msgSend(objc.Object, "layer", .{});
-        layer.setProperty("contentsGravity", macos.animation.kCAGravityTopLeft);
         layer.setProperty("device", api.device);
+        layer.setProperty("opaque", true);
         layer.setProperty("pixelFormat", @intFromEnum(c.MTLPixelFormat.bgra8unorm));
+        layer.setProperty("contentsGravity", macos.animation.kCAGravityTopLeft);
 
         self.* = .{ .layer = layer, .swap_chain = undefined, .io = api.io };
 
