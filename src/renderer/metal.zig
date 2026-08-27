@@ -116,12 +116,14 @@ pub const Handle = struct {
         self.swap_chain.deinit(self.io);
     }
 
-    pub fn setSize(self: *Handle, width: i32, height: i32) void {
+    pub fn update(self: *@This(), width: i32, height: i32, sync: bool) void {
         const size: macos.graphics.Size = .{
             .width = @floatFromInt(width),
             .height = @floatFromInt(height),
         };
         self.layer.msgSend(void, "setDrawableSize:", .{size});
+
+        self.layer.setProperty("presentsWithTransaction", sync);
     }
 };
 
