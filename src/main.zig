@@ -2,12 +2,14 @@ const std = @import("std");
 const Io = std.Io;
 
 const App = @import("app.zig");
+const macos = @import("macos");
 const WindowState = App.WindowState;
 const datastruct = @import("datastruct.zig");
 const SinglyLinkedList = datastruct.SinglyLinkedList;
 const global = @import("global.zig");
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
+const Waker = Loop.Waker;
 const win = @import("window.zig");
 const Window = win.Window;
 
@@ -26,8 +28,11 @@ pub fn main(init: std.process.Init) !void {
 
     var context: Context = .{
         .app = &app,
-        .tick_h = .noop,
+        .display_c = .noop,
+        .waker = undefined,
     };
+
+    context.waker = try app.await(&context.display_c, tick);
 
     win.setEventCallback(win.WindowResized, windowCallback);
 
@@ -47,19 +52,41 @@ pub fn main(init: std.process.Init) !void {
 
     app.states.append(window_state);
 
-    app.timer(&context.tick_h, tick, 16);
+    const result = try macos.video.DisplayLink.createWithActiveCGDisplays();
+    result.setOutputCallback(
+        Waker,
+        &displayLinkCallback,
+        &context.waker,
+    ) catch |err| {
+        log.warn("error configuring display link err={}", .{err});
+        result.release();
+        return;
+    };
+
+    try result.start();
+
     app.run(.until_done);
+}
+
+fn displayLinkCallback(
+    _: *macos.video.DisplayLink,
+    ud: ?*Waker,
+) void {
+    if (ud) |waker| {
+        waker.wake() catch {};
+    }
 }
 
 const Context = struct {
     app: *App,
-    tick_h: Completion,
+    display_c: Completion,
+    waker: Waker,
 };
 
 pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
     res catch loop.stop();
 
-    const context: *Context = @alignCast(@fieldParentPtr("tick_h", completion));
+    const context: *Context = @alignCast(@fieldParentPtr("display_c", completion));
     const app = context.app;
 
     _tick(app) catch loop.stop();
