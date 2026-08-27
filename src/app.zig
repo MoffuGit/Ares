@@ -128,11 +128,13 @@ pub const WindowState = struct {
 
     win: Window,
     handler: RenderHandle,
+    resized: bool,
 
     pub fn init(self: *WindowState, opts: win.Options, renderer: *Renderer) !void {
         self.* = .{
             .win = undefined,
             .handler = undefined,
+            .resized = false,
         };
 
         try self.win.init(opts);
