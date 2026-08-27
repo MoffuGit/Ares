@@ -11,9 +11,6 @@ const macos = @import("macos");
 const objc = @import("objc");
 
 const Metal = @import("renderer/metal.zig");
-const Uniforms = Metal.Uniforms;
-const VertexInput = Metal.VertexInput;
-const Shaders = Metal.Shaders;
 const win = @import("window.zig");
 const Window = win.Window;
 
@@ -22,6 +19,9 @@ const log = std.log.scoped(.render);
 pub const Renderer = renderer: {
     if (!builtin.is_test) break :renderer struct {
         pub const Handle = Metal.Handle;
+        pub const VertexInput = Metal.VertexInput;
+        pub const Uniforms = Metal.Uniforms;
+        const Shaders = Metal.Shaders;
 
         api: Metal,
         shaders: Shaders,

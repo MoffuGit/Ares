@@ -129,7 +129,7 @@ pub const WindowState = struct {
     win: Window,
     handler: RenderHandle,
 
-    pub fn init(self: *WindowState, opts: win.Options, renderer: *Renderer) !void {
+    pub fn init(self: *WindowState, app: *App, opts: win.Options) !void {
         self.* = .{
             .win = undefined,
             .handler = undefined,
@@ -138,7 +138,7 @@ pub const WindowState = struct {
         try self.win.init(opts);
         errdefer self.win.deinit();
 
-        try self.handler.init(renderer.api, &self.win);
+        try self.handler.init(app.renderer.api, &self.win);
     }
 
     pub fn deinit(self: *WindowState) void {

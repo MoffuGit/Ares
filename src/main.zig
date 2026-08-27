@@ -39,15 +39,19 @@ pub fn main(init: std.process.Init) !void {
     const chunks = app.chunks.allocator();
     const window_state = try chunks.create(WindowState);
 
-    try window_state.init(.{
-        .name = "Odyssey",
-        .x = 0,
-        .y = 0,
-        .width = 800,
-        .height = 600,
-        .flags = win.WindowCenter | win.WindowFocus,
-        .userdata = &context,
-    }, &app.renderer);
+    try window_state.init(
+        &app,
+        .{
+            .name = "Odyssey",
+            .x = 0,
+            .y = 0,
+            .width = 800,
+            .height = 600,
+            .flags = win.WindowCenter | win.WindowFocus,
+            .userdata = &context,
+        },
+    );
+
     errdefer window_state.deinit();
 
     app.states.append(window_state);
