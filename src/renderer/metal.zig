@@ -15,8 +15,8 @@ pub const Pipeline = @import("metal/pipeline.zig");
 pub const RenderPass = @import("metal/render_pass.zig");
 const shaders = @import("metal/shaders.zig");
 pub const Shaders = shaders.Shaders;
-pub const VertexInput = shaders.VertexInput;
-pub const VertexBuffer = shaders.VertexBuffer;
+pub const RectInput = shaders.RectInput;
+pub const RectBuffer = shaders.RectBuffer;
 pub const UniformsBuffer = shaders.UniformsBuffer;
 pub const Uniforms = shaders.Uniforms;
 pub const Target = @import("metal/target.zig");
@@ -162,7 +162,7 @@ const SwapChain = struct {
 };
 
 const FrameState = struct {
-    vertex: VertexBuffer,
+    vertex: RectBuffer,
     uniforms: UniformsBuffer,
 
     pub fn init(self: *FrameState, api: Metal) !void {

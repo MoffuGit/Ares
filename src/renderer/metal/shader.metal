@@ -2,7 +2,7 @@
 
 using namespace metal;
 
-struct VertexInput {
+struct RectInput {
     float4 position [[attribute(0)]];
     float4 color_0  [[attribute(1)]];
     float4 color_1  [[attribute(2)]];
@@ -21,7 +21,7 @@ struct Uniforms {
 
 vertex VertexOutput vertexShader(
     uint v_id [[vertex_id]],
-    VertexInput in [[stage_in]],
+    RectInput in [[stage_in]],
     constant Uniforms& uniforms [[buffer(1)]]
 ) {
     float4x2 vertices = float4x2(float2(-1.0f, -1.0f), float2(-1.0f, 1.0f), float2(1.0f, -1.0f), float2(1.0f, 1.0f));

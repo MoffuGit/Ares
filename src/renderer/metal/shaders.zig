@@ -16,10 +16,10 @@ const Pipeline = @import("pipeline.zig");
 
 const log = std.log.scoped(.metal);
 
-pub const VertexBuffer = Buffer(VertexInput);
+pub const RectBuffer = Buffer(RectInput);
 pub const UniformsBuffer = Buffer(Uniforms);
 
-pub const VertexInput = extern struct {
+pub const RectInput = extern struct {
     position: [4]f32 align(16),
     color_0: [4]f32 align(16),
     color_1: [4]f32 align(16),
@@ -30,13 +30,13 @@ pub const VertexInput = extern struct {
 const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
     &.{
         .{
-            "bg_color",
+            "rect",
             .{
                 .vertex_fn = "vertexShader",
                 .fragment_fn = "fragmentShader",
                 .blending_enabled = false,
                 .step_fn = .per_instance,
-                .vertex_attributes = VertexInput,
+                .vertex_attributes = RectInput,
             },
         },
     };

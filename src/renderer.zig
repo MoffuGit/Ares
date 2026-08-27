@@ -19,7 +19,7 @@ const log = std.log.scoped(.render);
 pub const Renderer = renderer: {
     if (!builtin.is_test) break :renderer struct {
         pub const Handle = Metal.Handle;
-        pub const VertexInput = Metal.VertexInput;
+        pub const RectInput = Metal.RectInput;
         pub const Uniforms = Metal.Uniforms;
         const Shaders = Metal.Shaders;
 
@@ -54,7 +54,7 @@ pub const Renderer = renderer: {
 
             var state = handler.frameState();
 
-            const vertices = [_]VertexInput{
+            const vertices = [_]RectInput{
                 .{
                     .position = .{ 10.0, 10.0, 110.0, 110.0 },
                     .color_0 = .{ 1.0, 0.0, 0.0, 1.0 },
@@ -85,7 +85,7 @@ pub const Renderer = renderer: {
             defer pass.complete();
 
             pass.step(.{
-                .pipeline = self.shaders.pipelines.bg_color,
+                .pipeline = self.shaders.pipelines.rect,
                 .buffers = &.{state.vertex.buffer},
                 .uniforms = state.uniforms.buffer,
                 .draw = .{
