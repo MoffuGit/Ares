@@ -10,7 +10,7 @@ struct RectInput {
     float4 color_3  [[attribute(4)]];
 };
 
-struct VertexOutput {
+struct RectOutput {
     float4 position [[position]];
     float4 color;
 };
@@ -19,7 +19,7 @@ struct Uniforms {
   float2 viewport_size;
 };
 
-vertex VertexOutput vertexShader(
+vertex RectOutput rectVertexShader(
     uint v_id [[vertex_id]],
     RectInput in [[stage_in]],
     constant Uniforms& uniforms [[buffer(1)]]
@@ -32,7 +32,7 @@ vertex VertexOutput vertexShader(
 
     float4x4 colors = float4x4(in.color_0, in.color_1, in.color_2, in.color_3);
 
-    VertexOutput out;
+    RectOutput out;
     out.position = float4(
         2.0f * position.x / uniforms.viewport_size.x - 1.0f,
         2.0f * (1.0f - position.y / uniforms.viewport_size.y) - 1.0f,
@@ -43,6 +43,6 @@ vertex VertexOutput vertexShader(
     return out;
 }
 
-fragment float4 fragmentShader(VertexOutput in [[stage_in]]) {
+fragment float4 rectFragmentShader(RectOutput in [[stage_in]]) {
     return in.color;
 }

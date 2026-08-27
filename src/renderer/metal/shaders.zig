@@ -32,8 +32,8 @@ const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
         .{
             "rect",
             .{
-                .vertex_fn = "vertexShader",
-                .fragment_fn = "fragmentShader",
+                .vertex_fn = "rectVertexShader",
+                .fragment_fn = "rectFragmentShader",
                 .blending_enabled = false,
                 .step_fn = .per_instance,
                 .vertex_attributes = RectInput,
