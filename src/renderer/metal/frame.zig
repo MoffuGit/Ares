@@ -80,7 +80,7 @@ pub inline fn complete(self: *Frame, target: *Target, sync: bool) void {
     self.buffer.msgSend(void, "commit", .{});
 
     if (sync) {
-        self.buffer.msgSend(void, "waitUntilCompleted", .{});
+        self.buffer.msgSend(void, "waitUntilScheduled", .{});
         CompletionBlock.invoke(&self.block, .{});
         target.drawable.msgSend(void, "present", .{});
     }
