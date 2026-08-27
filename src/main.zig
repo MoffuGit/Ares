@@ -83,9 +83,10 @@ pub fn _tick(app: *App) !void {
             chunks.destroy(state);
         } else {
             if (!state.resized) {
-                state.resized = false;
                 try app.renderer.render(&state.win, &state.handler);
             }
+
+            state.resized = false;
             states.append(state);
         }
     }
