@@ -5,8 +5,8 @@ const Io = std.Io;
 const zqlite = @import("zqlite");
 
 const App = @import("app.zig");
-const db = @import("db.zig");
-const KVS = db.KVS;
+const database = @import("database.zig");
+const KVS = database.KVS;
 const uuid = @import("uuid.zig");
 const ent = @import("entity.zig");
 const AnyEntity = ent.AnyEntity;
@@ -63,7 +63,7 @@ test "Session init stores current id and reads previous id" {
     const allocator = testing.allocator;
     const io = testing.io;
 
-    var test_pool = try db.testingPool(allocator);
+    var test_pool = try database.testingPool(allocator);
     defer test_pool.deinit();
 
     const conn = try test_pool.acquire(io);
@@ -91,7 +91,7 @@ test "Session created after drop uses previous session id as old id" {
     const allocator = testing.allocator;
     const io = testing.io;
 
-    var test_pool = try db.testingPool(allocator);
+    var test_pool = try database.testingPool(allocator);
     defer test_pool.deinit();
 
     const conn = try test_pool.acquire(io);

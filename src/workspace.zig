@@ -8,7 +8,7 @@ const zqlite = @import("zqlite");
 const App = @import("app.zig");
 const ent = @import("entity.zig");
 const AnyEntity = ent.AnyEntity;
-const db = @import("db.zig");
+const database = @import("database.zig");
 const Project = @import("project.zig");
 const uuid = @import("uuid.zig");
 pub const persistence = @import("workspace/persistence.zig");
@@ -33,8 +33,8 @@ pub fn init(
     session: uuid.Uuid,
     io: Io,
 ) !void {
-    const conn = try db.acquire(io);
-    errdefer db.release(io, conn);
+    const conn = try database.acquire(io);
+    errdefer database.release(io, conn);
 
     const gpa = app.gpa;
 
@@ -90,7 +90,7 @@ pub fn drop(self: *Workspace) void {
 }
 
 pub fn deinit(self: *Workspace) void {
-    db.release(self.io, self.conn);
+    database.release(self.io, self.conn);
     self.arena.deinit();
 }
 

@@ -71,7 +71,7 @@ pub const WindowHandle = renderer: {
     break :renderer struct {
         pub fn init(_: *WindowHandle, _: *Renderer, _: *Window, _: Allocator, _: Io) !void {}
 
-        pub fn deinit(_: *Renderer) void {}
+        pub fn deinit(_: *WindowHandle) void {}
     };
 };
 

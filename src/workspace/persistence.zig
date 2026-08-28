@@ -6,7 +6,7 @@ const Io = std.Io;
 
 const zqlite = @import("zqlite");
 
-const db = @import("../db.zig");
+const database = @import("../database.zig");
 const global = @import("../global.zig");
 const uuid = @import("../uuid.zig");
 
@@ -306,7 +306,7 @@ test "basic operation" {
     const alloc = testing.allocator;
     const io = testing.io;
 
-    var pool = try db.testingPool(alloc);
+    var pool = try database.testingPool(alloc);
     defer pool.deinit();
 
     const conn = try pool.acquire(io);
@@ -347,7 +347,7 @@ test "getByPaths returns workspace matching ordered paths" {
     const alloc = testing.allocator;
     const io = testing.io;
 
-    var pool = try db.testingPool(alloc);
+    var pool = try database.testingPool(alloc);
     defer pool.deinit();
 
     const conn = try pool.acquire(io);
@@ -377,7 +377,7 @@ test "insertDefault returns unique SQLite rowid workspace ids" {
     const alloc = testing.allocator;
     const io = testing.io;
 
-    var pool = try db.testingPool(alloc);
+    var pool = try database.testingPool(alloc);
     defer pool.deinit();
 
     const conn = try pool.acquire(io);
@@ -403,7 +403,7 @@ test "setSession updates workspace session and getBySession returns matching wor
     const alloc = testing.allocator;
     const io = testing.io;
 
-    var pool = try db.testingPool(alloc);
+    var pool = try database.testingPool(alloc);
     defer pool.deinit();
 
     const conn = try pool.acquire(io);
@@ -452,7 +452,7 @@ test "getAllValidMetadata returns existing workspaces" {
     const alloc = testing.allocator;
     const io = testing.io;
 
-    var pool = try db.testingPool(alloc);
+    var pool = try database.testingPool(alloc);
     defer pool.deinit();
 
     const conn = try pool.acquire(io);
@@ -482,7 +482,7 @@ test "getAllValidMetadata removes missing workspaces" {
     const alloc = testing.allocator;
     const io = testing.io;
 
-    var pool = try db.testingPool(alloc);
+    var pool = try database.testingPool(alloc);
     defer pool.deinit();
 
     const conn = try pool.acquire(io);

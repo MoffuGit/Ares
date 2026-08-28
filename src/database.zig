@@ -10,8 +10,8 @@ const global = @import("global.zig");
 
 const log = std.log.scoped(.database);
 
-const WORKSPACE_SCHEMA = @embedFile("db/workspace.sql");
-const KEY_VALUE_STORE = @embedFile("db/key_value_store.sql");
+const WORKSPACE_SCHEMA = @embedFile("migrations/workspace.sql");
+const KEY_VALUE_STORE = @embedFile("migrations/key_value_store.sql");
 
 pub var pool: *zqlite.Pool = undefined;
 
