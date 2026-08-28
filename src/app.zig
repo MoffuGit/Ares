@@ -23,7 +23,7 @@ const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const Waker = Loop.Waker;
 const Renderer = @import("renderer.zig").Renderer;
-const RenderHandle = Renderer.Handle;
+const Handle = Renderer.Handle;
 const Scheduler = @import("scheduler.zig");
 const subs = @import("subscription.zig");
 const Subscriptions = subs.Subscriptions;
@@ -108,7 +108,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     try self.loop.init(&self.scheduler, self.io);
     errdefer self.loop.deinit();
 
-    try self.renderer.init(io);
+    try self.renderer.init();
     errdefer self.renderer.deinit();
 }
 
@@ -127,22 +127,27 @@ pub const WindowState = struct {
     next: ?*WindowState = null,
 
     win: Window,
-    handler: RenderHandle,
+    handle: Handle,
 
     pub fn init(self: *WindowState, app: *App, opts: win.Options) !void {
         self.* = .{
             .win = undefined,
-            .handler = undefined,
+            .handle = undefined,
         };
 
         try self.win.init(opts);
         errdefer self.win.deinit();
 
-        try self.handler.init(app.renderer.api, &self.win);
+        try self.handle.init(
+            &app.renderer,
+            &self.win,
+            app.gpa,
+            app.io,
+        );
     }
 
     pub fn deinit(self: *WindowState) void {
-        self.handler.deinit();
+        self.handle.deinit();
         self.win.deinit();
     }
 };

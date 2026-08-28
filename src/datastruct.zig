@@ -13,6 +13,7 @@ pub const MultiQueue = multi_queue.MultiQueue;
 pub const slotmap = @import("datastruct/slotmap.zig");
 pub const spsc = @import("datastruct/spsc.zig");
 pub const SpscBounded = spsc.SpscBounded;
+pub const SwapChain = @import("datastruct/swap_chain.zig").SwapChain;
 
 test {
     _ = mpsc;

@@ -6,6 +6,7 @@ const Allocator = std.mem.Allocator;
 
 const objc = @import("objc");
 
+const FrameState = @import("../frame_state.zig");
 const Handle = @import("../metal.zig").Handle;
 const Metal = @import("../metal.zig");
 const c = @import("c.zig");
@@ -22,8 +23,8 @@ buffer: objc.Object,
 block: CompletionBlock.Context,
 
 pub fn begin(
-    handler: *Handle,
     api: Metal,
+    frame_state: *FrameState,
 ) Frame {
     const buffer = api.queue.msgSend(
         objc.Object,
@@ -34,7 +35,7 @@ pub fn begin(
     // Create our block to register for completion updates.
     // The block is deallocated by the objC runtime on success.
     const block = CompletionBlock.init(
-        .{ .handler = handler },
+        .{ .frame_state = frame_state },
         &bufferCompleted,
     );
 
@@ -43,7 +44,9 @@ pub fn begin(
 
 /// This is the block type used for the addCompletedHandler callback.
 const CompletionBlock = objc.Block(
-    struct { handler: *Handle },
+    struct {
+        frame_state: *FrameState,
+    },
     .{},
     void,
 );
@@ -51,7 +54,7 @@ const CompletionBlock = objc.Block(
 fn bufferCompleted(
     block: *const CompletionBlock.Context,
 ) callconv(.c) void {
-    block.handler.releaseFrame();
+    block.frame_state.release();
 }
 
 /// Add a render pass to this frame with the provided attachments.

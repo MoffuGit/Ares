@@ -113,7 +113,14 @@ pub fn _tick(app: *App) !void {
 
             chunks.destroy(state);
         } else {
-            try app.renderer.render(&state.win, &state.handler, false);
+            const width, const height = state.win.sizeInPixels() orelse unreachable;
+            const frame = state.handle.nextFrame();
+
+            frame.uniform = .{
+                .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
+            };
+            app.renderer.render(&state.handle, frame, false);
+
             states.append(state);
         }
     }
@@ -130,7 +137,14 @@ pub fn windowCallback(event: [*c]const win.Event) callconv(.c) void {
 
     while (curr) |state| : (curr = state.next) {
         if (state.win.raw == window.raw) {
-            app.renderer.render(&state.win, &state.handler, true) catch {};
+            const width, const height = state.win.sizeInPixels() orelse unreachable;
+            const frame = state.handle.nextFrame();
+
+            frame.uniform = .{
+                .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
+            };
+
+            app.renderer.render(&state.handle, frame, true);
             break;
         }
     }

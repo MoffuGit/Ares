@@ -7,25 +7,12 @@ const Allocator = std.mem.Allocator;
 const macos = @import("macos");
 const objc = @import("objc");
 
-const Metal = @import("../metal.zig");
-
 const buffer = @import("buffer.zig");
-const Buffer = buffer.Buffer;
 const c = @import("c.zig");
 const Pipeline = @import("pipeline.zig");
+const Rect = @import("../frame_state.zig").Rect;
 
 const log = std.log.scoped(.metal);
-
-pub const RectBuffer = Buffer(RectInput);
-pub const UniformsBuffer = Buffer(Uniforms);
-
-pub const RectInput = extern struct {
-    position: [4]f32 align(16),
-    color_0: [4]f32 align(16),
-    color_1: [4]f32 align(16),
-    color_2: [4]f32 align(16),
-    color_3: [4]f32 align(16),
-};
 
 const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
     &.{
@@ -36,14 +23,10 @@ const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
                 .fragment_fn = "rectFragmentShader",
                 .blending_enabled = false,
                 .step_fn = .per_instance,
-                .vertex_attributes = RectInput,
+                .vertex_attributes = Rect,
             },
         },
     };
-
-pub const Uniforms = extern struct {
-    viewport_size: [2]f32 align(8),
-};
 
 /// All the comptime-known info about a pipeline, so that
 /// we can define them ahead-of-time in an ergonomic way.
@@ -103,11 +86,10 @@ pub const Shaders = struct {
     /// Initialize our shader set.
     pub fn init(
         self: *Shaders,
-        api: Metal,
+        device: objc.Object,
         pixel_format: c.MTLPixelFormat,
-        io: Io,
     ) !void {
-        const library = try initLibrary(api.device, io);
+        const library = try initLibrary(device);
         errdefer library.msgSend(void, objc.sel("release"), .{});
 
         var pipelines: PipelineCollection = undefined;
@@ -122,7 +104,7 @@ pub const Shaders = struct {
 
         inline for (pipeline_descs) |pipeline| {
             @field(pipelines, pipeline[0]) = try pipeline[1].initPipeline(
-                api.device,
+                device,
                 library,
                 pixel_format,
             );
@@ -148,9 +130,7 @@ pub const Shaders = struct {
 };
 
 /// Initialize the MTLLibrary. A MTLLibrary is a collection of shaders.
-fn initLibrary(device: objc.Object, io: Io) !objc.Object {
-    const start: std.Io.Timestamp = .now(io, .awake);
-
+fn initLibrary(device: objc.Object) !objc.Object {
     const data = try macos.dispatch.Data.create(
         @embedFile("odyssey_metallib"),
         macos.dispatch.queue.getMain(),
@@ -168,8 +148,6 @@ fn initLibrary(device: objc.Object, io: Io) !objc.Object {
         },
     );
     try checkError(err);
-
-    log.debug("shader library loaded time={}us", .{start.untilNow(io, .awake).toMicroseconds()});
 
     return library;
 }
