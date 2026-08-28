@@ -33,7 +33,8 @@ pub const Options = struct {
 };
 
 pub const ChunkPool = struct {
-    buffer: []u8,
+    ptr: [*]u8,
+    len: usize,
     alignment: mem.Alignment,
     chunk_size: u32,
     reserved: u32 = 0,
@@ -47,12 +48,11 @@ pub const ChunkPool = struct {
 
         const len = @as(usize, opt.chunk_size) * @as(usize, opt.capacity);
         const alignment: mem.Alignment = opt.alignment orelse .fromByteUnits(opt.chunk_size);
-        const buffer = (allocator.rawAlloc(len, alignment, @returnAddress()) orelse return error.OutOfMemory)[0..len];
-
-        log.debug("Chunk Pool size={B} capacity={} size={}", .{ buffer.len, opt.capacity, opt.chunk_size });
+        const ptr = allocator.rawAlloc(len, alignment, @returnAddress()) orelse return error.OutOfMemory;
 
         self.* = .{
-            .buffer = buffer,
+            .len = len,
+            .ptr = ptr,
             .alignment = alignment,
             .chunk_size = opt.chunk_size,
             .mutex = .init,
@@ -64,19 +64,19 @@ pub const ChunkPool = struct {
             const index = self.reserved;
             const offset = index * self.chunk_size;
 
-            if (offset == self.buffer.len) return null;
+            if (offset == self.len) return null;
             self.reserved += 1;
 
-            return self.buffer[offset .. offset + self.chunk_size];
+            return self.ptr[offset .. offset + self.chunk_size];
         } else {
             const index = self.free_list;
 
             const offset = @intFromEnum(index) * self.chunk_size;
-            const chunk: *Chunk = @ptrCast(@alignCast(&self.buffer[offset]));
+            const chunk: *Chunk = @ptrCast(@alignCast(&self.ptr[offset]));
             const next = chunk.header().next;
             self.free_list = next;
 
-            return self.buffer[offset .. offset + self.chunk_size];
+            return self.ptr[offset .. offset + self.chunk_size];
         }
     }
 
@@ -89,10 +89,10 @@ pub const ChunkPool = struct {
 
     pub fn free(self: *ChunkPool, buffer: []u8) void {
         assert(buffer.len == self.chunk_size);
-        assert(@intFromPtr(buffer.ptr) >= @intFromPtr(self.buffer.ptr));
-        assert(@intFromPtr(buffer.ptr) + buffer.len <= @intFromPtr(self.buffer.ptr) + self.buffer.len);
+        assert(@intFromPtr(buffer.ptr) >= @intFromPtr(self.ptr));
+        assert(@intFromPtr(buffer.ptr) + buffer.len <= @intFromPtr(self.ptr) + self.len);
 
-        const offset = @intFromPtr(buffer.ptr) - @intFromPtr(self.buffer.ptr);
+        const offset = @intFromPtr(buffer.ptr) - @intFromPtr(self.ptr);
         assert(offset % self.chunk_size == 0);
         const index: Index = @enumFromInt(offset / self.chunk_size);
         const chunk: *Chunk = @ptrCast(@alignCast(buffer.ptr));
@@ -111,7 +111,7 @@ pub const ChunkPool = struct {
     }
 
     pub fn deinit(self: *ChunkPool, gpa: Allocator) void {
-        gpa.rawFree(self.buffer, self.alignment, @returnAddress());
+        gpa.rawFree(self.ptr[0..self.len], self.alignment, @returnAddress());
     }
 };
 

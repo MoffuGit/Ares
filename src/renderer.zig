@@ -68,9 +68,9 @@ pub const Renderer = renderer: {
                 .{ .storage_mode = .shared, .cpu_cache_mode = .write_combined },
             );
 
-            var node: ?*BufferNode = frame_state.rect_list.nodes.head;
+            var node: ?*BufferNode = frame_state.rects.nodes.head;
             while (node) |curr| : (node = curr.next) {
-                const ptr = curr.pool.buffer.ptr;
+                const ptr = curr.pool.ptr;
                 const instances = curr.pool.reserved;
 
                 const rect = self.api.buffer(
