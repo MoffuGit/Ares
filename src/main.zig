@@ -17,9 +17,37 @@ const Window = win.Window;
 
 const log = std.log.scoped(.main);
 
+const Context = struct {
+    app: *App,
+    display_c: Completion,
+    waker: Waker,
+};
+
 pub fn main(init: std.process.Init) !void {
     try global.state.init();
     defer global.state.deinit();
+
+    win.setEventCallback(
+        win.WindowResized,
+        struct {
+            fn callback(event: [*c]const win.Event) callconv(.c) void {
+                const window: Window = .{ .raw = event.*.common.win };
+                const context: *Context = @ptrCast(@alignCast(window.userdata()));
+                const app = context.app;
+
+                var curr: ?*WindowState = app.states.head;
+
+                while (curr) |state| : (curr = state.next) {
+                    if (state.win.raw == window.raw) {
+                        render(app, state, true) catch |err| {
+                            log.err("Window render err={}", .{err});
+                        };
+                        break;
+                    }
+                }
+            }
+        }.callback,
+    );
 
     const gpa = init.gpa;
     const io = init.io;
@@ -34,7 +62,45 @@ pub fn main(init: std.process.Init) !void {
         .waker = undefined,
     };
 
-    context.waker = try app.await(&context.display_c, tick);
+    context.waker = try app.await(
+        &context.display_c,
+        struct {
+            fn callback(
+                completion: *Completion,
+                loop: *Loop,
+                res: anyerror!void,
+            ) bool {
+                res catch loop.stop();
+
+                const ctx: *Context = @alignCast(@fieldParentPtr("display_c", completion));
+
+                if (ctx.app.states.is_empty()) ctx.app.stop();
+
+                win.pollEvents();
+
+                var states = ctx.app.states;
+                ctx.app.states = .empty;
+
+                const chunks = ctx.app.chunks.allocator();
+
+                while (states.pop()) |state| {
+                    if (state.win.shouldClose()) {
+                        state.deinit();
+
+                        chunks.destroy(state);
+                    } else {
+                        render(ctx.app, state, false) catch |err| {
+                            log.err("Window render err={}", .{err});
+                        };
+
+                        ctx.app.states.append(state);
+                    }
+                }
+
+                return true;
+            }
+        }.callback,
+    );
 
     const chunks = app.chunks.allocator();
     const window_state = try chunks.create(WindowState);
@@ -59,7 +125,16 @@ pub fn main(init: std.process.Init) !void {
     const result = try macos.video.DisplayLink.createWithActiveCGDisplays();
     result.setOutputCallback(
         Waker,
-        &displayLinkCallback,
+        struct {
+            fn callback(
+                _: *macos.video.DisplayLink,
+                ud: ?*Waker,
+            ) void {
+                if (ud) |waker| {
+                    waker.wake() catch {};
+                }
+            }
+        }.callback,
         &context.waker,
     ) catch |err| {
         log.warn("error configuring display link err={}", .{err});
@@ -72,118 +147,32 @@ pub fn main(init: std.process.Init) !void {
     app.run(.until_done);
 }
 
-fn displayLinkCallback(
-    _: *macos.video.DisplayLink,
-    ud: ?*Waker,
-) void {
-    if (ud) |waker| {
-        waker.wake() catch {};
-    }
+pub fn render(app: *App, state: *WindowState, sync: bool) !void {
+    app.renderer.start();
+    defer app.renderer.end();
+
+    const width, const height = state.win.sizeInPixels() orelse unreachable;
+    const frame = state.handle.nextFrame();
+
+    try frame.uniform(.{
+        .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
+    });
+
+    try frame.rect(.{
+        .position = .{ 0.0, 0.0, 100.0, 100.0 },
+        .color_0 = .{ 1.0, 0.0, 0.0, 1.0 },
+        .color_1 = .{ 1.0, 0.0, 0.0, 1.0 },
+        .color_2 = .{ 1.0, 0.0, 0.0, 1.0 },
+        .color_3 = .{ 1.0, 0.0, 0.0, 1.0 },
+    });
+
+    try frame.rect(.{
+        .position = .{ 100.0, 100.0, 200.0, 200.0 },
+        .color_0 = .{ 0.0, 0.0, 1.0, 1.0 },
+        .color_1 = .{ 0.0, 0.0, 1.0, 1.0 },
+        .color_2 = .{ 0.0, 0.0, 1.0, 1.0 },
+        .color_3 = .{ 0.0, 0.0, 1.0, 1.0 },
+    });
+
+    renderer.render(&app.renderer, &state.handle, frame, sync);
 }
-
-const Context = struct {
-    app: *App,
-    display_c: Completion,
-    waker: Waker,
-};
-
-pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
-    res catch loop.stop();
-
-    const context: *Context = @alignCast(@fieldParentPtr("display_c", completion));
-    const app = context.app;
-
-    _tick(app) catch loop.stop();
-
-    return true;
-}
-
-pub fn _tick(app: *App) !void {
-    const chunks = app.chunks.allocator();
-
-    if (app.states.is_empty()) app.stop();
-
-    win.pollEvents();
-
-    var states = app.states;
-    app.states = .empty;
-
-    while (states.pop()) |state| {
-        if (state.win.shouldClose()) {
-            state.deinit();
-
-            chunks.destroy(state);
-        } else {
-            app.renderer.start();
-            defer app.renderer.end();
-            const width, const height = state.win.sizeInPixels() orelse unreachable;
-            const frame = state.handle.nextFrame();
-
-            try frame.uniform(.{
-                .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
-            });
-
-            try frame.rect(.{
-                .position = .{ 0.0, 0.0, 100.0, 100.0 },
-                .color_0 = .{ 1.0, 0.0, 0.0, 1.0 },
-                .color_1 = .{ 1.0, 0.0, 0.0, 1.0 },
-                .color_2 = .{ 1.0, 0.0, 0.0, 1.0 },
-                .color_3 = .{ 1.0, 0.0, 0.0, 1.0 },
-            });
-
-            try frame.rect(.{
-                .position = .{ 100.0, 100.0, 200.0, 200.0 },
-                .color_0 = .{ 0.0, 0.0, 1.0, 1.0 },
-                .color_1 = .{ 0.0, 0.0, 1.0, 1.0 },
-                .color_2 = .{ 0.0, 0.0, 1.0, 1.0 },
-                .color_3 = .{ 0.0, 0.0, 1.0, 1.0 },
-            });
-
-            renderer.render(&app.renderer, &state.handle, frame, false);
-
-            app.states.append(state);
-        }
-    }
-}
-
-// pub fn windowCallback(event: [*c]const win.Event) callconv(.c) void {
-//     const window: Window = .{ .raw = event.*.common.win };
-//     const context: *Context = @ptrCast(@alignCast(window.userdata()));
-//     const app = context.app;
-//
-//     var curr: ?*WindowState = app.states.head;
-//
-//     while (curr) |state| : (curr = state.next) {
-//         if (state.win.raw == window.raw) {
-//             app.renderer.start();
-//             defer app.renderer.end();
-//
-//             const width, const height = state.win.sizeInPixels() orelse unreachable;
-//             const frame = state.handle.nextFrame();
-//
-//             frame.uniform(.{
-//                 .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
-//             }) catch unreachable;
-//
-//             frame.rect(.{
-//                 .position = .{ 10.0, 10.0, 110.0, 110.0 },
-//                 .color_0 = .{ 1.0, 0.0, 0.0, 1.0 },
-//                 .color_1 = .{ 1.0, 0.0, 0.0, 1.0 },
-//                 .color_2 = .{ 1.0, 0.0, 0.0, 1.0 },
-//                 .color_3 = .{ 1.0, 0.0, 0.0, 1.0 },
-//             }) catch unreachable;
-//
-//             frame.rect(.{
-//                 .position = .{ 120.0, 120.0, 110.0, 110.0 },
-//                 .color_0 = .{ 0.0, 0.0, 1.0, 1.0 },
-//                 .color_1 = .{ 0.0, 0.0, 1.0, 1.0 },
-//                 .color_2 = .{ 0.0, 0.0, 1.0, 1.0 },
-//                 .color_3 = .{ 0.0, 0.0, 1.0, 1.0 },
-//             }) catch unreachable;
-//
-//             renderer.render(&app.renderer, &state.handle, frame, true);
-//             break;
-//         }
-//     }
-// }
-// win.setEventCallback(win.WindowResized, windowCallback);
