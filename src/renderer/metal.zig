@@ -82,7 +82,7 @@ pub fn end(self: *Metal) void {
 pub const Handle = struct {
     layer: objc.Object,
 
-    pub fn init(self: *@This(), api: Metal, window: *Window) void {
+    pub fn init(self: *@This(), api: *Metal, window: *Window) void {
         const CAMetalLayer = objc.getClass("CAMetalLayer").?;
 
         const layer = CAMetalLayer.msgSend(objc.Object, "layer", .{});
@@ -99,7 +99,7 @@ pub const Handle = struct {
 
     pub fn frame(
         _: *const @This(),
-        api: Metal,
+        api: *Metal,
         frame_state: *FrameState,
     ) Frame {
         return .begin(api, frame_state);

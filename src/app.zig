@@ -22,8 +22,9 @@ const EntityStore = ent.EntityStore;
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const Waker = Loop.Waker;
-const Renderer = @import("renderer.zig").Renderer;
-const Handle = Renderer.Handle;
+const render = @import("renderer.zig");
+const Renderer = render.Renderer;
+const WindowHandle = render.WindowHandle;
 const Scheduler = @import("scheduler.zig");
 const subs = @import("subscription.zig");
 const Subscriptions = subs.Subscriptions;
@@ -127,7 +128,7 @@ pub const WindowState = struct {
     next: ?*WindowState = null,
 
     win: Window,
-    handle: Handle,
+    handle: WindowHandle,
 
     pub fn init(self: *WindowState, app: *App, opts: win.Options) !void {
         self.* = .{

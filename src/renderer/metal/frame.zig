@@ -23,7 +23,7 @@ buffer: objc.Object,
 block: CompletionBlock.Context,
 
 pub fn begin(
-    api: Metal,
+    api: *Metal,
     frame_state: *FrameState,
 ) Frame {
     const buffer = api.queue.msgSend(

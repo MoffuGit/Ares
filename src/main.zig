@@ -11,6 +11,7 @@ const global = @import("global.zig");
 const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const Waker = Loop.Waker;
+const renderer = @import("renderer.zig");
 const win = @import("window.zig");
 const Window = win.Window;
 
@@ -34,8 +35,6 @@ pub fn main(init: std.process.Init) !void {
     };
 
     context.waker = try app.await(&context.display_c, tick);
-
-    win.setEventCallback(win.WindowResized, windowCallback);
 
     const chunks = app.chunks.allocator();
     const window_state = try chunks.create(WindowState);
@@ -106,14 +105,17 @@ pub fn _tick(app: *App) !void {
 
     win.pollEvents();
 
-    var states: SinglyLinkedList(WindowState) = .empty;
+    var states = app.states;
+    app.states = .empty;
 
-    while (app.states.pop()) |state| {
+    while (states.pop()) |state| {
         if (state.win.shouldClose()) {
             state.deinit();
 
             chunks.destroy(state);
         } else {
+            app.renderer.start();
+            defer app.renderer.end();
             const width, const height = state.win.sizeInPixels() orelse unreachable;
             const frame = state.handle.nextFrame();
 
@@ -129,41 +131,59 @@ pub fn _tick(app: *App) !void {
                 .color_3 = .{ 1.0, 0.0, 0.0, 1.0 },
             });
 
-            app.renderer.render(&state.handle, frame, false);
+            try frame.rect(.{
+                .position = .{ 120.0, 120.0, 110.0, 110.0 },
+                .color_0 = .{ 0.0, 0.0, 1.0, 1.0 },
+                .color_1 = .{ 0.0, 0.0, 1.0, 1.0 },
+                .color_2 = .{ 0.0, 0.0, 1.0, 1.0 },
+                .color_3 = .{ 0.0, 0.0, 1.0, 1.0 },
+            });
 
-            states.append(state);
-        }
-    }
+            renderer.render(&app.renderer, &state.handle, frame, false);
 
-    app.states = states;
-}
-
-pub fn windowCallback(event: [*c]const win.Event) callconv(.c) void {
-    const window: Window = .{ .raw = event.*.common.win };
-    const context: *Context = @ptrCast(@alignCast(window.userdata()));
-    const app = context.app;
-
-    var curr: ?*WindowState = app.states.head;
-
-    while (curr) |state| : (curr = state.next) {
-        if (state.win.raw == window.raw) {
-            const width, const height = state.win.sizeInPixels() orelse unreachable;
-            const frame = state.handle.nextFrame();
-
-            frame.uniform(.{
-                .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
-            }) catch unreachable;
-
-            frame.rect(.{
-                .position = .{ 10, 10, 110, 110 },
-                .color_0 = .{ 1, 0, 0, 1 },
-                .color_1 = .{ 1, 0, 0, 1 },
-                .color_2 = .{ 1, 0, 0, 1 },
-                .color_3 = .{ 1, 0, 0, 1 },
-            }) catch unreachable;
-
-            app.renderer.render(&state.handle, frame, true);
-            break;
+            app.states.append(state);
         }
     }
 }
+
+// pub fn windowCallback(event: [*c]const win.Event) callconv(.c) void {
+//     const window: Window = .{ .raw = event.*.common.win };
+//     const context: *Context = @ptrCast(@alignCast(window.userdata()));
+//     const app = context.app;
+//
+//     var curr: ?*WindowState = app.states.head;
+//
+//     while (curr) |state| : (curr = state.next) {
+//         if (state.win.raw == window.raw) {
+//             app.renderer.start();
+//             defer app.renderer.end();
+//
+//             const width, const height = state.win.sizeInPixels() orelse unreachable;
+//             const frame = state.handle.nextFrame();
+//
+//             frame.uniform(.{
+//                 .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
+//             }) catch unreachable;
+//
+//             frame.rect(.{
+//                 .position = .{ 10.0, 10.0, 110.0, 110.0 },
+//                 .color_0 = .{ 1.0, 0.0, 0.0, 1.0 },
+//                 .color_1 = .{ 1.0, 0.0, 0.0, 1.0 },
+//                 .color_2 = .{ 1.0, 0.0, 0.0, 1.0 },
+//                 .color_3 = .{ 1.0, 0.0, 0.0, 1.0 },
+//             }) catch unreachable;
+//
+//             frame.rect(.{
+//                 .position = .{ 120.0, 120.0, 110.0, 110.0 },
+//                 .color_0 = .{ 0.0, 0.0, 1.0, 1.0 },
+//                 .color_1 = .{ 0.0, 0.0, 1.0, 1.0 },
+//                 .color_2 = .{ 0.0, 0.0, 1.0, 1.0 },
+//                 .color_3 = .{ 0.0, 0.0, 1.0, 1.0 },
+//             }) catch unreachable;
+//
+//             renderer.render(&app.renderer, &state.handle, frame, true);
+//             break;
+//         }
+//     }
+// }
+// win.setEventCallback(win.WindowResized, windowCallback);

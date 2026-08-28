@@ -9,8 +9,6 @@ const ChunkPool = chunk_pool.ChunkPool;
 const datastruct = @import("../datastruct.zig");
 const SinglyLinkedList = datastruct.SinglyLinkedList;
 
-const page_size = std.heap.pageSize();
-
 pub const SwapChain = datastruct.SwapChain(FrameState, 3);
 
 pub const FrameState = @This();
@@ -32,7 +30,7 @@ pub fn init(self: *FrameState, swap_chain: *SwapChain, gpa: Allocator) !void {
 pub fn uniform(self: *FrameState, data: Uniforms) !void {
     const arena = self.arena.allocator();
 
-    const buffer = arena.rawAlloc(@sizeOf(Uniforms), .fromByteUnits(page_size), @returnAddress()) orelse return error.OutOfMemory;
+    const buffer = arena.rawAlloc(@sizeOf(Uniforms), .fromByteUnits(@alignOf(Uniforms)), @returnAddress()) orelse return error.OutOfMemory;
     const ptr: *Uniforms = @ptrCast(@alignCast(buffer));
     ptr.* = data;
 
@@ -48,7 +46,7 @@ pub fn rect(self: *FrameState, data: Rect) !void {
         try node.init(.{
             .capacity = 256,
             .chunk_size = @sizeOf(Rect),
-            .alignment = .fromByteUnits(page_size),
+            .alignment = .fromByteUnits(@alignOf(Rect)),
         }, arena);
         list.push(node);
     }
@@ -60,7 +58,7 @@ pub fn rect(self: *FrameState, data: Rect) !void {
         try node.init(.{
             .capacity = 256,
             .chunk_size = @sizeOf(Rect),
-            .alignment = .fromByteUnits(page_size),
+            .alignment = .fromByteUnits(@alignOf(Rect)),
         }, arena);
         list.push(node);
 
