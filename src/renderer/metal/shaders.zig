@@ -10,7 +10,7 @@ const objc = @import("objc");
 const buffer = @import("buffer.zig");
 const c = @import("c.zig");
 const Pipeline = @import("pipeline.zig");
-const Rect = @import("../frame_state.zig").Rect;
+const renderer = @import("../../renderer.zig");
 
 const log = std.log.scoped(.metal);
 
@@ -23,7 +23,7 @@ const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
                 .fragment_fn = "rectFragmentShader",
                 .blending_enabled = false,
                 .step_fn = .per_instance,
-                .vertex_attributes = Rect,
+                .vertex_attributes = renderer.Rect,
             },
         },
     };

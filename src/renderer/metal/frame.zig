@@ -6,7 +6,7 @@ const Allocator = std.mem.Allocator;
 
 const objc = @import("objc");
 
-const FrameState = @import("../frame_state.zig");
+const FrameState = @import("../../renderer.zig").FrameState;
 const Handle = @import("../metal.zig").Handle;
 const Metal = @import("../metal.zig");
 const c = @import("c.zig");

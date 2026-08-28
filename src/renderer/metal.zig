@@ -6,14 +6,15 @@ const Allocator = std.mem.Allocator;
 const macos = @import("macos");
 const objc = @import("objc");
 
+const FrameState = @import("../renderer.zig").FrameState;
 const win = @import("../window.zig");
 const Window = win.Window;
-const FrameState = @import("./frame_state.zig");
+pub const Buffer = @import("metal/buffer.zig");
 const c = @import("metal/c.zig");
 const Frame = @import("metal/frame.zig");
-const Shaders = @import("metal/shaders.zig").Shaders;
+const sh = @import("metal/shaders.zig");
+const Shaders = sh.Shaders;
 const Target = @import("metal/target.zig");
-const Buffer = @import("metal/buffer.zig");
 
 pub const Metal = @This();
 
