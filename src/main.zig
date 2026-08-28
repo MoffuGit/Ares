@@ -1,8 +1,9 @@
 const std = @import("std");
 const Io = std.Io;
 
-const App = @import("app.zig");
 const macos = @import("macos");
+
+const App = @import("app.zig");
 const WindowState = App.WindowState;
 const datastruct = @import("datastruct.zig");
 const SinglyLinkedList = datastruct.SinglyLinkedList;
