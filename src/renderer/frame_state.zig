@@ -44,7 +44,7 @@ pub fn rect(self: *FrameState, data: Rect) !void {
     }
 
     const buffer = ptr: {
-        if (list.nodes.head.?.buffer.alloc()) |ptr| break :ptr ptr;
+        if (list.nodes.head.?.pool.alloc()) |ptr| break :ptr ptr;
 
         const node = try arena.create(BufferNode);
         try node.init(.{
@@ -54,7 +54,7 @@ pub fn rect(self: *FrameState, data: Rect) !void {
         }, arena);
         list.push(node);
 
-        break :ptr node.buffer.alloc() orelse unreachable;
+        break :ptr node.pool.alloc() orelse unreachable;
     };
 
     assert(buffer.len == @sizeOf(Rect));
@@ -86,15 +86,15 @@ pub const Rect = extern struct {
 
 const BufferNode = struct {
     next: ?*BufferNode,
-    buffer: ChunkPool,
+    pool: ChunkPool,
 
     pub fn init(self: *BufferNode, opt: chunk_pool.Options, arena: Allocator) !void {
         self.* = .{
             .next = null,
-            .buffer = undefined,
+            .pool = undefined,
         };
 
-        try self.buffer.init(arena, opt);
+        try self.pool.init(arena, opt);
     }
 };
 
@@ -126,7 +126,7 @@ test "Rect List" {
 
     try testing.expect(!state.rect_list.nodes.is_empty());
     const head = state.rect_list.nodes.head.?;
-    try testing.expectEqual(1, head.buffer.reserved);
-    const ptr: *Rect = @ptrCast(@alignCast(head.buffer.buffer[0..@sizeOf(Rect)]));
+    try testing.expectEqual(1, head.pool.reserved);
+    const ptr: *Rect = @ptrCast(@alignCast(head.pool.buffer[0..@sizeOf(Rect)]));
     try testing.expectEqual(data, ptr.*);
 }
