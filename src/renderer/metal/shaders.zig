@@ -7,10 +7,11 @@ const Allocator = std.mem.Allocator;
 const macos = @import("macos");
 const objc = @import("objc");
 
-const buffer = @import("buffer.zig");
-const c = @import("c.zig");
-const Pipeline = @import("pipeline.zig");
 const renderer = @import("../../renderer.zig");
+const Metal = @import("../metal.zig");
+const Buffer = Metal.Buffer;
+const Pipeline = Metal.Pipeline;
+const c = @import("c.zig");
 
 const log = std.log.scoped(.metal);
 

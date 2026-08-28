@@ -8,7 +8,6 @@ const assert = std.debug.assert;
 const testing = std.testing;
 const Io = std.Io;
 const builtin = @import("builtin");
-const PAGE_SIZE = heap.pageSize();
 
 const c = @import("c");
 const macos = @import("macos");
@@ -21,7 +20,7 @@ const SinglyLinkedList = datastruct.SinglyLinkedList;
 const win = @import("window.zig");
 const Window = win.Window;
 
-pub const SwapChain = datastruct.SwapChain(FrameState, 3);
+const PAGE_SIZE = heap.pageSize();
 
 const log = std.log.scoped(.render);
 
@@ -36,6 +35,8 @@ pub const Renderer = renderer: {
         pub fn deinit(_: *Renderer) void {}
     };
 };
+
+pub const SwapChain = datastruct.SwapChain(FrameState, 3);
 
 pub const WindowHandle = renderer: {
     if (!builtin.is_test) break :renderer struct {
