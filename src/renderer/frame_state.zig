@@ -2,7 +2,10 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const heap = std.heap;
 
+const chunk_pool = @import("../chunk_pool.zig");
+const ChunkPool = chunk_pool.ChunkPool;
 const datastruct = @import("../datastruct.zig");
+const SinglyLinkedList = datastruct.SinglyLinkedList;
 
 pub const SwapChain = datastruct.SwapChain(FrameState, 3);
 
@@ -10,13 +13,20 @@ pub const FrameState = @This();
 
 swap_chain: *SwapChain,
 arena: heap.ArenaAllocator,
-uniform: Uniforms,
+uniforms: Uniforms,
+rect_buffer: RectBuffer,
 
 pub fn init(self: *FrameState, swap_chain: *SwapChain, gpa: Allocator) !void {
     self.* = .{
-        .uniform = undefined,
-        .swap_chain = swap_chain,
         .arena = .init(gpa),
+        .uniforms = undefined,
+        .swap_chain = swap_chain,
+        .rect_buffer = .{
+            .buffers = .{
+                .count = 0,
+                .buffers = .empty,
+            },
+        },
     };
 }
 
@@ -39,4 +49,22 @@ pub const Rect = extern struct {
     color_1: [4]f32 align(16),
     color_2: [4]f32 align(16),
     color_3: [4]f32 align(16),
+};
+
+const BufferNode = struct {
+    next: ?*BufferNode,
+    buffer: ChunkPool,
+};
+
+const BufferList = struct {
+    const empty: BufferList = .{
+        .buffers = .{},
+        .count = 0,
+    };
+    buffers: SinglyLinkedList(BufferNode),
+    count: u64,
+};
+
+const RectBuffer = struct {
+    buffers: BufferList,
 };

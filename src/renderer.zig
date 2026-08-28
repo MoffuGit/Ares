@@ -38,7 +38,7 @@ pub const Renderer = renderer: {
 
         //The sync path i take it from this issue: https://github.com/ocornut/imgui/issues/9500
         pub fn render(self: *@This(), handle: *Handle, frame_state: *FrameState, sync: bool) void {
-            const viewport_size = frame_state.uniform.viewport_size;
+            const viewport_size = frame_state.uniforms.viewport_size;
             handle.render_handle.update(viewport_size[0], viewport_size[1], sync);
 
             self.api.start();

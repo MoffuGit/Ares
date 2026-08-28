@@ -69,7 +69,7 @@ const Options = struct {};
 
 pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
     self.* = .{
-        .states = .{},
+        .states = .empty,
         .renderer = undefined,
         .flushing = false,
         .pending_updates = 0,
@@ -83,9 +83,9 @@ pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
         .loop = undefined,
         .gpa = gpa,
         .arena = .init(gpa),
-        .events = .{},
-        .dispatched = .{},
-        .deferred = .{},
+        .events = .empty,
+        .dispatched = .empty,
+        .deferred = .empty,
         .scheduler = undefined,
     };
 
@@ -308,7 +308,7 @@ pub const Deferred = struct {
 
 pub fn flushEvents(self: *App) void {
     const chunk = self.chunks.allocator();
-    while (!self.events.empty() or !self.dispatched.empty()) {
+    while (!self.events.is_empty() or !self.dispatched.is_empty()) {
         while (self.events.pop()) |event| {
             self.listeners.notifyAll(
                 event.id,

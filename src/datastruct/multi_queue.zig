@@ -36,7 +36,7 @@ pub fn MultiQueue(comptime Queues: type) type {
         pub fn init(self: *Self) void {
             @setRuntimeSafety(false);
             inline for (fields, 0..) |field, i| {
-                @field(self.queues[i], field.name) = .{};
+                @field(self.queues[i], field.name) = .empty;
             }
         }
 
@@ -49,7 +49,7 @@ pub fn MultiQueue(comptime Queues: type) type {
         }
 
         pub fn empty(self: *Self, comptime tag: Tag) bool {
-            return queue(self, tag).empty();
+            return queue(self, tag).is_empty();
         }
 
         pub fn queue(self: *Self, comptime tag: Tag) *linked_list.SinglyLinkedList(FieldType(tag)) {

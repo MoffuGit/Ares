@@ -8,8 +8,13 @@ const testing = std.testing;
 
 pub fn SinglyLinkedList(T: type) type {
     return struct {
-        head: ?*T = null,
-        tail: ?*T = null,
+        pub const empty: @This() = .{
+            .head = null,
+            .tail = null,
+        };
+
+        head: ?*T,
+        tail: ?*T,
 
         pub fn append(self: *@This(), v: *T) void {
             assert(v.next == null);
@@ -59,7 +64,7 @@ pub fn SinglyLinkedList(T: type) type {
             return next;
         }
 
-        pub fn empty(self: *const @This()) bool {
+        pub fn is_empty(self: *const @This()) bool {
             return self.head == null;
         }
     };
@@ -72,7 +77,7 @@ test "basics" {
         next: ?*Self = null,
     };
     var q: SinglyLinkedList(Elem) = .{};
-    try testing.expect(q.empty());
+    try testing.expect(q.is_empty());
 
     // Elems
     var elems: [10]Elem = .{Elem{}} ** 10;
@@ -80,10 +85,10 @@ test "basics" {
     // One
     try testing.expect(q.pop() == null);
     q.append(&elems[0]);
-    try testing.expect(!q.empty());
+    try testing.expect(!q.is_empty());
     try testing.expectEqual(q.pop().?, &elems[0]);
     try testing.expectEqual(q.pop(), null);
-    try testing.expect(q.empty());
+    try testing.expect(q.is_empty());
 
     // Two
     try testing.expectEqual(q.pop(), null);
@@ -104,10 +109,10 @@ test "basics" {
     // One
     try testing.expectEqual(q.pop(), null);
     q.prepend(&elems[0]);
-    try testing.expect(!q.empty());
+    try testing.expect(!q.is_empty());
     try testing.expectEqual(q.pop().?, &elems[0]);
     try testing.expectEqual(q.pop(), null);
-    try testing.expect(q.empty());
+    try testing.expect(q.is_empty());
 
     // Two
     try testing.expect(q.pop() == null);

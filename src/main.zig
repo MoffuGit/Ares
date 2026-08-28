@@ -102,11 +102,11 @@ pub fn tick(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
 pub fn _tick(app: *App) !void {
     const chunks = app.chunks.allocator();
 
-    if (app.states.empty()) app.stop();
+    if (app.states.is_empty()) app.stop();
 
     win.pollEvents();
 
-    var states: SinglyLinkedList(WindowState) = .{};
+    var states: SinglyLinkedList(WindowState) = .empty;
 
     while (app.states.pop()) |state| {
         if (state.win.shouldClose()) {
@@ -117,7 +117,7 @@ pub fn _tick(app: *App) !void {
             const width, const height = state.win.sizeInPixels() orelse unreachable;
             const frame = state.handle.nextFrame();
 
-            frame.uniform = .{
+            frame.uniforms = .{
                 .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
             };
             app.renderer.render(&state.handle, frame, false);
@@ -141,7 +141,7 @@ pub fn windowCallback(event: [*c]const win.Event) callconv(.c) void {
             const width, const height = state.win.sizeInPixels() orelse unreachable;
             const frame = state.handle.nextFrame();
 
-            frame.uniform = .{
+            frame.uniforms = .{
                 .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
             };
 
