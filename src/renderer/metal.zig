@@ -13,6 +13,7 @@ const c = @import("metal/c.zig");
 const Frame = @import("metal/frame.zig");
 const Shaders = @import("metal/shaders.zig").Shaders;
 const Target = @import("metal/target.zig");
+const Buffer = @import("metal/buffer.zig");
 
 pub const Metal = @This();
 
@@ -49,6 +50,15 @@ pub fn init(self: *Metal) !void {
     errdefer self.queue.release();
 
     try self.shaders.init(self.device, .bgra8unorm);
+}
+
+pub fn buffer(
+    self: *Metal,
+    chunk: [*]u8,
+    len: usize,
+    resource_options: c.MTLResourceOptions,
+) Buffer {
+    return .init(self.device, chunk, len, resource_options);
 }
 
 pub fn deinit(self: *Metal) void {

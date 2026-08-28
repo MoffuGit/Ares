@@ -17,8 +17,8 @@ pub const FrameState = @This();
 
 swap_chain: *SwapChain,
 arena: heap.ArenaAllocator,
-uniforms: Uniforms,
 rect_list: BufferList,
+uniforms: *Uniforms,
 
 pub fn init(self: *FrameState, swap_chain: *SwapChain, gpa: Allocator) !void {
     self.* = .{
@@ -27,6 +27,16 @@ pub fn init(self: *FrameState, swap_chain: *SwapChain, gpa: Allocator) !void {
         .swap_chain = swap_chain,
         .rect_list = .empty,
     };
+}
+
+pub fn uniform(self: *FrameState, data: Uniforms) !void {
+    const arena = self.arena.allocator();
+
+    const buffer = arena.rawAlloc(@sizeOf(Uniforms), .fromByteUnits(page_size), @returnAddress()) orelse return error.OutOfMemory;
+    const ptr: *Uniforms = @ptrCast(@alignCast(buffer));
+    ptr.* = data;
+
+    self.uniforms = ptr;
 }
 
 pub fn rect(self: *FrameState, data: Rect) !void {
@@ -68,7 +78,9 @@ pub fn deinit(self: *FrameState) void {
 }
 
 pub fn release(self: *FrameState) void {
-    _ = self.arena.reset(.free_all);
+    self.rect_list = .empty;
+    self.uniforms = undefined;
+    _ = self.arena.reset(.retain_capacity);
     self.swap_chain.releaseFrame();
 }
 
@@ -84,7 +96,7 @@ pub const Rect = extern struct {
     color_3: [4]f32 align(16),
 };
 
-const BufferNode = struct {
+pub const BufferNode = struct {
     next: ?*BufferNode,
     pool: ChunkPool,
 
@@ -98,7 +110,7 @@ const BufferNode = struct {
     }
 };
 
-const BufferList = struct {
+pub const BufferList = struct {
     const empty: BufferList = .{
         .nodes = .empty,
     };
@@ -122,11 +134,23 @@ test "Rect List" {
         .color_2 = .{ 1, 1, 1, 1 },
         .color_3 = .{ 1, 1, 1, 1 },
     };
+    for (0..256) |_| {
+        try state.rect(data);
+    }
+
+    {
+        try testing.expect(!state.rect_list.nodes.is_empty());
+        const tail = state.rect_list.nodes.tail.?;
+        try testing.expectEqual(256, tail.pool.reserved);
+        const ptr: *Rect = @ptrCast(@alignCast(tail.pool.buffer[0..@sizeOf(Rect)]));
+        try testing.expectEqual(data, ptr.*);
+    }
+
     try state.rect(data);
 
     try testing.expect(!state.rect_list.nodes.is_empty());
-    const head = state.rect_list.nodes.head.?;
-    try testing.expectEqual(1, head.pool.reserved);
-    const ptr: *Rect = @ptrCast(@alignCast(head.pool.buffer[0..@sizeOf(Rect)]));
+    const tail = state.rect_list.nodes.tail.?;
+    try testing.expectEqual(1, tail.pool.reserved);
+    const ptr: *Rect = @ptrCast(@alignCast(tail.pool.buffer[0..@sizeOf(Rect)]));
     try testing.expectEqual(data, ptr.*);
 }

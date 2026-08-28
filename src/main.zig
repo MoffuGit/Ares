@@ -117,9 +117,18 @@ pub fn _tick(app: *App) !void {
             const width, const height = state.win.sizeInPixels() orelse unreachable;
             const frame = state.handle.nextFrame();
 
-            frame.uniforms = .{
+            try frame.uniform(.{
                 .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
-            };
+            });
+
+            try frame.rect(.{
+                .position = .{ 10.0, 10.0, 110.0, 110.0 },
+                .color_0 = .{ 1.0, 0.0, 0.0, 1.0 },
+                .color_1 = .{ 1.0, 0.0, 0.0, 1.0 },
+                .color_2 = .{ 1.0, 0.0, 0.0, 1.0 },
+                .color_3 = .{ 1.0, 0.0, 0.0, 1.0 },
+            });
+
             app.renderer.render(&state.handle, frame, false);
 
             states.append(state);
@@ -141,9 +150,17 @@ pub fn windowCallback(event: [*c]const win.Event) callconv(.c) void {
             const width, const height = state.win.sizeInPixels() orelse unreachable;
             const frame = state.handle.nextFrame();
 
-            frame.uniforms = .{
+            frame.uniform(.{
                 .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
-            };
+            }) catch unreachable;
+
+            frame.rect(.{
+                .position = .{ 10, 10, 110, 110 },
+                .color_0 = .{ 1, 0, 0, 1 },
+                .color_1 = .{ 1, 0, 0, 1 },
+                .color_2 = .{ 1, 0, 0, 1 },
+                .color_3 = .{ 1, 0, 0, 1 },
+            }) catch unreachable;
 
             app.renderer.render(&state.handle, frame, true);
             break;

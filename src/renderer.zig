@@ -8,6 +8,10 @@ const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 const FrameState = @import("renderer/frame_state.zig");
 const SwapChain = FrameState.SwapChain;
+const BufferNode = FrameState.BufferNode;
+const Buffer = Metal.Buffer;
+const Rect = FrameState.Rect;
+const Uniforms = FrameState.Uniforms;
 
 const c = @import("c");
 const macos = @import("macos");
@@ -57,49 +61,35 @@ pub const Renderer = renderer: {
                 },
             });
             defer pass.complete();
-            //     const arena = state.arena.allocator();
-            //     const buffer = arena.rawAlloc(@sizeOf(Rect), .fromByteUnits(heap.pageSize()), @returnAddress()) orelse unreachable;
-            //     const input: *Rect = @ptrCast(@alignCast(buffer));
-            //
-            //     input.* = .{
-            //         .position = .{ 10.0, 10.0, 110.0, 110.0 },
-            //         .color_0 = .{ 1.0, 0.0, 0.0, 1.0 },
-            //         .color_1 = .{ 1.0, 0.0, 0.0, 1.0 },
-            //         .color_2 = .{ 1.0, 0.0, 1.0, 1.0 },
-            //         .color_3 = .{ 1.0, 0.0, 1.0, 1.0 },
-            //     };
-            //
-            //     const uni_buffer = arena.rawAlloc(@sizeOf(Uniforms), .fromByteUnits(heap.pageSize()), @returnAddress()) orelse unreachable;
-            //     const uni_input: *Uniforms = @ptrCast(@alignCast(uni_buffer));
-            //
-            //     uni_input.* = .{
-            //         .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
-            //     };
-            //
-            //     var mt_buffer: Buffer = undefined;
-            //
-            //     try mt_buffer.init(buffer, @sizeOf(Rect), .{ .device = self.api.device, .resource_options = .{
-            //         .cpu_cache_mode = .write_combined,
-            //         .storage_mode = .shared,
-            //     } });
-            //
-            //     var mt_uni_buffer: Buffer = undefined;
-            //
-            //     try mt_uni_buffer.init(uni_buffer, @sizeOf(Uniforms), .{ .device = self.api.device, .resource_options = .{
-            //         .cpu_cache_mode = .write_combined,
-            //         .storage_mode = .shared,
-            //     } });
-            //
-            //     pass.step(.{
-            //         .pipeline = self.shaders.pipelines.rect,
-            //         .buffers = &.{mt_buffer.buffer},
-            //         .uniforms = mt_uni_buffer.buffer,
-            //         .draw = .{
-            //             .vertex_count = 4,
-            //             .type = .triangle_strip,
-            //             .instance_count = 1,
-            //         },
-            //     });
+
+            const uniform = self.api.buffer(
+                @ptrCast(frame_state.uniforms),
+                @sizeOf(Uniforms),
+                .{ .storage_mode = .shared, .cpu_cache_mode = .write_combined },
+            );
+
+            var node: ?*BufferNode = frame_state.rect_list.nodes.head;
+            while (node) |curr| : (node = curr.next) {
+                const ptr = curr.pool.buffer.ptr;
+                const instances = curr.pool.reserved;
+
+                const rect = self.api.buffer(
+                    @ptrCast(ptr),
+                    @sizeOf(Rect) * instances,
+                    .{ .storage_mode = .shared, .cpu_cache_mode = .write_combined },
+                );
+
+                pass.step(.{
+                    .pipeline = self.api.shaders.pipelines.rect,
+                    .buffers = &.{rect.buffer},
+                    .uniforms = uniform.buffer,
+                    .draw = .{
+                        .vertex_count = 4,
+                        .type = .triangle_strip,
+                        .instance_count = instances,
+                    },
+                });
+            }
         }
 
         pub const Handle = struct {
