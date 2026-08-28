@@ -1,6 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const heap = std.heap;
+const assert = std.debug.assert;
+const testing = std.testing;
 
 const chunk_pool = @import("../chunk_pool.zig");
 const ChunkPool = chunk_pool.ChunkPool;
@@ -23,23 +25,43 @@ pub fn init(self: *FrameState, swap_chain: *SwapChain, gpa: Allocator) !void {
         .arena = .init(gpa),
         .uniforms = undefined,
         .swap_chain = swap_chain,
-        .rect_list = .{
-            .count = 0,
-            .nodes = .empty,
-        },
+        .rect_list = .empty,
     };
 }
 
-// pub fn rect(self: *FrameState, data: Rect) !void {
-//     const arena = self.arena.allocator();
-//     const list = self.rect_list;
-//
-//     if (list.nodes.is_empty()) {
-//         const node = try arena.create(BufferNode);
-//         try node.init(256, @sizeOf(Rect), arena);
-//         list.push(node);
-//     }
-// }
+pub fn rect(self: *FrameState, data: Rect) !void {
+    const arena = self.arena.allocator();
+    const list = &self.rect_list;
+
+    if (list.nodes.is_empty()) {
+        const node = try arena.create(BufferNode);
+        try node.init(.{
+            .capacity = 256,
+            .chunk_size = @sizeOf(Rect),
+            .alignment = .fromByteUnits(page_size),
+        }, arena);
+        list.push(node);
+    }
+
+    const buffer = ptr: {
+        if (list.nodes.head.?.buffer.alloc()) |ptr| break :ptr ptr;
+
+        const node = try arena.create(BufferNode);
+        try node.init(.{
+            .capacity = 256,
+            .chunk_size = @sizeOf(Rect),
+            .alignment = .fromByteUnits(page_size),
+        }, arena);
+        list.push(node);
+
+        break :ptr node.buffer.alloc() orelse unreachable;
+    };
+
+    assert(buffer.len == @sizeOf(Rect));
+
+    const ptr: *Rect = @ptrCast(@alignCast(buffer.ptr));
+    ptr.* = data;
+}
 
 pub fn deinit(self: *FrameState) void {
     self.arena.deinit();
@@ -66,26 +88,45 @@ const BufferNode = struct {
     next: ?*BufferNode,
     buffer: ChunkPool,
 
-    pub fn init(self: *BufferNode, capacity: u32, chunk_size: u32, arena: Allocator) !void {
+    pub fn init(self: *BufferNode, opt: chunk_pool.Options, arena: Allocator) !void {
         self.* = .{
             .next = null,
             .buffer = undefined,
         };
 
-        try self.buffer.init(arena, capacity, chunk_size, .fromByteUnits(page_size));
+        try self.buffer.init(arena, opt);
     }
 };
 
 const BufferList = struct {
     const empty: BufferList = .{
-        .nodes = .{},
-        .count = 0,
+        .nodes = .empty,
     };
     nodes: SinglyLinkedList(BufferNode),
-    count: u64,
 
     pub fn push(self: *BufferList, node: *BufferNode) void {
         self.nodes.append(node);
-        self.count += 1;
     }
 };
+
+test "Rect List" {
+    const gpa = testing.allocator;
+    var state: FrameState = undefined;
+    try state.init(undefined, gpa);
+    defer state.deinit();
+
+    const data: Rect = .{
+        .position = .{ 1, 1, 1, 1 },
+        .color_0 = .{ 1, 1, 1, 1 },
+        .color_1 = .{ 1, 1, 1, 1 },
+        .color_2 = .{ 1, 1, 1, 1 },
+        .color_3 = .{ 1, 1, 1, 1 },
+    };
+    try state.rect(data);
+
+    try testing.expect(!state.rect_list.nodes.is_empty());
+    const head = state.rect_list.nodes.head.?;
+    try testing.expectEqual(1, head.buffer.reserved);
+    const ptr: *Rect = @ptrCast(@alignCast(head.buffer.buffer[0..@sizeOf(Rect)]));
+    try testing.expectEqual(data, ptr.*);
+}

@@ -141,3 +141,7 @@ pub const Renderer = renderer: {
         pub fn deinit(_: *Renderer) void {}
     };
 };
+
+test {
+    _ = FrameState;
+}

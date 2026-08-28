@@ -14,8 +14,10 @@ const WorktreeStore = @import("project/worktree_store.zig");
 const Session = @import("session.zig");
 const Workspace = @import("workspace.zig");
 const Worktree = @import("worktree.zig");
+const renderer = @import("renderer.zig");
 
 test {
+    _ = renderer;
     _ = Scheduler;
     _ = bench;
     _ = patch;
