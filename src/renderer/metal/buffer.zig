@@ -31,3 +31,7 @@ pub fn init(
 
     return .{ .buffer = buffer };
 }
+
+pub fn release(self: *const Buffer) void {
+    self.buffer.release();
+}

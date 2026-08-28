@@ -92,34 +92,37 @@ pub fn render(renderer: *Renderer, window_handle: *WindowHandle, frame_state: *F
     });
     defer pass.complete();
 
-    // const uniform = renderer.buffer(
-    //     @ptrCast(frame_state.uniforms),
-    //     @sizeOf(Uniforms),
-    //     .{ .storage_mode = .shared, .cpu_cache_mode = .write_combined },
-    // );
-    //
-    // var node: ?*BufferNode = frame_state.rects.nodes.head;
-    // while (node) |curr| : (node = curr.next) {
-    //     const ptr = curr.pool.ptr;
-    //     const instances = curr.pool.reserved;
-    //
-    //     const rect = renderer.buffer(
-    //         @ptrCast(ptr),
-    //         @sizeOf(Rect) * instances,
-    //         .{ .storage_mode = .shared, .cpu_cache_mode = .write_combined },
-    //     );
-    //
-    //     pass.step(.{
-    //         .pipeline = renderer.shaders.pipelines.rect,
-    //         .buffers = &.{rect.buffer},
-    //         .uniforms = uniform.buffer,
-    //         .draw = .{
-    //             .vertex_count = 4,
-    //             .type = .triangle_strip,
-    //             .instance_count = instances,
-    //         },
-    //     });
-    // }
+    const uniform = renderer.buffer(
+        @ptrCast(frame_state.uniforms),
+        @sizeOf(Uniforms),
+        .{ .storage_mode = .shared, .cpu_cache_mode = .write_combined },
+    );
+
+    defer uniform.release();
+
+    var node: ?*BufferNode = frame_state.rects.nodes.head;
+    while (node) |curr| : (node = curr.next) {
+        const ptr = curr.pool.ptr;
+        const instances = curr.pool.reserved;
+
+        const rect = renderer.buffer(
+            @ptrCast(ptr),
+            @sizeOf(Rect) * instances,
+            .{ .storage_mode = .shared, .cpu_cache_mode = .write_combined },
+        );
+        defer rect.release();
+
+        pass.step(.{
+            .pipeline = renderer.shaders.pipelines.rect,
+            .buffers = &.{rect.buffer},
+            .uniforms = uniform.buffer,
+            .draw = .{
+                .vertex_count = 4,
+                .type = .triangle_strip,
+                .instance_count = instances,
+            },
+        });
+    }
 }
 
 pub const Uniforms = extern struct {
