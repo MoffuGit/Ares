@@ -68,11 +68,7 @@ pub fn main(init: std.process.Init) !void {
     context.waker = try app.await(
         &context.display_c,
         struct {
-            fn callback(
-                completion: *Completion,
-                loop: *Loop,
-                res: anyerror!void,
-            ) bool {
+            fn callback(completion: *Completion, loop: *Loop, res: anyerror!void) bool {
                 res catch loop.stop();
 
                 const ctx: *Context = @alignCast(@fieldParentPtr("display_c", completion));
@@ -132,10 +128,7 @@ pub fn main(init: std.process.Init) !void {
     result.setOutputCallback(
         Waker,
         struct {
-            fn callback(
-                _: *macos.video.DisplayLink,
-                ud: ?*Waker,
-            ) void {
+            fn callback(_: *macos.video.DisplayLink, ud: ?*Waker) void {
                 if (ud) |waker| {
                     waker.wake() catch {};
                 }
