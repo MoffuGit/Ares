@@ -82,10 +82,10 @@ pub fn init(
     try self.chunks.initThreadSafe(
         self.arena,
         &.{
-            .{ 1024 * 1024 * 1024, RANGE_NODE_SIZE },
-            .{ 1024 * 1024 * 1024, CHUNK_SIZE },
-            .{ 1024 * 1024 * 2, @max(@sizeOf(EntryData), @sizeOf(ScannerTask)) },
-            .{ 1024 * 1024, @sizeOf(SharedFd) },
+            .{ .capacity = 1024 * 1024 * 1024, .chunk_size = RANGE_NODE_SIZE },
+            .{ .capacity = 1024 * 1024 * 1024, .chunk_size = CHUNK_SIZE },
+            .{ .capacity = 1024 * 1024 * 2, .chunk_size = @max(@sizeOf(EntryData), @sizeOf(ScannerTask)) },
+            .{ .capacity = 1024 * 1024, .chunk_size = @sizeOf(SharedFd) },
         },
         self.io,
     );
@@ -292,7 +292,7 @@ fn scanRequest(self: *Scanner, subscription: u64, path: ChunkedPath) !void {
 fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore: ?*const IgnoreNode) !void {
     const chunks = self.chunks.threadSafeAllocator();
     var buffer: [64 * 1024]u8 = undefined;
-    var tasks: SinglyLinkedList(Task) = .{};
+    var tasks: SinglyLinkedList(Task) = .empty;
     var count: u32 = 0;
 
     defer if (shared_fd) |fd| fd.release(chunks, self.io);
@@ -341,7 +341,7 @@ fn scanDir(self: *Scanner, dir_path: ChunkedPath, shared_fd: ?*SharedFd, ignore:
     suffix_buf[0] = '/';
     var path_buf: [MAX_PATH_LEN]u8 = undefined;
 
-    var entries: SinglyLinkedList(EntryData) = .{};
+    var entries: SinglyLinkedList(EntryData) = .empty;
 
     while (try bulk.next()) |entry| {
         const name = entry.name;

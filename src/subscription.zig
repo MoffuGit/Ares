@@ -227,7 +227,7 @@ test "Subscriptions" {
     };
 
     var chunks: ChunkAllocator = undefined;
-    try chunks.init(std.testing.allocator, &.{.{ 100, Subs.NODE_SIZE }});
+    try chunks.init(std.testing.allocator, &.{.{ .capacity = 100, .chunk_size = Subs.NODE_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
     var subscriptions: Subs = undefined;
@@ -282,7 +282,7 @@ test "Subscription notifies only its subscriber" {
     };
 
     var chunks: ChunkAllocator = undefined;
-    try chunks.init(std.testing.allocator, &.{.{ 100, Subs.NODE_SIZE }});
+    try chunks.init(std.testing.allocator, &.{.{ .capacity = 100, .chunk_size = Subs.NODE_SIZE }});
     defer chunks.deinit(std.testing.allocator);
 
     var subscriptions: Subs = undefined;

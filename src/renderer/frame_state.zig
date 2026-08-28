@@ -7,6 +7,8 @@ const ChunkPool = chunk_pool.ChunkPool;
 const datastruct = @import("../datastruct.zig");
 const SinglyLinkedList = datastruct.SinglyLinkedList;
 
+const page_size = std.heap.pageSize();
+
 pub const SwapChain = datastruct.SwapChain(FrameState, 3);
 
 pub const FrameState = @This();
@@ -14,21 +16,30 @@ pub const FrameState = @This();
 swap_chain: *SwapChain,
 arena: heap.ArenaAllocator,
 uniforms: Uniforms,
-rect_buffer: RectBuffer,
+rect_list: BufferList,
 
 pub fn init(self: *FrameState, swap_chain: *SwapChain, gpa: Allocator) !void {
     self.* = .{
         .arena = .init(gpa),
         .uniforms = undefined,
         .swap_chain = swap_chain,
-        .rect_buffer = .{
-            .buffers = .{
-                .count = 0,
-                .buffers = .empty,
-            },
+        .rect_list = .{
+            .count = 0,
+            .nodes = .empty,
         },
     };
 }
+
+// pub fn rect(self: *FrameState, data: Rect) !void {
+//     const arena = self.arena.allocator();
+//     const list = self.rect_list;
+//
+//     if (list.nodes.is_empty()) {
+//         const node = try arena.create(BufferNode);
+//         try node.init(256, @sizeOf(Rect), arena);
+//         list.push(node);
+//     }
+// }
 
 pub fn deinit(self: *FrameState) void {
     self.arena.deinit();
@@ -54,17 +65,27 @@ pub const Rect = extern struct {
 const BufferNode = struct {
     next: ?*BufferNode,
     buffer: ChunkPool,
+
+    pub fn init(self: *BufferNode, capacity: u32, chunk_size: u32, arena: Allocator) !void {
+        self.* = .{
+            .next = null,
+            .buffer = undefined,
+        };
+
+        try self.buffer.init(arena, capacity, chunk_size, .fromByteUnits(page_size));
+    }
 };
 
 const BufferList = struct {
     const empty: BufferList = .{
-        .buffers = .{},
+        .nodes = .{},
         .count = 0,
     };
-    buffers: SinglyLinkedList(BufferNode),
+    nodes: SinglyLinkedList(BufferNode),
     count: u64,
-};
 
-const RectBuffer = struct {
-    buffers: BufferList,
+    pub fn push(self: *BufferList, node: *BufferNode) void {
+        self.nodes.append(node);
+        self.count += 1;
+    }
 };

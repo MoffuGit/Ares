@@ -136,7 +136,7 @@ pub const Renderer = renderer: {
             pub fn deinit(_: *@This()) void {}
         };
 
-        pub fn init(_: *Renderer, _: Io) !void {}
+        pub fn init(_: *Renderer) !void {}
 
         pub fn deinit(_: *Renderer) void {}
     };

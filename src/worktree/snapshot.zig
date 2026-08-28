@@ -74,7 +74,7 @@ pub fn init(
     self.root_name = try arena.dupe(u8, std.fs.path.basename(self.abs_root));
 
     try self.chunks.init(arena, &.{
-        .{ 1024 * 1024, NODE_SIZE },
+        .{ .capacity = 1024 * 1024, .chunk_size = NODE_SIZE },
     });
 
     try self.entries.init(self.chunks.allocator());
@@ -105,7 +105,7 @@ pub fn clone(self: *const Snapshot, gpa: Allocator) !Snapshot {
     copy.root_name = try arena.dupe(u8, self.root_name);
 
     try copy.chunks.init(arena, &.{
-        .{ 1024 * 1024, NODE_SIZE },
+        .{ .capacity = 1024 * 1024, .chunk_size = NODE_SIZE },
     });
     copy.entries = try self.entries.clone(copy.chunks.allocator());
 

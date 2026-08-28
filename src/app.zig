@@ -33,11 +33,11 @@ const TypeId = typeId.TypeId;
 const win = @import("window.zig");
 const Window = win.Window;
 
-const CHUNK_SIZES: []const chunk_pool.PoolConfig = &.{
-    .{ 50, 128 },
-    .{ 50, 256 },
-    .{ 50, 512 },
-    .{ 50, 2048 },
+const CHUNK_SIZES: []const chunk_pool.Options = &.{
+    .{ .capacity = 50, .chunk_size = 128 },
+    .{ .capacity = 50, .chunk_size = 256 },
+    .{ .capacity = 50, .chunk_size = 512 },
+    .{ .capacity = 50, .chunk_size = 2048 },
 };
 
 const log = std.log.scoped(.app);

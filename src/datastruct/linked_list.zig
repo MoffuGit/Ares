@@ -76,7 +76,7 @@ test "basics" {
         const Self = @This();
         next: ?*Self = null,
     };
-    var q: SinglyLinkedList(Elem) = .{};
+    var q: SinglyLinkedList(Elem) = .empty;
     try testing.expect(q.is_empty());
 
     // Elems

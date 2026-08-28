@@ -26,6 +26,12 @@ const Chunk = opaque {
     }
 };
 
+pub const Options = struct {
+    capacity: u32,
+    chunk_size: u32,
+    alignment: ?mem.Alignment = null,
+};
+
 pub const ChunkPool = struct {
     buffer: []u8,
     alignment: mem.Alignment,
@@ -34,24 +40,21 @@ pub const ChunkPool = struct {
     free_list: Index = .none,
     mutex: Io.Mutex,
 
-    pub fn init(self: *ChunkPool, allocator: Allocator, capacity: u32, chunk_size: u32, alignment: mem.Alignment) !void {
-        assert(capacity < math.maxInt(u32));
-        assert(capacity > 0);
-        assert(chunk_size > 0);
+    pub fn init(self: *ChunkPool, allocator: Allocator, opt: Options) !void {
+        assert(opt.capacity < math.maxInt(u32));
+        assert(opt.capacity > 0);
+        assert(opt.chunk_size > 0);
 
-        const len = @as(usize, chunk_size) * @as(usize, capacity);
-        const buffer = (allocator.rawAlloc(
-            len,
-            alignment,
-            @returnAddress(),
-        ) orelse return error.OutOfMemory)[0..len];
+        const len = @as(usize, opt.chunk_size) * @as(usize, opt.capacity);
+        const alignment: mem.Alignment = opt.alignment orelse .fromByteUnits(opt.chunk_size);
+        const buffer = (allocator.rawAlloc(len, alignment, @returnAddress()) orelse return error.OutOfMemory)[0..len];
 
-        log.debug("Chunk Pool size={B} capacity={} size={}", .{ buffer.len, capacity, chunk_size });
+        log.debug("Chunk Pool size={B} capacity={} size={}", .{ buffer.len, opt.capacity, opt.chunk_size });
 
         self.* = .{
             .buffer = buffer,
             .alignment = alignment,
-            .chunk_size = chunk_size,
+            .chunk_size = opt.chunk_size,
             .mutex = .init,
         };
     }
@@ -112,23 +115,21 @@ pub const ChunkPool = struct {
     }
 };
 
-pub const PoolConfig = struct { u32, u32 };
-
-fn lessThan(_: void, lhs: PoolConfig, rhs: PoolConfig) bool {
-    return lhs.@"1" < rhs.@"1";
+fn lessThan(_: void, lhs: Options, rhs: Options) bool {
+    return lhs.chunk_size < rhs.chunk_size;
 }
 
 pub const ChunkAllocator = struct {
     pools: []ChunkPool,
     io: Io,
 
-    pub fn init(self: *ChunkAllocator, child_alloc: Allocator, pool_configs: []const PoolConfig) !void {
+    pub fn init(self: *ChunkAllocator, child_alloc: Allocator, opts: []const Options) !void {
         self.* = .{
             .pools = undefined,
             .io = undefined,
         };
 
-        self.pools = try child_alloc.alloc(ChunkPool, pool_configs.len);
+        self.pools = try child_alloc.alloc(ChunkPool, opts.len);
         errdefer child_alloc.free(self.pools);
 
         var initialized: usize = 0;
@@ -136,26 +137,30 @@ pub const ChunkAllocator = struct {
             for (self.pools[0..initialized]) |*pool| pool.deinit(child_alloc);
         }
 
-        var buffer: [100]PoolConfig = undefined;
-        for (pool_configs, 0..) |config, index| {
-            buffer[index] = .{ config.@"0", math.ceilPowerOfTwoAssert(u32, config.@"1") };
+        var buffer: [100]Options = undefined;
+        for (opts, 0..) |config, index| {
+            buffer[index] = .{
+                .capacity = config.capacity,
+                .chunk_size = math.ceilPowerOfTwoAssert(u32, config.chunk_size),
+                .alignment = config.alignment,
+            };
         }
 
-        const ordered_pools = buffer[0..pool_configs.len];
-        mem.sortUnstable(PoolConfig, buffer[0..pool_configs.len], {}, lessThan);
+        const ordered_pools = buffer[0..opts.len];
+        mem.sort(Options, buffer[0..opts.len], {}, lessThan);
 
         var last: u32 = 0;
-        for (ordered_pools, 0..) |config, index| {
-            assert(last != config.@"1");
+        for (ordered_pools, 0..) |opt, index| {
+            assert(last != opt.chunk_size);
 
-            try self.pools[index].init(child_alloc, config.@"0", config.@"1", .fromByteUnits(config.@"1"));
+            try self.pools[index].init(child_alloc, opt);
 
-            last = config.@"1";
+            last = opt.chunk_size;
             initialized += 1;
         }
     }
 
-    pub fn initThreadSafe(self: *ChunkAllocator, child_alloc: Allocator, pool_configs: []const PoolConfig, io: Io) !void {
+    pub fn initThreadSafe(self: *ChunkAllocator, child_alloc: Allocator, pool_configs: []const Options, io: Io) !void {
         try self.init(child_alloc, pool_configs);
         self.io = io;
     }
@@ -242,7 +247,7 @@ test "Simple Chunk Pool" {
     const gpa = testing.allocator;
 
     var pool: ChunkPool = undefined;
-    try pool.init(gpa, 2, 128, .fromByteUnits(128));
+    try pool.init(gpa, .{ .capacity = 2, .chunk_size = 128 });
     defer pool.deinit(gpa);
 
     const first = pool.alloc() orelse return error.TestUnexpectedResult;
@@ -261,7 +266,7 @@ test "Chunk Pool reuses chunk after capacity is exhausted" {
     const gpa = testing.allocator;
 
     var pool: ChunkPool = undefined;
-    try pool.init(gpa, 3, 128, .fromByteUnits(128));
+    try pool.init(gpa, .{ .capacity = 3, .chunk_size = 128 });
     defer pool.deinit(gpa);
 
     const first = pool.alloc() orelse return error.TestUnexpectedResult;
@@ -288,7 +293,7 @@ test "Chunk Allocator" {
     };
 
     var chunk_allocator: ChunkAllocator = undefined;
-    try chunk_allocator.init(gpa, &.{ .{ 1, 64 }, .{ 1, 128 } });
+    try chunk_allocator.init(gpa, &.{ .{ .capacity = 1, .chunk_size = 64 }, .{ .capacity = 1, .chunk_size = 128 } });
     defer chunk_allocator.deinit(gpa);
 
     const alloc = chunk_allocator.allocator();
@@ -312,7 +317,7 @@ test "Chunk Allocator orders chunk sizes from smallest to biggest" {
     const gpa = testing.allocator;
 
     var chunk_allocator: ChunkAllocator = undefined;
-    try chunk_allocator.init(gpa, &.{ .{ 1, 128 }, .{ 1, 64 }, .{ 1, 256 } });
+    try chunk_allocator.init(gpa, &.{ .{ .capacity = 1, .chunk_size = 128 }, .{ .capacity = 1, .chunk_size = 64 }, .{ .capacity = 1, .chunk_size = 256 } });
     defer chunk_allocator.deinit(gpa);
 
     try testing.expectEqual(@as(u32, 64), chunk_allocator.pools[0].chunk_size);
