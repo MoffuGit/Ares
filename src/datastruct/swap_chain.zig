@@ -17,7 +17,7 @@ pub fn SwapChain(T: type, buf_count: comptime_int) type {
             };
 
             for (&self.buffer) |*frame| {
-                try frame.init(self, gpa);
+                try frame.init(gpa);
             }
         }
 

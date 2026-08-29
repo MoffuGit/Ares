@@ -17,6 +17,7 @@ const chunk_pool = @import("chunk_pool.zig");
 const ChunkPool = chunk_pool.ChunkPool;
 const datastruct = @import("datastruct.zig");
 const SinglyLinkedList = datastruct.SinglyLinkedList;
+const Metal = @import("renderer/metal.zig");
 const win = @import("window.zig");
 const Window = win.Window;
 
@@ -25,8 +26,6 @@ const PAGE_SIZE = heap.pageSize();
 const log = std.log.scoped(.render);
 
 pub const Renderer = renderer: {
-    const Metal = @import("renderer/metal.zig");
-
     if (!builtin.is_test) break :renderer Metal;
 
     break :renderer struct {
@@ -36,53 +35,23 @@ pub const Renderer = renderer: {
     };
 };
 
-pub const SwapChain = datastruct.SwapChain(FrameState, 3);
-
-pub const WindowHandle = renderer: {
-    if (!builtin.is_test) break :renderer struct {
-        swap_chain: SwapChain,
-        handle: Renderer.Handle,
-
-        pub fn init(self: *WindowHandle, renderer: *Renderer, window: *Window, gpa: Allocator, io: Io) !void {
-            self.* = .{
-                .swap_chain = undefined,
-                .handle = undefined,
-            };
-
-            try self.swap_chain.init(gpa, io);
-
-            self.handle.init(renderer, window);
-        }
-
-        pub fn deinit(self: *WindowHandle) void {
-            self.handle.deinit();
-            self.swap_chain.deinit();
-        }
-
-        pub fn nextFrame(self: *WindowHandle) *FrameState {
-            return self.swap_chain.nextFrame();
-        }
-
-        pub fn releaseFrame(self: *WindowHandle) void {
-            self.swap_chain.releaseFrame();
-        }
-    };
+pub const Handle = renderer: {
+    if (!builtin.is_test) break :renderer Metal.Handle;
 
     break :renderer struct {
-        pub fn init(_: *WindowHandle, _: *Renderer, _: *Window, _: Allocator, _: Io) !void {}
+        pub fn init(_: *Handle, _: *Renderer, _: *Window, _: Allocator, _: Io) !void {}
 
-        pub fn deinit(_: *WindowHandle) void {}
+        pub fn deinit(_: *Handle) void {}
     };
 };
 
 //The sync path i take it from this issue: https://github.com/ocornut/imgui/issues/9500
-pub fn render(renderer: *Renderer, window_handle: *WindowHandle, frame_state: *FrameState, sync: bool) void {
+pub fn render(renderer: *Renderer, handle: *Handle, frame_state: *FrameState, sync: bool) void {
     const width, const height = frame_state.uniforms.viewport_size;
-    const handle = &window_handle.handle;
 
     handle.update(width, height, sync);
     var target = handle.target();
-    var frame = handle.frame(renderer, frame_state);
+    var frame = renderer.frame(handle);
     defer frame.complete(&target, sync);
 
     var pass = frame.renderPass(&.{
@@ -140,15 +109,13 @@ pub const Rect = extern struct {
 
 pub const FrameState = struct {
     arena: heap.ArenaAllocator,
-    swap_chain: *SwapChain,
     rects: BufferList,
     uniforms: *Uniforms,
 
-    pub fn init(self: *FrameState, swap_chain: *SwapChain, gpa: Allocator) !void {
+    pub fn init(self: *FrameState, gpa: Allocator) !void {
         self.* = .{
             .arena = .init(gpa),
             .uniforms = undefined,
-            .swap_chain = swap_chain,
             .rects = .empty,
         };
     }
@@ -205,11 +172,10 @@ pub const FrameState = struct {
         self.arena.deinit();
     }
 
-    pub fn release(self: *FrameState) void {
+    pub fn reset(self: *FrameState) void {
         self.rects = .empty;
         self.uniforms = undefined;
         _ = self.arena.reset(.retain_capacity);
-        self.swap_chain.releaseFrame();
     }
 };
 

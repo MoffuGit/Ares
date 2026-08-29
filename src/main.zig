@@ -149,7 +149,7 @@ pub fn main(init: std.process.Init) !void {
 pub fn render(app: *App, state: *WindowState, sync: bool) !void {
     const width, const height = state.win.sizeInPixels() orelse unreachable;
     const frame = state.handle.nextFrame();
-    errdefer frame.release();
+    errdefer state.handle.releaseFrame();
 
     try frame.uniform(.{
         .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },

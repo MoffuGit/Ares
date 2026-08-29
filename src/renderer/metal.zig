@@ -6,7 +6,10 @@ const Allocator = std.mem.Allocator;
 const macos = @import("macos");
 const objc = @import("objc");
 
-const FrameState = @import("../renderer.zig").FrameState;
+const datastruct = @import("../datastruct.zig");
+const SwapChain = datastruct.SwapChain(FrameState, 3);
+const renderer = @import("../renderer.zig");
+const FrameState = renderer.FrameState;
 const win = @import("../window.zig");
 const Window = win.Window;
 const c = @import("metal/c.zig");
@@ -79,10 +82,19 @@ pub fn end(self: *Metal) void {
     self.autorelease_pool = null;
 }
 
+pub fn frame(self: *Metal, handle: *Handle) Frame {
+    return .begin(self, handle);
+}
+
 pub const Handle = struct {
     layer: objc.Object,
+    swap_chain: SwapChain,
 
-    pub fn init(self: *@This(), api: *Metal, window: *Window) void {
+    pub fn init(self: *@This(), api: *Metal, window: *Window, gpa: Allocator, io: Io) !void {
+        self.* = .{ .layer = undefined, .swap_chain = undefined };
+
+        try self.swap_chain.init(gpa, io);
+
         const CAMetalLayer = objc.getClass("CAMetalLayer").?;
 
         const layer = CAMetalLayer.msgSend(objc.Object, "layer", .{});
@@ -94,15 +106,17 @@ pub const Handle = struct {
         const view = objc.Object.fromId(window.NSView() orelse unreachable);
         view.msgSend(void, "setLayer:", .{layer});
 
-        self.* = .{ .layer = layer };
+        self.layer = layer;
     }
 
-    pub fn frame(
-        _: *const @This(),
-        api: *Metal,
-        frame_state: *FrameState,
-    ) Frame {
-        return .begin(api, frame_state);
+    pub fn nextFrame(self: *Handle) *FrameState {
+        const next = self.swap_chain.nextFrame();
+        next.reset();
+        return next;
+    }
+
+    pub fn releaseFrame(self: *Handle) void {
+        self.swap_chain.releaseFrame();
     }
 
     pub fn target(self: *const Handle) Target {
@@ -111,6 +125,7 @@ pub const Handle = struct {
 
     pub fn deinit(self: *@This()) void {
         self.layer.release();
+        self.swap_chain.deinit();
     }
 
     pub fn update(self: *@This(), width: f32, height: f32, sync: bool) void {
@@ -167,7 +182,7 @@ pub const Frame = struct {
 
     pub fn begin(
         api: *Metal,
-        frame_state: *FrameState,
+        handle: *Handle,
     ) Frame {
         const command_buffer = api.queue.msgSend(
             objc.Object,
@@ -178,7 +193,7 @@ pub const Frame = struct {
         // Create our block to register for completion updates.
         // The block is deallocated by the objC runtime on success.
         const block = CompletionBlock.init(
-            .{ .frame_state = frame_state },
+            .{ .handle = handle },
             &bufferCompleted,
         );
 
@@ -188,7 +203,7 @@ pub const Frame = struct {
     /// This is the block type used for the addCompletedHandler callback.
     const CompletionBlock = objc.Block(
         struct {
-            frame_state: *FrameState,
+            handle: *Handle,
         },
         .{},
         void,
@@ -197,7 +212,7 @@ pub const Frame = struct {
     fn bufferCompleted(
         block: *const CompletionBlock.Context,
     ) callconv(.c) void {
-        block.frame_state.release();
+        block.handle.releaseFrame();
     }
 
     /// Add a render pass to this frame with the provided attachments.

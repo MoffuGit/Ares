@@ -24,7 +24,7 @@ const Completion = Loop.Completion;
 const Waker = Loop.Waker;
 const render = @import("renderer.zig");
 const Renderer = render.Renderer;
-const WindowHandle = render.WindowHandle;
+const Handle = render.Handle;
 const Scheduler = @import("scheduler.zig");
 const subs = @import("subscription.zig");
 const Subscriptions = subs.Subscriptions;
@@ -128,7 +128,7 @@ pub const WindowState = struct {
     next: ?*WindowState = null,
 
     win: Window,
-    handle: WindowHandle,
+    handle: Handle,
 
     pub fn init(self: *WindowState, app: *App, opts: win.Options) !void {
         self.* = .{
