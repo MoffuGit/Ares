@@ -40,8 +40,7 @@ pub fn SinglyLinkedList(T: type) type {
             }
         }
 
-        pub fn copy(self: *@This(), other: *const @This()) void {
-            assert(self != other);
+        pub fn concatByMoving(self: *@This(), other: *@This()) void {
             const v = other.head orelse return;
 
             if (self.tail) |tail| {
@@ -51,6 +50,9 @@ pub fn SinglyLinkedList(T: type) type {
             }
 
             self.tail = other.tail;
+
+            other.head = null;
+            other.tail = null;
         }
 
         pub fn pop(self: *@This()) ?*T {
