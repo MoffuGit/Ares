@@ -12,6 +12,7 @@ const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const Waker = Loop.Waker;
 const renderer = @import("renderer.zig");
+const view = @import("view.zig");
 const win = @import("window.zig");
 const Window = win.Window;
 
@@ -146,6 +147,9 @@ pub fn main(init: std.process.Init) !void {
 }
 
 pub fn render(app: *App, state: *WindowState, sync: bool) !void {
+    view.startBuild(state);
+    defer view.endBuild();
+
     const frame = state.render_handle.nextFrame();
     errdefer state.render_handle.releaseFrame();
 

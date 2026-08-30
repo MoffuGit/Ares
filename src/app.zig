@@ -31,6 +31,8 @@ const Subscriptions = subs.Subscriptions;
 const typeId = @import("type_id.zig");
 const TypeInfo = typeId.TypeInfo;
 const TypeId = typeId.TypeId;
+const view = @import("view.zig");
+const ViewState = view.ViewState;
 const win = @import("window.zig");
 const Window = win.Window;
 
@@ -132,13 +134,18 @@ pub const WindowState = struct {
     win: Window,
     size: WindowSize,
     render_handle: Handle,
+    view_state: ViewState,
 
     pub fn init(self: *WindowState, app: *App, opts: win.Options) !void {
         self.* = .{
+            .view_state = undefined,
             .win = undefined,
             .render_handle = undefined,
             .size = .{ .width = @floatFromInt(opts.width), .height = @floatFromInt(opts.height) },
         };
+
+        try self.view_state.init(app.gpa);
+        errdefer self.view_state.deinit();
 
         try self.win.init(opts);
         errdefer self.win.deinit();
@@ -154,6 +161,7 @@ pub const WindowState = struct {
     pub fn deinit(self: *WindowState) void {
         self.render_handle.deinit();
         self.win.deinit();
+        self.view_state.deinit();
     }
 };
 

@@ -8,10 +8,12 @@ const testing = std.testing;
 
 pub fn DoublyLinkedList(T: type) type {
     return struct {
+        pub const empty: @This() = .{ .first = null, .last = null };
+
         const Node = T;
 
-        first: ?*Node = null,
-        last: ?*Node = null,
+        first: ?*Node,
+        last: ?*Node,
 
         pub fn insertAfter(list: *@This(), existing_node: *Node, new_node: *Node) void {
             new_node.prev = existing_node;
@@ -153,7 +155,7 @@ test "basics" {
         next: ?*@This() = null,
         prev: ?*@This() = null,
     };
-    var list: DoublyLinkedList(L) = .{};
+    var list: DoublyLinkedList(L) = .empty;
 
     var one: L = .{ .data = 1 };
     var two: L = .{ .data = 2 };
@@ -202,8 +204,8 @@ test "concatenation" {
         next: ?*@This() = null,
         prev: ?*@This() = null,
     };
-    var list1: DoublyLinkedList(L) = .{};
-    var list2: DoublyLinkedList(L) = .{};
+    var list1: DoublyLinkedList(L) = .empty;
+    var list2: DoublyLinkedList(L) = .empty;
 
     var one: L = .{ .data = 1 };
     var two: L = .{ .data = 2 };
