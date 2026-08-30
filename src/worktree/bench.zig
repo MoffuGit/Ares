@@ -96,7 +96,8 @@ test "benchmark: Worktree initial scan" {
     const min = Bench.min(&durations);
     const max = Bench.max(&durations);
     const mean = Bench.mean(&durations);
-    Bench.report("min={}ms, max={}ms, mean={}ms", .{
+    Bench.report("iterations={}, min={}ms, max={}ms, mean={}ms", .{
+        durations.len,
         min.toMilliseconds(),
         max.toMilliseconds(),
         mean.toMilliseconds(),
