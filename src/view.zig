@@ -13,12 +13,7 @@ const DoublyLinkedList = datastruct.DoublyLinkedList;
 
 pub var curr_state: ?*ViewState = null;
 
-const Stacks = MultiQueue(union(enum) {
-    ancestors: Block,
-});
-
 pub const ViewState = struct {
-    stacks: Stacks,
     arena: heap.ArenaAllocator,
     frame: u64,
     frame_arenas: [2]heap.ArenaAllocator,
@@ -32,14 +27,12 @@ pub const ViewState = struct {
             .frame_arenas = .{ .init(gpa), .init(gpa) },
             .arena = .init(gpa),
             .chunks = undefined,
-            .stacks = undefined,
         };
 
         const arena = self.arena.allocator();
         errdefer self.arena.deinit();
 
         try self.chunks.init(arena, &.{.{ .capacity = 2048, .chunk_size = @sizeOf(Block) }});
-        self.stacks.init();
     }
 
     pub fn deinit(self: *ViewState) void {
@@ -56,7 +49,6 @@ pub fn startBuild(window_state: *WindowState) void {
     assert(curr_state == null);
 
     const state = &window_state.view_state;
-    state.stacks.init();
 
     curr_state = state;
 }
@@ -122,13 +114,6 @@ const Block = struct {
         const arena = state.frameArena();
         const block = try arena.create(Block);
         block.* = .empty;
-
-        const ancestors = state.stacks.queue(.ancestors);
-
-        if (ancestors.head) |parent| {
-            parent.childrens.append(block);
-            block.parent = parent;
-        }
 
         return block;
     }

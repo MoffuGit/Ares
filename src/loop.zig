@@ -17,10 +17,10 @@ const atomic = std.atomic;
 
 const datastruct = @import("datastruct.zig");
 const Mpsc = datastruct.Mpsc;
-const MultiQueue = datastruct.MultiQueue;
 const heap = datastruct.heap;
 const Scheduler = @import("scheduler.zig");
 const Task = Scheduler.Task;
+const SinglyLinkedList = datastruct.SinglyLinkedList;
 
 const log = std.log.scoped(.loop);
 
@@ -32,12 +32,10 @@ wakeup: Wakeup,
 time: Time,
 scheduler: *Scheduler,
 tasks: Mpsc(Completion),
-queues: MultiQueue(union(enum) {
-    canceling: Completion,
-    submissions: Completion,
-    completions: Completion,
-    cancellations: Completion,
-}),
+canceling: SinglyLinkedList(Completion),
+submissions: SinglyLinkedList(Completion),
+completions: SinglyLinkedList(Completion),
+cancellations: SinglyLinkedList(Completion),
 timers: heap.Intrusive(Timer, void, Timer.less),
 inflight: usize,
 stopped: bool,
@@ -60,7 +58,10 @@ pub fn init(self: *Loop, scheduler: *Scheduler, io: Io) !void {
         .inflight = 0,
         .stopped = false,
         .timers = .{ .context = {} },
-        .queues = undefined,
+        .canceling = .empty,
+        .submissions = .empty,
+        .completions = .empty,
+        .cancellations = .empty,
         .time = undefined,
     };
 
@@ -68,7 +69,6 @@ pub fn init(self: *Loop, scheduler: *Scheduler, io: Io) !void {
     errdefer self.wakeup.deinit();
 
     self.tasks.init();
-    self.queues.init();
 
     try self.wakeup.register(self);
 }
@@ -81,8 +81,8 @@ pub fn deinit(self: *Loop) void {
 }
 
 pub fn done(self: *Loop) bool {
-    return self.stopped or (self.queues.empty(.submissions) and
-        self.queues.empty(.completions) and
+    return self.stopped or (self.submissions.is_empty() and
+        self.completions.is_empty() and
         self.inflight == 0);
 }
 
@@ -107,7 +107,7 @@ pub fn run(self: *Loop, mode: RunMode) !void {
 pub fn tick(self: *Loop, wait: bool) !void {
     var should_wait: bool = wait;
 
-    while (self.queues.pop(.cancellations)) |completion| {
+    while (self.cancellations.pop()) |completion| {
         const target: *Completion = completion.operation.cancel;
         switch (target.state) {
             .canceled, .idle => {},
@@ -117,14 +117,14 @@ pub fn tick(self: *Loop, wait: bool) !void {
                     self.timers.remove(timer_op);
                     target.canceled();
                     self.inflight -= 1;
-                    self.queues.push(.completions, target);
+                    self.completions.append(target);
                 },
                 .read => {
                     target.stopped.store(true, .release);
                 },
                 else => {
                     target.state = .canceled;
-                    self.queues.push(.canceling, target);
+                    self.canceling.append(target);
                 },
             },
         }
@@ -134,14 +134,14 @@ pub fn tick(self: *Loop, wait: bool) !void {
 
     var kevents: [256]Kevent = undefined;
 
-    while (!self.queues.empty(.canceling) or
-        !self.queues.empty(.submissions))
+    while (!self.canceling.is_empty() or
+        !self.submissions.is_empty())
     {
         var submitted: usize = 0;
 
         while (submitted < kevents.len) {
             const event = &kevents[submitted];
-            const completion = self.queues.pop(.canceling) orelse break;
+            const completion = self.canceling.pop() orelse break;
             submitted += 1;
 
             assert(completion.state == .canceled);
@@ -150,16 +150,16 @@ pub fn tick(self: *Loop, wait: bool) !void {
             completion.kevent(event);
             event.flags = std.c.EV.DELETE;
             completion.canceled();
-            self.queues.push(.completions, completion);
+            self.completions.append(completion);
         }
 
         var active: usize = 0;
 
         while (submitted < kevents.len) {
-            const completion = self.queues.pop(.submissions) orelse break;
+            const completion = self.submissions.pop() orelse break;
 
             if (completion.state == .completed) {
-                self.queues.push(.completions, completion);
+                self.completions.append(completion);
                 continue;
             }
 
@@ -200,7 +200,7 @@ pub fn tick(self: *Loop, wait: bool) !void {
 
             assert(c.result != null);
             c.state = .completed;
-            self.queues.push(.completions, c);
+            self.completions.append(c);
         }
     }
 
@@ -235,10 +235,10 @@ pub fn tick(self: *Loop, wait: bool) !void {
         if (c.stopped.raw) c.canceled();
         c.state = .completed;
         self.inflight -= 1;
-        self.queues.push(.completions, c);
+        self.completions.append(c);
     }
 
-    while (self.queues.pop(.completions)) |completion| {
+    while (self.completions.pop()) |completion| {
         should_wait = false;
 
         assert(completion.state == .completed);
@@ -315,11 +315,11 @@ pub fn submit(self: *Loop, completion: *Completion) void {
         },
         .cancel => {
             completion.state = .submitted;
-            self.queues.push(.cancellations, completion);
+            self.cancellations.append(completion);
         },
         .machport => {
             completion.state = .submitted;
-            self.queues.push(.submissions, completion);
+            self.submissions.append(completion);
         },
         .timer => {
             const c_timer = completion.operation.timer;
