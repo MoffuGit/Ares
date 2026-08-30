@@ -39,8 +39,10 @@ pub fn main(init: std.process.Init) !void {
 
                 while (curr) |state| : (curr = state.next) {
                     if (state.win.raw == window.raw) {
-                        app.renderer.start();
-                        defer app.renderer.end();
+                        state.size = .{
+                            .width = @floatFromInt(event.*.update.w),
+                            .height = @floatFromInt(event.*.update.h),
+                        };
 
                         render(app, state, true) catch |err| {
                             log.err("Window render err={}", .{err});
@@ -81,9 +83,6 @@ pub fn main(init: std.process.Init) !void {
                 ctx.app.states = .empty;
 
                 const chunks = ctx.app.chunks.allocator();
-
-                ctx.app.renderer.start();
-                defer ctx.app.renderer.end();
 
                 while (states.pop()) |state| {
                     if (state.win.shouldClose()) {
@@ -147,13 +146,11 @@ pub fn main(init: std.process.Init) !void {
 }
 
 pub fn render(app: *App, state: *WindowState, sync: bool) !void {
-    const width, const height = state.win.sizeInPixels() orelse unreachable;
-
     const frame = state.render_handle.nextFrame();
     errdefer state.render_handle.releaseFrame();
 
     try frame.uniform(.{
-        .viewport_size = .{ @floatFromInt(width), @floatFromInt(height) },
+        .viewport_size = .{ state.size.width, state.size.height },
     });
 
     try frame.rect(.{

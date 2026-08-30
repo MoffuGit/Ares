@@ -118,16 +118,6 @@ pub const Window = window: {
         pub fn NSView(self: *const @This()) ?*anyopaque {
             return c.RGFW_window_getView_OSX(self.raw);
         }
-
-        pub fn sizeInPixels(self: *const @This()) ?struct { i32, i32 } {
-            var width: i32, var height: i32 = .{ 0, 0 };
-
-            if (c.RGFW_window_getSizeInPixels(self.raw, &width, &height) == c.RGFW_TRUE) {
-                return .{ width, height };
-            }
-
-            return null;
-        }
     };
 
     break :window struct {
