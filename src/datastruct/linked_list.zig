@@ -1,5 +1,4 @@
 const std = @import("std");
-const assert = std.debug.assert;
 const testing = std.testing;
 const fmt = std.fmt;
 
@@ -14,8 +13,6 @@ pub fn SinglyLinkedList(T: type, comptime next_field: []const u8) type {
         tail: ?*T,
 
         pub fn append(self: *@This(), value: *T) void {
-            assert(@field(value, next_field) == null);
-
             if (self.tail) |tail| {
                 @field(tail, next_field) = value;
                 self.tail = value;
@@ -26,8 +23,6 @@ pub fn SinglyLinkedList(T: type, comptime next_field: []const u8) type {
         }
 
         pub fn prepend(self: *@This(), value: *T) void {
-            assert(@field(value, next_field) == null);
-
             if (self.head) |head| {
                 @field(value, next_field) = head;
                 self.head = value;

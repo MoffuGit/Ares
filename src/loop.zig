@@ -302,6 +302,8 @@ pub fn tick(self: *Loop, wait: bool) !void {
 }
 
 pub fn submit(self: *Loop, completion: *Completion) void {
+    assert(completion.state == .idle);
+
     switch (completion.operation) {
         .read => {
             completion.loop = self;

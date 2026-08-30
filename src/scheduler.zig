@@ -8,6 +8,7 @@ const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
 const heap = std.heap;
+const asserts = std.debug.assert;
 
 const constants = @import("constants.zig");
 const MAX_CONTEXT_SIZE = constants.MAX_CONTEXT_SIZE;
@@ -163,6 +164,8 @@ const Queue = struct {
     }
 
     pub fn push(self: *@This(), task: *Task, io: Io) void {
+        asserts(task.next == null);
+
         self.mutex.lock(io) catch unreachable;
         defer self.mutex.unlock(io);
 
