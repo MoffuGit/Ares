@@ -54,14 +54,14 @@ pub fn SinglyLinkedList(T: type) type {
         }
 
         pub fn pop(self: *@This()) ?*T {
-            const next = self.head orelse return null;
+            const head = self.head orelse return null;
 
             if (self.head == self.tail) self.tail = null;
 
-            self.head = next.next;
+            self.head = head.next;
 
-            next.next = null;
-            return next;
+            head.next = null;
+            return head;
         }
 
         pub fn is_empty(self: *const @This()) bool {
