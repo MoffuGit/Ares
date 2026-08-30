@@ -143,7 +143,12 @@ fn pushUpdate(self: *Scanner, scanning: bool) !void {
     var producer = worktree.events.register() orelse unreachable;
     defer producer.unregister();
 
-    const snapshot = try self.snapshot.clone(self.gpa);
+    const snapshot = snapshot: {
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
+
+        break :snapshot try self.snapshot.clone(self.gpa);
+    };
     producer.push(.{
         .update = .{
             .scanning = scanning,
@@ -155,8 +160,11 @@ fn pushUpdate(self: *Scanner, scanning: bool) !void {
 fn pushTask(self: *Scanner, task: *ScannerTask) !void {
     if (self.stopped.load(.acquire)) return error.Closed;
 
-    try self.scheduler.push(&task.task);
     _ = self.task_count.fetchAdd(1, .release);
+    self.scheduler.push(&task.task) catch |err| {
+        _ = self.task_count.fetchSub(1, .release);
+        return err;
+    };
 }
 
 fn taskDone(self: *Scanner, task: *ScannerTask) void {
