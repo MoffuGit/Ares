@@ -8,7 +8,6 @@ const App = @import("app.zig");
 const WindowState = App.WindowState;
 const chunk_pool = @import("chunk_pool.zig");
 const datastruct = @import("datastruct.zig");
-const MultiQueue = datastruct.MultiQueue;
 const DoublyLinkedList = datastruct.DoublyLinkedList;
 
 pub var curr_state: ?*ViewState = null;
@@ -95,7 +94,7 @@ const Block = struct {
         .color = .{ 0.0, 0.0, 0.0, 0.0 },
     };
 
-    childrens: DoublyLinkedList(Block),
+    childrens: DoublyLinkedList(Block, "next", "prev"),
 
     next: ?*Block,
     prev: ?*Block,

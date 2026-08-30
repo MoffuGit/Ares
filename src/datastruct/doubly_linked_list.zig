@@ -1,161 +1,134 @@
-//SOURCE: https://codeberg.org/ziglang/zig
-//LICENSE: [ZIG]
-
 const std = @import("std");
-const debug = std.debug;
-const assert = debug.assert;
+const assert = std.debug.assert;
 const testing = std.testing;
+const fmt = std.fmt;
 
-pub fn DoublyLinkedList(T: type) type {
+pub fn DoublyLinkedList(T: type, comptime next_field: []const u8, comptime prev_field: []const u8) type {
     return struct {
         pub const empty: @This() = .{ .first = null, .last = null };
 
-        const Node = T;
+        first: ?*T,
+        last: ?*T,
 
-        first: ?*Node,
-        last: ?*Node,
+        pub fn insertAfter(self: *@This(), existing_node: *T, new_node: *T) void {
+            assert(@field(new_node, next_field) == null);
+            assert(@field(new_node, prev_field) == null);
 
-        pub fn insertAfter(list: *@This(), existing_node: *Node, new_node: *Node) void {
-            new_node.prev = existing_node;
-            if (existing_node.next) |next_node| {
-                // Intermediate node.
-                new_node.next = next_node;
-                next_node.prev = new_node;
+            @field(new_node, prev_field) = existing_node;
+            if (@field(existing_node, next_field)) |next_node| {
+                @field(new_node, next_field) = next_node;
+                @field(next_node, prev_field) = new_node;
             } else {
-                // Last element of the list.
-                new_node.next = null;
-                list.last = new_node;
+                self.last = new_node;
             }
-            existing_node.next = new_node;
+            @field(existing_node, next_field) = new_node;
         }
 
-        pub fn insertBefore(list: *@This(), existing_node: *Node, new_node: *Node) void {
-            new_node.next = existing_node;
-            if (existing_node.prev) |prev_node| {
-                // Intermediate node.
-                new_node.prev = prev_node;
-                prev_node.next = new_node;
+        pub fn insertBefore(self: *@This(), existing_node: *T, new_node: *T) void {
+            assert(@field(new_node, next_field) == null);
+            assert(@field(new_node, prev_field) == null);
+
+            @field(new_node, next_field) = existing_node;
+            if (@field(existing_node, prev_field)) |prev_node| {
+                @field(new_node, prev_field) = prev_node;
+                @field(prev_node, next_field) = new_node;
             } else {
-                // First element of the list.
-                new_node.prev = null;
-                list.first = new_node;
+                self.first = new_node;
             }
-            existing_node.prev = new_node;
+            @field(existing_node, prev_field) = new_node;
         }
 
-        /// Concatenate list2 onto the end of list1, removing all entries from the former.
-        ///
-        /// Arguments:
-        ///     list1: the list to concatenate onto
-        ///     list2: the list to be concatenated
-        pub fn concatByMoving(list1: *@This(), list2: *@This()) void {
-            const l2_first = list2.first orelse return;
-            if (list1.last) |l1_last| {
-                l1_last.next = list2.first;
-                l2_first.prev = list1.last;
+        pub fn concatByMoving(self: *@This(), other: *@This()) void {
+            const first = other.first orelse return;
+
+            if (self.last) |last| {
+                @field(last, next_field) = first;
+                @field(first, prev_field) = last;
             } else {
-                // list1 was empty
-                list1.first = list2.first;
+                self.first = first;
             }
-            list1.last = list2.last;
-            list2.first = null;
-            list2.last = null;
+
+            self.last = other.last;
+            other.first = null;
+            other.last = null;
         }
 
-        /// Insert a new node at the end of the list.
-        ///
-        /// Arguments:
-        ///     new_node: Pointer to the new node to insert.
-        pub fn append(list: *@This(), new_node: *Node) void {
-            if (list.last) |last| {
-                // Insert after last.
-                list.insertAfter(last, new_node);
+        pub fn append(self: *@This(), value: *T) void {
+            assert(@field(value, next_field) == null);
+            assert(@field(value, prev_field) == null);
+
+            if (self.last) |last| {
+                self.insertAfter(last, value);
             } else {
-                // Empty list.
-                list.prepend(new_node);
+                self.first = value;
+                self.last = value;
             }
         }
 
-        /// Insert a new node at the beginning of the list.
-        ///
-        /// Arguments:
-        ///     new_node: Pointer to the new node to insert.
-        pub fn prepend(list: *@This(), new_node: *Node) void {
-            if (list.first) |first| {
-                // Insert before first.
-                list.insertBefore(first, new_node);
+        pub fn prepend(self: *@This(), value: *T) void {
+            assert(@field(value, next_field) == null);
+            assert(@field(value, prev_field) == null);
+
+            if (self.first) |first| {
+                self.insertBefore(first, value);
             } else {
-                // Empty list.
-                list.first = new_node;
-                list.last = new_node;
-                new_node.prev = null;
-                new_node.next = null;
+                self.first = value;
+                self.last = value;
             }
         }
 
-        /// Remove a node from the list.
-        /// Assumes the node is in the list.
-        ///
-        /// Arguments:
-        ///     node: Pointer to the node to be removed.
-        pub fn remove(list: *@This(), node: *Node) void {
-            if (node.prev) |prev_node| {
-                // Intermediate node.
-                prev_node.next = node.next;
+        pub fn remove(self: *@This(), value: *T) void {
+            const prev = @field(value, prev_field);
+            const next = @field(value, next_field);
+
+            if (prev) |prev_node| {
+                @field(prev_node, next_field) = next;
             } else {
-                // First element of the list.
-                list.first = node.next;
+                self.first = next;
             }
 
-            if (node.next) |next_node| {
-                // Intermediate node.
-                next_node.prev = node.prev;
+            if (next) |next_node| {
+                @field(next_node, prev_field) = prev;
             } else {
-                // Last element of the list.
-                list.last = node.prev;
+                self.last = prev;
             }
+
+            @field(value, next_field) = null;
+            @field(value, prev_field) = null;
         }
 
-        /// Remove and return the last node in the list.
-        ///
-        /// Returns:
-        ///     A pointer to the last node in the list.
-        pub fn pop(list: *@This()) ?*Node {
-            const last = list.last orelse return null;
-            list.remove(last);
+        pub fn pop(self: *@This()) ?*T {
+            const last = self.last orelse return null;
+            self.remove(last);
             return last;
         }
 
-        /// Remove and return the first node in the list.
-        ///
-        /// Returns:
-        ///     A pointer to the first node in the list.
-        pub fn popFirst(list: *@This()) ?*Node {
-            const first = list.first orelse return null;
-            list.remove(first);
+        pub fn popFirst(self: *@This()) ?*T {
+            const first = self.first orelse return null;
+            self.remove(first);
             return first;
         }
 
-        /// Iterate over all nodes, returning the count.
-        ///
-        /// This operation is O(N). Consider tracking the length separately rather than
-        /// computing it.
-        pub fn len(list: @This()) usize {
+        pub fn len(self: *const @This()) usize {
             var count: usize = 0;
-            var it: ?*const Node = list.first;
-            while (it) |n| : (it = n.next) count += 1;
+            var it = self.first;
+            while (it) |node| : (it = @field(node, next_field)) count += 1;
             return count;
+        }
+
+        pub fn is_empty(self: *const @This()) bool {
+            return self.first == null;
         }
     };
 }
 
-test "basics" {
+test "uses the selected link fields" {
     const L = struct {
         data: u32,
-        next: ?*@This() = null,
-        prev: ?*@This() = null,
+        list_next: ?*@This() = null,
+        list_prev: ?*@This() = null,
     };
-    var list: DoublyLinkedList(L) = .empty;
+    var list: DoublyLinkedList(L, "list_next", "list_prev") = .empty;
 
     var one: L = .{ .data = 1 };
     var two: L = .{ .data = 2 };
@@ -173,7 +146,7 @@ test "basics" {
     {
         var it = list.first;
         var index: u32 = 1;
-        while (it) |node| : (it = node.next) {
+        while (it) |node| : (it = node.list_next) {
             try testing.expect(node.data == index);
             index += 1;
         }
@@ -183,7 +156,7 @@ test "basics" {
     {
         var it = list.last;
         var index: u32 = 1;
-        while (it) |node| : (it = node.prev) {
+        while (it) |node| : (it = node.list_prev) {
             try testing.expect(node.data == (6 - index));
             index += 1;
         }
@@ -196,6 +169,9 @@ test "basics" {
     try testing.expect(list.first.?.data == 2);
     try testing.expect(list.last.?.data == 4);
     try testing.expect(list.len() == 2);
+    try testing.expect(one.list_next == null and one.list_prev == null);
+    try testing.expect(three.list_next == null and three.list_prev == null);
+    try testing.expect(five.list_next == null and five.list_prev == null);
 }
 
 test "concatenation" {
@@ -204,8 +180,8 @@ test "concatenation" {
         next: ?*@This() = null,
         prev: ?*@This() = null,
     };
-    var list1: DoublyLinkedList(L) = .empty;
-    var list2: DoublyLinkedList(L) = .empty;
+    var list1: DoublyLinkedList(L, "next", "prev") = .empty;
+    var list2: DoublyLinkedList(L, "next", "prev") = .empty;
 
     var one: L = .{ .data = 1 };
     var two: L = .{ .data = 2 };

@@ -4,14 +4,6 @@ const testing = std.testing;
 const fmt = std.fmt;
 
 pub fn SinglyLinkedList(T: type, comptime next_field: []const u8) type {
-    const name = @typeName(T);
-
-    if (!@hasField(T, next_field)) {
-        @compileError(fmt.comptimePrint("Missing {} field on {} node", .{ next_field, name }));
-    } else if (@FieldType(T, next_field) != ?*T) {
-        @compileError(fmt.comptimePrint("Wrong {} field type on {} node", .{ next_field, name }));
-    }
-
     return struct {
         pub const empty: @This() = .{
             .head = null,
