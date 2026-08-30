@@ -14,7 +14,7 @@ pub const MemMapRng = struct {
 };
 
 pub const MemMap = struct {
-    ranges: linked_list.SinglyLinkedList(MemMapRng) = .empty,
+    ranges: linked_list.SinglyLinkedList(MemMapRng, "next") = .empty,
 
     pub fn push(self: *MemMap, vaddr_range: math.Rngu64, base: *anyopaque, alloc: Allocator) !void {
         const range = try alloc.create(MemMapRng);

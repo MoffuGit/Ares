@@ -29,7 +29,7 @@ pub const Patch = struct {
 };
 
 pub const PatchList = struct {
-    list: SinglyLinkedList(Patch) = .empty,
+    list: SinglyLinkedList(Patch, "next") = .empty,
 
     pub fn push(self: *PatchList, range: Rngu64, replace: []u8, alloc: Allocator) !void {
         const patch = try alloc.create(Patch);
@@ -54,7 +54,7 @@ pub const Line = struct {
 };
 
 pub const LineMap = struct {
-    lines: SinglyLinkedList(Line) = .empty,
+    lines: SinglyLinkedList(Line, "next") = .empty,
     total: u64 = 0,
 
     pub fn push(self: *LineMap, line: Line, alloc: Allocator) !void {
@@ -190,7 +190,7 @@ pub const Patched = struct {
             var line_delta: i64 = 0;
             line_delta -= @intCast(replaced_lines_range.dim());
 
-            var replace_line_range: SinglyLinkedList(math.Rngu64Node) = .empty;
+            var replace_line_range: SinglyLinkedList(math.Rngu64Node, "next") = .empty;
             var replaced_lines_count: u64 = 0;
             var last_line_start_off: u64 = 0;
 

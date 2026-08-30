@@ -153,7 +153,7 @@ const Worker = struct {
 
 const Queue = struct {
     mutex: Io.Mutex = .init,
-    tasks: SinglyLinkedList(Task) = .empty,
+    tasks: SinglyLinkedList(Task, "next") = .empty,
 
     pub fn pop(self: *@This(), io: Io) ?*Task {
         self.mutex.lock(io) catch unreachable;

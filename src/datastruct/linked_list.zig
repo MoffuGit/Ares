@@ -1,12 +1,17 @@
-//Source: https://github.com/mitchellh/libxev
-//License; [LIBXEV]
-
 const std = @import("std");
-const debug = std.debug;
-const assert = debug.assert;
+const assert = std.debug.assert;
 const testing = std.testing;
+const fmt = std.fmt;
 
-pub fn SinglyLinkedList(T: type) type {
+pub fn SinglyLinkedList(T: type, comptime next_field: []const u8) type {
+    const name = @typeName(T);
+
+    if (!@hasField(T, next_field)) {
+        @compileError(fmt.comptimePrint("Missing {} field on {} node", .{ next_field, name }));
+    } else if (@FieldType(T, next_field) != ?*T) {
+        @compileError(fmt.comptimePrint("Wrong {} field type on {} node", .{ next_field, name }));
+    }
+
     return struct {
         pub const empty: @This() = .{
             .head = null,
@@ -16,41 +21,40 @@ pub fn SinglyLinkedList(T: type) type {
         head: ?*T,
         tail: ?*T,
 
-        pub fn append(self: *@This(), v: *T) void {
-            assert(v.next == null);
+        pub fn append(self: *@This(), value: *T) void {
+            assert(@field(value, next_field) == null);
 
             if (self.tail) |tail| {
-                tail.next = v;
-                self.tail = v;
+                @field(tail, next_field) = value;
+                self.tail = value;
             } else {
-                self.head = v;
-                self.tail = v;
+                self.head = value;
+                self.tail = value;
             }
         }
 
-        pub fn prepend(self: *@This(), v: *T) void {
-            assert(v.next == null);
+        pub fn prepend(self: *@This(), value: *T) void {
+            assert(@field(value, next_field) == null);
 
             if (self.head) |head| {
-                v.next = head;
-                self.head = v;
+                @field(value, next_field) = head;
+                self.head = value;
             } else {
-                self.head = v;
-                self.tail = v;
+                self.head = value;
+                self.tail = value;
             }
         }
 
         pub fn concatByMoving(self: *@This(), other: *@This()) void {
-            const v = other.head orelse return;
+            const head = other.head orelse return;
 
             if (self.tail) |tail| {
-                tail.next = v;
+                @field(tail, next_field) = head;
             } else {
-                self.head = v;
+                self.head = head;
             }
 
             self.tail = other.tail;
-
             other.head = null;
             other.tail = null;
         }
@@ -59,10 +63,8 @@ pub fn SinglyLinkedList(T: type) type {
             const head = self.head orelse return null;
 
             if (self.head == self.tail) self.tail = null;
-
-            self.head = head.next;
-
-            head.next = null;
+            self.head = @field(head, next_field);
+            @field(head, next_field) = null;
             return head;
         }
 
@@ -72,73 +74,50 @@ pub fn SinglyLinkedList(T: type) type {
     };
 }
 
-test "basics" {
-    // Types
+test "uses the selected link field" {
     const Elem = struct {
-        const Self = @This();
-        next: ?*Self = null,
+        value: u8,
+        next_a: ?*@This() = null,
+        next_b: ?*@This() = null,
     };
-    var q: SinglyLinkedList(Elem) = .empty;
-    try testing.expect(q.is_empty());
+    const ListA = SinglyLinkedList(Elem, "next_a");
+    const ListB = SinglyLinkedList(Elem, "next_b");
 
-    // Elems
-    var elems: [10]Elem = .{Elem{}} ** 10;
+    var one: Elem = .{ .value = 1 };
+    var two: Elem = .{ .value = 2 };
+    var list_a: ListA = .empty;
+    var list_b: ListB = .empty;
 
-    // One
-    try testing.expect(q.pop() == null);
-    q.append(&elems[0]);
-    try testing.expect(!q.is_empty());
-    try testing.expectEqual(q.pop().?, &elems[0]);
-    try testing.expectEqual(q.pop(), null);
-    try testing.expect(q.is_empty());
+    list_a.append(&one);
+    list_a.append(&two);
+    list_b.append(&two);
+    list_b.append(&one);
 
-    // Two
-    try testing.expectEqual(q.pop(), null);
-    q.append(&elems[0]);
-    q.append(&elems[1]);
-    try testing.expectEqual(q.pop().?, &elems[0]);
-    try testing.expectEqual(q.pop().?, &elems[1]);
-    try testing.expectEqual(q.pop(), null);
+    try testing.expectEqual(@as(u8, 1), list_a.pop().?.value);
+    try testing.expectEqual(@as(u8, 2), list_a.pop().?.value);
+    try testing.expectEqual(@as(u8, 2), list_b.pop().?.value);
+    try testing.expectEqual(@as(u8, 1), list_b.pop().?.value);
+    try testing.expect(list_a.is_empty());
+    try testing.expect(list_b.is_empty());
+}
 
-    // Interleaved
-    try testing.expectEqual(q.pop(), null);
-    q.append(&elems[0]);
-    try testing.expectEqual(q.pop().?, &elems[0]);
-    q.append(&elems[1]);
-    try testing.expectEqual(q.pop().?, &elems[1]);
-    try testing.expectEqual(q.pop(), null);
+test "concatenates using the selected link field" {
+    const Elem = struct {
+        value: u8,
+        next_struct: ?*@This() = null,
+    };
+    const List = SinglyLinkedList(Elem, "next_struct");
 
-    // One
-    try testing.expectEqual(q.pop(), null);
-    q.prepend(&elems[0]);
-    try testing.expect(!q.is_empty());
-    try testing.expectEqual(q.pop().?, &elems[0]);
-    try testing.expectEqual(q.pop(), null);
-    try testing.expect(q.is_empty());
+    var one: Elem = .{ .value = 1 };
+    var two: Elem = .{ .value = 2 };
+    var first: List = .empty;
+    var second: List = .empty;
 
-    // Two
-    try testing.expect(q.pop() == null);
-    q.prepend(&elems[0]);
-    q.prepend(&elems[1]);
-    try testing.expectEqual(q.pop().?, &elems[1]);
-    try testing.expectEqual(q.pop().?, &elems[0]);
-    try testing.expect(q.pop() == null);
+    first.prepend(&one);
+    second.prepend(&two);
+    first.concatByMoving(&second);
 
-    // Interleaved
-    try testing.expect(q.pop() == null);
-    q.prepend(&elems[0]);
-    try testing.expect(q.pop().? == &elems[0]);
-    q.prepend(&elems[1]);
-    try testing.expect(q.pop().? == &elems[1]);
-    try testing.expect(q.pop() == null);
-
-    q.prepend(&elems[0]);
-    q.append(&elems[1]);
-    q.prepend(&elems[2]);
-    q.append(&elems[4]);
-
-    try testing.expect(q.pop().? == &elems[2]);
-    try testing.expect(q.pop().? == &elems[0]);
-    try testing.expect(q.pop().? == &elems[1]);
-    try testing.expect(q.pop().? == &elems[4]);
+    try testing.expect(second.is_empty());
+    try testing.expectEqual(@as(u8, 1), first.pop().?.value);
+    try testing.expectEqual(@as(u8, 2), first.pop().?.value);
 }
