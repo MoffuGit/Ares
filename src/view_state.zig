@@ -102,6 +102,7 @@ fn stackFlag(tag: StackCollection.Tag) u64 {
 
 pub fn push(value: Stacks) !void {
     const state = curr_state orelse unreachable;
+    assert(state.auto_pop_flags & stackFlag(meta.activeTag(value)) == 0);
 
     switch (value) {
         inline else => |val, tag| {
@@ -114,16 +115,14 @@ pub fn push(value: Stacks) !void {
 
 pub fn pop(comptime tag: StackCollection.Tag) void {
     const state = curr_state orelse unreachable;
+    assert(state.auto_pop_flags & stackFlag(tag) == 0);
     assert(state.stacks.pop(tag) != null);
 }
 
 pub fn setNext(value: Stacks) !void {
     const state = curr_state orelse unreachable;
-    const flag = stackFlag(meta.activeTag(value));
-    assert(state.auto_pop_flags & flag == 0);
-
     try push(value);
-    state.auto_pop_flags |= flag;
+    state.auto_pop_flags |= stackFlag(meta.activeTag(value));
 }
 
 fn popAutomaticStacks() void {
@@ -133,7 +132,7 @@ fn popAutomaticStacks() void {
         const tag: StackCollection.Tag = @enumFromInt(field.value);
         if (state.auto_pop_flags & stackFlag(tag) != 0) {
             state.auto_pop_flags &= ~stackFlag(tag);
-            _ = pop(tag);
+            pop(tag);
         }
     }
 }
