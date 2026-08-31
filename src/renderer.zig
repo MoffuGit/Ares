@@ -200,7 +200,7 @@ pub const BufferList = struct {
     const empty: BufferList = .{
         .nodes = .empty,
     };
-    nodes: SinglyLinkedList(BufferNode, "next"),
+    nodes: SinglyLinkedList(BufferNode),
 
     pub fn push(self: *BufferList, node: *BufferNode) void {
         self.nodes.append(node);

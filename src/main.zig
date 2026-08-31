@@ -147,7 +147,7 @@ pub fn main(init: std.process.Init) !void {
 }
 
 pub fn render(app: *App, state: *WindowState, sync: bool) !void {
-    view.startBuild(state);
+    try view.startBuild(state);
     defer view.endBuild();
 
     const frame = state.render_handle.nextFrame();

@@ -2,7 +2,7 @@ const std = @import("std");
 const testing = std.testing;
 const fmt = std.fmt;
 
-pub fn SinglyLinkedList(T: type, comptime next_field: []const u8) type {
+pub fn SinglyLinkedList(T: type) type {
     return struct {
         pub const empty: @This() = .{
             .head = null,
@@ -14,7 +14,7 @@ pub fn SinglyLinkedList(T: type, comptime next_field: []const u8) type {
 
         pub fn append(self: *@This(), value: *T) void {
             if (self.tail) |tail| {
-                @field(tail, next_field) = value;
+                tail.next = value;
                 self.tail = value;
             } else {
                 self.head = value;
@@ -24,7 +24,7 @@ pub fn SinglyLinkedList(T: type, comptime next_field: []const u8) type {
 
         pub fn prepend(self: *@This(), value: *T) void {
             if (self.head) |head| {
-                @field(value, next_field) = head;
+                value.next = head;
                 self.head = value;
             } else {
                 self.head = value;
@@ -36,7 +36,7 @@ pub fn SinglyLinkedList(T: type, comptime next_field: []const u8) type {
             const head = other.head orelse return;
 
             if (self.tail) |tail| {
-                @field(tail, next_field) = head;
+                tail.next = head;
             } else {
                 self.head = head;
             }
@@ -50,8 +50,8 @@ pub fn SinglyLinkedList(T: type, comptime next_field: []const u8) type {
             const head = self.head orelse return null;
 
             if (self.head == self.tail) self.tail = null;
-            self.head = @field(head, next_field);
-            @field(head, next_field) = null;
+            self.head = head.next;
+            head.next = null;
             return head;
         }
 
@@ -61,39 +61,30 @@ pub fn SinglyLinkedList(T: type, comptime next_field: []const u8) type {
     };
 }
 
-test "uses the selected link field" {
+test "append and prepend" {
     const Elem = struct {
         value: u8,
-        next_a: ?*@This() = null,
-        next_b: ?*@This() = null,
+        next: ?*@This() = null,
     };
-    const ListA = SinglyLinkedList(Elem, "next_a");
-    const ListB = SinglyLinkedList(Elem, "next_b");
 
     var one: Elem = .{ .value = 1 };
     var two: Elem = .{ .value = 2 };
-    var list_a: ListA = .empty;
-    var list_b: ListB = .empty;
+    var list: SinglyLinkedList(Elem) = .empty;
 
-    list_a.append(&one);
-    list_a.append(&two);
-    list_b.append(&two);
-    list_b.append(&one);
+    list.append(&two);
+    list.prepend(&one);
 
-    try testing.expectEqual(@as(u8, 1), list_a.pop().?.value);
-    try testing.expectEqual(@as(u8, 2), list_a.pop().?.value);
-    try testing.expectEqual(@as(u8, 2), list_b.pop().?.value);
-    try testing.expectEqual(@as(u8, 1), list_b.pop().?.value);
-    try testing.expect(list_a.is_empty());
-    try testing.expect(list_b.is_empty());
+    try testing.expectEqual(@as(u8, 1), list.pop().?.value);
+    try testing.expectEqual(@as(u8, 2), list.pop().?.value);
+    try testing.expect(list.is_empty());
 }
 
-test "concatenates using the selected link field" {
+test "concatenation" {
     const Elem = struct {
         value: u8,
-        next_struct: ?*@This() = null,
+        next: ?*@This() = null,
     };
-    const List = SinglyLinkedList(Elem, "next_struct");
+    const List = SinglyLinkedList(Elem);
 
     var one: Elem = .{ .value = 1 };
     var two: Elem = .{ .value = 2 };

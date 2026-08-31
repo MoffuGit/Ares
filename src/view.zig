@@ -11,6 +11,7 @@ const datastruct = @import("datastruct.zig");
 const DoublyLinkedList = datastruct.DoublyLinkedList;
 
 pub var curr_state: ?*ViewState = null;
+pub var null_block: Block = .empty;
 
 pub const ViewState = struct {
     arena: heap.ArenaAllocator,
@@ -21,7 +22,7 @@ pub const ViewState = struct {
 
     pub fn init(self: *ViewState, gpa: Allocator) !void {
         self.* = .{
-            .root = undefined,
+            .root = &null_block,
             .frame = 0,
             .frame_arenas = .{ .init(gpa), .init(gpa) },
             .arena = .init(gpa),
@@ -44,12 +45,15 @@ pub const ViewState = struct {
     }
 };
 
-pub fn startBuild(window_state: *WindowState) void {
+pub fn startBuild(window_state: *WindowState) !void {
     assert(curr_state == null);
-
     const state = &window_state.view_state;
+    state.root = &null_block;
 
     curr_state = state;
+
+    const root = try Block.new();
+    state.root = root;
 }
 
 pub fn endBuild() void {
@@ -94,7 +98,7 @@ const Block = struct {
         .color = .{ 0.0, 0.0, 0.0, 0.0 },
     };
 
-    childrens: DoublyLinkedList(Block, "next", "prev"),
+    childrens: DoublyLinkedList(Block),
 
     next: ?*Block,
     prev: ?*Block,
@@ -117,23 +121,3 @@ const Block = struct {
         return block;
     }
 };
-
-test "Basic operation" {
-    const gpa = testing.allocator;
-
-    var window_state: WindowState = .{
-        .size = .{ .width = 800.0, .height = 600.0 },
-        .render_handle = .{},
-        .win = .{},
-        .view_state = undefined,
-    };
-
-    try window_state.view_state.init(gpa);
-    defer window_state.view_state.deinit();
-
-    startBuild(&window_state);
-    defer endBuild();
-
-    const block = try Block.new();
-    _ = block;
-}

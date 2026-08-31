@@ -3,7 +3,7 @@ const assert = std.debug.assert;
 const testing = std.testing;
 const fmt = std.fmt;
 
-pub fn DoublyLinkedList(T: type, comptime next_field: []const u8, comptime prev_field: []const u8) type {
+pub fn DoublyLinkedList(T: type) type {
     return struct {
         pub const empty: @This() = .{ .first = null, .last = null };
 
@@ -11,39 +11,39 @@ pub fn DoublyLinkedList(T: type, comptime next_field: []const u8, comptime prev_
         last: ?*T,
 
         pub fn insertAfter(self: *@This(), existing_node: *T, new_node: *T) void {
-            assert(@field(new_node, next_field) == null);
-            assert(@field(new_node, prev_field) == null);
+            assert(new_node.next == null);
+            assert(new_node.prev == null);
 
-            @field(new_node, prev_field) = existing_node;
-            if (@field(existing_node, next_field)) |next_node| {
-                @field(new_node, next_field) = next_node;
-                @field(next_node, prev_field) = new_node;
+            new_node.prev = existing_node;
+            if (existing_node.next) |next_node| {
+                new_node.next = next_node;
+                next_node.prev = new_node;
             } else {
                 self.last = new_node;
             }
-            @field(existing_node, next_field) = new_node;
+            existing_node.next = new_node;
         }
 
         pub fn insertBefore(self: *@This(), existing_node: *T, new_node: *T) void {
-            assert(@field(new_node, next_field) == null);
-            assert(@field(new_node, prev_field) == null);
+            assert(new_node.next == null);
+            assert(new_node.prev == null);
 
-            @field(new_node, next_field) = existing_node;
-            if (@field(existing_node, prev_field)) |prev_node| {
-                @field(new_node, prev_field) = prev_node;
-                @field(prev_node, next_field) = new_node;
+            new_node.next = existing_node;
+            if (existing_node.prev) |prev_node| {
+                new_node.prev = prev_node;
+                prev_node.next = new_node;
             } else {
                 self.first = new_node;
             }
-            @field(existing_node, prev_field) = new_node;
+            existing_node.prev = new_node;
         }
 
         pub fn concatByMoving(self: *@This(), other: *@This()) void {
             const first = other.first orelse return;
 
             if (self.last) |last| {
-                @field(last, next_field) = first;
-                @field(first, prev_field) = last;
+                last.next = first;
+                first.prev = last;
             } else {
                 self.first = first;
             }
@@ -54,8 +54,8 @@ pub fn DoublyLinkedList(T: type, comptime next_field: []const u8, comptime prev_
         }
 
         pub fn append(self: *@This(), value: *T) void {
-            assert(@field(value, next_field) == null);
-            assert(@field(value, prev_field) == null);
+            assert(value.next == null);
+            assert(value.prev == null);
 
             if (self.last) |last| {
                 self.insertAfter(last, value);
@@ -66,8 +66,8 @@ pub fn DoublyLinkedList(T: type, comptime next_field: []const u8, comptime prev_
         }
 
         pub fn prepend(self: *@This(), value: *T) void {
-            assert(@field(value, next_field) == null);
-            assert(@field(value, prev_field) == null);
+            assert(value.next == null);
+            assert(value.prev == null);
 
             if (self.first) |first| {
                 self.insertBefore(first, value);
@@ -78,23 +78,23 @@ pub fn DoublyLinkedList(T: type, comptime next_field: []const u8, comptime prev_
         }
 
         pub fn remove(self: *@This(), value: *T) void {
-            const prev = @field(value, prev_field);
-            const next = @field(value, next_field);
+            const prev = value.prev;
+            const next = value.next;
 
             if (prev) |prev_node| {
-                @field(prev_node, next_field) = next;
+                prev_node.next = next;
             } else {
                 self.first = next;
             }
 
             if (next) |next_node| {
-                @field(next_node, prev_field) = prev;
+                next_node.prev = prev;
             } else {
                 self.last = prev;
             }
 
-            @field(value, next_field) = null;
-            @field(value, prev_field) = null;
+            value.next = null;
+            value.prev = null;
         }
 
         pub fn pop(self: *@This()) ?*T {
@@ -112,7 +112,7 @@ pub fn DoublyLinkedList(T: type, comptime next_field: []const u8, comptime prev_
         pub fn len(self: *const @This()) usize {
             var count: usize = 0;
             var it = self.first;
-            while (it) |node| : (it = @field(node, next_field)) count += 1;
+            while (it) |node| : (it = node.next) count += 1;
             return count;
         }
 
@@ -122,13 +122,13 @@ pub fn DoublyLinkedList(T: type, comptime next_field: []const u8, comptime prev_
     };
 }
 
-test "uses the selected link fields" {
+test "basic operations" {
     const L = struct {
         data: u32,
-        list_next: ?*@This() = null,
-        list_prev: ?*@This() = null,
+        next: ?*@This() = null,
+        prev: ?*@This() = null,
     };
-    var list: DoublyLinkedList(L, "list_next", "list_prev") = .empty;
+    var list: DoublyLinkedList(L) = .empty;
 
     var one: L = .{ .data = 1 };
     var two: L = .{ .data = 2 };
@@ -146,7 +146,7 @@ test "uses the selected link fields" {
     {
         var it = list.first;
         var index: u32 = 1;
-        while (it) |node| : (it = node.list_next) {
+        while (it) |node| : (it = node.next) {
             try testing.expect(node.data == index);
             index += 1;
         }
@@ -156,7 +156,7 @@ test "uses the selected link fields" {
     {
         var it = list.last;
         var index: u32 = 1;
-        while (it) |node| : (it = node.list_prev) {
+        while (it) |node| : (it = node.prev) {
             try testing.expect(node.data == (6 - index));
             index += 1;
         }
@@ -169,9 +169,9 @@ test "uses the selected link fields" {
     try testing.expect(list.first.?.data == 2);
     try testing.expect(list.last.?.data == 4);
     try testing.expect(list.len() == 2);
-    try testing.expect(one.list_next == null and one.list_prev == null);
-    try testing.expect(three.list_next == null and three.list_prev == null);
-    try testing.expect(five.list_next == null and five.list_prev == null);
+    try testing.expect(one.next == null and one.prev == null);
+    try testing.expect(three.next == null and three.prev == null);
+    try testing.expect(five.next == null and five.prev == null);
 }
 
 test "concatenation" {
@@ -180,8 +180,8 @@ test "concatenation" {
         next: ?*@This() = null,
         prev: ?*@This() = null,
     };
-    var list1: DoublyLinkedList(L, "next", "prev") = .empty;
-    var list2: DoublyLinkedList(L, "next", "prev") = .empty;
+    var list1: DoublyLinkedList(L) = .empty;
+    var list2: DoublyLinkedList(L) = .empty;
 
     var one: L = .{ .data = 1 };
     var two: L = .{ .data = 2 };
