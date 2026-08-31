@@ -9,19 +9,26 @@ const WindowState = App.WindowState;
 const chunk_pool = @import("chunk_pool.zig");
 const datastruct = @import("datastruct.zig");
 const DoublyLinkedList = datastruct.DoublyLinkedList;
+const LinkedListCollection = datastruct.LinkedListCollection;
 
 pub var curr_state: ?*ViewState = null;
 pub var null_block: Block = .empty;
+
+const Stacks = union(enum) {
+    ancestors: Ancestor,
+};
 
 pub const ViewState = struct {
     arena: heap.ArenaAllocator,
     frame: u64,
     frame_arenas: [2]heap.ArenaAllocator,
     chunks: chunk_pool.ChunkAllocator,
+    stacks: LinkedListCollection(Stacks),
     root: *Block,
 
     pub fn init(self: *ViewState, gpa: Allocator) !void {
         self.* = .{
+            .stacks = .empty,
             .root = &null_block,
             .frame = 0,
             .frame_arenas = .{ .init(gpa), .init(gpa) },
@@ -63,6 +70,11 @@ pub fn endBuild() void {
 
     curr_state = null;
 }
+
+const Ancestor = struct {
+    next: ?*Ancestor,
+    block: *Block,
+};
 
 const Axis = enum(u1) { x = 0, y = 1 };
 
