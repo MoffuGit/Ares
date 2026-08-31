@@ -18,12 +18,15 @@ pub fn startBuild(window_state: *WindowState) !void {
     assert(curr_state == null);
     const state = &window_state.view_state;
     state.root = &null_block;
-    state.stacks = .empty;
+    state.stack = .empty;
+    state.block_count = 0;
 
     curr_state = state;
 
     const root = try Block.new();
     state.root = root;
+
+    try push(.ancestors, .{ .block = root });
 }
 
 pub fn endBuild() void {
@@ -38,16 +41,18 @@ pub const ViewState = struct {
     arena: heap.ArenaAllocator,
 
     root: *Block,
+    block_count: u64,
     frame: u64,
     frame_arenas: [2]heap.ArenaAllocator,
-    stacks: LinkedListCollection(Stacks),
+    stack: LinkedListCollection(StackNodes),
 
     chunks: chunk_pool.ChunkAllocator,
 
     pub fn init(self: *ViewState, gpa: Allocator) !void {
         self.* = .{
-            .stacks = .empty,
+            .stack = .empty,
             .root = &null_block,
+            .block_count = 0,
             .frame = 0,
             .frame_arenas = .{ .init(gpa), .init(gpa) },
             .arena = .init(gpa),
@@ -70,27 +75,32 @@ pub const ViewState = struct {
     }
 };
 
-const Stacks = union(enum) {
+const Stacks = enum { ancestors, axis, color, width, height };
+
+const StackNodes = union(Stacks) {
     ancestors: struct { next: ?*@This() = null, block: *Block },
     axis: struct { next: ?*@This() = null, axis: Axis },
     color: struct { next: ?*@This() = null, color: [4]f32 },
+    width: struct { next: ?*@This() = null, size: Size },
+    height: struct { next: ?*@This() = null, size: Size },
 };
 
-fn StackNode(comptime tag: std.meta.Tag(Stacks)) type {
-    return @FieldType(Stacks, @tagName(tag));
+fn StackNode(comptime tag: std.meta.Tag(StackNodes)) type {
+    return @FieldType(StackNodes, @tagName(tag));
 }
 
-pub fn push(comptime tag: std.meta.Tag(Stacks), data: StackNode(tag)) !void {
+pub fn push(comptime tag: std.meta.Tag(StackNodes), data: StackNode(tag)) !void {
     const state = curr_state orelse unreachable;
-    const node = try state.frameArena().create(StackNode(tag));
+
+    const arena = state.frameArena();
+    const node = try arena.create(StackNode(tag));
     node.* = data;
-    node.next = null;
-    state.stacks.prepend(tag, node);
+    state.stack.prepend(tag, node);
 }
 
-pub fn pop(comptime tag: std.meta.Tag(Stacks)) ?*StackNode(tag) {
+pub fn pop(comptime tag: std.meta.Tag(StackNodes)) ?*StackNode(tag) {
     const state = curr_state orelse unreachable;
-    return state.stacks.pop(tag);
+    return state.stack.pop(tag);
 }
 
 const Axis = enum(u1) { x = 0, y = 1 };
@@ -147,35 +157,48 @@ const Block = struct {
         const block = try arena.create(Block);
         block.* = .empty;
 
+        state.block_count += 1;
+
+        if (state.stack.get(.ancestors).head) |parent| {
+            parent.block.childrens.prepend(block);
+            block.parent = parent.block;
+        }
+
+        if (state.stack.get(.axis).head) |n| block.axis = n.axis;
+        if (state.stack.get(.color).head) |n| block.color = n.color;
+        if (state.stack.get(.width).head) |n| block.sizing[0] = n.size;
+        if (state.stack.get(.height).head) |n| block.sizing[1] = n.size;
+
         return block;
     }
 };
 
-test "pushes and pops view stacks by tag" {
-    var state: ViewState = undefined;
-    try state.init(testing.allocator);
-    defer state.deinit();
+test "Basic Operations" {
+    const gpa = testing.allocator;
+    const io = testing.io;
 
-    curr_state = &state;
-    defer curr_state = null;
+    var window_state: WindowState = undefined;
+    try window_state.init(&.{}, .default, gpa, io);
+    defer window_state.deinit();
 
-    try push(.ancestors, .{ .block = &null_block });
-    try push(.axis, .{ .axis = .x });
-    try push(.axis, .{ .axis = .y });
-    try push(.color, .{ .color = .{ 1.0, 0.5, 0.25, 1.0 } });
+    const state = &window_state.view_state;
 
-    const ancestor = pop(.ancestors).?;
-    try testing.expect(ancestor.block == &null_block);
+    {
+        try startBuild(&window_state);
+        endBuild();
 
-    try testing.expectEqual(Axis.y, pop(.axis).?.axis);
-    try testing.expectEqual(Axis.x, pop(.axis).?.axis);
+        try testing.expectEqual(1, state.block_count);
+    }
 
-    try testing.expectEqual(
-        [4]f32{ 1.0, 0.5, 0.25, 1.0 },
-        pop(.color).?.color,
-    );
+    {
+        try startBuild(&window_state);
 
-    try testing.expect(pop(.ancestors) == null);
-    try testing.expect(pop(.axis) == null);
-    try testing.expect(pop(.color) == null);
+        const first = try Block.new();
+
+        endBuild();
+
+        try testing.expectEqual(2, state.block_count);
+        const root = state.root;
+        try testing.expectEqual(first, root.childrens.last);
+    }
 }

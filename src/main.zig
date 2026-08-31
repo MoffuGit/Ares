@@ -108,7 +108,7 @@ pub fn main(init: std.process.Init) !void {
     const window_state = try chunks.create(WindowState);
 
     try window_state.init(
-        &app,
+        &app.renderer,
         .{
             .name = "Odyssey",
             .x = 0,
@@ -118,6 +118,8 @@ pub fn main(init: std.process.Init) !void {
             .flags = win.WindowCenter | win.WindowFocus,
             .userdata = &context,
         },
+        app.gpa,
+        app.io,
     );
 
     errdefer window_state.deinit();

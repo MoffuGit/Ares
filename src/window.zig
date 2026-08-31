@@ -62,6 +62,16 @@ pub const pollEvents = c.RGFW_pollEvents;
 const EventCallback = c.RGFW_genericFunc;
 
 pub const Options = struct {
+    pub const default: Options = .{
+        .name = "Odyssey",
+        .x = 0,
+        .y = 0,
+        .width = 600,
+        .height = 800,
+        .flags = WindowCenter | WindowFocus,
+        .userdata = null,
+    };
+
     name: [:0]const u8,
     x: i32,
     y: i32,

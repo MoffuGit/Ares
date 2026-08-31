@@ -90,7 +90,7 @@ pub const Handle = struct {
     layer: objc.Object,
     swap_chain: SwapChain,
 
-    pub fn init(self: *@This(), api: *Metal, window: *Window, gpa: Allocator, io: Io) !void {
+    pub fn init(self: *@This(), api: *const Metal, window: *Window, gpa: Allocator, io: Io) !void {
         self.* = .{ .layer = undefined, .swap_chain = undefined };
 
         try self.swap_chain.init(gpa, io);

@@ -136,7 +136,7 @@ pub const WindowState = struct {
     render_handle: Handle,
     view_state: ViewState,
 
-    pub fn init(self: *WindowState, app: *App, opts: win.Options) !void {
+    pub fn init(self: *WindowState, renderer: *const Renderer, opts: win.Options, gpa: Allocator, io: Io) !void {
         self.* = .{
             .view_state = undefined,
             .win = undefined,
@@ -144,17 +144,17 @@ pub const WindowState = struct {
             .size = .{ .width = @floatFromInt(opts.width), .height = @floatFromInt(opts.height) },
         };
 
-        try self.view_state.init(app.gpa);
+        try self.view_state.init(gpa);
         errdefer self.view_state.deinit();
 
         try self.win.init(opts);
         errdefer self.win.deinit();
 
         try self.render_handle.init(
-            &app.renderer,
+            renderer,
             &self.win,
-            app.gpa,
-            app.io,
+            gpa,
+            io,
         );
     }
 

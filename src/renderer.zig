@@ -39,7 +39,7 @@ pub const Handle = renderer: {
     if (!builtin.is_test) break :renderer Metal.Handle;
 
     break :renderer struct {
-        pub fn init(_: *Handle, _: *Renderer, _: *Window, _: Allocator, _: Io) !void {}
+        pub fn init(_: *Handle, _: *const Renderer, _: *Window, _: Allocator, _: Io) !void {}
 
         pub fn deinit(_: *Handle) void {}
     };
