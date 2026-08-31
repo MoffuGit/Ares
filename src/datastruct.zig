@@ -12,8 +12,8 @@ pub const slotmap = @import("datastruct/slotmap.zig");
 pub const spsc = @import("datastruct/spsc.zig");
 pub const SpscBounded = spsc.SpscBounded;
 pub const SwapChain = @import("datastruct/swap_chain.zig").SwapChain;
-pub const linked_list_collection = @import("datastruct/linked_lists_collection.zig");
-pub const LinkedListCollection = linked_list_collection.LinkedListCollection;
+pub const tagged_linked_list = @import("datastruct/tagged_linked_list.zig");
+pub const TaggedLinkedList = tagged_linked_list.TaggedLinkedList;
 
 test {
     _ = mpsc;
@@ -24,5 +24,5 @@ test {
     _ = heap;
     _ = slotmap;
     _ = btree;
-    _ = linked_list_collection;
+    _ = tagged_linked_list;
 }
