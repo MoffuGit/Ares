@@ -1,5 +1,4 @@
 const std = @import("std");
-const assert = std.debug.assert;
 const testing = std.testing;
 const fmt = std.fmt;
 
@@ -11,9 +10,6 @@ pub fn DoublyLinkedList(T: type) type {
         last: ?*T,
 
         pub fn insertAfter(self: *@This(), existing_node: *T, new_node: *T) void {
-            assert(new_node.next == null);
-            assert(new_node.prev == null);
-
             new_node.prev = existing_node;
             if (existing_node.next) |next_node| {
                 new_node.next = next_node;
@@ -25,9 +21,6 @@ pub fn DoublyLinkedList(T: type) type {
         }
 
         pub fn insertBefore(self: *@This(), existing_node: *T, new_node: *T) void {
-            assert(new_node.next == null);
-            assert(new_node.prev == null);
-
             new_node.next = existing_node;
             if (existing_node.prev) |prev_node| {
                 new_node.prev = prev_node;
@@ -54,9 +47,6 @@ pub fn DoublyLinkedList(T: type) type {
         }
 
         pub fn append(self: *@This(), value: *T) void {
-            assert(value.next == null);
-            assert(value.prev == null);
-
             if (self.last) |last| {
                 self.insertAfter(last, value);
             } else {
@@ -66,9 +56,6 @@ pub fn DoublyLinkedList(T: type) type {
         }
 
         pub fn prepend(self: *@This(), value: *T) void {
-            assert(value.next == null);
-            assert(value.prev == null);
-
             if (self.first) |first| {
                 self.insertBefore(first, value);
             } else {
