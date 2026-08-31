@@ -71,12 +71,9 @@ pub const ViewState = struct {
 };
 
 const Stacks = union(enum) {
-    ancestors: Ancestor,
-};
-
-const Ancestor = struct {
-    next: ?*Ancestor = null,
-    block: *Block,
+    ancestors: struct { next: ?*@This() = null, block: *Block },
+    axis: struct { next: ?*@This() = null, axis: Axis },
+    color: struct { next: ?*@This() = null, color: [4]f32 },
 };
 
 fn StackNode(comptime tag: std.meta.Tag(Stacks)) type {
@@ -154,7 +151,7 @@ const Block = struct {
     }
 };
 
-test "pushes and pops a view stack by tag" {
+test "pushes and pops view stacks by tag" {
     var state: ViewState = undefined;
     try state.init(testing.allocator);
     defer state.deinit();
@@ -163,8 +160,22 @@ test "pushes and pops a view stack by tag" {
     defer curr_state = null;
 
     try push(.ancestors, .{ .block = &null_block });
+    try push(.axis, .{ .axis = .x });
+    try push(.axis, .{ .axis = .y });
+    try push(.color, .{ .color = .{ 1.0, 0.5, 0.25, 1.0 } });
 
-    const ancestor: *Ancestor = pop(.ancestors).?;
+    const ancestor = pop(.ancestors).?;
     try testing.expect(ancestor.block == &null_block);
+
+    try testing.expectEqual(Axis.y, pop(.axis).?.axis);
+    try testing.expectEqual(Axis.x, pop(.axis).?.axis);
+
+    try testing.expectEqual(
+        [4]f32{ 1.0, 0.5, 0.25, 1.0 },
+        pop(.color).?.color,
+    );
+
     try testing.expect(pop(.ancestors) == null);
+    try testing.expect(pop(.axis) == null);
+    try testing.expect(pop(.color) == null);
 }
