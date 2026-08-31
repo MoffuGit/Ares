@@ -13,7 +13,7 @@ const renderer = @import("renderer.zig");
 const Scheduler = @import("scheduler.zig");
 const Session = @import("session.zig");
 const subscription = @import("subscription.zig");
-const view = @import("view.zig");
+const view = @import("view_state.zig");
 const Workspace = @import("workspace.zig");
 const Worktree = @import("worktree.zig");
 

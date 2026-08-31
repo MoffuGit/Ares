@@ -14,17 +14,35 @@ const LinkedListCollection = datastruct.LinkedListCollection;
 pub var curr_state: ?*ViewState = null;
 pub var null_block: Block = .empty;
 
-const Stacks = union(enum) {
-    ancestors: Ancestor,
-};
+pub fn startBuild(window_state: *WindowState) !void {
+    assert(curr_state == null);
+    const state = &window_state.view_state;
+    state.root = &null_block;
+    state.stacks = .empty;
+
+    curr_state = state;
+
+    const root = try Block.new();
+    state.root = root;
+}
+
+pub fn endBuild() void {
+    const state = curr_state orelse unreachable;
+    state.frame += 1;
+    _ = state.frame_arenas[state.frame % state.frame_arenas.len].reset(.retain_capacity);
+
+    curr_state = null;
+}
 
 pub const ViewState = struct {
     arena: heap.ArenaAllocator,
+
+    root: *Block,
     frame: u64,
     frame_arenas: [2]heap.ArenaAllocator,
-    chunks: chunk_pool.ChunkAllocator,
     stacks: LinkedListCollection(Stacks),
-    root: *Block,
+
+    chunks: chunk_pool.ChunkAllocator,
 
     pub fn init(self: *ViewState, gpa: Allocator) !void {
         self.* = .{
@@ -52,29 +70,31 @@ pub const ViewState = struct {
     }
 };
 
-pub fn startBuild(window_state: *WindowState) !void {
-    assert(curr_state == null);
-    const state = &window_state.view_state;
-    state.root = &null_block;
-
-    curr_state = state;
-
-    const root = try Block.new();
-    state.root = root;
-}
-
-pub fn endBuild() void {
-    const state = curr_state orelse unreachable;
-    state.frame += 1;
-    _ = state.frame_arenas[state.frame % state.frame_arenas.len].reset(.retain_capacity);
-
-    curr_state = null;
-}
+const Stacks = union(enum) {
+    ancestors: Ancestor,
+};
 
 const Ancestor = struct {
-    next: ?*Ancestor,
+    next: ?*Ancestor = null,
     block: *Block,
 };
+
+fn StackNode(comptime tag: std.meta.Tag(Stacks)) type {
+    return @FieldType(Stacks, @tagName(tag));
+}
+
+pub fn push(comptime tag: std.meta.Tag(Stacks), data: StackNode(tag)) !void {
+    const state = curr_state orelse unreachable;
+    const node = try state.frameArena().create(StackNode(tag));
+    node.* = data;
+    node.next = null;
+    state.stacks.prepend(tag, node);
+}
+
+pub fn pop(comptime tag: std.meta.Tag(Stacks)) ?*StackNode(tag) {
+    const state = curr_state orelse unreachable;
+    return state.stacks.pop(tag);
+}
 
 const Axis = enum(u1) { x = 0, y = 1 };
 
@@ -133,3 +153,18 @@ const Block = struct {
         return block;
     }
 };
+
+test "pushes and pops a view stack by tag" {
+    var state: ViewState = undefined;
+    try state.init(testing.allocator);
+    defer state.deinit();
+
+    curr_state = &state;
+    defer curr_state = null;
+
+    try push(.ancestors, .{ .block = &null_block });
+
+    const ancestor: *Ancestor = pop(.ancestors).?;
+    try testing.expect(ancestor.block == &null_block);
+    try testing.expect(pop(.ancestors) == null);
+}
