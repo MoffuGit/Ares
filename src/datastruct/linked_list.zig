@@ -1,6 +1,5 @@
 const std = @import("std");
 const testing = std.testing;
-const fmt = std.fmt;
 
 pub fn SinglyLinkedList(T: type) type {
     return struct {

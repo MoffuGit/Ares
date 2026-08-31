@@ -1,6 +1,5 @@
 const std = @import("std");
 const testing = std.testing;
-const fmt = std.fmt;
 
 pub fn DoublyLinkedList(T: type) type {
     return struct {
