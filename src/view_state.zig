@@ -33,7 +33,7 @@ pub fn start(window_state: *WindowState) !void {
     const root = try Block.new();
     state.root = root;
 
-    try pushAttr(.{ .ancestors = root });
+    try pushAttr(.{ .parent = root });
 }
 
 pub fn end() void {
@@ -46,7 +46,7 @@ pub fn end() void {
 }
 
 const Stacks = TaggedLinkedList(union(enum) {
-    ancestors: *Block,
+    parent: *Block,
     axis: Axis,
     color: [4]f32,
     width: Size,
@@ -186,7 +186,7 @@ const Block = struct {
 
         state.block_count += 1;
 
-        if (state.stacks.get(.ancestors).head) |parent| {
+        if (state.stacks.get(.parent).head) |parent| {
             parent.value.childrens.prepend(block);
             block.parent = parent.value;
         }
