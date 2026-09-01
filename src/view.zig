@@ -306,8 +306,8 @@ const Axis = enum(u1) { x = 0, y = 1 };
 const Size = union(enum) {
     const zero: Size = .{ .fixed = 0 };
 
-    fit: f32,
-    grow: f32,
+    fit: void,
+    grow: void,
     fixed: f32,
     percent: f32,
 };
