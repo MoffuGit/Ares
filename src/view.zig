@@ -30,7 +30,7 @@ pub fn start(window_state: *WindowState) !void {
         .{ .width = .{ .fixed = size.width } },
         .{ .height = .{ .fixed = size.height } },
     });
-    const root = try box();
+    const root = try block();
     state.root = root;
 
     try pushAttr(.{ .parent = root });
@@ -59,7 +59,7 @@ pub fn end() void {
                 var position: f32 = 0.0;
                 var bounds: f32 = 0.0;
 
-                var children: ?*Box = b.childrens.first;
+                var children: ?*Block = b.childrens.first;
                 while (children) |child| : (children = child.next) {
                     child.position[axis] = position;
 
@@ -137,14 +137,14 @@ pub fn nextAttrs(values: []const Attribute) !void {
     }
 }
 
-pub fn box() !*Box {
+pub fn block() !*Block {
     const state = curr_state orelse unreachable;
     const arena = state.frameArena();
 
-    const new = try arena.create(Box);
+    const new = try arena.create(Block);
     new.* = ._null;
 
-    state.box_count += 1;
+    state.block_count += 1;
 
     if (state.stacks.get(.parent).head) |parent| {
         parent.value.childrens.append(new);
@@ -167,7 +167,7 @@ pub fn box() !*Box {
 }
 
 const Stacks = TaggedLinkedList(union(enum) {
-    parent: *Box,
+    parent: *Block,
     axis: Axis,
     color: [4]f32,
     width: Size,
@@ -187,8 +187,8 @@ fn stackFlag(flag: Flags) u64 {
 pub const ViewState = struct {
     arena: heap.ArenaAllocator,
 
-    root: *Box,
-    box_count: u64,
+    root: *Block,
+    block_count: u64,
 
     frame: u64,
     frame_arenas: [2]heap.ArenaAllocator,
@@ -203,7 +203,7 @@ pub const ViewState = struct {
             .stacks = .empty,
             .stack_pop_flags = 0,
             .root = undefined,
-            .box_count = 0,
+            .block_count = 0,
             .frame = 0,
             .frame_arenas = .{ .init(gpa), .init(gpa) },
             .arena = .init(gpa),
@@ -213,7 +213,7 @@ pub const ViewState = struct {
         const arena = self.arena.allocator();
         errdefer self.arena.deinit();
 
-        try self.chunks.init(arena, &.{.{ .capacity = 2048, .chunk_size = @sizeOf(Box) }});
+        try self.chunks.init(arena, &.{.{ .capacity = 2048, .chunk_size = @sizeOf(Block) }});
     }
 
     pub fn deinit(self: *ViewState) void {
@@ -229,7 +229,7 @@ pub const ViewState = struct {
         self.root = undefined;
         self.stacks = .empty;
         self.stack_pop_flags = 0;
-        self.box_count = 0;
+        self.block_count = 0;
     }
 
     pub fn flagStack(
@@ -250,16 +250,16 @@ pub const ViewState = struct {
     }
 
     const PreOrderIterator = struct {
-        node: ?*Box,
+        node: ?*Block,
 
-        pub fn next(self: *PreOrderIterator) ?*Box {
+        pub fn next(self: *PreOrderIterator) ?*Block {
             const current = self.node orelse return null;
             self.node = nextPreOrder(current);
 
             return current;
         }
 
-        fn nextPreOrder(current: *Box) ?*Box {
+        fn nextPreOrder(current: *Block) ?*Block {
             if (current.childrens.first) |child| return child;
 
             var ancestor = current;
@@ -271,16 +271,16 @@ pub const ViewState = struct {
     };
 
     const PostOrderIterator = struct {
-        node: ?*Box,
+        node: ?*Block,
 
-        pub fn next(self: *PostOrderIterator) ?*Box {
+        pub fn next(self: *PostOrderIterator) ?*Block {
             const current = self.node orelse return null;
             self.node = nextPostOrder(current);
 
             return current;
         }
 
-        fn nextPostOrder(current: *Box) ?*Box {
+        fn nextPostOrder(current: *Block) ?*Block {
             const parent = current.parent orelse return null;
             return if (current.next) |sibling| firstPostOrder(sibling) else parent;
         }
@@ -294,7 +294,7 @@ pub const ViewState = struct {
         return .{ .node = firstPostOrder(self.root) };
     }
 
-    fn firstPostOrder(root: *Box) *Box {
+    fn firstPostOrder(root: *Block) *Block {
         var node = root;
         while (node.childrens.first) |child| node = child;
         return node;
@@ -319,8 +319,8 @@ const Alignment = enum(u2) {
     end,
 };
 
-const Box = struct {
-    pub const _null: Box = .{
+const Block = struct {
+    pub const _null: Block = .{
         .minimum = @splat(0.0),
         .childrens = .empty,
         .next = null,
@@ -336,12 +336,12 @@ const Box = struct {
         .alignment = @splat(.none),
     };
 
-    childrens: DoublyLinkedList(Box),
+    childrens: DoublyLinkedList(Block),
 
-    next: ?*Box,
-    prev: ?*Box,
+    next: ?*Block,
+    prev: ?*Block,
 
-    parent: ?*Box,
+    parent: ?*Block,
     axis: Axis,
     sizing: [2]Size,
     minimum: [2]f32,
@@ -368,17 +368,17 @@ test "Basic Operations" {
         try start(&window_state);
         end();
 
-        try testing.expectEqual(1, state.box_count);
+        try testing.expectEqual(1, state.block_count);
     }
 
     {
         try start(&window_state);
 
-        const first = try box();
+        const first = try block();
 
         end();
 
-        try testing.expectEqual(2, state.box_count);
+        try testing.expectEqual(2, state.block_count);
         const root = state.root;
         try testing.expectEqual(first, root.childrens.last);
     }
@@ -392,7 +392,7 @@ test "Basic Operations" {
         try nextAttr(.{ .axis = .y });
         try nextAttr(.{ .color = color });
 
-        const styled = try box();
+        const styled = try block();
         try testing.expectEqual(Axis.y, styled.axis);
         try testing.expectEqual(color, styled.color);
         try testing.expect(window_state.view_state.stacks.get(.axis).is_empty());
@@ -406,7 +406,7 @@ test "Basic Operations" {
             .{ .color = color },
         });
 
-        const styled = try box();
+        const styled = try block();
         try testing.expectEqual(Axis.y, styled.axis);
         try testing.expectEqual(color, styled.color);
         try testing.expect(window_state.view_state.stacks.get(.axis).is_empty());
@@ -414,9 +414,9 @@ test "Basic Operations" {
         try testing.expectEqual(@as(u64, 0), window_state.view_state.stack_pop_flags);
     }
 
-    const unstyled = try box();
+    const unstyled = try block();
     try testing.expectEqual(Axis.x, unstyled.axis);
-    try testing.expectEqual(Box._null.color, unstyled.color);
+    try testing.expectEqual(Block._null.color, unstyled.color);
 
     {
         try pushAttr(.{ .axis = .y });
@@ -426,7 +426,7 @@ test "Basic Operations" {
     try pushAttr(.{ .axis = .x });
     defer popAttr(.axis);
 
-    const manually_popped = try box();
+    const manually_popped = try block();
     try testing.expectEqual(Axis.x, manually_popped.axis);
     try testing.expect(window_state.view_state.stacks.get(.axis).head != null);
 }
@@ -443,33 +443,33 @@ test "Fixed Layout" {
         try start(&window_state);
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 800 } }, .{ .height = .{ .fixed = 800 } } });
-        const first = try box();
+        const first = try block();
 
         try pushAttr(.{ .parent = first });
         try nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 800 } } });
-        const first_first = try box();
+        const first_first = try block();
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 800 } } });
-        const first_second = try box();
+        const first_second = try block();
         popAttr(.parent);
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 120 } }, .{ .axis = .y } });
-        const second = try box();
+        const second = try block();
 
         try pushAttr(.{ .parent = second });
         try nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 60 } } });
-        const second_first = try box();
+        const second_first = try block();
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 60 } } });
-        const second_second = try box();
+        const second_second = try block();
         popAttr(.parent);
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 509 } }, .{ .height = .{ .fixed = 789 } } });
-        const third = try box();
+        const third = try block();
 
         try pushAttr(.{ .parent = third });
         try nextAttrs(&.{ .{ .width = .{ .fixed = 600 } }, .{ .height = .{ .fixed = 800 } } });
-        const third_first = try box();
+        const third_first = try block();
 
         popAttr(.parent);
 
