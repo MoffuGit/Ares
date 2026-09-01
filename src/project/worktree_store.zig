@@ -17,14 +17,14 @@ pub const Options = struct {
 };
 
 any: AnyEntity,
-worktrees: std.AutoHashMap(u8, *Worktree),
+worktrees: std.array_hash_map.Auto(u8, *Worktree),
 next_id: u8,
 
 pub fn init(self: *WorktreeStore, any: AnyEntity, app: *App, options: Options) !void {
     self.* = .{
         .any = any,
         .next_id = 0,
-        .worktrees = .init(options.arena),
+        .worktrees = .empty,
     };
     errdefer _ = self.drop();
 
@@ -36,7 +36,7 @@ pub fn init(self: *WorktreeStore, any: AnyEntity, app: *App, options: Options) !
         });
         errdefer worktree.drop();
 
-        try self.worktrees.put(id, worktree);
+        try self.worktrees.put(options.arena, id, worktree);
         self.next_id += 1;
     }
 }
