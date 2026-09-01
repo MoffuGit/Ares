@@ -21,12 +21,9 @@ pub fn start(window_state: *WindowState) !void {
     assert(curr_state == null);
 
     const state = &window_state.view_state;
-    curr_state = state;
+    state.reset();
 
-    state.root = undefined;
-    state.stacks = .empty;
-    state.stack_pop_flags = 0;
-    state.box_count = 0;
+    curr_state = state;
 
     const root = try box();
     state.root = root;
@@ -38,18 +35,20 @@ pub fn end() void {
     const state = curr_state orelse unreachable;
     defer curr_state = null;
 
-    // inline for (comptime meta.tags(Axis).*) |axis| {
-    //     const curr: ?*Box = state.root;
-    //
-    //     while (curr) |b| {
-    //         switch (b.sizing[@intFromEnum(axis)].kind) {
-    //             .fixed => {
-    //                 b.size[@intFromEnum(axis)] = b.sizing[@intFromEnum(axis)].value;
-    //             },
-    //             else => {},
-    //         }
-    //     }
-    // }
+    inline for (@typeInfo(Axis).@"enum".fields) |field| {
+        const axis = field.value;
+
+        var curr: ?*Box = state.root;
+
+        while (curr) |b| {
+            switch (b.sizing[axis]) {
+                .fixed => |size| b.size[axis] = size,
+                else => {},
+            }
+
+            curr = null;
+        }
+    }
 
     //we need to produce our layout
     //lets do first width
@@ -83,14 +82,19 @@ const Stacks = TaggedLinkedList(union(enum) {
     axis: Axis,
     color: [4]f32,
     width: Size,
+    min_width: f32,
     height: Size,
+    min_height: f32,
     alignment: [2]Alignment,
     padding: [4]f32,
     gap: f32,
 });
 
-fn stackFlag(tag: Stacks.Tag) u64 {
-    return @as(u64, 1) << @intFromEnum(tag);
+pub const Flags = Stacks.Tag;
+pub const Attribute = Stacks.Value;
+
+fn stackFlag(flag: Flags) u64 {
+    return @as(u64, 1) << @intFromEnum(flag);
 }
 
 pub const ViewState = struct {
@@ -133,42 +137,65 @@ pub const ViewState = struct {
     pub fn frameArena(self: *ViewState) Allocator {
         return self.frame_arenas[self.frame % self.frame_arenas.len].allocator();
     }
+
+    pub fn reset(self: *ViewState) void {
+        self.root = undefined;
+        self.stacks = .empty;
+        self.stack_pop_flags = 0;
+        self.box_count = 0;
+    }
+
+    pub fn flagStack(
+        self: *ViewState,
+        flag: Flags,
+    ) void {
+        self.stack_pop_flags |= stackFlag(flag);
+    }
+
+    pub fn popFlagged(self: *ViewState) void {
+        inline for (@typeInfo(Stacks.Tag).@"enum".fields) |field| {
+            const flag: Flags = @enumFromInt(field.value);
+            if (self.stack_pop_flags & stackFlag(flag) != 0) {
+                self.stack_pop_flags &= ~stackFlag(flag);
+                if (self.stacks.pop(flag) == null) unreachable;
+            }
+        }
+    }
 };
 
-pub fn pushAttr(attr: Stacks.Value) !void {
+pub fn pushAttr(attr: Attribute) !void {
     const state = curr_state orelse unreachable;
     const arena = state.frameArena();
 
     switch (attr) {
-        inline else => |val, tag| {
-            assert(state.stack_pop_flags & stackFlag(tag) == 0);
+        inline else => |val, flag| {
+            assert(state.stack_pop_flags & stackFlag(flag) == 0);
 
-            const node = try arena.create(Stacks.Node(tag));
+            const node = try arena.create(Stacks.Node(flag));
             node.* = .{ .value = val };
-            state.stacks.prepend(tag, node);
+            state.stacks.prepend(flag, node);
         },
     }
 }
 
-pub fn popAttr(comptime tag: Stacks.Tag) void {
+pub fn popAttr(comptime flag: Flags) void {
     const state = curr_state orelse unreachable;
 
-    assert(state.stack_pop_flags & stackFlag(tag) == 0);
+    assert(state.stack_pop_flags & stackFlag(flag) == 0);
 
-    if (state.stacks.pop(tag) == null) unreachable;
+    if (state.stacks.pop(flag) == null) unreachable;
 }
 
-pub fn setAttr(value: Stacks.Value) !void {
+pub fn nextAttr(attr: Attribute) !void {
     const state = curr_state orelse unreachable;
 
-    try pushAttr(value);
-
-    state.stack_pop_flags |= stackFlag(meta.activeTag(value));
+    try pushAttr(attr);
+    state.flagStack(meta.activeTag(attr));
 }
 
-pub fn setAttrs(values: []const Stacks.Value) !void {
+pub fn nextAttrs(values: []const Attribute) !void {
     for (values) |value| {
-        try setAttr(value);
+        try nextAttr(value);
     }
 }
 
@@ -176,50 +203,40 @@ pub fn box() !*Box {
     const state = curr_state orelse unreachable;
     const arena = state.frameArena();
 
-    const _box = try arena.create(Box);
-    _box.* = .empty;
+    const new = try arena.create(Box);
+    new.* = ._null;
 
     state.box_count += 1;
 
     if (state.stacks.get(.parent).head) |parent| {
-        parent.value.childrens.prepend(_box);
-        _box.parent = parent.value;
+        parent.value.childrens.prepend(new);
+        new.parent = parent.value;
     }
 
-    if (state.stacks.get(.axis).head) |node| _box.axis = node.value;
-    if (state.stacks.get(.color).head) |node| _box.color = node.value;
-    if (state.stacks.get(.width).head) |node| _box.sizing[0] = node.value;
-    if (state.stacks.get(.height).head) |node| _box.sizing[1] = node.value;
+    if (state.stacks.get(.color).head) |node| new.color = node.value;
 
-    inline for (comptime meta.tags(Stacks.Tag).*) |tag| {
-        if (state.stack_pop_flags & stackFlag(tag) != 0) {
-            state.stack_pop_flags &= ~stackFlag(tag);
-            popAttr(tag);
-        }
-    }
+    if (state.stacks.get(.axis).head) |node| new.axis = node.value;
 
-    return _box;
+    if (state.stacks.get(.width).head) |node| new.sizing[0] = node.value;
+    if (state.stacks.get(.min_width).head) |node| new.minimum[0] = node.value;
+
+    if (state.stacks.get(.height).head) |node| new.sizing[1] = node.value;
+    if (state.stacks.get(.min_height).head) |node| new.minimum[1] = node.value;
+
+    state.popFlagged();
+
+    return new;
 }
 
 const Axis = enum(u1) { x = 0, y = 1 };
 
-const SizeKind = enum(u2) {
-    fit,
-    grow,
-    fixed,
-    percent,
-};
+const Size = union(enum) {
+    const zero: Size = .{ .fixed = 0 };
 
-const Size = struct {
-    pub const zero: Size = .{
-        .value = 0,
-        .min = 0,
-        .kind = .fixed,
-    };
-
-    value: f32,
-    min: f32,
-    kind: SizeKind,
+    fit: f32,
+    grow: f32,
+    fixed: f32,
+    percent: f32,
 };
 
 const Alignment = enum(u2) {
@@ -230,7 +247,8 @@ const Alignment = enum(u2) {
 };
 
 const Box = struct {
-    pub const empty: Box = .{
+    pub const _null: Box = .{
+        .minimum = @splat(0.0),
         .childrens = .empty,
         .next = null,
         .prev = null,
@@ -253,6 +271,7 @@ const Box = struct {
     parent: ?*Box,
     axis: Axis,
     sizing: [2]Size,
+    minimum: [2]f32,
     color: [4]f32,
     padding: [4]f32,
     gap: f32,
@@ -297,8 +316,8 @@ test "Basic Operations" {
     const color = [4]f32{ 1.0, 0.5, 0.25, 1.0 };
 
     {
-        try setAttr(.{ .axis = .y });
-        try setAttr(.{ .color = color });
+        try nextAttr(.{ .axis = .y });
+        try nextAttr(.{ .color = color });
 
         const styled = try box();
         try testing.expectEqual(Axis.y, styled.axis);
@@ -309,7 +328,7 @@ test "Basic Operations" {
     }
 
     {
-        try setAttrs(&.{
+        try nextAttrs(&.{
             .{ .axis = .y },
             .{ .color = color },
         });
@@ -324,7 +343,7 @@ test "Basic Operations" {
 
     const unstyled = try box();
     try testing.expectEqual(Axis.x, unstyled.axis);
-    try testing.expectEqual(Box.empty.color, unstyled.color);
+    try testing.expectEqual(Box._null.color, unstyled.color);
 
     {
         try pushAttr(.{ .axis = .y });
