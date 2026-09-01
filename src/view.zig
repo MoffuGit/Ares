@@ -69,6 +69,28 @@ pub fn end() void {
         }
 
         {
+            var iterator = state.postOrderIterator();
+            while (iterator.next()) |b| {
+                switch (b.sizing[axis]) {
+                    .fit => {
+                        var total: f32 = 0.0;
+                        var children: ?*Block = b.childrens.first;
+                        while (children) |child| : (children = child.next) {
+                            if (@intFromEnum(b.axis) == axis) {
+                                total += child.size[axis];
+                            } else {
+                                total = @max(total, child.size[axis]);
+                            }
+                        }
+
+                        b.size[axis] = total;
+                    },
+                    else => {},
+                }
+            }
+        }
+
+        {
             var iterator = state.preOrderIterator();
             while (iterator.next()) |b| {
                 var position: f32 = 0.0;
