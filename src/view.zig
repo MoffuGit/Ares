@@ -48,6 +48,21 @@ pub fn end() void {
             while (iterator.next()) |b| {
                 switch (b.sizing[axis]) {
                     .fixed => |size| b.size[axis] = size,
+                    .percent => |percent| {
+                        const parent_size = bkl: {
+                            var node = b.parent;
+                            while (node) |n| : (node = n.next) {
+                                switch (n.sizing[axis]) {
+                                    .fixed, .percent => break :bkl n.size[axis],
+                                    else => {},
+                                }
+                            }
+
+                            break :bkl 0.0;
+                        };
+
+                        b.size[axis] = parent_size * percent;
+                    },
                     else => {},
                 }
             }
@@ -305,9 +320,9 @@ const Axis = enum(u1) { x = 0, y = 1 };
 
 const Size = union(enum) {
     const zero: Size = .{ .fixed = 0 };
+    const grow: Size = .{ .percent = 1 };
 
     fit,
-    grow,
     fixed: f32,
     percent: f32,
 };
@@ -511,4 +526,51 @@ test "Fixed Layout" {
         try testing.expectEqual([2]f32{ 920, 0 }, third_first.abs_position);
         try testing.expectEqual([2]f32{ 0, 0 }, third_first.bounds);
     }
+}
+
+test "Percent Layout" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+
+    var window_state: WindowState = undefined;
+    try window_state.init(&.{}, .default, gpa, io);
+    defer window_state.deinit();
+
+    try start(&window_state);
+
+    try nextAttrs(&.{ .{ .width = .{ .fixed = 800 } }, .{ .height = .{ .fixed = 600 } } });
+    const parent = try block();
+
+    try pushAttr(.{ .parent = parent });
+    try nextAttrs(&.{ .{ .width = .{ .percent = 0.25 } }, .{ .height = .{ .percent = 0.5 } } });
+    const first = try block();
+
+    try pushAttr(.{ .parent = first });
+    try nextAttrs(&.{ .{ .width = .{ .percent = 0.5 } }, .{ .height = .{ .percent = 0.5 } } });
+    const nested = try block();
+    popAttr(.parent);
+
+    try nextAttrs(&.{ .{ .width = .{ .percent = 0.5 } }, .{ .height = .{ .percent = 1.0 } } });
+    const second = try block();
+    popAttr(.parent);
+
+    end();
+
+    try testing.expectEqual([2]f32{ 800, 600 }, parent.size);
+    try testing.expectEqual([2]f32{ 600, 600 }, parent.bounds);
+
+    try testing.expectEqual([2]f32{ 200, 300 }, first.size);
+    try testing.expectEqual([2]f32{ 0, 0 }, first.position);
+    try testing.expectEqual([2]f32{ 0, 0 }, first.abs_position);
+    try testing.expectEqual([2]f32{ 100, 150 }, first.bounds);
+
+    try testing.expectEqual([2]f32{ 100, 150 }, nested.size);
+    try testing.expectEqual([2]f32{ 0, 0 }, nested.position);
+    try testing.expectEqual([2]f32{ 0, 0 }, nested.abs_position);
+    try testing.expectEqual([2]f32{ 0, 0 }, nested.bounds);
+
+    try testing.expectEqual([2]f32{ 400, 600 }, second.size);
+    try testing.expectEqual([2]f32{ 200, 0 }, second.position);
+    try testing.expectEqual([2]f32{ 200, 0 }, second.abs_position);
+    try testing.expectEqual([2]f32{ 0, 0 }, second.bounds);
 }
