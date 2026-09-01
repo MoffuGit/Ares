@@ -131,7 +131,7 @@ pub fn setAttrs(values: []const Stacks.Value) !void {
     }
 }
 
-fn handleFlags() void {
+fn handleStackFlags() void {
     const state = curr_state orelse unreachable;
 
     inline for (@typeInfo(Stacks.Tag).@"enum".fields) |field| {
@@ -208,7 +208,7 @@ const Block = struct {
         if (state.stacks.get(.width).head) |node| block.sizing[0] = node.value;
         if (state.stacks.get(.height).head) |node| block.sizing[1] = node.value;
 
-        handleFlags();
+        handleStackFlags();
 
         return block;
     }
