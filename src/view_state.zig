@@ -53,6 +53,10 @@ pub fn end() void {
     //grow/srhink
     //
     //positions and alignment
+    //
+    //after we have the layout Algorithm
+    //i want to add the cache
+    //and after the cache i want to add signals( input events )
 
     state.frame += 1;
     const arena_index = state.frame % state.frame_arenas.len;
