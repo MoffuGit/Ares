@@ -175,8 +175,6 @@ const Stacks = TaggedLinkedList(union(enum) {
     height: Size,
     min_height: f32,
     alignment: [2]Alignment,
-    padding: [4]f32,
-    gap: f32,
 });
 
 pub const Flags = Stacks.Tag;
@@ -335,8 +333,6 @@ const Box = struct {
         .bounds = @splat(0.0),
         .abs_position = @splat(0.0),
         .color = @splat(0.0),
-        .padding = @splat(0.0),
-        .gap = 0.0,
         .alignment = @splat(.none),
     };
 
@@ -350,8 +346,6 @@ const Box = struct {
     sizing: [2]Size,
     minimum: [2]f32,
     color: [4]f32,
-    padding: [4]f32,
-    gap: f32,
     alignment: [2]Alignment,
 
     size: [2]f32,
