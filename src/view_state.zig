@@ -131,18 +131,6 @@ pub fn setAttrs(values: []const Stacks.Value) !void {
     }
 }
 
-fn handleStackFlags() void {
-    const state = curr_state orelse unreachable;
-
-    inline for (@typeInfo(Stacks.Tag).@"enum".fields) |field| {
-        const tag: Stacks.Tag = @enumFromInt(field.value);
-        if (state.stack_pop_flags & stackFlag(tag) != 0) {
-            state.stack_pop_flags &= ~stackFlag(tag);
-            popAttr(tag);
-        }
-    }
-}
-
 const Axis = enum(u1) { x = 0, y = 1 };
 
 const SizeKind = enum(u2) {
@@ -208,7 +196,12 @@ const Block = struct {
         if (state.stacks.get(.width).head) |node| block.sizing[0] = node.value;
         if (state.stacks.get(.height).head) |node| block.sizing[1] = node.value;
 
-        handleStackFlags();
+        inline for (comptime meta.tags(Stacks.Tag).*) |tag| {
+            if (state.stack_pop_flags & stackFlag(tag) != 0) {
+                state.stack_pop_flags &= ~stackFlag(tag);
+                popAttr(tag);
+            }
+        }
 
         return block;
     }
