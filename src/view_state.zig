@@ -19,7 +19,7 @@ const TaggedLinkedList = datastruct.TaggedLinkedList;
 pub var curr_state: ?*ViewState = null;
 pub var null_block: Block = .empty;
 
-pub fn startBuild(window_state: *WindowState) !void {
+pub fn start(window_state: *WindowState) !void {
     assert(curr_state == null);
 
     const state = &window_state.view_state;
@@ -36,7 +36,7 @@ pub fn startBuild(window_state: *WindowState) !void {
     try pushAttr(.{ .ancestors = root });
 }
 
-pub fn endBuild() void {
+pub fn end() void {
     const state = curr_state orelse unreachable;
     state.frame += 1;
     const arena_index = state.frame % state.frame_arenas.len;
@@ -218,26 +218,26 @@ test "Basic Operations" {
     const state = &window_state.view_state;
 
     {
-        try startBuild(&window_state);
-        endBuild();
+        try start(&window_state);
+        end();
 
         try testing.expectEqual(1, state.block_count);
     }
 
     {
-        try startBuild(&window_state);
+        try start(&window_state);
 
         const first = try Block.new();
 
-        endBuild();
+        end();
 
         try testing.expectEqual(2, state.block_count);
         const root = state.root;
         try testing.expectEqual(first, root.childrens.last);
     }
 
-    try startBuild(&window_state);
-    defer endBuild();
+    try start(&window_state);
+    defer end();
 
     const color = [4]f32{ 1.0, 0.5, 0.25, 1.0 };
 
