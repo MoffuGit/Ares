@@ -199,7 +199,6 @@ const Block = struct {
     next: ?*Block,
     prev: ?*Block,
 
-    //Attr
     parent: ?*Block,
     axis: Axis,
     sizing: [2]Size,
