@@ -242,15 +242,6 @@ test "Basic Operations" {
         const root = state.root;
         try testing.expectEqual(first, root.childrens.last);
     }
-}
-
-test "pops stacks after creating one block" {
-    const gpa = testing.allocator;
-    const io = testing.io;
-
-    var window_state: WindowState = undefined;
-    try window_state.init(&.{}, .default, gpa, io);
-    defer window_state.deinit();
 
     try startBuild(&window_state);
     defer endBuild();
