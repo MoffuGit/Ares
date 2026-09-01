@@ -31,7 +31,7 @@ pub fn MpscBounded(comptime T: type) type {
             pub fn unregister(self: *Producer) void {
                 const slot = self.slot orelse @panic("Producer Unregistered");
                 self.slot = null;
-                assert(slot.claimed.swap(false, .release));
+                if (!slot.claimed.swap(false, .release)) unreachable;
             }
         };
 
@@ -64,7 +64,7 @@ pub fn MpscBounded(comptime T: type) type {
 
         pub fn deinit(self: *Self, allocator: Allocator) void {
             for (self.slots) |*slot| {
-                assert(!slot.claimed.load(.monotonic));
+                if (slot.claimed.load(.monotonic)) unreachable;
                 slot.spsc.deinit(allocator);
             }
             allocator.free(self.slots);
