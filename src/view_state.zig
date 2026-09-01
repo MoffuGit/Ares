@@ -1,5 +1,5 @@
-// // The following Immedate Mode GUI implementation concepts origined from
-// // Digital Grove(https://www.dgtlgrove.com/)
+// The following Immedate Mode GUI implementation concepts origined from
+// Digital Grove(https://www.dgtlgrove.com/)
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -14,6 +14,7 @@ const chunk_pool = @import("chunk_pool.zig");
 const datastruct = @import("datastruct.zig");
 const DoublyLinkedList = datastruct.DoublyLinkedList;
 const TaggedLinkedList = datastruct.TaggedLinkedList;
+const ArrayHashMap = std.array_hash_map.String;
 
 pub var curr_state: ?*ViewState = null;
 pub var null_block: Block = .empty;
@@ -24,7 +25,7 @@ pub fn startBuild(window_state: *WindowState) !void {
     const state = &window_state.view_state;
     state.root = &null_block;
     state.stacks = .empty;
-    state.auto_pop_flags = 0;
+    state.stack_pop_flags = 0;
     state.block_count = 0;
 
     curr_state = state;
@@ -32,7 +33,7 @@ pub fn startBuild(window_state: *WindowState) !void {
     const root = try Block.new();
     state.root = root;
 
-    try push(.{ .ancestors = root });
+    try pushAttr(.{ .ancestors = root });
 }
 
 pub fn endBuild() void {
@@ -44,6 +45,18 @@ pub fn endBuild() void {
     curr_state = null;
 }
 
+const Stacks = TaggedLinkedList(union(enum) {
+    ancestors: *Block,
+    axis: Axis,
+    color: [4]f32,
+    width: Size,
+    height: Size,
+});
+
+fn stackFlag(tag: Stacks.Tag) u64 {
+    return @as(u64, 1) << @intFromEnum(tag);
+}
+
 pub const ViewState = struct {
     arena: heap.ArenaAllocator,
 
@@ -53,15 +66,15 @@ pub const ViewState = struct {
     frame: u64,
     frame_arenas: [2]heap.ArenaAllocator,
 
-    stacks: StackCollection,
-    auto_pop_flags: u64,
+    stacks: Stacks,
+    stack_pop_flags: u64,
 
     chunks: chunk_pool.ChunkAllocator,
 
     pub fn init(self: *ViewState, gpa: Allocator) !void {
         self.* = .{
             .stacks = .empty,
-            .auto_pop_flags = 0,
+            .stack_pop_flags = 0,
             .root = &null_block,
             .block_count = 0,
             .frame = 0,
@@ -86,53 +99,46 @@ pub const ViewState = struct {
     }
 };
 
-const Stacks = union(enum) {
-    ancestors: *Block,
-    axis: Axis,
-    color: [4]f32,
-    width: Size,
-    height: Size,
-};
-
-const StackCollection = TaggedLinkedList(Stacks);
-
-fn stackFlag(tag: StackCollection.Tag) u64 {
-    return @as(u64, 1) << @intFromEnum(tag);
-}
-
-pub fn push(value: Stacks) !void {
+pub fn pushAttr(attr: Stacks.Value) !void {
     const state = curr_state orelse unreachable;
-    assert(state.auto_pop_flags & stackFlag(meta.activeTag(value)) == 0);
 
-    switch (value) {
+    switch (attr) {
         inline else => |val, tag| {
-            const node = try state.frameArena().create(StackCollection.Node(tag));
+            assert(state.stack_pop_flags & stackFlag(tag) == 0);
+
+            const node = try state.frameArena().create(Stacks.Node(tag));
             node.* = .{ .value = val };
             state.stacks.prepend(tag, node);
         },
     }
 }
 
-pub fn pop(comptime tag: StackCollection.Tag) void {
+pub fn popAttr(comptime tag: Stacks.Tag) void {
     const state = curr_state orelse unreachable;
-    assert(state.auto_pop_flags & stackFlag(tag) == 0);
-    assert(state.stacks.pop(tag) != null);
+    assert(state.stack_pop_flags & stackFlag(tag) == 0);
+    if (state.stacks.pop(tag) == null) unreachable;
 }
 
-pub fn setNext(value: Stacks) !void {
+pub fn setAttr(value: Stacks.Value) !void {
     const state = curr_state orelse unreachable;
-    try push(value);
-    state.auto_pop_flags |= stackFlag(meta.activeTag(value));
+    try pushAttr(value);
+    state.stack_pop_flags |= stackFlag(meta.activeTag(value));
 }
 
-fn popAutomaticStacks() void {
+pub fn setAttrs(values: []const Stacks.Value) !void {
+    for (values) |value| {
+        try setAttr(value);
+    }
+}
+
+fn handleFlags() void {
     const state = curr_state orelse unreachable;
 
-    inline for (@typeInfo(StackCollection.Tag).@"enum".fields) |field| {
-        const tag: StackCollection.Tag = @enumFromInt(field.value);
-        if (state.auto_pop_flags & stackFlag(tag) != 0) {
-            state.auto_pop_flags &= ~stackFlag(tag);
-            pop(tag);
+    inline for (@typeInfo(Stacks.Tag).@"enum".fields) |field| {
+        const tag: Stacks.Tag = @enumFromInt(field.value);
+        if (state.stack_pop_flags & stackFlag(tag) != 0) {
+            state.stack_pop_flags &= ~stackFlag(tag);
+            popAttr(tag);
         }
     }
 }
@@ -176,14 +182,14 @@ const Block = struct {
     next: ?*Block,
     prev: ?*Block,
 
+    //Attr
     parent: ?*Block,
-
     axis: Axis,
     sizing: [2]Size,
+    color: [4]f32,
 
     size: [2]f32,
     position: [2]f32,
-    color: [4]f32,
 
     pub fn new() !*Block {
         const state = curr_state orelse unreachable;
@@ -202,7 +208,7 @@ const Block = struct {
         if (state.stacks.get(.width).head) |node| block.sizing[0] = node.value;
         if (state.stacks.get(.height).head) |node| block.sizing[1] = node.value;
 
-        popAutomaticStacks();
+        handleFlags();
 
         return block;
     }
@@ -250,27 +256,44 @@ test "pops stacks after creating one block" {
     defer endBuild();
 
     const color = [4]f32{ 1.0, 0.5, 0.25, 1.0 };
-    try setNext(.{ .axis = .y });
-    try setNext(.{ .color = color });
 
-    const styled = try Block.new();
-    try testing.expectEqual(Axis.y, styled.axis);
-    try testing.expectEqual(color, styled.color);
-    try testing.expect(window_state.view_state.stacks.get(.axis).is_empty());
-    try testing.expect(window_state.view_state.stacks.get(.color).is_empty());
-    try testing.expectEqual(@as(u64, 0), window_state.view_state.auto_pop_flags);
+    {
+        try setAttr(.{ .axis = .y });
+        try setAttr(.{ .color = color });
+
+        const styled = try Block.new();
+        try testing.expectEqual(Axis.y, styled.axis);
+        try testing.expectEqual(color, styled.color);
+        try testing.expect(window_state.view_state.stacks.get(.axis).is_empty());
+        try testing.expect(window_state.view_state.stacks.get(.color).is_empty());
+        try testing.expectEqual(@as(u64, 0), window_state.view_state.stack_pop_flags);
+    }
+
+    {
+        try setAttrs(&.{
+            .{ .axis = .y },
+            .{ .color = color },
+        });
+
+        const styled = try Block.new();
+        try testing.expectEqual(Axis.y, styled.axis);
+        try testing.expectEqual(color, styled.color);
+        try testing.expect(window_state.view_state.stacks.get(.axis).is_empty());
+        try testing.expect(window_state.view_state.stacks.get(.color).is_empty());
+        try testing.expectEqual(@as(u64, 0), window_state.view_state.stack_pop_flags);
+    }
 
     const unstyled = try Block.new();
     try testing.expectEqual(Axis.x, unstyled.axis);
     try testing.expectEqual(Block.empty.color, unstyled.color);
 
     {
-        try push(.{ .axis = .y });
-        defer pop(.axis);
+        try pushAttr(.{ .axis = .y });
+        defer popAttr(.axis);
     }
 
-    try push(.{ .axis = .x });
-    defer pop(.axis);
+    try pushAttr(.{ .axis = .x });
+    defer popAttr(.axis);
 
     const manually_popped = try Block.new();
     try testing.expectEqual(Axis.x, manually_popped.axis);

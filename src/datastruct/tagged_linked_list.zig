@@ -5,27 +5,21 @@ const SinglyLinkedList = @import("linked_list.zig").SinglyLinkedList;
 
 pub fn TaggedLinkedList(Union: type) type {
     return struct {
+        pub const Value = Union;
+
         const info = @typeInfo(Union).@"union";
 
-        const UnionTag = info.tag_type orelse
+        pub const Tag = info.tag_type orelse
             @compileError("TaggedLinkedListCollection requires a tagged union");
-
-        const fields = info.fields;
-
-        pub const Values = Union;
-
-        pub const Tag = UnionTag;
-
-        pub fn Value(comptime tag: Tag) type {
-            return @FieldType(Union, @tagName(tag));
-        }
 
         pub fn Node(comptime tag: Tag) type {
             return struct {
                 next: ?*@This() = null,
-                value: Value(tag),
+                value: @FieldType(Union, @tagName(tag)),
             };
         }
+
+        const fields = info.fields;
 
         pub const Lists = bkl: {
             var field_names: [fields.len][]const u8 = undefined;
@@ -33,10 +27,11 @@ pub fn TaggedLinkedList(Union: type) type {
             var field_attrs: [fields.len]std.builtin.Type.StructField.Attributes = undefined;
 
             for (fields, &field_names, &field_types, &field_attrs) |field, *name, *Type, *attr| {
-                const tag: Tag = @field(Tag, field.name);
+                const List = SinglyLinkedList(Node(@field(Tag, field.name)));
+
                 name.* = field.name;
-                Type.* = SinglyLinkedList(Node(tag));
-                attr.* = .{ .@"align" = @alignOf(Type.*) };
+                Type.* = List;
+                attr.* = .{ .@"align" = @alignOf(List) };
             }
 
             break :bkl @Struct(.auto, null, &field_names, &field_types, &field_attrs);
@@ -51,10 +46,6 @@ pub fn TaggedLinkedList(Union: type) type {
         };
 
         lists: Lists,
-
-        pub fn List(comptime tag: Tag) type {
-            return @FieldType(Lists, @tagName(tag));
-        }
 
         pub fn get(self: *@This(), comptime tag: Tag) *SinglyLinkedList(Node(tag)) {
             return &@field(self.lists, @tagName(tag));

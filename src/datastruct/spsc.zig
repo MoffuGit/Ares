@@ -83,7 +83,7 @@ pub fn SpscBounded(T: type) type {
 
         pub fn pop(self: *Self) void {
             const read = self.consumer.load(.monotonic);
-            assert(self.producer.load(.acquire) != read);
+            if (self.producer.load(.acquire) == read) unreachable;
             self.consumer.store(read +% 1, .release);
         }
 
