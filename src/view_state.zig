@@ -7,6 +7,7 @@ const heap = std.heap;
 const assert = std.debug.assert;
 const testing = std.testing;
 const meta = std.meta;
+const ArrayHashMap = std.array_hash_map.Custom;
 
 const App = @import("app.zig");
 const WindowState = App.WindowState;
@@ -14,7 +15,6 @@ const chunk_pool = @import("chunk_pool.zig");
 const datastruct = @import("datastruct.zig");
 const DoublyLinkedList = datastruct.DoublyLinkedList;
 const TaggedLinkedList = datastruct.TaggedLinkedList;
-const ArrayHashMap = std.array_hash_map.String;
 
 pub var curr_state: ?*ViewState = null;
 pub var null_block: Block = .empty;

@@ -5,9 +5,10 @@ const SinglyLinkedList = @import("linked_list.zig").SinglyLinkedList;
 
 pub fn TaggedLinkedList(Union: type) type {
     return struct {
-        pub const Value = Union;
-
         const info = @typeInfo(Union).@"union";
+        const fields = info.fields;
+
+        pub const Value = Union;
 
         pub const Tag = info.tag_type orelse
             @compileError("TaggedLinkedListCollection requires a tagged union");
@@ -18,8 +19,6 @@ pub fn TaggedLinkedList(Union: type) type {
                 value: @FieldType(Union, @tagName(tag)),
             };
         }
-
-        const fields = info.fields;
 
         pub const Lists = bkl: {
             var field_names: [fields.len][]const u8 = undefined;
