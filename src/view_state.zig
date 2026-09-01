@@ -38,6 +38,22 @@ pub fn start(window_state: *WindowState) !void {
 
 pub fn end() void {
     const state = curr_state orelse unreachable;
+
+    //we need to produce our layout
+    //lets do first width
+    //then height
+    //
+    //width;
+    //fit size ,
+    //grow/shrink
+    //wrap text (not yet)
+    //
+    //height
+    //fit size
+    //grow/srhink
+    //
+    //positions and alignment
+
     state.frame += 1;
     const arena_index = state.frame % state.frame_arenas.len;
     _ = state.frame_arenas[arena_index].reset(.retain_capacity);
@@ -51,6 +67,9 @@ const Stacks = TaggedLinkedList(union(enum) {
     color: [4]f32,
     width: Size,
     height: Size,
+    alignment: [2]Alignment,
+    padding: [4]f32,
+    gap: f32,
 });
 
 fn stackFlag(tag: Stacks.Tag) u64 {
@@ -152,6 +171,13 @@ const Size = struct {
     kind: SizeKind,
 };
 
+const Alignment = enum(u2) {
+    none,
+    start,
+    center,
+    end,
+};
+
 const Block = struct {
     pub const empty: Block = .{
         .childrens = .empty,
@@ -159,10 +185,13 @@ const Block = struct {
         .prev = null,
         .parent = null,
         .axis = .x,
-        .sizing = .{ .zero, .zero },
-        .size = .{ 0.0, 0.0 },
-        .position = .{ 0.0, 0.0 },
-        .color = .{ 0.0, 0.0, 0.0, 0.0 },
+        .sizing = @splat(.zero),
+        .size = @splat(0.0),
+        .position = @splat(0.0),
+        .color = @splat(0.0),
+        .padding = @splat(0.0),
+        .gap = 0,
+        .alignment = @splat(.none),
     };
 
     childrens: DoublyLinkedList(Block),
@@ -175,6 +204,9 @@ const Block = struct {
     axis: Axis,
     sizing: [2]Size,
     color: [4]f32,
+    padding: [4]f32,
+    gap: f32,
+    alignment: [2]Alignment,
 
     size: [2]f32,
     position: [2]f32,
