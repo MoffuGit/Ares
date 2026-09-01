@@ -77,6 +77,71 @@ pub fn end() void {
     _ = state.frame_arenas[arena_index].reset(.retain_capacity);
 }
 
+pub fn pushAttr(attr: Attribute) !void {
+    const state = curr_state orelse unreachable;
+    const arena = state.frameArena();
+
+    switch (attr) {
+        inline else => |val, flag| {
+            assert(state.stack_pop_flags & stackFlag(flag) == 0);
+
+            const node = try arena.create(Stacks.Node(flag));
+            node.* = .{ .value = val };
+            state.stacks.prepend(flag, node);
+        },
+    }
+}
+
+pub fn popAttr(comptime flag: Flags) void {
+    const state = curr_state orelse unreachable;
+
+    assert(state.stack_pop_flags & stackFlag(flag) == 0);
+
+    if (state.stacks.pop(flag) == null) unreachable;
+}
+
+pub fn nextAttr(attr: Attribute) !void {
+    const state = curr_state orelse unreachable;
+
+    try pushAttr(attr);
+    state.flagStack(meta.activeTag(attr));
+}
+
+pub fn nextAttrs(values: []const Attribute) !void {
+    for (values) |value| {
+        try nextAttr(value);
+    }
+}
+
+pub fn box() !*Box {
+    const state = curr_state orelse unreachable;
+    const arena = state.frameArena();
+
+    const new = try arena.create(Box);
+    new.* = ._null;
+
+    state.box_count += 1;
+
+    if (state.stacks.get(.parent).head) |parent| {
+        parent.value.childrens.prepend(new);
+        new.parent = parent.value;
+    }
+
+    if (state.stacks.get(.color).head) |node| new.color = node.value;
+
+    if (state.stacks.get(.axis).head) |node| new.axis = node.value;
+
+    if (state.stacks.get(.width).head) |node| new.sizing[0] = node.value;
+    if (state.stacks.get(.min_width).head) |node| new.minimum[0] = node.value;
+
+    if (state.stacks.get(.height).head) |node| new.sizing[1] = node.value;
+    if (state.stacks.get(.min_height).head) |node| new.minimum[1] = node.value;
+
+    state.popFlagged();
+
+    return new;
+}
+
 const Stacks = TaggedLinkedList(union(enum) {
     parent: *Box,
     axis: Axis,
@@ -162,71 +227,6 @@ pub const ViewState = struct {
         }
     }
 };
-
-pub fn pushAttr(attr: Attribute) !void {
-    const state = curr_state orelse unreachable;
-    const arena = state.frameArena();
-
-    switch (attr) {
-        inline else => |val, flag| {
-            assert(state.stack_pop_flags & stackFlag(flag) == 0);
-
-            const node = try arena.create(Stacks.Node(flag));
-            node.* = .{ .value = val };
-            state.stacks.prepend(flag, node);
-        },
-    }
-}
-
-pub fn popAttr(comptime flag: Flags) void {
-    const state = curr_state orelse unreachable;
-
-    assert(state.stack_pop_flags & stackFlag(flag) == 0);
-
-    if (state.stacks.pop(flag) == null) unreachable;
-}
-
-pub fn nextAttr(attr: Attribute) !void {
-    const state = curr_state orelse unreachable;
-
-    try pushAttr(attr);
-    state.flagStack(meta.activeTag(attr));
-}
-
-pub fn nextAttrs(values: []const Attribute) !void {
-    for (values) |value| {
-        try nextAttr(value);
-    }
-}
-
-pub fn box() !*Box {
-    const state = curr_state orelse unreachable;
-    const arena = state.frameArena();
-
-    const new = try arena.create(Box);
-    new.* = ._null;
-
-    state.box_count += 1;
-
-    if (state.stacks.get(.parent).head) |parent| {
-        parent.value.childrens.prepend(new);
-        new.parent = parent.value;
-    }
-
-    if (state.stacks.get(.color).head) |node| new.color = node.value;
-
-    if (state.stacks.get(.axis).head) |node| new.axis = node.value;
-
-    if (state.stacks.get(.width).head) |node| new.sizing[0] = node.value;
-    if (state.stacks.get(.min_width).head) |node| new.minimum[0] = node.value;
-
-    if (state.stacks.get(.height).head) |node| new.sizing[1] = node.value;
-    if (state.stacks.get(.min_height).head) |node| new.minimum[1] = node.value;
-
-    state.popFlagged();
-
-    return new;
-}
 
 const Axis = enum(u1) { x = 0, y = 1 };
 
@@ -356,4 +356,27 @@ test "Basic Operations" {
     const manually_popped = try box();
     try testing.expectEqual(Axis.x, manually_popped.axis);
     try testing.expect(window_state.view_state.stacks.get(.axis).head != null);
+}
+
+test "Fixed Layout" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+
+    var window_state: WindowState = undefined;
+    try window_state.init(&.{}, .default, gpa, io);
+    defer window_state.deinit();
+
+    {
+        try start(&window_state);
+        defer end();
+
+        try nextAttrs(&.{ .{ .width = .{ .fixed = 800 } }, .{ .height = .{ .fixed = 800 } } });
+        _ = try box();
+
+        try nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 120 } } });
+        _ = try box();
+
+        try nextAttrs(&.{ .{ .width = .{ .fixed = 509 } }, .{ .height = .{ .fixed = 789 } } });
+        _ = try box();
+    }
 }
