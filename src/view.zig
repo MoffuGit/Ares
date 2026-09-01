@@ -107,7 +107,7 @@ pub fn pushAttr(attr: Attribute) !void {
 
     switch (attr) {
         inline else => |val, flag| {
-            assert(state.stack_pop_flags & stackFlag(flag) == 0);
+            assert(state.pop_flags & stackFlag(flag) == 0);
 
             const node = try arena.create(Stacks.Node(flag));
             node.* = .{ .value = val };
@@ -119,7 +119,7 @@ pub fn pushAttr(attr: Attribute) !void {
 pub fn popAttr(comptime flag: Flags) void {
     const state = curr_state orelse unreachable;
 
-    assert(state.stack_pop_flags & stackFlag(flag) == 0);
+    assert(state.pop_flags & stackFlag(flag) == 0);
 
     if (state.stacks.pop(flag) == null) unreachable;
 }
@@ -194,14 +194,14 @@ pub const ViewState = struct {
     frame_arenas: [2]heap.ArenaAllocator,
 
     stacks: Stacks,
-    stack_pop_flags: u64,
+    pop_flags: u64,
 
     chunks: chunk_pool.ChunkAllocator,
 
     pub fn init(self: *ViewState, gpa: Allocator) !void {
         self.* = .{
             .stacks = .empty,
-            .stack_pop_flags = 0,
+            .pop_flags = 0,
             .root = undefined,
             .block_count = 0,
             .frame = 0,
@@ -228,7 +228,7 @@ pub const ViewState = struct {
     pub fn reset(self: *ViewState) void {
         self.root = undefined;
         self.stacks = .empty;
-        self.stack_pop_flags = 0;
+        self.pop_flags = 0;
         self.block_count = 0;
     }
 
@@ -236,14 +236,14 @@ pub const ViewState = struct {
         self: *ViewState,
         flag: Flags,
     ) void {
-        self.stack_pop_flags |= stackFlag(flag);
+        self.pop_flags |= stackFlag(flag);
     }
 
     pub fn popFlagged(self: *ViewState) void {
         inline for (@typeInfo(Stacks.Tag).@"enum".fields) |field| {
             const flag: Flags = @enumFromInt(field.value);
-            if (self.stack_pop_flags & stackFlag(flag) != 0) {
-                self.stack_pop_flags &= ~stackFlag(flag);
+            if (self.pop_flags & stackFlag(flag) != 0) {
+                self.pop_flags &= ~stackFlag(flag);
                 if (self.stacks.pop(flag) == null) unreachable;
             }
         }
@@ -397,7 +397,7 @@ test "Basic Operations" {
         try testing.expectEqual(color, styled.color);
         try testing.expect(window_state.view_state.stacks.get(.axis).is_empty());
         try testing.expect(window_state.view_state.stacks.get(.color).is_empty());
-        try testing.expectEqual(@as(u64, 0), window_state.view_state.stack_pop_flags);
+        try testing.expectEqual(@as(u64, 0), window_state.view_state.pop_flags);
     }
 
     {
@@ -411,7 +411,7 @@ test "Basic Operations" {
         try testing.expectEqual(color, styled.color);
         try testing.expect(window_state.view_state.stacks.get(.axis).is_empty());
         try testing.expect(window_state.view_state.stacks.get(.color).is_empty());
-        try testing.expectEqual(@as(u64, 0), window_state.view_state.stack_pop_flags);
+        try testing.expectEqual(@as(u64, 0), window_state.view_state.pop_flags);
     }
 
     const unstyled = try block();
