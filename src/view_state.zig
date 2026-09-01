@@ -57,6 +57,9 @@ pub fn end() void {
     //after we have the layout Algorithm
     //i want to add the cache
     //and after the cache i want to add signals( input events )
+    //
+    //another thing we would need to add are more styles (not only bg color)
+    //those are thing like borders, corner radius, blur, transparency...
 
     state.frame += 1;
     const arena_index = state.frame % state.frame_arenas.len;
