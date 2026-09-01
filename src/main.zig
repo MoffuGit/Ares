@@ -12,7 +12,7 @@ const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const Waker = Loop.Waker;
 const renderer = @import("renderer.zig");
-const view = @import("view_state.zig");
+const view = @import("view.zig");
 const win = @import("window.zig");
 const Window = win.Window;
 
