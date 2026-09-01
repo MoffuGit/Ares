@@ -140,7 +140,7 @@ const SizeKind = enum(u2) {
     percent,
 };
 
-const Size = packed struct {
+const Size = struct {
     pub const zero: Size = .{
         .value = 0,
         .min = 0,
