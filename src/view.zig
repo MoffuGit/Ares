@@ -25,6 +25,11 @@ pub fn start(window_state: *WindowState) !void {
 
     curr_state = state;
 
+    const size = window_state.size;
+    try nextAttrs(&.{
+        .{ .width = .{ .fixed = size.width } },
+        .{ .height = .{ .fixed = size.height } },
+    });
     const root = try box();
     state.root = root;
 
@@ -38,11 +43,37 @@ pub fn end() void {
     inline for (@typeInfo(Axis).@"enum".fields) |field| {
         const axis = field.value;
 
-        var iterator = state.preOrderIterator();
-        while (iterator.next()) |b| {
-            switch (b.sizing[axis]) {
-                .fixed => |size| b.size[axis] = size,
-                else => {},
+        {
+            var iterator = state.preOrderIterator();
+            while (iterator.next()) |b| {
+                switch (b.sizing[axis]) {
+                    .fixed => |size| b.size[axis] = size,
+                    else => {},
+                }
+            }
+        }
+
+        {
+            var iterator = state.preOrderIterator();
+            while (iterator.next()) |b| {
+                var position: f32 = 0.0;
+                var bounds: f32 = 0.0;
+
+                var children: ?*Box = b.childrens.first;
+                while (children) |child| : (children = child.next) {
+                    child.position[axis] = position;
+
+                    if (@intFromEnum(b.axis) == axis) {
+                        position += child.size[axis];
+                        bounds += child.size[axis];
+                    } else {
+                        bounds = @max(bounds, child.size[axis]);
+                    }
+
+                    child.abs_position[axis] = b.abs_position[axis] + child.position[axis];
+                }
+
+                b.bounds[axis] = bounds;
             }
         }
     }
@@ -116,7 +147,7 @@ pub fn box() !*Box {
     state.box_count += 1;
 
     if (state.stacks.get(.parent).head) |parent| {
-        parent.value.childrens.prepend(new);
+        parent.value.childrens.append(new);
         new.parent = parent.value;
     }
 
@@ -301,9 +332,11 @@ const Box = struct {
         .sizing = @splat(.zero),
         .size = @splat(0.0),
         .position = @splat(0.0),
+        .bounds = @splat(0.0),
+        .abs_position = @splat(0.0),
         .color = @splat(0.0),
         .padding = @splat(0.0),
-        .gap = 0,
+        .gap = 0.0,
         .alignment = @splat(.none),
     };
 
@@ -323,6 +356,8 @@ const Box = struct {
 
     size: [2]f32,
     position: [2]f32,
+    abs_position: [2]f32,
+    bounds: [2]f32,
 };
 
 test "Basic Operations" {
@@ -416,16 +451,70 @@ test "Fixed Layout" {
         try nextAttrs(&.{ .{ .width = .{ .fixed = 800 } }, .{ .height = .{ .fixed = 800 } } });
         const first = try box();
 
-        try nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 120 } } });
+        try pushAttr(.{ .parent = first });
+        try nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 800 } } });
+        const first_first = try box();
+
+        try nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 800 } } });
+        const first_second = try box();
+        popAttr(.parent);
+
+        try nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 120 } }, .{ .axis = .y } });
         const second = try box();
+
+        try pushAttr(.{ .parent = second });
+        try nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 60 } } });
+        const second_first = try box();
+
+        try nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 60 } } });
+        const second_second = try box();
+        popAttr(.parent);
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 509 } }, .{ .height = .{ .fixed = 789 } } });
         const third = try box();
+
+        try pushAttr(.{ .parent = third });
+        try nextAttrs(&.{ .{ .width = .{ .fixed = 600 } }, .{ .height = .{ .fixed = 800 } } });
+        const third_first = try box();
+
+        popAttr(.parent);
 
         end();
 
         try testing.expectEqual([2]f32{ 800, 800 }, first.size);
         try testing.expectEqual([2]f32{ 120, 120 }, second.size);
         try testing.expectEqual([2]f32{ 509, 789 }, third.size);
+
+        try testing.expectEqual([2]f32{ 0, 0 }, first.position);
+        try testing.expectEqual([2]f32{ 0, 0 }, first.abs_position);
+        try testing.expectEqual([2]f32{ 800, 800 }, first.bounds);
+
+        try testing.expectEqual([2]f32{ 0, 0 }, first_first.position);
+        try testing.expectEqual([2]f32{ 0, 0 }, first_first.abs_position);
+        try testing.expectEqual([2]f32{ 0, 0 }, first_first.bounds);
+
+        try testing.expectEqual([2]f32{ 400, 0 }, first_second.position);
+        try testing.expectEqual([2]f32{ 400, 0 }, first_second.abs_position);
+        try testing.expectEqual([2]f32{ 0, 0 }, first_second.bounds);
+
+        try testing.expectEqual([2]f32{ 800, 0 }, second.position);
+        try testing.expectEqual([2]f32{ 800, 0 }, second.abs_position);
+        try testing.expectEqual([2]f32{ 120, 120 }, second.bounds);
+
+        try testing.expectEqual([2]f32{ 0, 0 }, second_first.position);
+        try testing.expectEqual([2]f32{ 800, 0 }, second_first.abs_position);
+        try testing.expectEqual([2]f32{ 0, 0 }, second_first.bounds);
+
+        try testing.expectEqual([2]f32{ 0, 60 }, second_second.position);
+        try testing.expectEqual([2]f32{ 800, 60 }, second_second.abs_position);
+        try testing.expectEqual([2]f32{ 0, 0 }, second_second.bounds);
+
+        try testing.expectEqual([2]f32{ 920, 0 }, third.position);
+        try testing.expectEqual([2]f32{ 920, 0 }, third.abs_position);
+        try testing.expectEqual([2]f32{ 600, 800 }, third.bounds);
+
+        try testing.expectEqual([2]f32{ 0, 0 }, third_first.position);
+        try testing.expectEqual([2]f32{ 920, 0 }, third_first.abs_position);
+        try testing.expectEqual([2]f32{ 0, 0 }, third_first.bounds);
     }
 }
