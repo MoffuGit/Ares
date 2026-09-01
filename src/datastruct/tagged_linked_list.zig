@@ -11,7 +11,7 @@ pub fn TaggedLinkedList(Union: type) type {
         pub const Value = Union;
 
         pub const Tag = info.tag_type orelse
-            @compileError("TaggedLinkedListCollection requires a tagged union");
+            @compileError("TaggedLinkedList requires a tagged union");
 
         pub fn Node(comptime tag: Tag) type {
             return struct {
