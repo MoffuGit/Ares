@@ -21,12 +21,12 @@ pub fn start(window_state: *WindowState) !void {
     assert(curr_state == null);
 
     const state = &window_state.view_state;
+    curr_state = state;
+
     state.root = undefined;
     state.stacks = .empty;
     state.stack_pop_flags = 0;
     state.box_count = 0;
-
-    curr_state = state;
 
     const root = try box();
     state.root = root;
@@ -36,6 +36,7 @@ pub fn start(window_state: *WindowState) !void {
 
 pub fn end() void {
     const state = curr_state orelse unreachable;
+    defer curr_state = null;
 
     // inline for (comptime meta.tags(Axis).*) |axis| {
     //     const curr: ?*Box = state.root;
@@ -75,8 +76,6 @@ pub fn end() void {
     state.frame += 1;
     const arena_index = state.frame % state.frame_arenas.len;
     _ = state.frame_arenas[arena_index].reset(.retain_capacity);
-
-    curr_state = null;
 }
 
 const Stacks = TaggedLinkedList(union(enum) {
@@ -138,12 +137,13 @@ pub const ViewState = struct {
 
 pub fn pushAttr(attr: Stacks.Value) !void {
     const state = curr_state orelse unreachable;
+    const arena = state.frameArena();
 
     switch (attr) {
         inline else => |val, tag| {
             assert(state.stack_pop_flags & stackFlag(tag) == 0);
 
-            const node = try state.frameArena().create(Stacks.Node(tag));
+            const node = try arena.create(Stacks.Node(tag));
             node.* = .{ .value = val };
             state.stacks.prepend(tag, node);
         },
@@ -152,13 +152,17 @@ pub fn pushAttr(attr: Stacks.Value) !void {
 
 pub fn popAttr(comptime tag: Stacks.Tag) void {
     const state = curr_state orelse unreachable;
+
     assert(state.stack_pop_flags & stackFlag(tag) == 0);
+
     if (state.stacks.pop(tag) == null) unreachable;
 }
 
 pub fn setAttr(value: Stacks.Value) !void {
     const state = curr_state orelse unreachable;
+
     try pushAttr(value);
+
     state.stack_pop_flags |= stackFlag(meta.activeTag(value));
 }
 
