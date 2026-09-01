@@ -37,18 +37,18 @@ pub fn start(window_state: *WindowState) !void {
 pub fn end() void {
     const state = curr_state orelse unreachable;
 
-    inline for (comptime meta.tags(Axis).*) |axis| {
-        const curr: ?*Box = state.root;
-
-        while (curr) |b| {
-            switch (b.sizing[@intFromEnum(axis)].kind) {
-                .fixed => {
-                    b.size[@intFromEnum(axis)] = b.sizing[@intFromEnum(axis)].value;
-                },
-                else => {},
-            }
-        }
-    }
+    // inline for (comptime meta.tags(Axis).*) |axis| {
+    //     const curr: ?*Box = state.root;
+    //
+    //     while (curr) |b| {
+    //         switch (b.sizing[@intFromEnum(axis)].kind) {
+    //             .fixed => {
+    //                 b.size[@intFromEnum(axis)] = b.sizing[@intFromEnum(axis)].value;
+    //             },
+    //             else => {},
+    //         }
+    //     }
+    // }
 
     //we need to produce our layout
     //lets do first width
