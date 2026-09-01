@@ -38,22 +38,15 @@ pub fn end() void {
     inline for (@typeInfo(Axis).@"enum".fields) |field| {
         const axis = field.value;
 
-        var curr: ?*Box = state.root;
-
-        while (curr) |b| {
+        var iterator = state.preOrderIterator();
+        while (iterator.next()) |b| {
             switch (b.sizing[axis]) {
                 .fixed => |size| b.size[axis] = size,
                 else => {},
             }
-
-            curr = null;
         }
     }
 
-    //we need to produce our layout
-    //lets do first width
-    //then height
-    //
     //width;
     //fit size ,
     //grow/shrink
@@ -226,6 +219,57 @@ pub const ViewState = struct {
             }
         }
     }
+
+    const PreOrderIterator = struct {
+        node: ?*Box,
+
+        pub fn next(self: *PreOrderIterator) ?*Box {
+            const current = self.node orelse return null;
+            self.node = nextPreOrder(current);
+
+            return current;
+        }
+
+        fn nextPreOrder(current: *Box) ?*Box {
+            if (current.childrens.first) |child| return child;
+
+            var ancestor = current;
+            while (true) {
+                if (ancestor.next) |sibling| return sibling;
+                ancestor = ancestor.parent orelse return null;
+            }
+        }
+    };
+
+    const PostOrderIterator = struct {
+        node: ?*Box,
+
+        pub fn next(self: *PostOrderIterator) ?*Box {
+            const current = self.node orelse return null;
+            self.node = nextPostOrder(current);
+
+            return current;
+        }
+
+        fn nextPostOrder(current: *Box) ?*Box {
+            const parent = current.parent orelse return null;
+            return if (current.next) |sibling| firstPostOrder(sibling) else parent;
+        }
+    };
+
+    pub fn preOrderIterator(self: *ViewState) PreOrderIterator {
+        return .{ .node = self.root };
+    }
+
+    pub fn postOrderIterator(self: *ViewState) PostOrderIterator {
+        return .{ .node = firstPostOrder(self.root) };
+    }
+
+    fn firstPostOrder(root: *Box) *Box {
+        var node = root;
+        while (node.childrens.first) |child| node = child;
+        return node;
+    }
 };
 
 const Axis = enum(u1) { x = 0, y = 1 };
@@ -368,15 +412,20 @@ test "Fixed Layout" {
 
     {
         try start(&window_state);
-        defer end();
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 800 } }, .{ .height = .{ .fixed = 800 } } });
-        _ = try box();
+        const first = try box();
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 120 } } });
-        _ = try box();
+        const second = try box();
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 509 } }, .{ .height = .{ .fixed = 789 } } });
-        _ = try box();
+        const third = try box();
+
+        end();
+
+        try testing.expectEqual([2]f32{ 800, 800 }, first.size);
+        try testing.expectEqual([2]f32{ 120, 120 }, second.size);
+        try testing.expectEqual([2]f32{ 509, 789 }, third.size);
     }
 }
