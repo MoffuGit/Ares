@@ -34,7 +34,6 @@ pub const ViewState = struct {
         width_shrink: f32,
         height: Sizing,
         height_shrink: f32,
-        alignment: [2]Alignment,
         flags: Block.Flags,
     });
 
@@ -228,13 +227,6 @@ const Sizing = union(enum) {
     percent: f32,
 };
 
-const Alignment = enum(u2) {
-    none,
-    start,
-    center,
-    end,
-};
-
 const Block = struct {
     children: DoublyLinkedList(Block),
     child_count: u8,
@@ -247,7 +239,6 @@ const Block = struct {
     sizing: [2]Sizing,
     shrink: [2]f32,
     color: [4]f32,
-    alignment: [2]Alignment,
     flags: Flags,
 
     size: [2]f32,
@@ -271,7 +262,6 @@ const Block = struct {
         .sizing = @splat(.zero),
         .shrink = @splat(1.0),
         .color = @splat(0.0),
-        .alignment = @splat(.none),
         .flags = .{},
         .size = @splat(0.0),
         .position = @splat(0.0),
@@ -292,7 +282,6 @@ const Block = struct {
         if (state.stacks.get(.height).head) |node| self.sizing[1] = node.value;
         if (state.stacks.get(.width_shrink).head) |node| self.shrink[0] = clamp(node.value, 0.0, 1.0);
         if (state.stacks.get(.height_shrink).head) |node| self.shrink[1] = clamp(node.value, 0.0, 1.0);
-        if (state.stacks.get(.alignment).head) |node| self.alignment = node.value;
 
         const stack_flags: u2 = if (state.stacks.get(.flags).head) |node| @bitCast(node.value) else 0;
         self.flags = @bitCast(@as(u2, @bitCast(flags)) | stack_flags);
