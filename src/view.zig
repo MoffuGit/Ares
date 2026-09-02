@@ -7,6 +7,8 @@ const heap = std.heap;
 const assert = std.debug.assert;
 const testing = std.testing;
 const meta = std.meta;
+const clamp = std.math.clamp;
+const fmt = std.fmt;
 
 const App = @import("app.zig");
 const WindowState = App.WindowState;
@@ -103,7 +105,7 @@ pub fn end() void {
                     while (children) |child| : (children = child.next) {
                         const size = child.size[axis];
                         const overflow = size - allowed;
-                        const fix = std.math.clamp(overflow, 0, size);
+                        const fix = clamp(overflow, 0, size);
                         if (fix > 0) child.size[axis] -= fix;
                     }
                 }
@@ -123,11 +125,12 @@ pub fn end() void {
                     const overflow = used - allowed;
 
                     if (overflow > 0 and aviable > 0) {
-                        const fixup = std.math.clamp(overflow / aviable, 0, 1);
                         children = b.childrens.first;
 
                         while (children) |child| : (children = child.next) {
-                            child.size[axis] -= child.size[axis] * (1.0 - child.shrink[axis]) * fixup;
+                            child.size[axis] -= child.size[axis] *
+                                (1.0 - child.shrink[axis]) *
+                                clamp(overflow / aviable, 0, 1);
                         }
                     }
                 }
@@ -256,7 +259,7 @@ pub const ViewState = struct {
 
     arena: heap.ArenaAllocator,
 
-    root: *Block,
+    root: ?*Block,
     block_count: u64,
 
     frame: u64,
@@ -271,7 +274,7 @@ pub const ViewState = struct {
         self.* = .{
             .stacks = .empty,
             .pop_flags = 0,
-            .root = undefined,
+            .root = null,
             .block_count = 0,
             .frame = 0,
             .frame_arenas = .{ .init(gpa), .init(gpa) },
@@ -295,7 +298,7 @@ pub const ViewState = struct {
     }
 
     pub fn reset(self: *ViewState) void {
-        self.root = undefined;
+        self.root = null;
         self.stacks = .empty;
         self.pop_flags = 0;
         self.block_count = 0;
@@ -360,7 +363,7 @@ pub const ViewState = struct {
     }
 
     pub fn postOrderIterator(self: *ViewState) PostOrderIterator {
-        return .{ .node = firstPostOrder(self.root) };
+        return .{ .node = if (self.root) |root| firstPostOrder(root) else null };
     }
 
     fn firstPostOrder(root: *Block) *Block {
@@ -389,6 +392,8 @@ const Alignment = enum(u2) {
 };
 
 const Block = struct {
+    const Key = u64;
+
     const Flags = packed struct {
         const allowOverflow: Flags = .{
             .overflow = 0b11,
@@ -454,11 +459,11 @@ const Block = struct {
 
         if (state.stacks.get(.width).head) |node| self.sizing[0] = node.value;
 
-        if (state.stacks.get(.width_shrink).head) |node| self.shrink[0] = std.math.clamp(node.value, 0.0, 1.0);
+        if (state.stacks.get(.width_shrink).head) |node| self.shrink[0] = clamp(node.value, 0.0, 1.0);
 
         if (state.stacks.get(.height).head) |node| self.sizing[1] = node.value;
 
-        if (state.stacks.get(.height_shrink).head) |node| self.shrink[1] = std.math.clamp(node.value, 0.0, 1.0);
+        if (state.stacks.get(.height_shrink).head) |node| self.shrink[1] = clamp(node.value, 0.0, 1.0);
 
         const stack_flags: u2 = if (state.stacks.get(.flags).head) |node| @bitCast(node.value) else 0;
 
@@ -496,7 +501,7 @@ test "Basic Operations" {
 
         try testing.expectEqual(2, state.block_count);
         const root = state.root;
-        try testing.expectEqual(first, root.childrens.last);
+        try testing.expectEqual(first, root.?.childrens.last);
     }
 
     try start(&window_state);
