@@ -731,68 +731,68 @@ test "Full Percent Width With Fixed Siblings" {
     try testing.expectEqual([2]f32{ 500, 0 }, last.position);
     try testing.expectEqual([2]f32{ 500, 0 }, last.abs_position);
 }
-//
-// test "Fit Layout" {
-//     const gpa = testing.allocator;
-//     const io = testing.io;
-//
-//     var window_state: WindowState = undefined;
-//     try window_state.init(&.{}, .default, gpa, io);
-//     defer window_state.deinit();
-//
-//     try start(&window_state);
-//
-//     try nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 100 } } });
-//     const spacer = try block();
-//
-//     try nextAttrs(&.{ .{ .width = .fit }, .{ .height = .fit }, .{ .axis = .y } });
-//     const parent = try block();
-//
-//     try pushAttr(.{ .parent = parent });
-//     try nextAttrs(&.{ .{ .width = .fit }, .{ .height = .fit } });
-//     const first = try block();
-//
-//     try pushAttr(.{ .parent = first });
-//     try nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 150 } } });
-//     const first_first = try block();
-//
-//     try nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 150 } } });
-//     const first_second = try block();
-//     popAttr(.parent);
-//
-//     try nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 450 } } });
-//     const second = try block();
-//     popAttr(.parent);
-//
-//     end();
-//
-//     try testing.expectEqual([2]f32{ 100, 100 }, spacer.size);
-//     try testing.expectEqual([2]f32{ 0, 0 }, spacer.position);
-//     try testing.expectEqual([2]f32{ 0, 0 }, spacer.abs_position);
-//     try testing.expectEqual([2]f32{ 0, 0 }, spacer.bounds);
-//
-//     try testing.expectEqual([2]f32{ 400, 600 }, parent.size);
-//     try testing.expectEqual([2]f32{ 100, 0 }, parent.position);
-//     try testing.expectEqual([2]f32{ 100, 0 }, parent.abs_position);
-//     try testing.expectEqual([2]f32{ 400, 600 }, parent.bounds);
-//
-//     try testing.expectEqual([2]f32{ 200, 150 }, first.size);
-//     try testing.expectEqual([2]f32{ 0, 0 }, first.position);
-//     try testing.expectEqual([2]f32{ 100, 0 }, first.abs_position);
-//     try testing.expectEqual([2]f32{ 200, 150 }, first.bounds);
-//
-//     try testing.expectEqual([2]f32{ 100, 150 }, first_first.size);
-//     try testing.expectEqual([2]f32{ 0, 0 }, first_first.position);
-//     try testing.expectEqual([2]f32{ 100, 0 }, first_first.abs_position);
-//     try testing.expectEqual([2]f32{ 0, 0 }, first_first.bounds);
-//
-//     try testing.expectEqual([2]f32{ 100, 150 }, first_second.size);
-//     try testing.expectEqual([2]f32{ 100, 0 }, first_second.position);
-//     try testing.expectEqual([2]f32{ 200, 0 }, first_second.abs_position);
-//     try testing.expectEqual([2]f32{ 0, 0 }, first_second.bounds);
-//
-//     try testing.expectEqual([2]f32{ 400, 450 }, second.size);
-//     try testing.expectEqual([2]f32{ 0, 150 }, second.position);
-//     try testing.expectEqual([2]f32{ 100, 150 }, second.abs_position);
-//     try testing.expectEqual([2]f32{ 0, 0 }, second.bounds);
-// }
+
+test "Fit Layout" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+
+    var window_state: WindowState = undefined;
+    try window_state.init(&.{}, .default, gpa, io);
+    defer window_state.deinit();
+
+    try start(&window_state);
+
+    try nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 100 } } });
+    const spacer = try block(.{});
+
+    try nextAttrs(&.{ .{ .width = .fit }, .{ .height = .fit }, .{ .axis = .y } });
+    const parent = try block(.{});
+
+    try pushAttr(.{ .parent = parent });
+    try nextAttrs(&.{ .{ .width = .fit }, .{ .height = .fit } });
+    const first = try block(.{});
+
+    try pushAttr(.{ .parent = first });
+    try nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 150 } } });
+    const first_first = try block(.{});
+
+    try nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 150 } } });
+    const first_second = try block(.{});
+    popAttr(.parent);
+
+    try nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 450 } } });
+    const second = try block(.{});
+    popAttr(.parent);
+
+    end();
+
+    try testing.expectEqual([2]f32{ 100, 100 }, spacer.size);
+    try testing.expectEqual([2]f32{ 0, 0 }, spacer.position);
+    try testing.expectEqual([2]f32{ 0, 0 }, spacer.abs_position);
+    try testing.expectEqual([2]f32{ 0, 0 }, spacer.bounds);
+
+    try testing.expectEqual([2]f32{ 400, 600 }, parent.size);
+    try testing.expectEqual([2]f32{ 100, 0 }, parent.position);
+    try testing.expectEqual([2]f32{ 100, 0 }, parent.abs_position);
+    try testing.expectEqual([2]f32{ 400, 600 }, parent.bounds);
+
+    try testing.expectEqual([2]f32{ 200, 150 }, first.size);
+    try testing.expectEqual([2]f32{ 0, 0 }, first.position);
+    try testing.expectEqual([2]f32{ 100, 0 }, first.abs_position);
+    try testing.expectEqual([2]f32{ 200, 150 }, first.bounds);
+
+    try testing.expectEqual([2]f32{ 100, 150 }, first_first.size);
+    try testing.expectEqual([2]f32{ 0, 0 }, first_first.position);
+    try testing.expectEqual([2]f32{ 100, 0 }, first_first.abs_position);
+    try testing.expectEqual([2]f32{ 0, 0 }, first_first.bounds);
+
+    try testing.expectEqual([2]f32{ 100, 150 }, first_second.size);
+    try testing.expectEqual([2]f32{ 100, 0 }, first_second.position);
+    try testing.expectEqual([2]f32{ 200, 0 }, first_second.abs_position);
+    try testing.expectEqual([2]f32{ 0, 0 }, first_second.bounds);
+
+    try testing.expectEqual([2]f32{ 400, 450 }, second.size);
+    try testing.expectEqual([2]f32{ 0, 150 }, second.position);
+    try testing.expectEqual([2]f32{ 100, 150 }, second.abs_position);
+    try testing.expectEqual([2]f32{ 0, 0 }, second.bounds);
+}
