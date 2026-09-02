@@ -41,41 +41,6 @@ pub const ViewState = struct {
     pub const Attribute = Stacks.Value;
     pub const Node = Stacks.Node;
 
-    const PreOrderIterator = struct {
-        node: ?*Block,
-
-        pub fn next(self: *PreOrderIterator) ?*Block {
-            const current = self.node orelse return null;
-            self.node = nextPreOrder(current);
-            return current;
-        }
-
-        fn nextPreOrder(current: *Block) ?*Block {
-            if (current.children.first) |child| return child;
-
-            var ancestor = current;
-            while (true) {
-                if (ancestor.next) |sibling| return sibling;
-                ancestor = ancestor.parent orelse return null;
-            }
-        }
-    };
-
-    const PostOrderIterator = struct {
-        node: ?*Block,
-
-        pub fn next(self: *PostOrderIterator) ?*Block {
-            const current = self.node orelse return null;
-            self.node = nextPostOrder(current);
-            return current;
-        }
-
-        fn nextPostOrder(current: *Block) ?*Block {
-            const parent = current.parent orelse return null;
-            return if (current.next) |sibling| firstPostOrder(sibling) else parent;
-        }
-    };
-
     pub fn init(self: *ViewState, gpa: Allocator) !void {
         self.* = .{
             .arena = .init(gpa),
@@ -120,9 +85,11 @@ pub const ViewState = struct {
     }
 
     pub fn finish(self: *ViewState) void {
-        assert(self.root != null);
+        const root = self.root orelse unreachable;
 
-        layout(self);
+        inline for (0..2) |axis| {
+            root.layout(axis);
+        }
 
         self.frame += 1;
         const arena_index = self.frame % self.frame_arenas.len;
@@ -176,14 +143,6 @@ pub const ViewState = struct {
         for (attrs) |attr| try self.nextAttr(attr);
     }
 
-    pub fn preOrderIterator(self: *ViewState) PreOrderIterator {
-        return .{ .node = self.root };
-    }
-
-    pub fn postOrderIterator(self: *ViewState) PostOrderIterator {
-        return .{ .node = if (self.root) |root| firstPostOrder(root) else null };
-    }
-
     fn frameArena(self: *ViewState) Allocator {
         return self.frame_arenas[self.frame % self.frame_arenas.len].allocator();
     }
@@ -208,17 +167,11 @@ pub const ViewState = struct {
             }
         }
     }
-
-    fn firstPostOrder(root: *Block) *Block {
-        var node = root;
-        while (node.children.first) |child| node = child;
-        return node;
-    }
 };
 
-const Axis = enum(u1) { x = 0, y = 1 };
+pub const Axis = enum(u1) { x = 0, y = 1 };
 
-const Sizing = union(enum) {
+pub const Sizing = union(enum) {
     pub const zero: Sizing = .{ .fixed = 0 };
     pub const grow: Sizing = .{ .percent = 1 };
 
@@ -227,7 +180,7 @@ const Sizing = union(enum) {
     percent: f32,
 };
 
-const Block = struct {
+pub const Block = struct {
     children: DoublyLinkedList(Block),
     child_count: u8,
 
@@ -246,13 +199,13 @@ const Block = struct {
     abs_position: [2]f32,
     bounds: [2]f32,
 
-    const Flags = packed struct {
-        const allowOverflow: Flags = .{ .overflow = 0b11 };
+    pub const Flags = packed struct {
+        pub const allowOverflow: Flags = .{ .overflow = 0b11 };
 
         overflow: u2 = 0,
     };
 
-    const empty: Block = .{
+    pub const empty: Block = .{
         .children = .empty,
         .child_count = 0,
         .next = null,
@@ -286,146 +239,176 @@ const Block = struct {
         const stack_flags: u2 = if (state.stacks.get(.flags).head) |node| @bitCast(node.value) else 0;
         self.flags = @bitCast(@as(u2, @bitCast(flags)) | stack_flags);
     }
+
+    pub fn nextPreOrder(self: *Block) ?*Block {
+        if (self.children.first) |child| return child;
+
+        var ancestor = self;
+        while (true) {
+            if (ancestor.next) |sibling| return sibling;
+            ancestor = ancestor.parent orelse return null;
+        }
+    }
+
+    pub fn firstPostOrder(self: *Block) *Block {
+        var block = self;
+        while (block.children.first) |child| block = child;
+        return block;
+    }
+
+    pub fn nextPostOrder(self: *Block) ?*Block {
+        const parent = self.parent orelse return null;
+        return if (self.next) |sibling| sibling.firstPostOrder() else parent;
+    }
+
+    pub fn layout(self: *Block, axis: u1) void {
+        self.resolveFixedSizing(axis);
+        self.resolvePerSizing(axis);
+        self.resolveFitSizing(axis);
+        self.resolveOverflow(axis);
+        self.resolvePositions(axis);
+    }
+
+    pub fn resolveFixedSizing(self: *Block, axis: u1) void {
+        var block: ?*Block = self;
+        while (block) |current| : (block = current.nextPreOrder()) {
+            switch (current.sizing[axis]) {
+                .fixed => |fixed| current.size[axis] = fixed,
+                else => {},
+            }
+        }
+    }
+
+    pub fn resolvePerSizing(self: *Block, axis: u1) void {
+        var block: ?*Block = self;
+        while (block) |current| : (block = current.nextPreOrder()) {
+            switch (current.sizing[axis]) {
+                .percent => |percent| {
+                    const parent_size = parent_size: {
+                        var node = current.parent;
+                        while (node) |parent| : (node = parent.parent) {
+                            switch (parent.sizing[axis]) {
+                                .fixed, .percent => break :parent_size parent.size[axis],
+                                else => {},
+                            }
+                        }
+
+                        break :parent_size 0.0;
+                    };
+
+                    current.size[axis] = parent_size * percent;
+                },
+                else => {},
+            }
+        }
+    }
+
+    pub fn resolveFitSizing(self: *Block, axis: u1) void {
+        var block: ?*Block = self.firstPostOrder();
+        while (block) |current| : (block = current.nextPostOrder()) {
+            switch (current.sizing[axis]) {
+                .fit => {
+                    var total: f32 = 0.0;
+                    var children = current.children.first;
+                    while (children) |child| : (children = child.next) {
+                        if (@intFromEnum(current.axis) == axis) {
+                            total += child.size[axis];
+                        } else {
+                            total = @max(total, child.size[axis]);
+                        }
+                    }
+
+                    current.size[axis] = total;
+                },
+                else => {},
+            }
+        }
+    }
+
+    pub fn resolveOverflow(self: *Block, axis: u1) void {
+        var block: ?*Block = self;
+        while (block) |current| : (block = current.nextPreOrder()) {
+            const allowed = current.size[axis];
+            const overflow_mask = @as(u2, 1) << axis;
+
+            if (@intFromEnum(current.axis) != axis and
+                current.flags.overflow & overflow_mask == 0)
+            {
+                var children = current.children.first;
+                while (children) |child| : (children = child.next) {
+                    const size = child.size[axis];
+                    const overflow = size - allowed;
+                    const fix = clamp(overflow, 0, size);
+                    if (fix > 0) child.size[axis] -= fix;
+                }
+            }
+
+            if (@intFromEnum(current.axis) == axis and
+                current.flags.overflow & overflow_mask == 0)
+            {
+                var used: f32 = 0.0;
+                var available: f32 = 0.0;
+
+                var children = current.children.first;
+                while (children) |child| : (children = child.next) {
+                    used += child.size[axis];
+                    available += child.size[axis] * (1.0 - child.shrink[axis]);
+                }
+
+                const overflow = used - allowed;
+
+                if (overflow > 0 and available > 0) {
+                    children = current.children.first;
+
+                    while (children) |child| : (children = child.next) {
+                        child.size[axis] -= child.size[axis] *
+                            (1.0 - child.shrink[axis]) *
+                            clamp(overflow / available, 0, 1);
+                    }
+                }
+            }
+
+            if (current.flags.overflow & overflow_mask != 0) {
+                var children = current.children.first;
+                while (children) |child| : (children = child.next) {
+                    switch (child.sizing[axis]) {
+                        .percent => |percent| {
+                            child.size[axis] = current.size[axis] * percent;
+                        },
+                        else => {},
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn resolvePositions(self: *Block, axis: u1) void {
+        var block: ?*Block = self;
+        while (block) |current| : (block = current.nextPreOrder()) {
+            var position: f32 = 0.0;
+            var bounds: f32 = 0.0;
+
+            var children = current.children.first;
+            while (children) |child| : (children = child.next) {
+                child.position[axis] = position;
+
+                if (@intFromEnum(current.axis) == axis) {
+                    position += child.size[axis];
+                    bounds += child.size[axis];
+                } else {
+                    bounds = @max(bounds, child.size[axis]);
+                }
+
+                child.abs_position[axis] = current.abs_position[axis] + child.position[axis];
+            }
+
+            current.bounds[axis] = bounds;
+        }
+    }
 };
 
 fn stackFlag(flag: ViewState.Flags) u64 {
     return @as(u64, 1) << @intFromEnum(flag);
-}
-
-fn layout(state: *ViewState) void {
-    assert(state.root != null);
-
-    inline for (@typeInfo(Axis).@"enum".fields) |field| {
-        const axis = field.value;
-
-        {
-            var iterator = state.preOrderIterator();
-            while (iterator.next()) |block| {
-                switch (block.sizing[axis]) {
-                    .fixed => |size| block.size[axis] = size,
-                    .percent => |percent| {
-                        const parent_size = parent_size: {
-                            var node = block.parent;
-                            while (node) |parent| : (node = parent.parent) {
-                                switch (parent.sizing[axis]) {
-                                    .fixed, .percent => break :parent_size parent.size[axis],
-                                    else => {},
-                                }
-                            }
-
-                            break :parent_size 0.0;
-                        };
-
-                        block.size[axis] = parent_size * percent;
-                    },
-                    else => {},
-                }
-            }
-        }
-
-        {
-            var iterator = state.postOrderIterator();
-            while (iterator.next()) |block| {
-                switch (block.sizing[axis]) {
-                    .fit => {
-                        var total: f32 = 0.0;
-                        var children = block.children.first;
-                        while (children) |child| : (children = child.next) {
-                            if (@intFromEnum(block.axis) == axis) {
-                                total += child.size[axis];
-                            } else {
-                                total = @max(total, child.size[axis]);
-                            }
-                        }
-
-                        block.size[axis] = total;
-                    },
-                    else => {},
-                }
-            }
-        }
-
-        {
-            var iterator = state.preOrderIterator();
-            while (iterator.next()) |block| {
-                const allowed = block.size[axis];
-                const overflow_mask = @as(u2, 1) << axis;
-
-                if (@intFromEnum(block.axis) != axis and
-                    block.flags.overflow & overflow_mask == 0)
-                {
-                    var children = block.children.first;
-                    while (children) |child| : (children = child.next) {
-                        const size = child.size[axis];
-                        const overflow = size - allowed;
-                        const fix = clamp(overflow, 0, size);
-                        if (fix > 0) child.size[axis] -= fix;
-                    }
-                }
-
-                if (@intFromEnum(block.axis) == axis and
-                    block.flags.overflow & overflow_mask == 0)
-                {
-                    var used: f32 = 0.0;
-                    var available: f32 = 0.0;
-
-                    var children = block.children.first;
-                    while (children) |child| : (children = child.next) {
-                        used += child.size[axis];
-                        available += child.size[axis] * (1.0 - child.shrink[axis]);
-                    }
-
-                    const overflow = used - allowed;
-
-                    if (overflow > 0 and available > 0) {
-                        children = block.children.first;
-
-                        while (children) |child| : (children = child.next) {
-                            child.size[axis] -= child.size[axis] *
-                                (1.0 - child.shrink[axis]) *
-                                clamp(overflow / available, 0, 1);
-                        }
-                    }
-                }
-
-                if (block.flags.overflow & overflow_mask != 0) {
-                    var children = block.children.first;
-                    while (children) |child| : (children = child.next) {
-                        switch (child.sizing[axis]) {
-                            .percent => |percent| {
-                                child.size[axis] = block.size[axis] * percent;
-                            },
-                            else => {},
-                        }
-                    }
-                }
-            }
-        }
-
-        {
-            var iterator = state.preOrderIterator();
-            while (iterator.next()) |block| {
-                var position: f32 = 0.0;
-                var bounds: f32 = 0.0;
-
-                var children = block.children.first;
-                while (children) |child| : (children = child.next) {
-                    child.position[axis] = position;
-
-                    if (@intFromEnum(block.axis) == axis) {
-                        position += child.size[axis];
-                        bounds += child.size[axis];
-                    } else {
-                        bounds = @max(bounds, child.size[axis]);
-                    }
-
-                    child.abs_position[axis] = block.abs_position[axis] + child.position[axis];
-                }
-
-                block.bounds[axis] = bounds;
-            }
-        }
-    }
 }
 
 test "view state builds blocks and applies stacked attributes" {

@@ -183,19 +183,19 @@ pub fn render(app: *App, state: *WindowState, sync: bool) !void {
         .viewport_size = .{ state.size.width, state.size.height },
     });
 
-    var iterator = state.view_state.preOrderIterator();
-    while (iterator.next()) |box| {
+    var box = state.view_state.root;
+    while (box) |current| : (box = current.nextPreOrder()) {
         try frame.rect(.{
             .position = .{
-                box.abs_position[0],
-                box.abs_position[1],
-                box.abs_position[0] + box.size[0],
-                box.abs_position[1] + box.size[1],
+                current.abs_position[0],
+                current.abs_position[1],
+                current.abs_position[0] + current.size[0],
+                current.abs_position[1] + current.size[1],
             },
-            .color_0 = box.color,
-            .color_1 = box.color,
-            .color_2 = box.color,
-            .color_3 = box.color,
+            .color_0 = current.color,
+            .color_1 = current.color,
+            .color_2 = current.color,
+            .color_3 = current.color,
         });
     }
 
