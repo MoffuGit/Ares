@@ -171,17 +171,6 @@ pub fn end() void {
         }
     }
 
-    //width;
-    //fit size ,
-    //grow/shrink
-    //wrap text (not yet)
-    //
-    //height
-    //fit size
-    //grow/srhink
-    //
-    //positions and alignment
-    //
     //after we have the layout Algorithm
     //i want to add the cache
     //and after the cache i want to add signals( input events )
