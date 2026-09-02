@@ -164,8 +164,8 @@ pub fn render(app: *App, state: *WindowState, sync: bool) !void {
 
         try view.nextAttrs(&.{
             .{ .color = .{ 0.0, 1.0, 0.0, 1.0 } },
-            .{ .height_strictness = 0.0 },
-            .{ .width_strictness = 0.0 },
+            .{ .height_shrink = 0.0 },
+            .{ .width_shrink = 0.0 },
         });
         _ = try view.block(.{});
 

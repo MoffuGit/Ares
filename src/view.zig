@@ -117,7 +117,7 @@ pub fn end() void {
                     var children = b.childrens.first;
                     while (children) |child| : (children = child.next) {
                         used += child.size[axis];
-                        aviable += child.size[axis] * (1.0 - child.strictness[axis]);
+                        aviable += child.size[axis] * (1.0 - child.shrink[axis]);
                     }
 
                     const overflow = used - allowed;
@@ -127,7 +127,7 @@ pub fn end() void {
                         children = b.childrens.first;
 
                         while (children) |child| : (children = child.next) {
-                            child.size[axis] -= child.size[axis] * (1.0 - child.strictness[axis]) * fixup;
+                            child.size[axis] -= child.size[axis] * (1.0 - child.shrink[axis]) * fixup;
                         }
                     }
                 }
@@ -252,9 +252,9 @@ pub const ViewState = struct {
         axis: Axis,
         color: [4]f32,
         width: Size,
-        width_strictness: f32,
+        width_shrink: f32,
         height: Size,
-        height_strictness: f32,
+        height_shrink: f32,
         alignment: [2]Alignment,
         flags: Block.Flags,
     });
@@ -409,7 +409,7 @@ const Block = struct {
     };
 
     pub const _null: Block = .{
-        .strictness = @splat(1.0),
+        .shrink = @splat(1.0),
         .childrens = .empty,
         .next = null,
         .prev = null,
@@ -435,7 +435,7 @@ const Block = struct {
     parent: ?*Block,
     axis: Axis,
     sizing: [2]Size,
-    strictness: [2]f32,
+    shrink: [2]f32,
     color: [4]f32,
     alignment: [2]Alignment,
     flags: Flags,
@@ -465,11 +465,11 @@ const Block = struct {
 
         if (state.stacks.get(.width).head) |node| self.sizing[0] = node.value;
 
-        if (state.stacks.get(.width_strictness).head) |node| self.strictness[0] = std.math.clamp(node.value, 0.0, 1.0);
+        if (state.stacks.get(.width_shrink).head) |node| self.shrink[0] = std.math.clamp(node.value, 0.0, 1.0);
 
         if (state.stacks.get(.height).head) |node| self.sizing[1] = node.value;
 
-        if (state.stacks.get(.height_strictness).head) |node| self.strictness[1] = std.math.clamp(node.value, 0.0, 1.0);
+        if (state.stacks.get(.height_shrink).head) |node| self.shrink[1] = std.math.clamp(node.value, 0.0, 1.0);
 
         const stack_flags: u2 = if (state.stacks.get(.flags).head) |node| @bitCast(node.value) else 0;
 
@@ -716,8 +716,8 @@ test "Full Percent Width With Fixed Siblings" {
     const first = try block(.{});
 
     try nextAttrs(&.{
-        .{ .width = .grow },           .{ .height = .grow },
-        .{ .height_strictness = 0.0 }, .{ .width_strictness = 0.0 },
+        .{ .width = .grow },      .{ .height = .grow },
+        .{ .width_shrink = 0.0 }, .{ .height_shrink = 0.0 },
     });
     const middle = try block(.{});
 
