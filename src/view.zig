@@ -93,16 +93,53 @@ pub fn end() void {
         {
             var iterator = state.preOrderIterator();
             while (iterator.next()) |b| {
+                const allowed = b.size[axis];
+
                 if (@intFromEnum(b.axis) != axis and
                     b.flags.overflow & (@as(u2, 1) << axis) == 0)
                 {
-                    const allowed = b.size[axis];
                     var children = b.childrens.first;
                     while (children) |child| : (children = child.next) {
                         const size = child.size[axis];
                         const overflow = size - allowed;
                         const fix = std.math.clamp(overflow, 0, size);
                         if (fix > 0) child.size[axis] -= fix;
+                    }
+                }
+
+                if (@intFromEnum(b.axis) == axis and
+                    b.flags.overflow & (@as(u2, 1) << axis) == 0)
+                {
+                    var used: f32 = 0.0;
+                    var aviable: f32 = 0.0;
+
+                    var children = b.childrens.first;
+                    while (children) |child| : (children = child.next) {
+                        used += child.size[axis];
+                        aviable += child.size[axis] * (1.0 - child.minimum[axis]);
+                    }
+
+                    const overflow = used - allowed;
+
+                    if (overflow > 0 and aviable > 0) {
+                        const fixup = std.math.clamp(overflow / aviable, 0, 1);
+                        children = b.childrens.first;
+
+                        while (children) |child| : (children = child.next) {
+                            child.size[axis] -= child.size[axis] * (1.0 - child.minimum[axis]) * fixup;
+                        }
+                    }
+                }
+
+                if (b.flags.overflow & (@as(u2, 1) << axis) == 1) {
+                    var children = b.childrens.first;
+                    while (children) |child| : (children = child.next) {
+                        switch (child.sizing[axis]) {
+                            .percent => |percent| {
+                                child.size[axis] = b.size[axis] * percent;
+                            },
+                            else => {},
+                        }
                     }
                 }
             }
@@ -202,6 +239,7 @@ pub fn block(flags: Block.Flags) !*Block {
     state.block_count += 1;
 
     if (state.stacks.get(.parent).head) |parent| {
+        parent.value.child_count += 1;
         parent.value.childrens.append(new);
         new.parent = parent.value;
     }
@@ -211,10 +249,10 @@ pub fn block(flags: Block.Flags) !*Block {
     if (state.stacks.get(.axis).head) |node| new.axis = node.value;
 
     if (state.stacks.get(.width).head) |node| new.sizing[0] = node.value;
-    if (state.stacks.get(.min_width).head) |node| new.minimum[0] = node.value;
+    if (state.stacks.get(.width_strictness).head) |node| new.minimum[0] = std.math.clamp(node.value, 0.0, 1.0);
 
     if (state.stacks.get(.height).head) |node| new.sizing[1] = node.value;
-    if (state.stacks.get(.min_height).head) |node| new.minimum[1] = node.value;
+    if (state.stacks.get(.height_strictness).head) |node| new.minimum[1] = std.math.clamp(node.value, 0.0, 1.0);
 
     const stack_flags: u2 = if (state.stacks.get(.flags).head) |node| @bitCast(node.value) else 0;
     new.flags = @bitCast(@as(u2, @bitCast(flags)) | stack_flags);
@@ -234,9 +272,9 @@ pub const ViewState = struct {
         axis: Axis,
         color: [4]f32,
         width: Size,
-        min_width: f32,
+        width_strictness: f32,
         height: Size,
-        min_height: f32,
+        height_strictness: f32,
         alignment: [2]Alignment,
         flags: Block.Flags,
     });
@@ -405,9 +443,11 @@ const Block = struct {
         .color = @splat(0.0),
         .alignment = @splat(.none),
         .flags = .{},
+        .child_count = 0,
     };
 
     childrens: DoublyLinkedList(Block),
+    child_count: u8,
 
     next: ?*Block,
     prev: ?*Block,
@@ -516,6 +556,10 @@ test "Fixed Layout" {
 
         try pushAttr(.{ .flags = .allowOverflow });
 
+        try nextAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
+        const wrapper = try block(.{});
+        try pushAttr(.{ .parent = wrapper });
+
         try nextAttrs(&.{ .{ .width = .{ .fixed = 800 } }, .{ .height = .{ .fixed = 800 } } });
         const first = try block(.{});
 
@@ -545,6 +589,7 @@ test "Fixed Layout" {
         try nextAttrs(&.{ .{ .width = .{ .fixed = 600 } }, .{ .height = .{ .fixed = 800 } } });
         const third_first = try block(.{});
 
+        popAttr(.parent);
         popAttr(.parent);
         popAttr(.flags);
 
@@ -635,47 +680,57 @@ test "Fixed Layout" {
 //     try testing.expectEqual([2]f32{ 0, 0 }, second.bounds);
 // }
 //
-// test "Full Percent Width With Fixed Siblings" {
-//     const gpa = testing.allocator;
-//     const io = testing.io;
-//
-//     var window_state: WindowState = undefined;
-//     try window_state.init(&.{}, .default, gpa, io);
-//     defer window_state.deinit();
-//
-//     try start(&window_state);
-//
-//     try nextAttrs(&.{ .{ .width = .{ .fixed = 800 } }, .{ .height = .{ .fixed = 600 } } });
-//     const parent = try block();
-//
-//     try pushAttr(.{ .parent = parent });
-//     try nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 600 } } });
-//     const first = try block();
-//
-//     try nextAttrs(&.{ .{ .width = .grow }, .{ .height = .{ .fixed = 600 } } });
-//     const middle = try block();
-//
-//     try nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 600 } } });
-//     const last = try block();
-//     popAttr(.parent);
-//
-//     end();
-//
-//     try testing.expectEqual([2]f32{ 800, 600 }, parent.size);
-//     try testing.expectEqual([2]f32{ 1000, 600 }, parent.bounds);
-//
-//     try testing.expectEqual([2]f32{ 100, 600 }, first.size);
-//     try testing.expectEqual([2]f32{ 0, 0 }, first.position);
-//     try testing.expectEqual([2]f32{ 0, 0 }, first.abs_position);
-//
-//     try testing.expectEqual([2]f32{ 800, 600 }, middle.size);
-//     try testing.expectEqual([2]f32{ 100, 0 }, middle.position);
-//     try testing.expectEqual([2]f32{ 100, 0 }, middle.abs_position);
-//
-//     try testing.expectEqual([2]f32{ 100, 600 }, last.size);
-//     try testing.expectEqual([2]f32{ 900, 0 }, last.position);
-//     try testing.expectEqual([2]f32{ 900, 0 }, last.abs_position);
-// }
+test "Full Percent Width With Fixed Siblings" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+
+    var window_state: WindowState = undefined;
+    try window_state.init(&.{}, .default, gpa, io);
+    defer window_state.deinit();
+
+    try start(&window_state);
+
+    try nextAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
+    const parent = try block(.{});
+
+    try pushAttr(.{ .parent = parent });
+    try nextAttrs(&.{
+        .{ .width = .{ .fixed = 100 } },
+        .{ .height = .grow },
+        .{ .height_strictness = 1.0 },
+        .{ .width_strictness = 1.0 },
+    });
+    const first = try block(.{});
+
+    try nextAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
+    const middle = try block(.{});
+
+    try nextAttrs(&.{
+        .{ .width = .{ .fixed = 100 } },
+        .{ .height = .grow },
+        .{ .height_strictness = 1.0 },
+        .{ .width_strictness = 1.0 },
+    });
+    const last = try block(.{});
+    popAttr(.parent);
+
+    end();
+
+    try testing.expectEqual([2]f32{ 600, 800 }, parent.size);
+    try testing.expectEqual([2]f32{ 600, 800 }, parent.bounds);
+
+    try testing.expectEqual([2]f32{ 100, 800 }, first.size);
+    try testing.expectEqual([2]f32{ 0, 0 }, first.position);
+    try testing.expectEqual([2]f32{ 0, 0 }, first.abs_position);
+
+    try testing.expectEqual([2]f32{ 400, 800 }, middle.size);
+    try testing.expectEqual([2]f32{ 100, 0 }, middle.position);
+    try testing.expectEqual([2]f32{ 100, 0 }, middle.abs_position);
+
+    try testing.expectEqual([2]f32{ 100, 800 }, last.size);
+    try testing.expectEqual([2]f32{ 500, 0 }, last.position);
+    try testing.expectEqual([2]f32{ 500, 0 }, last.abs_position);
+}
 //
 // test "Fit Layout" {
 //     const gpa = testing.allocator;
