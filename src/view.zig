@@ -632,54 +632,54 @@ test "Fixed Layout" {
         try testing.expectEqual([2]f32{ 0, 0 }, third_first.bounds);
     }
 }
-//
-// test "Percent Layout" {
-//     const gpa = testing.allocator;
-//     const io = testing.io;
-//
-//     var window_state: WindowState = undefined;
-//     try window_state.init(&.{}, .default, gpa, io);
-//     defer window_state.deinit();
-//
-//     try start(&window_state);
-//
-//     try nextAttrs(&.{ .{ .width = .{ .fixed = 800 } }, .{ .height = .{ .fixed = 600 } } });
-//     const parent = try block();
-//
-//     try pushAttr(.{ .parent = parent });
-//     try nextAttrs(&.{ .{ .width = .{ .percent = 0.25 } }, .{ .height = .{ .percent = 0.5 } } });
-//     const first = try block();
-//
-//     try pushAttr(.{ .parent = first });
-//     try nextAttrs(&.{ .{ .width = .{ .percent = 0.5 } }, .{ .height = .{ .percent = 0.5 } } });
-//     const nested = try block();
-//     popAttr(.parent);
-//
-//     try nextAttrs(&.{ .{ .width = .{ .percent = 0.5 } }, .{ .height = .{ .percent = 1.0 } } });
-//     const second = try block();
-//     popAttr(.parent);
-//
-//     end();
-//
-//     try testing.expectEqual([2]f32{ 800, 600 }, parent.size);
-//     try testing.expectEqual([2]f32{ 600, 600 }, parent.bounds);
-//
-//     try testing.expectEqual([2]f32{ 200, 300 }, first.size);
-//     try testing.expectEqual([2]f32{ 0, 0 }, first.position);
-//     try testing.expectEqual([2]f32{ 0, 0 }, first.abs_position);
-//     try testing.expectEqual([2]f32{ 100, 150 }, first.bounds);
-//
-//     try testing.expectEqual([2]f32{ 100, 150 }, nested.size);
-//     try testing.expectEqual([2]f32{ 0, 0 }, nested.position);
-//     try testing.expectEqual([2]f32{ 0, 0 }, nested.abs_position);
-//     try testing.expectEqual([2]f32{ 0, 0 }, nested.bounds);
-//
-//     try testing.expectEqual([2]f32{ 400, 600 }, second.size);
-//     try testing.expectEqual([2]f32{ 200, 0 }, second.position);
-//     try testing.expectEqual([2]f32{ 200, 0 }, second.abs_position);
-//     try testing.expectEqual([2]f32{ 0, 0 }, second.bounds);
-// }
-//
+
+test "Percent Layout" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+
+    var window_state: WindowState = undefined;
+    try window_state.init(&.{}, .default, gpa, io);
+    defer window_state.deinit();
+
+    try start(&window_state);
+
+    try nextAttrs(&.{ .{ .width = .{ .fixed = 600 } }, .{ .height = .{ .fixed = 800 } } });
+    const parent = try block(.{});
+
+    try pushAttr(.{ .parent = parent });
+    try nextAttrs(&.{ .{ .width = .{ .percent = 0.25 } }, .{ .height = .{ .percent = 0.5 } } });
+    const first = try block(.{});
+
+    try pushAttr(.{ .parent = first });
+    try nextAttrs(&.{ .{ .width = .{ .percent = 0.5 } }, .{ .height = .{ .percent = 0.5 } } });
+    const nested = try block(.{});
+    popAttr(.parent);
+
+    try nextAttrs(&.{ .{ .width = .{ .percent = 0.5 } }, .{ .height = .{ .percent = 1.0 } } });
+    const second = try block(.{});
+    popAttr(.parent);
+
+    end();
+
+    try testing.expectEqual([2]f32{ 600, 800 }, parent.size);
+    try testing.expectEqual([2]f32{ 450, 800 }, parent.bounds);
+
+    try testing.expectEqual([2]f32{ 150, 400 }, first.size);
+    try testing.expectEqual([2]f32{ 0, 0 }, first.position);
+    try testing.expectEqual([2]f32{ 0, 0 }, first.abs_position);
+    try testing.expectEqual([2]f32{ 75, 200 }, first.bounds);
+
+    try testing.expectEqual([2]f32{ 75, 200 }, nested.size);
+    try testing.expectEqual([2]f32{ 0, 0 }, nested.position);
+    try testing.expectEqual([2]f32{ 0, 0 }, nested.abs_position);
+    try testing.expectEqual([2]f32{ 0, 0 }, nested.bounds);
+
+    try testing.expectEqual([2]f32{ 300, 800 }, second.size);
+    try testing.expectEqual([2]f32{ 150, 0 }, second.position);
+    try testing.expectEqual([2]f32{ 150, 0 }, second.abs_position);
+    try testing.expectEqual([2]f32{ 0, 0 }, second.bounds);
+}
+
 test "Full Percent Width With Fixed Siblings" {
     const gpa = testing.allocator;
     const io = testing.io;
