@@ -28,32 +28,29 @@ pub fn main(init: std.process.Init) !void {
     try global.state.init();
     defer global.state.deinit();
 
-    win.setEventCallback(
-        win.WindowResized,
-        struct {
-            fn callback(event: [*c]const win.Event) callconv(.c) void {
-                const window: Window = .{ .raw = event.*.common.win };
-                const context: *Context = @ptrCast(@alignCast(window.userdata()));
-                const app = context.app;
+    win.setEventCallback(win.WindowResized, struct {
+        fn callback(event: [*c]const win.Event) callconv(.c) void {
+            const window: Window = .{ .raw = event.*.common.win };
+            const context: *Context = @ptrCast(@alignCast(window.userdata()));
+            const app = context.app;
 
-                var curr: ?*WindowState = app.states.head;
+            var curr: ?*WindowState = app.states.head;
 
-                while (curr) |state| : (curr = state.next) {
-                    if (state.win.raw == window.raw) {
-                        state.size = .{
-                            .width = @floatFromInt(event.*.update.w),
-                            .height = @floatFromInt(event.*.update.h),
-                        };
+            while (curr) |state| : (curr = state.next) {
+                if (state.win.raw == window.raw) {
+                    state.size = .{
+                        .width = @floatFromInt(event.*.update.w),
+                        .height = @floatFromInt(event.*.update.h),
+                    };
 
-                        render(app, state, true) catch |err| {
-                            log.err("Window render err={}", .{err});
-                        };
-                        break;
-                    }
+                    render(app, state, true) catch |err| {
+                        log.err("Window render err={}", .{err});
+                    };
+                    break;
                 }
             }
-        }.callback,
-    );
+        }
+    }.callback);
 
     const gpa = init.gpa;
     const io = init.io;
