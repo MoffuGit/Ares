@@ -232,7 +232,7 @@ fn stackFlag(flag: ViewState.Flags) u64 {
 pub fn block(flags: Block.Flags) !*Block {
     const state = curr_state orelse unreachable;
 
-    return try .new(state, flags);
+    return try .build(state, flags);
 }
 
 pub const ViewState = struct {
@@ -434,7 +434,7 @@ const Block = struct {
     abs_position: [2]f32,
     bounds: [2]f32,
 
-    pub fn new(state: *ViewState, flags: Flags) !*Block {
+    pub fn build(state: *ViewState, flags: Flags) !*Block {
         const arena = state.frameArena();
 
         const self = try arena.create(Block);
