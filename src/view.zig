@@ -117,7 +117,7 @@ pub fn end() void {
                     var children = b.childrens.first;
                     while (children) |child| : (children = child.next) {
                         used += child.size[axis];
-                        aviable += child.size[axis] * (1.0 - child.minimum[axis]);
+                        aviable += child.size[axis] * (1.0 - child.strictness[axis]);
                     }
 
                     const overflow = used - allowed;
@@ -127,7 +127,7 @@ pub fn end() void {
                         children = b.childrens.first;
 
                         while (children) |child| : (children = child.next) {
-                            child.size[axis] -= child.size[axis] * (1.0 - child.minimum[axis]) * fixup;
+                            child.size[axis] -= child.size[axis] * (1.0 - child.strictness[axis]) * fixup;
                         }
                     }
                 }
@@ -224,10 +224,16 @@ pub fn nextAttr(attr: ViewState.Attribute) !void {
     state.flagStack(meta.activeTag(attr));
 }
 
+pub fn pushAttrs(attrs: []const ViewState.Attribute) !void {
+    for (attrs) |attr| try pushAttr(attr);
+}
+
+pub fn popAttrs(comptime flags: []const ViewState.Flags) void {
+    inline for (flags) |flag| popAttr(flag);
+}
+
 pub fn nextAttrs(values: []const ViewState.Attribute) !void {
-    for (values) |value| {
-        try nextAttr(value);
-    }
+    for (values) |value| try nextAttr(value);
 }
 
 fn stackFlag(flag: ViewState.Flags) u64 {
@@ -378,8 +384,8 @@ pub const ViewState = struct {
 const Axis = enum(u1) { x = 0, y = 1 };
 
 const Size = union(enum) {
-    const zero: Size = .{ .fixed = 0 };
-    const grow: Size = .{ .percent = 1 };
+    pub const zero: Size = .{ .fixed = 0 };
+    pub const grow: Size = .{ .percent = 1 };
 
     fit,
     fixed: f32,
@@ -403,7 +409,7 @@ const Block = struct {
     };
 
     pub const _null: Block = .{
-        .minimum = @splat(0.0),
+        .strictness = @splat(1.0),
         .childrens = .empty,
         .next = null,
         .prev = null,
@@ -429,7 +435,7 @@ const Block = struct {
     parent: ?*Block,
     axis: Axis,
     sizing: [2]Size,
-    minimum: [2]f32,
+    strictness: [2]f32,
     color: [4]f32,
     alignment: [2]Alignment,
     flags: Flags,
@@ -459,11 +465,11 @@ const Block = struct {
 
         if (state.stacks.get(.width).head) |node| self.sizing[0] = node.value;
 
-        if (state.stacks.get(.width_strictness).head) |node| self.minimum[0] = std.math.clamp(node.value, 0.0, 1.0);
+        if (state.stacks.get(.width_strictness).head) |node| self.strictness[0] = std.math.clamp(node.value, 0.0, 1.0);
 
         if (state.stacks.get(.height).head) |node| self.sizing[1] = node.value;
 
-        if (state.stacks.get(.height_strictness).head) |node| self.minimum[1] = std.math.clamp(node.value, 0.0, 1.0);
+        if (state.stacks.get(.height_strictness).head) |node| self.strictness[1] = std.math.clamp(node.value, 0.0, 1.0);
 
         const stack_flags: u2 = if (state.stacks.get(.flags).head) |node| @bitCast(node.value) else 0;
 
@@ -706,19 +712,18 @@ test "Full Percent Width With Fixed Siblings" {
     try nextAttrs(&.{
         .{ .width = .{ .fixed = 100 } },
         .{ .height = .grow },
-        .{ .height_strictness = 1.0 },
-        .{ .width_strictness = 1.0 },
     });
     const first = try block(.{});
 
-    try nextAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
+    try nextAttrs(&.{
+        .{ .width = .grow },           .{ .height = .grow },
+        .{ .height_strictness = 0.0 }, .{ .width_strictness = 0.0 },
+    });
     const middle = try block(.{});
 
     try nextAttrs(&.{
         .{ .width = .{ .fixed = 100 } },
         .{ .height = .grow },
-        .{ .height_strictness = 1.0 },
-        .{ .width_strictness = 1.0 },
     });
     const last = try block(.{});
     popAttr(.parent);

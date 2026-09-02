@@ -149,8 +149,32 @@ pub fn main(init: std.process.Init) !void {
 }
 
 pub fn render(app: *App, state: *WindowState, sync: bool) !void {
-    try view.start(state);
-    defer view.end();
+    {
+        try view.start(state);
+        defer view.end();
+
+        try view.pushAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
+        defer view.popAttrs(&.{ .width, .height });
+
+        try view.nextAttrs(&.{
+            .{ .width = .{ .fixed = 100 } },
+            .{ .color = .{ 1.0, 0.0, 0.0, 1.0 } },
+        });
+        _ = try view.block(.{});
+
+        try view.nextAttrs(&.{
+            .{ .color = .{ 0.0, 1.0, 0.0, 1.0 } },
+            .{ .height_strictness = 0.0 },
+            .{ .width_strictness = 0.0 },
+        });
+        _ = try view.block(.{});
+
+        try view.nextAttrs(&.{
+            .{ .width = .{ .fixed = 100 } },
+            .{ .color = .{ 0.0, 0.0, 1.0, 1.0 } },
+        });
+        _ = try view.block(.{});
+    }
 
     const frame = state.render_handle.nextFrame();
     errdefer state.render_handle.releaseFrame();
@@ -159,21 +183,21 @@ pub fn render(app: *App, state: *WindowState, sync: bool) !void {
         .viewport_size = .{ state.size.width, state.size.height },
     });
 
-    try frame.rect(.{
-        .position = .{ 0.0, 0.0, 100.0, 100.0 },
-        .color_0 = .{ 1.0, 0.0, 0.0, 1.0 },
-        .color_1 = .{ 1.0, 0.0, 0.0, 1.0 },
-        .color_2 = .{ 1.0, 0.0, 0.0, 1.0 },
-        .color_3 = .{ 1.0, 0.0, 0.0, 1.0 },
-    });
-
-    try frame.rect(.{
-        .position = .{ 100.0, 100.0, 200.0, 200.0 },
-        .color_0 = .{ 0.0, 0.0, 1.0, 1.0 },
-        .color_1 = .{ 0.0, 0.0, 1.0, 1.0 },
-        .color_2 = .{ 0.0, 0.0, 1.0, 1.0 },
-        .color_3 = .{ 0.0, 0.0, 1.0, 1.0 },
-    });
+    var iterator = state.view_state.preOrderIterator();
+    while (iterator.next()) |box| {
+        try frame.rect(.{
+            .position = .{
+                box.abs_position[0],
+                box.abs_position[1],
+                box.abs_position[0] + box.size[0],
+                box.abs_position[1] + box.size[1],
+            },
+            .color_0 = box.color,
+            .color_1 = box.color,
+            .color_2 = box.color,
+            .color_3 = box.color,
+        });
+    }
 
     renderer.render(&app.renderer, &state.render_handle, frame, sync);
 }
