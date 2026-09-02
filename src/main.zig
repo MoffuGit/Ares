@@ -12,7 +12,6 @@ const Loop = @import("loop.zig");
 const Completion = Loop.Completion;
 const Waker = Loop.Waker;
 const renderer = @import("renderer.zig");
-const view = @import("view.zig");
 const win = @import("window.zig");
 const Window = win.Window;
 
@@ -147,8 +146,12 @@ pub fn main(init: std.process.Init) !void {
 
 pub fn render(app: *App, state: *WindowState, sync: bool) !void {
     {
-        try view.start(state);
-        defer view.end();
+        const view = &state.view_state;
+        try view.begin(.{
+            .width = state.size.width,
+            .height = state.size.height,
+        });
+        defer view.finish();
 
         try view.pushAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
         defer view.popAttrs(&.{ .width, .height });
