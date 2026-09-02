@@ -30,7 +30,8 @@ pub fn start(window_state: *WindowState) !void {
         .{ .width = .{ .fixed = size.width } },
         .{ .height = .{ .fixed = size.height } },
     });
-    const root = try block(.{});
+
+    const root = try Block.new(.{});
     state.root = root;
 
     try pushAttr(.{ .parent = root });
@@ -227,39 +228,6 @@ pub fn nextAttrs(values: []const ViewState.Attribute) !void {
     for (values) |value| {
         try nextAttr(value);
     }
-}
-
-pub fn block(flags: Block.Flags) !*Block {
-    const state = curr_state orelse unreachable;
-    const arena = state.frameArena();
-
-    const new = try arena.create(Block);
-    new.* = ._null;
-
-    state.block_count += 1;
-
-    if (state.stacks.get(.parent).head) |parent| {
-        parent.value.child_count += 1;
-        parent.value.childrens.append(new);
-        new.parent = parent.value;
-    }
-
-    if (state.stacks.get(.color).head) |node| new.color = node.value;
-
-    if (state.stacks.get(.axis).head) |node| new.axis = node.value;
-
-    if (state.stacks.get(.width).head) |node| new.sizing[0] = node.value;
-    if (state.stacks.get(.width_strictness).head) |node| new.minimum[0] = std.math.clamp(node.value, 0.0, 1.0);
-
-    if (state.stacks.get(.height).head) |node| new.sizing[1] = node.value;
-    if (state.stacks.get(.height_strictness).head) |node| new.minimum[1] = std.math.clamp(node.value, 0.0, 1.0);
-
-    const stack_flags: u2 = if (state.stacks.get(.flags).head) |node| @bitCast(node.value) else 0;
-    new.flags = @bitCast(@as(u2, @bitCast(flags)) | stack_flags);
-
-    state.popFlagged();
-
-    return new;
 }
 
 fn stackFlag(flag: ViewState.Flags) u64 {
@@ -464,6 +432,42 @@ const Block = struct {
     position: [2]f32,
     abs_position: [2]f32,
     bounds: [2]f32,
+
+    pub fn new(flags: Flags) !*Block {
+        const state = curr_state orelse unreachable;
+        const arena = state.frameArena();
+
+        const block = try arena.create(Block);
+        block.* = ._null;
+
+        state.block_count += 1;
+
+        if (state.stacks.get(.parent).head) |parent| {
+            parent.value.child_count += 1;
+            parent.value.childrens.append(block);
+            block.parent = parent.value;
+        }
+
+        if (state.stacks.get(.color).head) |node| block.color = node.value;
+
+        if (state.stacks.get(.axis).head) |node| block.axis = node.value;
+
+        if (state.stacks.get(.width).head) |node| block.sizing[0] = node.value;
+
+        if (state.stacks.get(.width_strictness).head) |node| block.minimum[0] = std.math.clamp(node.value, 0.0, 1.0);
+
+        if (state.stacks.get(.height).head) |node| block.sizing[1] = node.value;
+
+        if (state.stacks.get(.height_strictness).head) |node| block.minimum[1] = std.math.clamp(node.value, 0.0, 1.0);
+
+        const stack_flags: u2 = if (state.stacks.get(.flags).head) |node| @bitCast(node.value) else 0;
+
+        block.flags = @bitCast(@as(u2, @bitCast(flags)) | stack_flags);
+
+        state.popFlagged();
+
+        return block;
+    }
 };
 
 test "Basic Operations" {
@@ -486,7 +490,7 @@ test "Basic Operations" {
     {
         try start(&window_state);
 
-        const first = try block(.{});
+        const first = try Block.new(.{});
 
         end();
 
@@ -504,7 +508,7 @@ test "Basic Operations" {
         try nextAttr(.{ .axis = .y });
         try nextAttr(.{ .color = color });
 
-        const styled = try block(.{});
+        const styled = try Block.new(.{});
         try testing.expectEqual(Axis.y, styled.axis);
         try testing.expectEqual(color, styled.color);
         try testing.expect(window_state.view_state.stacks.get(.axis).is_empty());
@@ -518,7 +522,7 @@ test "Basic Operations" {
             .{ .color = color },
         });
 
-        const styled = try block(.{});
+        const styled = try Block.new(.{});
         try testing.expectEqual(Axis.y, styled.axis);
         try testing.expectEqual(color, styled.color);
         try testing.expect(window_state.view_state.stacks.get(.axis).is_empty());
@@ -526,7 +530,7 @@ test "Basic Operations" {
         try testing.expectEqual(@as(u64, 0), window_state.view_state.pop_flags);
     }
 
-    const unstyled = try block(.{});
+    const unstyled = try Block.new(.{});
     try testing.expectEqual(Axis.x, unstyled.axis);
     try testing.expectEqual(Block._null.color, unstyled.color);
 
@@ -538,7 +542,7 @@ test "Basic Operations" {
     try pushAttr(.{ .axis = .x });
     defer popAttr(.axis);
 
-    const manually_popped = try block(.{});
+    const manually_popped = try Block.new(.{});
     try testing.expectEqual(Axis.x, manually_popped.axis);
     try testing.expect(window_state.view_state.stacks.get(.axis).head != null);
 }
@@ -557,37 +561,37 @@ test "Fixed Layout" {
         try pushAttr(.{ .flags = .allowOverflow });
 
         try nextAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
-        const wrapper = try block(.{});
+        const wrapper = try Block.new(.{});
         try pushAttr(.{ .parent = wrapper });
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 800 } }, .{ .height = .{ .fixed = 800 } } });
-        const first = try block(.{});
+        const first = try Block.new(.{});
 
         try pushAttr(.{ .parent = first });
         try nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 800 } } });
-        const first_first = try block(.{});
+        const first_first = try Block.new(.{});
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 800 } } });
-        const first_second = try block(.{});
+        const first_second = try Block.new(.{});
         popAttr(.parent);
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 120 } }, .{ .axis = .y } });
-        const second = try block(.{});
+        const second = try Block.new(.{});
 
         try pushAttr(.{ .parent = second });
         try nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 60 } } });
-        const second_first = try block(.{});
+        const second_first = try Block.new(.{});
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 60 } } });
-        const second_second = try block(.{});
+        const second_second = try Block.new(.{});
         popAttr(.parent);
 
         try nextAttrs(&.{ .{ .width = .{ .fixed = 509 } }, .{ .height = .{ .fixed = 789 } } });
-        const third = try block(.{});
+        const third = try Block.new(.{});
 
         try pushAttr(.{ .parent = third });
         try nextAttrs(&.{ .{ .width = .{ .fixed = 600 } }, .{ .height = .{ .fixed = 800 } } });
-        const third_first = try block(.{});
+        const third_first = try Block.new(.{});
 
         popAttr(.parent);
         popAttr(.parent);
@@ -644,19 +648,19 @@ test "Percent Layout" {
     try start(&window_state);
 
     try nextAttrs(&.{ .{ .width = .{ .fixed = 600 } }, .{ .height = .{ .fixed = 800 } } });
-    const parent = try block(.{});
+    const parent = try Block.new(.{});
 
     try pushAttr(.{ .parent = parent });
     try nextAttrs(&.{ .{ .width = .{ .percent = 0.25 } }, .{ .height = .{ .percent = 0.5 } } });
-    const first = try block(.{});
+    const first = try Block.new(.{});
 
     try pushAttr(.{ .parent = first });
     try nextAttrs(&.{ .{ .width = .{ .percent = 0.5 } }, .{ .height = .{ .percent = 0.5 } } });
-    const nested = try block(.{});
+    const nested = try Block.new(.{});
     popAttr(.parent);
 
     try nextAttrs(&.{ .{ .width = .{ .percent = 0.5 } }, .{ .height = .{ .percent = 1.0 } } });
-    const second = try block(.{});
+    const second = try Block.new(.{});
     popAttr(.parent);
 
     end();
@@ -691,7 +695,7 @@ test "Full Percent Width With Fixed Siblings" {
     try start(&window_state);
 
     try nextAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
-    const parent = try block(.{});
+    const parent = try Block.new(.{});
 
     try pushAttr(.{ .parent = parent });
     try nextAttrs(&.{
@@ -700,10 +704,10 @@ test "Full Percent Width With Fixed Siblings" {
         .{ .height_strictness = 1.0 },
         .{ .width_strictness = 1.0 },
     });
-    const first = try block(.{});
+    const first = try Block.new(.{});
 
     try nextAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
-    const middle = try block(.{});
+    const middle = try Block.new(.{});
 
     try nextAttrs(&.{
         .{ .width = .{ .fixed = 100 } },
@@ -711,7 +715,7 @@ test "Full Percent Width With Fixed Siblings" {
         .{ .height_strictness = 1.0 },
         .{ .width_strictness = 1.0 },
     });
-    const last = try block(.{});
+    const last = try Block.new(.{});
     popAttr(.parent);
 
     end();
@@ -743,25 +747,25 @@ test "Fit Layout" {
     try start(&window_state);
 
     try nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 100 } } });
-    const spacer = try block(.{});
+    const spacer = try Block.new(.{});
 
     try nextAttrs(&.{ .{ .width = .fit }, .{ .height = .fit }, .{ .axis = .y } });
-    const parent = try block(.{});
+    const parent = try Block.new(.{});
 
     try pushAttr(.{ .parent = parent });
     try nextAttrs(&.{ .{ .width = .fit }, .{ .height = .fit } });
-    const first = try block(.{});
+    const first = try Block.new(.{});
 
     try pushAttr(.{ .parent = first });
     try nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 150 } } });
-    const first_first = try block(.{});
+    const first_first = try Block.new(.{});
 
     try nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 150 } } });
-    const first_second = try block(.{});
+    const first_second = try Block.new(.{});
     popAttr(.parent);
 
     try nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 450 } } });
-    const second = try block(.{});
+    const second = try Block.new(.{});
     popAttr(.parent);
 
     end();
