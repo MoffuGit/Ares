@@ -117,11 +117,11 @@ pub const ViewState = struct {
         _ = self.frame_arenas[arena_index].reset(.retain_capacity);
     }
 
-    pub fn fmt(self: *ViewState, comptime format: []const u8, args: anytype) ![]u8 {
+    pub fn fmt(self: *ViewState, comptime format: []const u8, args: anytype) []u8 {
         const required = fmt.count(format, args);
         const frame_arena = self.frameArena();
         const buffer = try frame_arena.alloc(u8, required);
-        return try std.fmt.bufPrint(buffer, format, args);
+        return std.fmt.bufPrint(buffer, format, args) catch unreachable;
     }
 
     pub fn blockWithString(self: *ViewState, string: []const u8, flags: Block.Flags) !*Block {
