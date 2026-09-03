@@ -530,6 +530,53 @@ test "view state builds blocks and applies stacked attributes" {
     try testing.expectEqual(styled, state.root.?.children.last);
 }
 
+test "cached blocks are reused and untouched blocks are evicted" {
+    var state: ViewState = undefined;
+    try state.init(testing.allocator);
+    defer state.deinit();
+
+    const key: u64 = 42;
+    const cache = &state.cache[key % state.cache.len];
+
+    try state.begin(.{ .width = 100, .height = 100 });
+    try state.nextAttr(.{ .width = .{ .fixed = 10 } });
+    _ = try state.block(.{}, null);
+    try state.nextAttr(.{ .width = .{ .fixed = 40 } });
+    const first = try state.block(.{}, key);
+    try state.pushAttr(.{ .parent = first });
+    _ = try state.block(.{}, null);
+    state.popAttr(.parent);
+    state.finish();
+
+    try testing.expectEqual(@as(usize, 1), cache.len());
+    try testing.expectEqual([2]f32{ 40, 0 }, first.size);
+    try testing.expectEqual([2]f32{ 10, 0 }, first.position);
+    try testing.expectEqual(@as(u8, 1), first.child_count);
+
+    try state.begin(.{ .width = 100, .height = 100 });
+    try state.nextAttrs(&.{
+        .{ .axis = .y },
+        .{ .width = .{ .fixed = 50 } },
+    });
+    const second = try state.block(.{}, key);
+
+    try testing.expectEqual(first, second);
+    try testing.expectEqual([2]f32{ 40, 0 }, second.size);
+    try testing.expectEqual([2]f32{ 10, 0 }, second.position);
+    try testing.expectEqual(Axis.y, second.axis);
+    try testing.expectEqual(Sizing{ .fixed = 50 }, second.sizing[0]);
+    try testing.expect(second.children.is_empty());
+    try testing.expectEqual(@as(u8, 0), second.child_count);
+    state.finish();
+
+    try testing.expectEqual(@as(usize, 1), cache.len());
+
+    try state.begin(.{ .width = 100, .height = 100 });
+    state.finish();
+
+    try testing.expect(cache.is_empty());
+}
+
 test "fixed layout preserves overflow when requested" {
     var state: ViewState = undefined;
     try state.init(testing.allocator);
