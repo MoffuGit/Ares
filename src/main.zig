@@ -160,20 +160,20 @@ pub fn render(app: *App, state: *WindowState, sync: bool) !void {
             .{ .width = .{ .fixed = 100 } },
             .{ .color = .{ 1.0, 0.0, 0.0, 1.0 } },
         });
-        _ = try view.block(.{});
+        _ = try view.block(.{}, null);
 
         try view.nextAttrs(&.{
             .{ .color = .{ 0.0, 1.0, 0.0, 1.0 } },
             .{ .height_shrink = 0.0 },
             .{ .width_shrink = 0.0 },
         });
-        _ = try view.block(.{});
+        _ = try view.block(.{}, null);
 
         try view.nextAttrs(&.{
             .{ .width = .{ .fixed = 100 } },
             .{ .color = .{ 0.0, 0.0, 1.0, 1.0 } },
         });
-        _ = try view.block(.{});
+        _ = try view.block(.{}, null);
     }
 
     const frame = state.render_handle.nextFrame();
