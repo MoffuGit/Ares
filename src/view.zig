@@ -184,7 +184,7 @@ pub const Block = struct {
     prev: ?*Block,
     parent: ?*Block,
 
-    key: u64,
+    key: ?u64,
 
     axis: Axis,
     sizing: [2]Sizing,
@@ -218,7 +218,7 @@ pub const Block = struct {
         .position = @splat(0.0),
         .abs_position = @splat(0.0),
         .bounds = @splat(0.0),
-        .key = 0,
+        .key = null,
     };
 
     fn build(self: *Block, state: *ViewState, flags: Flags) void {
