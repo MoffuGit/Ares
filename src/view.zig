@@ -124,14 +124,19 @@ pub const ViewState = struct {
         return try std.fmt.bufPrint(buffer, format, args);
     }
 
-    pub fn blockWithString(self: *ViewState, string: []const u8, flags: Block.Flags) !void {
-        const key: ?u64 = if (string.len == 0) null else key: {
+    pub fn blockWithString(self: *ViewState, string: []const u8, flags: Block.Flags) !*Block {
+        const hash_string = if (std.mem.find(u8, string, "@@@")) |index|
+            string[index + "@@@".len ..]
+        else
+            "";
+
+        const key: ?u64 = if (hash_string.len == 0) null else key: {
             var node = self.stacks.get(.parent).head;
             while (node) |current| : (node = current.next) {
-                if (current.value.key) |parent_key| break :key Wyhash.hash(parent_key, string);
+                if (current.value.key) |parent_key| break :key Wyhash.hash(parent_key, hash_string);
             }
 
-            break :key Wyhash.hash(0, string);
+            break :key Wyhash.hash(0, hash_string);
         };
 
         return try self.block(flags, key);
@@ -575,6 +580,34 @@ test "cached blocks are reused and untouched blocks are evicted" {
     state.finish();
 
     try testing.expect(cache.is_empty());
+}
+
+test "block string hashes only the text after the ID marker" {
+    var state: ViewState = undefined;
+    try state.init(testing.allocator);
+    defer state.deinit();
+
+    try state.begin(.{ .width = 100, .height = 100 });
+    _ = try state.blockWithString("First label@@@identity", .{});
+    const first = state.root.?.children.last.?;
+    try testing.expectEqual(Wyhash.hash(0, "identity"), first.key.?);
+    state.finish();
+
+    try state.begin(.{ .width = 100, .height = 100 });
+    _ = try state.blockWithString("Different label@@@identity", .{});
+    const second = state.root.?.children.last.?;
+    try testing.expectEqual(first, second);
+    state.finish();
+
+    try state.begin(.{ .width = 100, .height = 100 });
+    _ = try state.blockWithString("No identity@@@", .{});
+    try testing.expectEqual(null, state.root.?.children.last.?.key);
+    state.finish();
+
+    try state.begin(.{ .width = 100, .height = 100 });
+    _ = try state.blockWithString("No marker", .{});
+    try testing.expectEqual(null, state.root.?.children.last.?.key);
+    state.finish();
 }
 
 test "fixed layout preserves overflow when requested" {
