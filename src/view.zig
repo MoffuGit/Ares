@@ -63,10 +63,7 @@ pub const ViewState = struct {
         self.cache = try arena.alloc(DoublyLinkedList(Cache), 2048);
         @memset(self.cache, .empty);
 
-        try self.chunks.init(arena, &.{.{
-            .capacity = 2048,
-            .chunk_size = @sizeOf(Block),
-        }});
+        try self.chunks.init(arena, &.{.{ .capacity = 2048, .chunk_size = @sizeOf(Block) }});
     }
 
     pub fn deinit(self: *ViewState) void {

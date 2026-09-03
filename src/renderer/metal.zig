@@ -103,7 +103,7 @@ pub const Handle = struct {
         layer.setProperty("pixelFormat", @intFromEnum(c.MTLPixelFormat.bgra8unorm));
         layer.setProperty("contentsGravity", macos.animation.kCAGravityTopLeft);
 
-        const view = objc.Object.fromId(window.NSView() orelse unreachable);
+        const view = objc.Object.fromId(window.osView() orelse unreachable);
         view.msgSend(void, "setLayer:", .{layer});
 
         self.layer = layer;

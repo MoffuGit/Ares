@@ -20,6 +20,7 @@ const GlobalState = struct {
         if (!builtin.is_test) {
             const status = c.RGFW_init("Odyssey", 0);
             if (status != 0) return error.RGFWInitError;
+            c.RGFW_setQueueEvents(c.RGFW_TRUE);
         }
 
         log.info("odyssey zig version={}", .{builtin.zig_version});

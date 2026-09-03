@@ -49,6 +49,35 @@ pub const DataDrag = c.RGFW_dataDrag;
 pub const ScaleUpdated = c.RGFW_scaleUpdated;
 pub const MonitorConnected = c.RGFW_monitorConnected;
 pub const MonitorDisconnected = c.RGFW_monitorDisconnected;
+
+pub const EventKind = enum(u8) {
+    none = EventNone,
+    key_pressed = KeyPressed,
+    key_released = KeyReleased,
+    key_char = KeyChar,
+    mouse_button_pressed = MouseButtonPressed,
+    mouse_button_released = MouseButtonReleased,
+    mouse_scroll = MouseScroll,
+    mouse_motion = MouseMotion,
+    mouse_raw_motion = MouseRawMotion,
+    mouse_enter = MouseEnter,
+    mouse_leave = MouseLeave,
+    window_moved = WindowMoved,
+    window_resized = WindowResized,
+    window_focus_in = WindowFocusIn,
+    window_focus_out = WindowFocusOut,
+    window_refresh = WindowRefresh,
+    window_close = WindowClose,
+    window_maximized = WindowMaximized,
+    window_minimized = WindowMinimized,
+    window_restored = WindowRestored,
+    data_drop = DataDrop,
+    data_drag = DataDrag,
+    scale_updated = ScaleUpdated,
+    monitor_connected = MonitorConnected,
+    monitor_disconnected = MonitorDisconnected,
+};
+
 pub const MouseLeft = c.RGFW_mouseLeft;
 pub const MouseMiddle = c.RGFW_mouseMiddle;
 pub const MouseRight = c.RGFW_mouseRight;
@@ -109,6 +138,10 @@ pub const Window = window: {
             c.RGFW_window_setUserPtr(self.raw, opts.userdata);
         }
 
+        pub fn popEvent(self: *@This(), event: [*c]Event) bool {
+            return c.RGFW_window_checkQueuedEvent(self.raw, event) == c.RGFW_TRUE;
+        }
+
         pub fn userdata(self: *const @This()) ?*anyopaque {
             return c.RGFW_window_getUserPtr(self.raw);
         }
@@ -121,11 +154,11 @@ pub const Window = window: {
             return c.RGFW_window_shouldClose(self.raw) == c.RGFW_TRUE;
         }
 
-        pub fn NSWindow(self: *const @This()) ?*anyopaque {
+        pub fn osWindow(self: *const @This()) ?*anyopaque {
             return c.RGFW_window_getWindow_OSX(self.raw);
         }
 
-        pub fn NSView(self: *const @This()) ?*anyopaque {
+        pub fn osView(self: *const @This()) ?*anyopaque {
             return c.RGFW_window_getView_OSX(self.raw);
         }
     };
