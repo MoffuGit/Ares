@@ -100,10 +100,6 @@ pub const ViewState = struct {
         const new = try self.frameArena().create(Block);
         new.* = .empty;
         new.build(self, flags);
-
-        self.block_count += 1;
-        self.popFlagged();
-
         return new;
     }
 
@@ -188,6 +184,8 @@ pub const Block = struct {
     prev: ?*Block,
     parent: ?*Block,
 
+    key: u64,
+
     axis: Axis,
     sizing: [2]Sizing,
     shrink: [2]f32,
@@ -220,6 +218,7 @@ pub const Block = struct {
         .position = @splat(0.0),
         .abs_position = @splat(0.0),
         .bounds = @splat(0.0),
+        .key = 0,
     };
 
     fn build(self: *Block, state: *ViewState, flags: Flags) void {
@@ -238,6 +237,9 @@ pub const Block = struct {
 
         const stack_flags: u2 = if (state.stacks.get(.flags).head) |node| @bitCast(node.value) else 0;
         self.flags = @bitCast(@as(u2, @bitCast(flags)) | stack_flags);
+
+        state.block_count += 1;
+        state.popFlagged();
     }
 
     pub fn nextPreOrder(self: *Block) ?*Block {
