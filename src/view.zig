@@ -125,18 +125,18 @@ pub const ViewState = struct {
     }
 
     pub fn blockWithString(self: *ViewState, string: []const u8, flags: Block.Flags) !*Block {
-        const hash_string = if (std.mem.find(u8, string, "@@@")) |index|
+        const chunk = if (std.mem.find(u8, string, "@@@")) |index|
             string[index + "@@@".len ..]
         else
             "";
 
-        const key: ?u64 = if (hash_string.len == 0) null else key: {
+        const key: ?u64 = if (chunk.len == 0) null else key: {
             var node = self.stacks.get(.parent).head;
             while (node) |current| : (node = current.next) {
-                if (current.value.key) |parent_key| break :key Wyhash.hash(parent_key, hash_string);
+                if (current.value.key) |parent_key| break :key Wyhash.hash(parent_key, chunk);
             }
 
-            break :key Wyhash.hash(0, hash_string);
+            break :key Wyhash.hash(0, chunk);
         };
 
         return try self.block(flags, key);
