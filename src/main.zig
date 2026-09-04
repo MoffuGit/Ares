@@ -27,21 +27,27 @@ pub fn main(init: std.process.Init) !void {
     try global.init();
     defer global.deinit();
 
+    const gpa = init.gpa;
+    const io = init.io;
+
+    var app: App = undefined;
+    try app.init(gpa, io, .{});
+    defer app.deinit();
+
     win.setEventCallback(.window_resized, struct {
         fn callback(event: win.Event) void {
             const window = event.win;
             const update = event.type.window_update;
             const context: *Context = @ptrCast(@alignCast(window.userdata()));
-            const app = context.app;
 
-            var curr: ?*WindowState = app.states.head;
+            var curr: ?*WindowState = context.app.states.head;
 
             while (curr) |state| : (curr = state.next) {
                 if (state.win.raw == window.raw) {
                     state.width = update.width;
                     state.height = update.height;
 
-                    render(app, state, true) catch |err| {
+                    render(context.app, state, true) catch |err| {
                         log.err("Window render err={}", .{err});
                     };
                     break;
@@ -49,13 +55,6 @@ pub fn main(init: std.process.Init) !void {
             }
         }
     }.callback);
-
-    const gpa = init.gpa;
-    const io = init.io;
-
-    var app: App = undefined;
-    try app.init(gpa, io, .{});
-    defer app.deinit();
 
     var context: Context = .{
         .app = &app,
