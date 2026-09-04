@@ -38,7 +38,8 @@ pub fn main(init: std.process.Init) !void {
 
             while (curr) |state| : (curr = state.next) {
                 if (state.win.raw == window.raw) {
-                    state.size = .{ .width = update.width, .height = update.height };
+                    state.width = update.width;
+                    state.height = update.height;
 
                     render(app, state, true) catch |err| {
                         log.err("Window render err={}", .{err});
@@ -85,14 +86,6 @@ pub fn main(init: std.process.Init) !void {
 
                         chunks.destroy(state);
                     } else {
-                        while (state.win.popEvent()) |event| {
-                            switch (event.type) {
-                                .mouse_motion => |motion| {
-                                    log.debug("motion: {}", .{motion});
-                                },
-                                else => {},
-                            }
-                        }
                         render(ctx.app, state, false) catch |err| {
                             log.err("Window render err={}", .{err});
                         };
@@ -155,8 +148,8 @@ pub fn render(app: *App, window_state: *WindowState, sync: bool) !void {
         const view_state = &window_state.view_state;
 
         try view_state.begin(.{
-            .width = window_state.size.width,
-            .height = window_state.size.height,
+            .width = window_state.width,
+            .height = window_state.height,
         });
         defer view_state.finish();
 
@@ -187,7 +180,7 @@ pub fn render(app: *App, window_state: *WindowState, sync: bool) !void {
     errdefer window_state.render_handle.releaseFrame();
 
     try frame.uniform(.{
-        .viewport_size = .{ window_state.size.width, window_state.size.height },
+        .viewport_size = .{ window_state.width, window_state.height },
     });
 
     var box = window_state.view_state.root;

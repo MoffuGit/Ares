@@ -126,13 +126,12 @@ pub fn deinit(self: *App) void {
     self.loop.deinit();
 }
 
-pub const WindowSize = struct { width: f32, height: f32 };
-
 pub const WindowState = struct {
     next: ?*WindowState = null,
 
     win: Window,
-    size: WindowSize,
+    width: f32,
+    height: f32,
     render_handle: Handle,
     view_state: ViewState,
 
@@ -141,7 +140,8 @@ pub const WindowState = struct {
             .view_state = undefined,
             .win = undefined,
             .render_handle = undefined,
-            .size = .{ .width = @floatFromInt(opts.width), .height = @floatFromInt(opts.height) },
+            .width = @floatFromInt(opts.width),
+            .height = @floatFromInt(opts.height),
         };
 
         try self.view_state.init(gpa);
