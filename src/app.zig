@@ -71,6 +71,8 @@ notifications: btree.BPlusSet(EntityId, ent.entityOrder),
 const Options = struct {};
 
 pub fn init(self: *App, gpa: Allocator, io: Io, _: Options) !void {
+    try win.init("Odyssey", 0);
+
     self.* = .{
         .states = .empty,
         .renderer = undefined,
@@ -124,6 +126,7 @@ pub fn deinit(self: *App) void {
     self.receivers.deinit();
     self.arena.deinit();
     self.loop.deinit();
+    win.deinit();
 }
 
 pub const WindowState = struct {

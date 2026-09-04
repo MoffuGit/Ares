@@ -16,7 +16,6 @@ const datastruct = @import("datastruct.zig");
 const SinglyLinkedList = datastruct.SinglyLinkedList;
 const global = @import("global.zig");
 
-const state = &global.state;
 const Scheduler = @This();
 const log = std.log.scoped(.scheduler);
 
@@ -41,7 +40,7 @@ pub fn init(self: *Scheduler, arena: Allocator, io: Io) !void {
         .io = io,
     };
 
-    const workers = try arena.alloc(Worker, state.cpu_count);
+    const workers = try arena.alloc(Worker, global.cpu_count);
 
     for (workers) |*worker| {
         try self.group.concurrent(io, Worker.run, .{ worker, self });
@@ -59,7 +58,7 @@ pub fn deinit(self: *Scheduler) void {
 
 pub fn taskAdded(self: *Scheduler) void {
     const queued = self.queued.fetchAdd(1, .release);
-    if (queued < state.cpu_count) self.wakeOne();
+    if (queued < global.cpu_count) self.wakeOne();
 }
 
 pub fn wakeAll(self: *Scheduler) void {
@@ -128,7 +127,7 @@ const Worker = struct {
             if (self.queue.pop(scheduler.io)) |task| return task;
             if (scheduler.queue.pop(scheduler.io)) |task| return task;
 
-            for (0..state.cpu_count) |_| {
+            for (0..global.cpu_count) |_| {
                 const target = self.target orelse scheduler.workers.load(.acquire) orelse unreachable;
                 self.target = target.next;
 

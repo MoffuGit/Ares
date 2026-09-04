@@ -34,7 +34,8 @@ const WorktreeObserver = struct {
 test "benchmark: Worktree initial scan" {
     if (mode == .smoke) return;
 
-    try global.state.init();
+    try global.init();
+    defer global.deinit();
 
     const gpa = std.heap.c_allocator;
     var threaded: std.Io.Threaded = .init(gpa, .{});

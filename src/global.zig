@@ -3,31 +3,16 @@ const process = std.process;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
-const win = @import("window.zig");
 
 const log = std.log.scoped(.global);
 
-pub var state: GlobalState = .{};
+pub var cpu_count: usize = 2;
 
-const GlobalState = struct {
-    const Self = @This();
+pub fn init() !void {
+    cpu_count = try std.Thread.getCpuCount();
 
-    cpu_count: usize = 2,
+    log.info("odyssey zig version={}", .{builtin.zig_version});
+    log.info("odyssey build optimize={}", .{builtin.mode});
+}
 
-    pub fn init(self: *Self) !void {
-        const cpu_count = try std.Thread.getCpuCount();
-
-        try win.init("Odyssey", 0);
-
-        log.info("odyssey zig version={}", .{builtin.zig_version});
-        log.info("odyssey build optimize={}", .{builtin.mode});
-
-        self.* = .{
-            .cpu_count = cpu_count,
-        };
-    }
-
-    pub fn deinit(_: *Self) void {
-        win.deinit();
-    }
-};
+pub fn deinit() void {}

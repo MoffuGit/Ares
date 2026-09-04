@@ -24,8 +24,8 @@ const Context = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
-    try global.state.init();
-    defer global.state.deinit();
+    try global.init();
+    defer global.deinit();
 
     win.setEventCallback(.window_resized, struct {
         fn callback(event: win.Event) void {

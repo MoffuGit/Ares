@@ -23,7 +23,6 @@ const Snapshot = @import("worktree/snapshot.zig");
 const Entry = Snapshot.Entry;
 
 const log = std.log.scoped(.worktree);
-const state = &global.state;
 
 pub const Worktree = @This();
 
@@ -72,7 +71,7 @@ pub fn init(
     const arena = self.arena.allocator();
     errdefer self.arena.deinit();
 
-    self.events = try .init(state.cpu_count, 64, arena);
+    self.events = try .init(global.cpu_count, 64, arena);
     self.waker = try app.await(&self.await, handleEvents);
 
     try self.scanner.init(&app.scheduler, gpa, self.arena.allocator(), io);
