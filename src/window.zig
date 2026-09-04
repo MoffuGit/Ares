@@ -43,6 +43,17 @@ pub fn pollEvents() void {
     c.RGFW_pollEvents();
 }
 
+pub fn setEventCallback(flag: EventType, comptime function: *const fn (event: Event) void) void {
+    const TypeErased = struct {
+        fn callback(raw_event: [*c]const c.RGFW_event) callconv(.c) void {
+            const event = Event.convert(raw_event.*);
+
+            @call(.always_inline, function, .{event});
+        }
+    };
+    _ = c.RGFW_setEventCallback(@intFromEnum(flag), TypeErased.callback);
+}
+
 pub const Options = struct {
     pub const default: Options = .{
         .name = "Odyssey",
@@ -206,10 +217,9 @@ pub const Event = struct {
                 },
                 .mouse_motion, .mouse_raw_motion, .mouse_enter, .mouse_leave => .{
                     .mouse_motion = .{
-                        .position = .{
-                            .x = @floatFromInt(raw.mouse.x),
-                            .y = @floatFromInt(raw.mouse.x),
-                        },
+                        .inside = raw.mouse.inWindow == c.RGFW_TRUE,
+                        .x = @floatFromInt(raw.mouse.x),
+                        .y = @floatFromInt(raw.mouse.x),
                         .type = @enumFromInt(raw.type),
                     },
                 },
@@ -220,7 +230,7 @@ pub const Event = struct {
                     },
                 },
                 .mouse_scroll => .{
-                    .mouse_scroll = .{ .delta = .{ .x = raw.delta.x, .y = raw.delta.x } },
+                    .mouse_scroll = .{ .x = raw.delta.x, .y = raw.delta.x },
                 },
                 .window_moved,
                 .window_resized,
@@ -249,10 +259,10 @@ pub const Event = struct {
     }
 };
 
-pub const Position = struct { x: f32, y: f32 };
-
 pub const MouseMotion = struct {
-    position: Position,
+    x: f32,
+    y: f32,
+    inside: bool,
     type: enum(u8) {
         mouse_motion = c.RGFW_mouseMotion,
         mouse_raw_motion = c.RGFW_mouseRawMotion,
@@ -276,8 +286,6 @@ pub const WindowUpdate = struct {
         window_restored = c.RGFW_windowRestored,
     },
 };
-pub const ScaleUpdated = struct {};
-pub const MonitorUpdate = struct {};
 
 pub const Button = enum(u8) {
     left = c.RGFW_mouseLeft,
@@ -300,7 +308,8 @@ pub const MouseButton = struct {
 };
 
 pub const MouseScroll = struct {
-    delta: Position,
+    x: f32,
+    y: f32,
 };
 
 pub const Key = struct {
@@ -322,14 +331,3 @@ pub const Modifiers = packed struct {
     super: bool = false,
     scroll_lock: bool = false,
 };
-
-pub fn setEventCallback(flag: EventType, comptime function: *const fn (event: Event) void) void {
-    const TypeErased = struct {
-        fn callback(raw_event: [*c]const c.RGFW_event) callconv(.c) void {
-            const event = Event.convert(raw_event.*);
-
-            @call(.always_inline, function, .{event});
-        }
-    };
-    _ = c.RGFW_setEventCallback(@intFromEnum(flag), TypeErased.callback);
-}
