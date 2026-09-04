@@ -27,9 +27,10 @@ pub fn main(init: std.process.Init) !void {
     try global.state.init();
     defer global.state.deinit();
 
-    win.setEventCallback(win.WindowResized, struct {
-        fn callback(event: [*c]const win.Event) callconv(.c) void {
-            const window: Window = .{ .raw = event.*.common.win };
+    win.setEventCallback(.window_resized, struct {
+        fn callback(event: win.Event) void {
+            const window = event.win;
+            const update = event.type.window_update;
             const context: *Context = @ptrCast(@alignCast(window.userdata()));
             const app = context.app;
 
@@ -37,10 +38,7 @@ pub fn main(init: std.process.Init) !void {
 
             while (curr) |state| : (curr = state.next) {
                 if (state.win.raw == window.raw) {
-                    state.size = .{
-                        .width = @floatFromInt(event.*.update.w),
-                        .height = @floatFromInt(event.*.update.h),
-                    };
+                    state.size = .{ .width = update.width, .height = update.height };
 
                     render(app, state, true) catch |err| {
                         log.err("Window render err={}", .{err});

@@ -24,43 +24,24 @@ pub const WindowFocus = c.RGFW_windowFocus;
 pub const WindowCaptureMouse = c.RGFW_windowCaptureMouse;
 pub const WindowOpenGL = c.RGFW_windowOpenGL;
 pub const WindowEGL = c.RGFW_windowEGL;
-pub const Event = c.RGFW_event;
-pub const EventNone = c.RGFW_eventNone;
-pub const KeyPressed = c.RGFW_keyPressed;
-pub const KeyReleased = c.RGFW_keyReleased;
-pub const KeyChar = c.RGFW_keyChar;
-pub const MouseButtonPressed = c.RGFW_mouseButtonPressed;
-pub const MouseButtonReleased = c.RGFW_mouseButtonReleased;
-pub const MouseScroll = c.RGFW_mouseScroll;
-pub const MouseMotion = c.RGFW_mouseMotion;
-pub const MouseRawMotion = c.RGFW_mouseRawMotion;
-pub const MouseEnter = c.RGFW_mouseEnter;
-pub const MouseLeave = c.RGFW_mouseLeave;
-pub const WindowMoved = c.RGFW_windowMoved;
-pub const WindowResized = c.RGFW_windowResized;
-pub const WindowFocusIn = c.RGFW_windowFocusIn;
-pub const WindowFocusOut = c.RGFW_windowFocusOut;
-pub const WindowRefresh = c.RGFW_windowRefresh;
-pub const WindowClose = c.RGFW_windowClose;
-pub const WindowMaximized = c.RGFW_windowMaximized;
-pub const WindowMinimized = c.RGFW_windowMinimized;
-pub const WindowRestored = c.RGFW_windowRestored;
-pub const DataDrop = c.RGFW_dataDrop;
-pub const DataDrag = c.RGFW_dataDrag;
-pub const ScaleUpdated = c.RGFW_scaleUpdated;
-pub const MonitorConnected = c.RGFW_monitorConnected;
-pub const MonitorDisconnected = c.RGFW_monitorDisconnected;
-pub const MouseLeft = c.RGFW_mouseLeft;
-pub const MouseMiddle = c.RGFW_mouseMiddle;
-pub const MouseRight = c.RGFW_mouseRight;
-pub const MouseMisc1 = c.RGFW_mouseMisc1;
-pub const MouseMisc2 = c.RGFW_mouseMisc2;
-pub const MouseMisc3 = c.RGFW_mouseMisc3;
-pub const MouseMisc4 = c.RGFW_mouseMisc4;
-pub const MouseMisc5 = c.RGFW_mouseMisc5;
-pub const MouseFinal = c.RGFW_mouseFinal;
-pub const pollEvents = c.RGFW_pollEvents;
-const EventCallback = c.RGFW_genericFunc;
+
+pub fn init(className: [*c]const u8, flags: InitFlags) !void {
+    if (!builtin.is_test) {
+        const status = c.RGFW_init(className, flags);
+        if (status != 0) return error.RGFWInitError;
+        c.RGFW_setQueueEvents(c.RGFW_TRUE);
+    }
+}
+
+pub fn deinit() void {
+    if (!builtin.is_test) {
+        c.RGFW_deinit();
+    }
+}
+
+pub fn pollEvents() void {
+    c.RGFW_pollEvents();
+}
 
 pub const Options = struct {
     pub const default: Options = .{
@@ -81,24 +62,6 @@ pub const Options = struct {
     flags: Flags,
     userdata: ?*anyopaque,
 };
-
-pub fn setEventCallback(event: u8, callback: EventCallback) void {
-    _ = c.RGFW_setEventCallback(event, callback);
-}
-
-pub fn init(className: [*c]const u8, flags: InitFlags) !void {
-    if (!builtin.is_test) {
-        const status = c.RGFW_init(className, flags);
-        if (status != 0) return error.RGFWInitError;
-        c.RGFW_setQueueEvents(c.RGFW_TRUE);
-    }
-}
-
-pub fn deinit() void {
-    if (!builtin.is_test) {
-        c.RGFW_deinit();
-    }
-}
 
 pub const Window = window: {
     if (!builtin.is_test) break :window struct {
@@ -124,16 +87,21 @@ pub const Window = window: {
             c.RGFW_window_setUserPtr(self.raw, opts.userdata);
         }
 
-        pub fn popEvent(self: *@This(), event: [*c]Event) bool {
-            return c.RGFW_window_checkQueuedEvent(self.raw, event) == c.RGFW_TRUE;
+        pub fn deinit(self: *const @This()) void {
+            c.RGFW_window_close(self.raw);
         }
 
         pub fn userdata(self: *const @This()) ?*anyopaque {
             return c.RGFW_window_getUserPtr(self.raw);
         }
 
-        pub fn deinit(self: *const @This()) void {
-            c.RGFW_window_close(self.raw);
+        pub fn popEvent(self: *@This()) ?Event {
+            const raw: c.RGFW_event = undefined;
+            if (c.RGFW_window_checkQueuedEvent(self.raw, raw) == c.RGFW_TRUE) {
+                return Event.convert(raw);
+            } else {
+                return null;
+            }
         }
 
         pub fn shouldClose(self: *const @This()) bool {
@@ -160,3 +128,208 @@ pub const Window = window: {
         }
     };
 };
+
+const EventType = enum(u8) {
+    none = c.RGFW_eventNone,
+    key_pressed = c.RGFW_keyPressed,
+    key_released = c.RGFW_keyReleased,
+    key_char = c.RGFW_keyChar,
+    mouse_button_pressed = c.RGFW_mouseButtonPressed,
+    mouse_button_released = c.RGFW_mouseButtonReleased,
+    mouse_scroll = c.RGFW_mouseScroll,
+    mouse_motion = c.RGFW_mouseMotion,
+    mouse_raw_motion = c.RGFW_mouseRawMotion,
+    mouse_enter = c.RGFW_mouseEnter,
+    mouse_leave = c.RGFW_mouseLeave,
+    window_moved = c.RGFW_windowMoved,
+    window_resized = c.RGFW_windowResized,
+    window_focus_in = c.RGFW_windowFocusIn,
+    window_focus_out = c.RGFW_windowFocusOut,
+    window_refresh = c.RGFW_windowRefresh,
+    window_close = c.RGFW_windowClose,
+    window_maximized = c.RGFW_windowMaximized,
+    window_minimized = c.RGFW_windowMinimized,
+    window_restored = c.RGFW_windowRestored,
+    data_drop = c.RGFW_dataDrop,
+    data_drag = c.RGFW_dataDrag,
+    scale_updated = c.RGFW_scaleUpdated,
+    monitor_connected = c.RGFW_monitorConnected,
+    monitor_disconnected = c.RGFW_monitorDisconnected,
+};
+
+fn activeMod(mod: c.RGFW_keymod, flag: c.RGFW_keymod) bool {
+    return mod & flag != 0;
+}
+
+pub const Event = struct {
+    win: Window,
+    type: union(enum) {
+        none,
+        key: Key,
+        key_char: u32,
+        mouse_motion: MouseMotion,
+        mouse_button: MouseButton,
+        mouse_scroll: MouseScroll,
+        window_update: WindowUpdate,
+        focus_in,
+        focus_out,
+        //I don't handle this events yet
+        data_drop,
+        data_drag,
+        scale,
+        monitor,
+    },
+
+    pub fn convert(raw: c.RGFW_event) Event {
+        return .{
+            .win = .{ .raw = raw.common.win },
+            .type = switch (@as(EventType, @enumFromInt(raw.type))) {
+                .none => .none,
+                .window_focus_in => .focus_in,
+                .window_focus_out => .focus_out,
+                .key_char => .{ .key_char = raw.keyChar.value },
+                .key_released, .key_pressed => .{
+                    .key = .{
+                        .type = @enumFromInt(raw.type),
+                        .modifiers = .{
+                            .caps_lock = activeMod(raw.key.mod, c.RGFW_modCapsLock),
+                            .num_lock = activeMod(raw.key.mod, c.RGFW_modNumLock),
+                            .control = activeMod(raw.key.mod, c.RGFW_modControl),
+                            .alt = activeMod(raw.key.mod, c.RGFW_modAlt),
+                            .shift = activeMod(raw.key.mod, c.RGFW_modShift),
+                            .super = activeMod(raw.key.mod, c.RGFW_modSuper),
+                            .scroll_lock = activeMod(raw.key.mod, c.RGFW_modScrollLock),
+                        },
+                        .value = raw.key.value,
+                        .repeat = raw.key.repeat == c.RGFW_TRUE,
+                    },
+                },
+                .mouse_motion, .mouse_raw_motion, .mouse_enter, .mouse_leave => .{
+                    .mouse_motion = .{
+                        .position = .{
+                            .x = @floatFromInt(raw.mouse.x),
+                            .y = @floatFromInt(raw.mouse.x),
+                        },
+                        .type = @enumFromInt(raw.type),
+                    },
+                },
+                .mouse_button_released, .mouse_button_pressed => .{
+                    .mouse_button = .{
+                        .button = @enumFromInt(raw.button.type),
+                        .type = @enumFromInt(raw.type),
+                    },
+                },
+                .mouse_scroll => .{
+                    .mouse_scroll = .{ .delta = .{ .x = raw.delta.x, .y = raw.delta.x } },
+                },
+                .window_moved,
+                .window_resized,
+                .window_refresh,
+                .window_close,
+                .window_maximized,
+                .window_minimized,
+                .window_restored,
+                => .{
+                    .window_update = .{
+                        .x = @floatFromInt(raw.update.x),
+                        .y = @floatFromInt(raw.update.y),
+                        .width = @floatFromInt(raw.update.w),
+                        .height = @floatFromInt(raw.update.h),
+                        .type = @enumFromInt(raw.type),
+                    },
+                },
+                .data_drop,
+                .data_drag,
+                .scale_updated,
+                .monitor_connected,
+                .monitor_disconnected,
+                => unreachable,
+            },
+        };
+    }
+};
+
+pub const Position = struct { x: f32, y: f32 };
+
+pub const MouseMotion = struct {
+    position: Position,
+    type: enum(u8) {
+        mouse_motion = c.RGFW_mouseMotion,
+        mouse_raw_motion = c.RGFW_mouseRawMotion,
+        mouse_enter = c.RGFW_mouseEnter,
+        mouse_leave = c.RGFW_mouseLeave,
+    },
+};
+
+pub const WindowUpdate = struct {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    type: enum(u8) {
+        window_moved = c.RGFW_windowMoved,
+        window_resized = c.RGFW_windowResized,
+        window_refresh = c.RGFW_windowRefresh,
+        window_close = c.RGFW_windowClose,
+        window_maximized = c.RGFW_windowMaximized,
+        window_minimized = c.RGFW_windowMinimized,
+        window_restored = c.RGFW_windowRestored,
+    },
+};
+pub const ScaleUpdated = struct {};
+pub const MonitorUpdate = struct {};
+
+pub const Button = enum(u8) {
+    left = c.RGFW_mouseLeft,
+    middle = c.RGFW_mouseMiddle,
+    right = c.RGFW_mouseRight,
+    misc1 = c.RGFW_mouseMisc1,
+    misc2 = c.RGFW_mouseMisc2,
+    misc3 = c.RGFW_mouseMisc3,
+    misc4 = c.RGFW_mouseMisc4,
+    misc5 = c.RGFW_mouseMisc5,
+    final = c.RGFW_mouseFinal,
+};
+
+pub const MouseButton = struct {
+    button: Button,
+    type: enum(u8) {
+        mouse_button_pressed = c.RGFW_mouseButtonPressed,
+        mouse_button_released = c.RGFW_mouseButtonReleased,
+    },
+};
+
+pub const MouseScroll = struct {
+    delta: Position,
+};
+
+pub const Key = struct {
+    type: enum(u8) {
+        pressed = c.RGFW_keyPressed,
+        released = c.RGFW_keyReleased,
+    },
+    value: u16,
+    modifiers: Modifiers,
+    repeat: bool,
+};
+
+pub const Modifiers = packed struct {
+    caps_lock: bool = false,
+    num_lock: bool = false,
+    control: bool = false,
+    alt: bool = false,
+    shift: bool = false,
+    super: bool = false,
+    scroll_lock: bool = false,
+};
+
+pub fn setEventCallback(flag: EventType, comptime function: *const fn (event: Event) void) void {
+    const TypeErased = struct {
+        fn callback(raw_event: [*c]const c.RGFW_event) callconv(.c) void {
+            const event = Event.convert(raw_event.*);
+
+            @call(.always_inline, function, .{event});
+        }
+    };
+    _ = c.RGFW_setEventCallback(@intFromEnum(flag), TypeErased.callback);
+}
