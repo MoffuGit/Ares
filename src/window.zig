@@ -106,9 +106,9 @@ pub const Window = window: {
             return c.RGFW_window_getUserPtr(self.raw);
         }
 
-        pub fn popEvent(self: *@This()) ?Event {
-            const raw: c.RGFW_event = undefined;
-            if (c.RGFW_window_checkQueuedEvent(self.raw, raw) == c.RGFW_TRUE) {
+        pub fn popEvent(self: *const @This()) ?Event {
+            var raw: c.RGFW_event = undefined;
+            if (c.RGFW_window_checkQueuedEvent(self.raw, &raw) == c.RGFW_TRUE) {
                 return Event.convert(raw);
             } else {
                 return null;
@@ -215,11 +215,19 @@ pub const Event = struct {
                         .repeat = raw.key.repeat == c.RGFW_TRUE,
                     },
                 },
-                .mouse_motion, .mouse_raw_motion, .mouse_enter, .mouse_leave => .{
+                .mouse_raw_motion => .{
+                    .mouse_motion = .{
+                        .inside = raw.mouse.inWindow == c.RGFW_TRUE,
+                        .x = raw.delta.x,
+                        .y = raw.delta.y,
+                        .type = @enumFromInt(raw.type),
+                    },
+                },
+                .mouse_motion, .mouse_enter, .mouse_leave => .{
                     .mouse_motion = .{
                         .inside = raw.mouse.inWindow == c.RGFW_TRUE,
                         .x = @floatFromInt(raw.mouse.x),
-                        .y = @floatFromInt(raw.mouse.x),
+                        .y = @floatFromInt(raw.mouse.y),
                         .type = @enumFromInt(raw.type),
                     },
                 },
@@ -230,7 +238,7 @@ pub const Event = struct {
                     },
                 },
                 .mouse_scroll => .{
-                    .mouse_scroll = .{ .x = raw.delta.x, .y = raw.delta.x },
+                    .mouse_scroll = .{ .x = raw.delta.x, .y = raw.delta.y },
                 },
                 .window_moved,
                 .window_resized,
@@ -248,12 +256,11 @@ pub const Event = struct {
                         .type = @enumFromInt(raw.type),
                     },
                 },
-                .data_drop,
-                .data_drag,
-                .scale_updated,
-                .monitor_connected,
-                .monitor_disconnected,
-                => unreachable,
+                .data_drop => .data_drop,
+                .data_drag => .data_drag,
+                .scale_updated => .scale,
+                .monitor_connected => .monitor,
+                .monitor_disconnected => .monitor,
             },
         };
     }

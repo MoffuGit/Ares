@@ -85,6 +85,14 @@ pub fn main(init: std.process.Init) !void {
 
                         chunks.destroy(state);
                     } else {
+                        while (state.win.popEvent()) |event| {
+                            switch (event.type) {
+                                .mouse_motion => |motion| {
+                                    log.debug("motion: {}", .{motion});
+                                },
+                                else => {},
+                            }
+                        }
                         render(ctx.app, state, false) catch |err| {
                             log.err("Window render err={}", .{err});
                         };
