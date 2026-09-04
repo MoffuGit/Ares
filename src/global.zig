@@ -3,7 +3,7 @@ const process = std.process;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
-const c = @import("c");
+const win = @import("window.zig");
 
 const log = std.log.scoped(.global);
 
@@ -17,11 +17,7 @@ const GlobalState = struct {
     pub fn init(self: *Self) !void {
         const cpu_count = try std.Thread.getCpuCount();
 
-        if (!builtin.is_test) {
-            const status = c.RGFW_init("Odyssey", 0);
-            if (status != 0) return error.RGFWInitError;
-            c.RGFW_setQueueEvents(c.RGFW_TRUE);
-        }
+        try win.init("Odyssey", 0);
 
         log.info("odyssey zig version={}", .{builtin.zig_version});
         log.info("odyssey build optimize={}", .{builtin.mode});
@@ -32,8 +28,6 @@ const GlobalState = struct {
     }
 
     pub fn deinit(_: *Self) void {
-        if (!builtin.is_test) {
-            c.RGFW_deinit();
-        }
+        win.deinit();
     }
 };

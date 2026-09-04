@@ -3,6 +3,7 @@ const Io = std.Io;
 const builtin = @import("builtin");
 
 const c = @import("c");
+pub const InitFlags = c.RGFW_initFlags;
 pub const Flags = c.RGFW_windowFlags;
 pub const WindowNoBorder = c.RGFW_windowNoBorder;
 pub const WindowNoResize = c.RGFW_windowNoResize;
@@ -112,6 +113,20 @@ pub const Options = struct {
 
 pub fn setEventCallback(event: u8, callback: EventCallback) void {
     _ = c.RGFW_setEventCallback(event, callback);
+}
+
+pub fn init(className: [*c]const u8, flags: InitFlags) !void {
+    if (!builtin.is_test) {
+        const status = c.RGFW_init(className, flags);
+        if (status != 0) return error.RGFWInitError;
+        c.RGFW_setQueueEvents(c.RGFW_TRUE);
+    }
+}
+
+pub fn deinit() void {
+    if (!builtin.is_test) {
+        c.RGFW_deinit();
+    }
 }
 
 pub const Window = window: {
