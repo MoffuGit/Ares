@@ -144,46 +144,47 @@ pub fn main(init: std.process.Init) !void {
     app.run(.until_done);
 }
 
-pub fn render(app: *App, state: *WindowState, sync: bool) !void {
+pub fn render(app: *App, window_state: *WindowState, sync: bool) !void {
     {
-        const view = &state.view_state;
-        try view.begin(.{
-            .width = state.size.width,
-            .height = state.size.height,
+        const view_state = &window_state.view_state;
+
+        try view_state.begin(.{
+            .width = window_state.size.width,
+            .height = window_state.size.height,
         });
-        defer view.finish();
+        defer view_state.finish();
 
-        try view.pushAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
-        defer view.popAttrs(&.{ .width, .height });
+        try view_state.pushAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
+        defer view_state.popAttrs(&.{ .width, .height });
 
-        try view.nextAttrs(&.{
+        try view_state.nextAttrs(&.{
             .{ .width = .{ .fixed = 100 } },
             .{ .color = .{ 1.0, 0.0, 0.0, 1.0 } },
         });
-        _ = try view.block(.{}, null);
+        _ = try view_state.block(.{}, null);
 
-        try view.nextAttrs(&.{
+        try view_state.nextAttrs(&.{
             .{ .color = .{ 0.0, 1.0, 0.0, 1.0 } },
             .{ .height_shrink = 0.0 },
             .{ .width_shrink = 0.0 },
         });
-        _ = try view.block(.{}, null);
+        _ = try view_state.block(.{}, null);
 
-        try view.nextAttrs(&.{
+        try view_state.nextAttrs(&.{
             .{ .width = .{ .fixed = 100 } },
             .{ .color = .{ 0.0, 0.0, 1.0, 1.0 } },
         });
-        _ = try view.block(.{}, null);
+        _ = try view_state.block(.{}, null);
     }
 
-    const frame = state.render_handle.nextFrame();
-    errdefer state.render_handle.releaseFrame();
+    const frame = window_state.render_handle.nextFrame();
+    errdefer window_state.render_handle.releaseFrame();
 
     try frame.uniform(.{
-        .viewport_size = .{ state.size.width, state.size.height },
+        .viewport_size = .{ window_state.size.width, window_state.size.height },
     });
 
-    var box = state.view_state.root;
+    var box = window_state.view_state.root;
     while (box) |current| : (box = current.nextPreOrder()) {
         try frame.rect(.{
             .position = .{
@@ -199,5 +200,5 @@ pub fn render(app: *App, state: *WindowState, sync: bool) !void {
         });
     }
 
-    renderer.render(&app.renderer, &state.render_handle, frame, sync);
+    renderer.render(&app.renderer, &window_state.render_handle, frame, sync);
 }
