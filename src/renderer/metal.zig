@@ -7,15 +7,15 @@ const macos = @import("macos");
 const objc = @import("objc");
 
 const datastruct = @import("../datastruct.zig");
-const SwapChain = datastruct.SwapChain(FrameState, 3);
-const renderer = @import("../renderer.zig");
-const FrameState = renderer.FrameState;
+const render = @import("../render.zig");
+const FrameState = render.FrameState;
 const win = @import("../window.zig");
 const Window = win.Window;
 const c = @import("metal/c.zig");
 const sh = @import("metal/shaders.zig");
 const Shaders = sh.Shaders;
 
+const SwapChain = datastruct.SwapChain(FrameState, 3);
 const log = std.log.scoped(.metal);
 
 pub const Metal = @This();

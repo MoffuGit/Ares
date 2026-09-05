@@ -7,7 +7,7 @@ const Allocator = std.mem.Allocator;
 const macos = @import("macos");
 const objc = @import("objc");
 
-const renderer = @import("../../renderer.zig");
+const render = @import("../../render.zig");
 const Metal = @import("../metal.zig");
 const Buffer = Metal.Buffer;
 const Pipeline = Metal.Pipeline;
@@ -24,7 +24,7 @@ const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
                 .fragment_fn = "rectFragmentShader",
                 .blending_enabled = false,
                 .step_fn = .per_instance,
-                .vertex_attributes = renderer.Rect,
+                .vertex_attributes = render.Rect,
             },
         },
     };
