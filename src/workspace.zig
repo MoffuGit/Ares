@@ -5,7 +5,7 @@ const Allocator = std.mem.Allocator;
 
 const zqlite = @import("zqlite");
 
-const App = @import("app.zig");
+const Core = @import("core.zig");
 const ent = @import("entity.zig");
 const AnyEntity = ent.AnyEntity;
 const database = @import("database.zig");
@@ -28,7 +28,7 @@ paths: std.ArrayList([]u8),
 pub fn init(
     self: *Workspace,
     any: AnyEntity,
-    app: *App,
+    core: *Core,
     paths: []const []const u8,
     session: uuid.Uuid,
     io: Io,
@@ -36,7 +36,7 @@ pub fn init(
     const conn = try database.acquire(io);
     errdefer database.release(io, conn);
 
-    const gpa = app.gpa;
+    const gpa = core.gpa;
 
     self.* = .{
         .any = any,
@@ -57,7 +57,7 @@ pub fn init(
         self.paths.appendAssumeCapacity(copy);
     }
 
-    self.project = try app.new(Project, Project.init, .{
+    self.project = try core.new(Project, Project.init, .{
         Project.Options{
             .arena = self.arena.allocator(),
             .paths = self.paths.items,

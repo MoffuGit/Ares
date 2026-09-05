@@ -4,7 +4,7 @@ const Io = std.Io;
 
 const zqlite = @import("zqlite");
 
-const App = @import("app.zig");
+const Core = @import("core.zig");
 const database = @import("database.zig");
 const KVS = database.KVS;
 const uuid = @import("uuid.zig");
@@ -24,7 +24,7 @@ old_id: ?uuid.Uuid,
 pub fn init(
     self: *Session,
     any: AnyEntity,
-    _: *App,
+    _: *Core,
     alloc: Allocator,
     conn: *const zqlite.Conn,
     io: Io,

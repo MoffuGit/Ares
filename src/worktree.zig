@@ -6,7 +6,7 @@ const atomic = std.atomic;
 const heap = std.heap;
 const assert = std.debug.assert;
 
-const App = @import("app.zig");
+const Core = @import("core.zig");
 const chunk_pool = @import("chunk_pool.zig");
 const ChunkedPath = @import("chunked_path.zig");
 const datastruct = @import("datastruct.zig");
@@ -27,7 +27,7 @@ const log = std.log.scoped(.worktree);
 pub const Worktree = @This();
 
 io: Io,
-app: *App,
+core: *Core,
 gpa: Allocator,
 any: AnyEntity,
 arena: heap.ArenaAllocator,
@@ -44,15 +44,15 @@ await_c: Completion,
 pub fn init(
     self: *Worktree,
     any: AnyEntity,
-    app: *App,
+    core: *Core,
     io: Io,
     abs_path: []const u8,
 ) !void {
-    const gpa = app.gpa;
+    const gpa = core.gpa;
 
     self.* = .{
         .any = any,
-        .app = app,
+        .core = core,
         .io = io,
         .gpa = gpa,
         .arena = .init(gpa),
@@ -72,9 +72,9 @@ pub fn init(
     errdefer self.arena.deinit();
 
     self.events = try .init(global.cpu_count, 64, arena);
-    self.waker = try app.await(&self.await, handleEvents);
+    self.waker = try core.await(&self.await, handleEvents);
 
-    try self.scanner.init(&app.scheduler, gpa, self.arena.allocator(), io);
+    try self.scanner.init(&core.scheduler, gpa, self.arena.allocator(), io);
 }
 
 pub fn deinit(self: *Worktree) void {
@@ -91,7 +91,7 @@ pub fn deinit(self: *Worktree) void {
 pub fn drop(self: *Worktree) void {
     if (self.scanner.stop()) {
         self.any.drop();
-        self.app.cancel(
+        self.core.cancel(
             &self.await_c,
             struct {
                 fn noop(_: *Completion, _: *Loop, _: void) bool {
@@ -128,8 +128,8 @@ fn handleEvents(c: *Completion, _: *Loop, res: anyerror!void) bool {
 
     const self: *Worktree = @fieldParentPtr("await", c);
 
-    self.app.update();
-    defer self.app.endUpdate();
+    self.core.update();
+    defer self.core.endUpdate();
 
     while (self.events.pop()) |event| {
         switch (event) {
@@ -149,7 +149,7 @@ fn handleEvents(c: *Completion, _: *Loop, res: anyerror!void) bool {
         }
     }
 
-    self.app.notify(self);
+    self.core.notify(self);
 
     return true;
 }
@@ -159,11 +159,11 @@ test "Worktree" {
     const io = testing.io;
     const chromium_path = @import("test_options").chromium_path;
 
-    var app: App = undefined;
-    try app.init(gpa, io, .{});
-    defer app.deinit();
+    var core: Core = undefined;
+    try core.init(gpa, io, .{});
+    defer core.deinit();
 
-    const worktree = try app.new(
+    const worktree = try core.new(
         Worktree,
         init,
         .{

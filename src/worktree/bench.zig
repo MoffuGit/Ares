@@ -7,7 +7,7 @@ const heap = std.heap;
 const chromium_path = @import("test_options").chromium_path;
 const zlob = @import("zlob");
 
-const App = @import("../app.zig");
+const Core = @import("../core.zig");
 const Bench = @import("../bench.zig");
 const constants = @import("../constants.zig");
 const MAX_PATH_LEN = constants.MAX_PATH_LEN;
@@ -22,9 +22,9 @@ const mode: enum { smoke, benchmark } =
 
 const WorktreeObserver = struct {
     scanning: bool = true,
-    observer: App.Observer = .noop,
+    observer: Core.Observer = .noop,
 
-    pub fn callback(observer: *App.Observer, _: *App, worktree: *Worktree) bool {
+    pub fn callback(observer: *Core.Observer, _: *Core, worktree: *Worktree) bool {
         const parent: *@This() = @fieldParentPtr("observer", observer);
         parent.scanning = worktree.scanning;
         return parent.scanning;
@@ -41,11 +41,11 @@ test "benchmark: Worktree initial scan" {
     var threaded: std.Io.Threaded = .init(gpa, .{});
     const io = threaded.io();
 
-    var app: App = undefined;
-    try app.init(gpa, io, .{});
-    defer app.deinit();
+    var core: Core = undefined;
+    try core.init(gpa, io, .{});
+    defer core.deinit();
 
-    const arena = app.arena.allocator();
+    const arena = core.arena.allocator();
 
     var bench: Bench = .init();
     defer bench.deinit();
@@ -68,7 +68,7 @@ test "benchmark: Worktree initial scan" {
     for (0..durations.len) |idx| {
         bench.start(io);
 
-        const worktree = try app.new(
+        const worktree = try core.new(
             Worktree,
             Worktree.init,
             .{
@@ -80,16 +80,16 @@ test "benchmark: Worktree initial scan" {
 
         var observer: WorktreeObserver = .{};
 
-        try app.observe(worktree, WorktreeObserver.callback, &observer.observer);
+        try core.observe(worktree, WorktreeObserver.callback, &observer.observer);
 
         while (observer.scanning) {
-            app.run(.once);
-            app.flush();
+            core.run(.once);
+            core.flush();
         }
 
         durations[idx] = bench.stop(io);
 
-        verify(&app, zlob_set, worktree) catch |err| {
+        verify(&core, zlob_set, worktree) catch |err| {
             log.err("Verify err={}", .{err});
         };
     }
@@ -105,8 +105,8 @@ test "benchmark: Worktree initial scan" {
     });
 }
 
-fn verify(app: *App, zlob_set: std.StringHashMap(void), worktree: *Worktree) !void {
-    var arena = std.heap.ArenaAllocator.init(app.gpa);
+fn verify(core: *Core, zlob_set: std.StringHashMap(void), worktree: *Worktree) !void {
+    var arena = std.heap.ArenaAllocator.init(core.gpa);
     defer arena.deinit();
     const alloc = arena.allocator();
 

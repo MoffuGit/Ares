@@ -2,8 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 
-const App = @import("../app.zig");
-const Context = App.Context;
+const Core = @import("../core.zig");
 const ent = @import("../entity.zig");
 const AnyEntity = ent.AnyEntity;
 const Worktree = @import("../worktree.zig");
@@ -20,7 +19,7 @@ any: AnyEntity,
 worktrees: std.array_hash_map.Auto(u8, *Worktree),
 next_id: u8,
 
-pub fn init(self: *WorktreeStore, any: AnyEntity, app: *App, options: Options) !void {
+pub fn init(self: *WorktreeStore, any: AnyEntity, core: *Core, options: Options) !void {
     self.* = .{
         .any = any,
         .next_id = 0,
@@ -30,7 +29,7 @@ pub fn init(self: *WorktreeStore, any: AnyEntity, app: *App, options: Options) !
 
     for (options.paths) |path| {
         const id = self.next_id;
-        const worktree = try app.new(Worktree, Worktree.init, .{
+        const worktree = try core.new(Worktree, Worktree.init, .{
             options.io,
             path,
         });

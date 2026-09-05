@@ -11,8 +11,6 @@ const builtin = @import("builtin");
 
 const GitIgnore = @import("zlob").GitIgnore;
 
-const App = @import("../app.zig");
-const Context = App.Context;
 const chunk_pool = @import("../chunk_pool.zig");
 const ChunkAllocator = chunk_pool.ChunkAllocator;
 const ChunkedPath = @import("../chunked_path.zig");
@@ -22,7 +20,6 @@ const constants = @import("../constants.zig");
 const MAX_PATH_LEN = constants.MAX_PATH_LEN;
 const datastruct = @import("../datastruct.zig");
 const SinglyLinkedList = datastruct.SinglyLinkedList;
-const Dequeue = datastruct.Dequeue;
 const global = @import("../global.zig");
 const Loop = @import("../loop.zig");
 const Completion = Loop.Completion;

@@ -1,4 +1,4 @@
-const App = @import("app.zig");
+const Core = @import("core.zig");
 const bench = @import("bench.zig");
 const Buffer = @import("buffer.zig");
 const chunk_pool = @import("chunk_pool.zig");
@@ -24,7 +24,7 @@ test {
     _ = bench;
     _ = patch;
     _ = Buffer;
-    _ = App;
+    _ = Core;
     _ = chunk_pool;
     _ = chunked_path;
     _ = datastruct;
