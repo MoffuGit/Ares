@@ -1,0 +1,252 @@
+const std = @import("std");
+const heap = std.heap;
+const Allocator = std.mem.Allocator;
+const Io = std.Io;
+
+const chunk_pool = @import("chunk_pool.zig");
+const ChunkAllocator = chunk_pool.ChunkAllocator;
+const Core = @import("core.zig");
+const datastruct = @import("datastruct.zig");
+const SinglyLinkedList = datastruct.SinglyLinkedList;
+const Display = @import("display.zig");
+const render = @import("render.zig");
+const Renderer = render.Renderer;
+const Handle = Renderer.Handle;
+const view = @import("view.zig");
+const ViewState = view.ViewState;
+const win = @import("window.zig");
+const Window = win.Window;
+
+const log = std.log.scoped(.app);
+
+pub const App = @This();
+
+io: Io,
+gpa: Allocator,
+arena: heap.ArenaAllocator,
+chunks: ChunkAllocator,
+core: Core,
+display: Display,
+renderer: Renderer,
+window_states: SinglyLinkedList(WindowState),
+
+pub fn init(self: *App, gpa: Allocator, io: Io) !void {
+    self.* = .{
+        .arena = .init(gpa),
+        .chunks = undefined,
+        .io = io,
+        .gpa = gpa,
+        .window_states = .empty,
+        .renderer = undefined,
+        .core = undefined,
+        .display = undefined,
+    };
+
+    const arena = self.arena.allocator();
+    errdefer self.arena.deinit();
+
+    try self.chunks.init(arena, &.{
+        .{
+            .capacity = 50,
+            .chunk_size = @sizeOf(WindowState),
+        },
+    });
+
+    try win.init("Odyssey", 0);
+    errdefer win.deinit();
+
+    try self.core.init(gpa, io, .{});
+    errdefer self.core.deinit();
+
+    try self.renderer.init();
+    errdefer self.renderer.deinit();
+
+    try self.display.init(&self.core, displayCallback);
+    errdefer self.display.deinit();
+
+    win.setEventCallback(.window_resized, resizeCallback);
+}
+
+pub fn deinit(self: *App) void {
+    self.renderer.deinit();
+    self.core.deinit();
+    win.deinit();
+    self.arena.deinit();
+}
+
+pub fn run(self: *App) void {
+    self.core.run(.until_done);
+}
+
+pub const WindowState = struct {
+    next: ?*WindowState = null,
+
+    win: Window,
+    width: f32,
+    height: f32,
+    render_handle: Handle,
+    view_state: ViewState,
+
+    pub fn init(self: *WindowState, app: *App, opts: win.Options) !void {
+        self.* = .{
+            .view_state = undefined,
+            .win = undefined,
+            .render_handle = undefined,
+            .width = @floatFromInt(opts.width),
+            .height = @floatFromInt(opts.height),
+        };
+
+        try self.view_state.init(app.gpa);
+        errdefer self.view_state.deinit();
+
+        try self.win.init(opts);
+        errdefer self.win.deinit();
+
+        try self.render_handle.init(
+            &app.renderer,
+            &self.win,
+            app.gpa,
+            app.io,
+        );
+    }
+
+    pub fn deinit(self: *WindowState) void {
+        self.render_handle.deinit();
+        self.win.deinit();
+        self.view_state.deinit();
+    }
+};
+
+fn resizeCallback(event: win.Event) void {
+    const window = event.win;
+    const update = event.type.window_update;
+    const self: *App = @ptrCast(@alignCast(window.userdata()));
+
+    var curr: ?*WindowState = self.window_states.head;
+
+    while (curr) |state| : (curr = state.next) {
+        if (state.win.raw == window.raw) {
+            state.width = update.width;
+            state.height = update.height;
+
+            self.renderFrame(state, true) catch |err| {
+                log.err("Frame render err={}", .{err});
+            };
+            break;
+        }
+    }
+}
+
+fn displayCallback(display: *Display) bool {
+    const self: *App = @fieldParentPtr("display", display);
+
+    if (self.window_states.is_empty()) self.core.stop();
+
+    win.pollEvents();
+
+    var states = self.window_states;
+    self.window_states = .empty;
+
+    const chunks = self.chunks.allocator();
+
+    while (states.pop()) |state| {
+        if (state.win.shouldClose()) {
+            state.deinit();
+
+            chunks.destroy(state);
+        } else {
+            self.renderFrame(state, false) catch |err| {
+                log.debug("Frame render err={}", .{err});
+            };
+
+            self.window_states.append(state);
+        }
+    }
+
+    return true;
+}
+// const chunks = app.chunks.allocator();
+// const window_state = try chunks.create(WindowState);
+//
+// try window_state.init(
+//     &app.renderer,
+//     .{
+//         .name = "Odyssey",
+//         .x = 0,
+//         .y = 0,
+//         .width = 800,
+//         .height = 600,
+//         .flags = win.WindowCenter | win.WindowFocus,
+//         .userdata = &context,
+//     },
+//     app.gpa,
+//     app.io,
+// );
+//
+// errdefer window_state.deinit();
+//
+// app.states.append(window_state);
+//
+//
+pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
+    {
+        const view_state = &window_state.view_state;
+
+        try view_state.begin(.{
+            .width = window_state.width,
+            .height = window_state.height,
+        });
+        defer view_state.finish();
+
+        try view_state.pushAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
+        defer view_state.popAttrs(&.{ .width, .height });
+
+        try view_state.nextAttrs(&.{
+            .{ .width = .{ .fixed = 100 } },
+            .{ .color = .{ 1.0, 0.0, 0.0, 1.0 } },
+        });
+        _ = try view_state.block(.{}, null);
+
+        try view_state.nextAttrs(&.{
+            .{ .color = .{ 0.0, 1.0, 0.0, 1.0 } },
+            .{ .height_shrink = 0.0 },
+            .{ .width_shrink = 0.0 },
+        });
+        _ = try view_state.block(.{}, null);
+
+        try view_state.nextAttrs(&.{
+            .{ .width = .{ .fixed = 100 } },
+            .{ .color = .{ 0.0, 0.0, 1.0, 1.0 } },
+        });
+        _ = try view_state.block(.{}, null);
+    }
+
+    const frame = window_state.render_handle.nextFrame();
+    errdefer window_state.render_handle.releaseFrame();
+
+    try frame.uniform(.{
+        .viewport_size = .{ window_state.width, window_state.height },
+    });
+
+    var box = window_state.view_state.root;
+    while (box) |current| : (box = current.nextPreOrder()) {
+        try frame.rect(.{
+            .position = .{
+                current.abs_position[0],
+                current.abs_position[1],
+                current.abs_position[0] + current.size[0],
+                current.abs_position[1] + current.size[1],
+            },
+            .color_0 = current.color,
+            .color_1 = current.color,
+            .color_2 = current.color,
+            .color_3 = current.color,
+        });
+    }
+
+    render.renderFrame(&app.renderer, &window_state.render_handle, frame, sync);
+}
+//
+//window state will get moved into here because it does not make that much sense having it
+//on app, the naming is weird because app is not the app itself but the shared point between entities and the owner
+//of the loop, the renderer will get moved out of there as well
