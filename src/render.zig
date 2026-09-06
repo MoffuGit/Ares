@@ -47,9 +47,6 @@ pub const Handle = renderer: {
 
 //The sync path i take it from this issue: https://github.com/ocornut/imgui/issues/9500
 pub fn renderFrame(renderer: *Renderer, handle: *Handle, frame_state: *FrameState, sync: bool) void {
-    renderer.start();
-    defer renderer.end();
-
     const width, const height = frame_state.uniforms.viewport_size;
 
     handle.update(width, height, sync);

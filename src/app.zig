@@ -140,6 +140,9 @@ fn resizeCallback(event: win.Event) void {
 fn displayCallback(display: *Display) bool {
     const self: *App = @fieldParentPtr("display", display);
 
+    self.renderer.start();
+    defer self.renderer.end();
+
     if (self.window_states.is_empty()) self.core.stop();
 
     win.pollEvents();
