@@ -201,7 +201,7 @@ pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
             .{ .width_shrink = 0.0 },
         });
 
-        const green = try view_state.blockFromString("green@@@green", .{ .mouse = true });
+        const green = try view_state.blockFromFmt("green@@@{}", .{1}, .{ .mouse = true });
         const signal = view_state.signalForBlock(green);
 
         if (signal.hovered) {

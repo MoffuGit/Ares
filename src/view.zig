@@ -150,11 +150,17 @@ pub const ViewState = struct {
         return signal;
     }
 
-    pub fn fmt(self: *ViewState, comptime format: []const u8, args: anytype) []u8 {
-        const required = fmt.count(format, args);
+    pub fn fmt(self: *ViewState, comptime format: []const u8, args: anytype) ![]u8 {
+        const required = std.fmt.count(format, args);
         const frame_arena = self.frameArena();
         const buffer = try frame_arena.alloc(u8, required);
         return std.fmt.bufPrint(buffer, format, args) catch unreachable;
+    }
+
+    pub fn blockFromFmt(self: *ViewState, comptime format: []const u8, args: anytype, flags: Block.Flags) !*Block {
+        const string = try self.fmt(format, args);
+
+        return try self.blockFromString(string, flags);
     }
 
     pub fn blockFromString(self: *ViewState, string: []const u8, flags: Block.Flags) !*Block {
