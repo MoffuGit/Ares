@@ -21,6 +21,8 @@ pub const ViewState = struct {
     root: ?*Block,
     block_count: u64,
 
+    mouse: [2]f32,
+
     frame: u64,
     frame_arenas: [2]heap.ArenaAllocator,
 
@@ -52,6 +54,7 @@ pub const ViewState = struct {
 
     pub fn init(self: *ViewState, gpa: Allocator) !void {
         self.* = .{
+            .mouse = @splat(0.0),
             .cache = undefined,
             .arena = .init(gpa),
             .root = null,
@@ -82,6 +85,9 @@ pub const ViewState = struct {
         errdefer self.reset();
 
         const size = try window.size();
+        const mouse = try window.mouse();
+
+        self.mouse = .{ mouse.x, mouse.y };
 
         try self.nextAttrs(&.{
             .{ .width = .{ .fixed = size.w } },

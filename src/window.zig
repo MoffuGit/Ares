@@ -127,9 +127,6 @@ pub const Window = window: {
             return c.RGFW_window_getView_OSX(self.raw);
         }
 
-        //WARN: this function will leak memory on macos
-        //if is not called inside a AutoReleasePool scope
-        //or at least that's the behavior i got
         pub fn size(self: *const @This()) !struct { w: f32, h: f32 } {
             var w: i32 = 0;
             var h: i32 = 0;
@@ -137,7 +134,18 @@ pub const Window = window: {
             if (c.RGFW_window_getSize(self.raw, &w, &h) == c.RGFW_TRUE) {
                 return .{ .w = @floatFromInt(w), .h = @floatFromInt(h) };
             } else {
-                return error.Error;
+                return error.GetSizeError;
+            }
+        }
+
+        pub fn mouse(self: *const @This()) !struct { x: f32, y: f32 } {
+            var x: i32 = 0;
+            var y: i32 = 0;
+
+            if (c.RGFW_window_getMouse(self.raw, &x, &y) == c.RGFW_TRUE) {
+                return .{ .x = @floatFromInt(x), .y = @floatFromInt(y) };
+            } else {
+                return error.GetMouseError;
             }
         }
     };
