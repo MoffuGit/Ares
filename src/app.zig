@@ -82,8 +82,6 @@ pub const WindowState = struct {
     next: ?*WindowState = null,
 
     win: Window,
-    width: f32,
-    height: f32,
     render_handle: Handle,
     view_state: ViewState,
 
@@ -92,8 +90,6 @@ pub const WindowState = struct {
             .view_state = undefined,
             .win = undefined,
             .render_handle = undefined,
-            .width = @floatFromInt(opts.width),
-            .height = @floatFromInt(opts.height),
         };
 
         try self.view_state.init(app.gpa);
@@ -121,16 +117,12 @@ pub const WindowState = struct {
 
 fn resizeCallback(event: win.Event) void {
     const window = event.win;
-    const update = event.type.window_update;
     const self: *App = @ptrCast(@alignCast(window.userdata()));
 
     var curr: ?*WindowState = self.states.head;
 
     while (curr) |state| : (curr = state.next) {
         if (state.win.raw == window.raw) {
-            state.width = update.width;
-            state.height = update.height;
-
             self.renderFrame(state, true) catch |err| {
                 log.err("Frame render err={}", .{err});
             };
@@ -180,12 +172,13 @@ pub fn openWindow(self: *App, opts: win.Options) !void {
 }
 
 pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
+    const size = try window_state.win.size();
     {
         const view_state = &window_state.view_state;
 
         try view_state.begin(.{
-            .width = window_state.width,
-            .height = window_state.height,
+            .width = size.w,
+            .height = size.h,
         });
         defer view_state.finish();
 
@@ -216,7 +209,7 @@ pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
     errdefer window_state.render_handle.releaseFrame();
 
     try frame.uniform(.{
-        .viewport_size = .{ window_state.width, window_state.height },
+        .viewport_size = .{ size.w, size.h },
     });
 
     var box = window_state.view_state.root;

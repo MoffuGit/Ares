@@ -126,6 +126,20 @@ pub const Window = window: {
         pub fn osView(self: *const @This()) ?*anyopaque {
             return c.RGFW_window_getView_OSX(self.raw);
         }
+
+        //WARN: this function will leak memory on macos
+        //if is not called inside a AutoReleasePool scope
+        //or at least that's the behavior i got
+        pub fn size(self: *const @This()) !struct { w: f32, h: f32 } {
+            var w: i32 = 0;
+            var h: i32 = 0;
+
+            if (c.RGFW_window_getSize(self.raw, &w, &h) == c.RGFW_TRUE) {
+                return .{ .w = @floatFromInt(w), .h = @floatFromInt(h) };
+            } else {
+                return error.Error;
+            }
+        }
     };
 
     break :window struct {
