@@ -206,10 +206,17 @@ pub const ViewState = struct {
     pub fn buildBlock(self: *ViewState, flags: Block.Flags, optional_key: ?u64) !*Block {
         const block = bkl: {
             if (optional_key) |key| {
-                if (self.getBlock(key)) |block| {
-                    block.reset();
+                if (self.getBlock(key)) |cached| {
+                    if (cached.touched_frame == self.frame) {
+                        const block = try self.frameArena().create(Block);
+                        block.* = .empty;
 
-                    break :bkl block;
+                        break :bkl block;
+                    }
+
+                    cached.reset();
+
+                    break :bkl cached;
                 } else {
                     const chunks = self.chunks.allocator();
 
