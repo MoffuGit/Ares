@@ -200,8 +200,15 @@ pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
             .{ .height_shrink = 0.0 },
             .{ .width_shrink = 0.0 },
         });
-        const green = try view_state.buildBlock(.{}, null);
-        green.color = .{ 0.0, 1.0, 0.0, 1.0 };
+
+        const green = try view_state.blockFromString("green@@@green", .{ .mouse = true });
+        const signal = view_state.signalForBlock(green);
+
+        if (signal.hovered) {
+            green.color = .{ 0.0, 1.0, 0.5, 1.0 };
+        } else {
+            green.color = .{ 0.0, 1.0, 0.0, 1.0 };
+        }
 
         try view_state.nextAttrs(&.{
             .{ .width = .{ .fixed = 100 } },
@@ -223,12 +230,7 @@ pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
     var box = window_state.view_state.root;
     while (box) |current| : (box = current.nextPreOrder()) {
         try frame.rect(.{
-            .position = .{
-                current.abs_position[0],
-                current.abs_position[1],
-                current.abs_position[0] + current.size[0],
-                current.abs_position[1] + current.size[1],
-            },
+            .position = current.rect[0] ++ current.rect[1],
             .color_0 = current.color,
             .color_1 = current.color,
             .color_2 = current.color,

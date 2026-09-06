@@ -16,6 +16,8 @@ const datastruct = @import("datastruct.zig");
 const DoublyLinkedList = datastruct.DoublyLinkedList;
 const TaggedLinkedList = datastruct.TaggedLinkedList;
 
+const log = std.log.scoped(.view);
+
 pub const ViewState = struct {
     arena: heap.ArenaAllocator,
     root: ?*Block,
@@ -125,17 +127,28 @@ pub const ViewState = struct {
         _ = self.frame_arenas[arena_index].reset(.retain_capacity);
     }
 
-    // pub fn signalFromBlock(self: *ViewState, block: *Block) Signals {
-    //     const flags = block.flags;
-    //     _ = self;
-    //
-    //     var signal: Signals = .none;
-    //
-    //     // if (flags.mouse and ) {
-    //     // }
-    //
-    //     return Signals;
-    // }
+    pub fn signalForBlock(self: *ViewState, block: *Block) Signals {
+        const flags = block.flags;
+
+        var signal: Signals = .none;
+
+        const mouse = self.mouse;
+        const rect = block.rect;
+
+        if (rect[0][0] <= mouse[0] and mouse[0] < rect[1][0] and
+            rect[0][1] <= mouse[1] and mouse[1] < rect[1][1])
+        {
+            signal.mouseover = true;
+        }
+
+        if (flags.mouse and rect[0][0] <= mouse[0] and mouse[0] < rect[1][0] and
+            rect[0][1] <= mouse[1] and mouse[1] < rect[1][1])
+        {
+            signal.hovered = true;
+        }
+
+        return signal;
+    }
 
     pub fn fmt(self: *ViewState, comptime format: []const u8, args: anytype) []u8 {
         const required = fmt.count(format, args);
@@ -326,7 +339,7 @@ pub const Block = struct {
 
     size: [2]f32,
     position: [2]f32,
-    abs_position: [2]f32,
+    rect: [2][2]f32,
     bounds: [2]f32,
 
     pub const Flags = packed struct {
@@ -337,6 +350,7 @@ pub const Block = struct {
     };
 
     pub const empty: Block = .{
+        .rect = @splat(@splat(0.0)),
         .cache = ._null,
         .children = .empty,
         .child_count = 0,
@@ -351,7 +365,6 @@ pub const Block = struct {
         .flags = .{},
         .size = @splat(0.0),
         .position = @splat(0.0),
-        .abs_position = @splat(0.0),
         .bounds = @splat(0.0),
         .key = null,
     };
@@ -419,7 +432,7 @@ pub const Block = struct {
         self.resolvePerSizing(axis);
         self.resolveFitSizing(axis);
         self.resolveOverflow(axis);
-        self.resolvePositions(axis);
+        self.resolveRect(axis);
     }
 
     pub fn resolveFixedSizing(self: *Block, axis: u1) void {
@@ -535,7 +548,7 @@ pub const Block = struct {
         }
     }
 
-    pub fn resolvePositions(self: *Block, axis: u1) void {
+    pub fn resolveRect(self: *Block, axis: u1) void {
         var block: ?*Block = self;
         while (block) |current| : (block = current.nextPreOrder()) {
             var position: f32 = 0.0;
@@ -552,7 +565,12 @@ pub const Block = struct {
                     bounds = @max(bounds, child.size[axis]);
                 }
 
-                child.abs_position[axis] = current.abs_position[axis] + child.position[axis];
+                child.rect[0][axis] = current.rect[0][axis] + child.position[axis];
+                child.rect[1][axis] = child.rect[0][axis] + child.size[axis];
+
+                for (0..2) |p| {
+                    child.rect[p][axis] = @floor(child.rect[p][axis]);
+                }
             }
 
             current.bounds[axis] = bounds;
