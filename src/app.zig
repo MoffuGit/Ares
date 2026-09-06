@@ -28,7 +28,7 @@ chunks: ChunkAllocator,
 core: Core,
 display: Display,
 renderer: Renderer,
-window_states: SinglyLinkedList(WindowState),
+states: SinglyLinkedList(WindowState),
 
 pub fn init(self: *App, gpa: Allocator, io: Io) !void {
     self.* = .{
@@ -36,7 +36,7 @@ pub fn init(self: *App, gpa: Allocator, io: Io) !void {
         .chunks = undefined,
         .io = io,
         .gpa = gpa,
-        .window_states = .empty,
+        .states = .empty,
         .renderer = undefined,
         .core = undefined,
         .display = undefined,
@@ -124,7 +124,7 @@ fn resizeCallback(event: win.Event) void {
     const update = event.type.window_update;
     const self: *App = @ptrCast(@alignCast(window.userdata()));
 
-    var curr: ?*WindowState = self.window_states.head;
+    var curr: ?*WindowState = self.states.head;
 
     while (curr) |state| : (curr = state.next) {
         if (state.win.raw == window.raw) {
@@ -145,12 +145,12 @@ fn displayCallback(display: *Display) bool {
     self.renderer.start();
     defer self.renderer.end();
 
-    if (self.window_states.is_empty()) self.core.stop();
+    if (self.states.is_empty()) self.core.stop();
 
     win.pollEvents();
 
-    var states = self.window_states;
-    self.window_states = .empty;
+    var states = self.states;
+    self.states = .empty;
 
     const chunks = self.chunks.allocator();
 
@@ -164,14 +164,20 @@ fn displayCallback(display: *Display) bool {
                 log.debug("Frame render err={}", .{err});
             };
 
-            self.window_states.append(state);
+            self.states.append(state);
         }
     }
 
     return true;
 }
 
-// pub fn openWindow(self: *App) !void {}
+pub fn openWindow(self: *App, opts: win.Options) !void {
+    const chunks = self.chunks.allocator();
+    const window_state = try chunks.create(WindowState);
+    try window_state.init(self, opts);
+
+    self.states.append(window_state);
+}
 
 pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
     {

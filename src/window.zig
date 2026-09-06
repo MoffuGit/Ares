@@ -70,7 +70,6 @@ pub const Options = struct {
     width: i32,
     height: i32,
     flags: Flags,
-    userdata: ?*anyopaque,
 };
 
 pub const Window = window: {
