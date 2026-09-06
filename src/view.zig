@@ -150,36 +150,47 @@ pub const ViewState = struct {
         return try self.block(flags, key);
     }
 
+    pub fn get(self: *ViewState, key: u64) ?*Block {
+        const list = &self.cache[key % self.cache.len];
+        var entry = list.first;
+
+        while (entry) |cache| : (entry = cache.next) {
+            const blk: *Block = @fieldParentPtr("cache", cache);
+            if (blk.key == key) {
+                return blk;
+            }
+        }
+
+        return null;
+    }
+
     pub fn block(self: *ViewState, flags: Block.Flags, key: ?u64) !*Block {
         const blk = bkl: {
             if (key) |k| {
-                const list = &self.cache[k % self.cache.len];
+                if (self.get(k)) |cached| {
+                    cached.children = .empty;
+                    cached.child_count = 0;
+                    cached.next = null;
+                    cached.prev = null;
+                    cached.parent = null;
 
-                var entry = list.first;
-                while (entry) |cache| : (entry = cache.next) {
-                    const cached: *Block = @fieldParentPtr("cache", cache);
-                    if (cached.key == k) {
-                        cached.children = .empty;
-                        cached.child_count = 0;
-                        cached.next = null;
-                        cached.prev = null;
-                        cached.parent = null;
+                    cached.axis = .x;
+                    cached.sizing = @splat(.zero);
+                    cached.shrink = @splat(1.0);
+                    cached.color = @splat(0.0);
+                    cached.flags = .{};
+                    break :bkl cached;
+                } else {
+                    const list = &self.cache[k % self.cache.len];
+                    const chunks = self.chunks.allocator();
 
-                        cached.axis = .x;
-                        cached.sizing = @splat(.zero);
-                        cached.shrink = @splat(1.0);
-                        cached.color = @splat(0.0);
-                        cached.flags = .{};
-                        break :bkl cached;
-                    }
+                    const blk = try chunks.create(Block);
+                    blk.* = .empty;
+                    blk.key = k;
+                    list.append(&blk.cache);
+
+                    break :bkl blk;
                 }
-
-                const chunks = self.chunks.allocator();
-                const cached = try chunks.create(Block);
-                cached.* = .empty;
-                cached.key = k;
-                list.append(&cached.cache);
-                break :bkl cached;
             } else {
                 const blk = try self.frameArena().create(Block);
                 blk.* = .empty;
