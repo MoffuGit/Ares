@@ -62,7 +62,6 @@ pub const Options = struct {
         .width = 600,
         .height = 800,
         .flags = WindowCenter | WindowFocus,
-        .userdata = null,
     };
 
     name: [:0]const u8,
@@ -94,12 +93,14 @@ pub const Window = window: {
                 opts.height,
                 opts.flags,
             ) orelse return error.RGFWCreation;
-
-            c.RGFW_window_setUserPtr(self.raw, opts.userdata);
         }
 
         pub fn deinit(self: *const @This()) void {
             c.RGFW_window_close(self.raw);
+        }
+
+        pub fn setUserdata(self: *const @This(), ud: ?*anyopaque) void {
+            c.RGFW_window_setUserPtr(self.raw, ud);
         }
 
         pub fn userdata(self: *const @This()) ?*anyopaque {

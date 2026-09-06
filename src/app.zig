@@ -102,6 +102,8 @@ pub const WindowState = struct {
         try self.win.init(opts);
         errdefer self.win.deinit();
 
+        self.win.setUserdata(app);
+
         try self.render_handle.init(
             &app.renderer,
             &self.win,
@@ -168,29 +170,9 @@ fn displayCallback(display: *Display) bool {
 
     return true;
 }
-// const chunks = app.chunks.allocator();
-// const window_state = try chunks.create(WindowState);
-//
-// try window_state.init(
-//     &app.renderer,
-//     .{
-//         .name = "Odyssey",
-//         .x = 0,
-//         .y = 0,
-//         .width = 800,
-//         .height = 600,
-//         .flags = win.WindowCenter | win.WindowFocus,
-//         .userdata = &context,
-//     },
-//     app.gpa,
-//     app.io,
-// );
-//
-// errdefer window_state.deinit();
-//
-// app.states.append(window_state);
-//
-//
+
+// pub fn openWindow(self: *App) !void {}
+
 pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
     {
         const view_state = &window_state.view_state;

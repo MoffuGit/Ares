@@ -15,5 +15,27 @@ pub fn main(init: std.process.Init) !void {
     try app.init(gpa, io);
     defer app.deinit();
 
+    // const chunks = app.chunks.allocator();
+    // const window_state = try chunks.create(App.WindowState);
+    //
+    // try window_state.init(
+    //     &app.renderer,
+    //     .{
+    //         .name = "Odyssey",
+    //         .x = 0,
+    //         .y = 0,
+    //         .width = 800,
+    //         .height = 600,
+    //         .flags = win.WindowCenter | win.WindowFocus,
+    //         .userdata = &context,
+    //     },
+    //     app.gpa,
+    //     app.io,
+    // );
+    //
+    // errdefer window_state.deinit();
+    //
+    // app.states.append(window_state);
+    //
     app.run();
 }
