@@ -120,14 +120,22 @@ fn resizeCallback(event: win.Event) void {
     const self: *App = @ptrCast(@alignCast(window.userdata()));
 
     var curr: ?*WindowState = self.states.head;
+    var resized: ?*WindowState = null;
 
     while (curr) |state| : (curr = state.next) {
         if (state.win.raw == window.raw) {
-            self.renderFrame(state, true) catch |err| {
+            resized = state;
+        } else {
+            self.renderFrame(state, false) catch |err| {
                 log.err("Frame render err={}", .{err});
             };
-            break;
         }
+    }
+
+    if (resized) |state| {
+        self.renderFrame(state, true) catch |err| {
+            log.err("Frame render err={}", .{err});
+        };
     }
 }
 
