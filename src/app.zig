@@ -180,14 +180,10 @@ pub fn openWindow(self: *App, opts: win.Options) !void {
 }
 
 pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
-    const size = try window_state.win.size();
     {
         const view_state = &window_state.view_state;
 
-        try view_state.begin(.{
-            .width = size.w,
-            .height = size.h,
-        });
+        try view_state.begin(window_state.win);
         defer view_state.finish();
 
         try view_state.pushAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
@@ -215,6 +211,8 @@ pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
 
     const frame = window_state.render_handle.nextFrame();
     errdefer window_state.render_handle.releaseFrame();
+
+    const size = try window_state.win.size();
 
     try frame.uniform(.{
         .viewport_size = .{ size.w, size.h },

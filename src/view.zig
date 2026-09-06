@@ -8,6 +8,8 @@ const heap = std.heap;
 const meta = std.meta;
 const testing = std.testing;
 const Wyhash = std.hash.Wyhash;
+const win = @import("window.zig");
+const Window = win.Window;
 
 const chunk_pool = @import("chunk_pool.zig");
 const datastruct = @import("datastruct.zig");
@@ -75,16 +77,15 @@ pub const ViewState = struct {
         self.arena.deinit();
     }
 
-    pub fn begin(self: *ViewState, viewport: struct { width: f32, height: f32 }) !void {
-        assert(viewport.width >= 0.0);
-        assert(viewport.height >= 0.0);
-
+    pub fn begin(self: *ViewState, window: Window) !void {
         self.reset();
         errdefer self.reset();
 
+        const size = try window.size();
+
         try self.nextAttrs(&.{
-            .{ .width = .{ .fixed = viewport.width } },
-            .{ .height = .{ .fixed = viewport.height } },
+            .{ .width = .{ .fixed = size.w } },
+            .{ .height = .{ .fixed = size.h } },
         });
 
         self.root = try self.block(.{}, null);
