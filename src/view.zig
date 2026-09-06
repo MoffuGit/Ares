@@ -125,6 +125,18 @@ pub const ViewState = struct {
         _ = self.frame_arenas[arena_index].reset(.retain_capacity);
     }
 
+    // pub fn signalFromBlock(self: *ViewState, block: *Block) Signals {
+    //     const flags = block.flags;
+    //     _ = self;
+    //
+    //     var signal: Signals = .none;
+    //
+    //     // if (flags.mouse and ) {
+    //     // }
+    //
+    //     return Signals;
+    // }
+
     pub fn fmt(self: *ViewState, comptime format: []const u8, args: anytype) []u8 {
         const required = fmt.count(format, args);
         const frame_arena = self.frameArena();
@@ -284,9 +296,14 @@ pub const Sizing = union(enum) {
     percent: f32,
 };
 
-pub const Signal = packed struct {
-    hovered: bool = false,
-    mouseover: bool = false,
+pub const Signals = packed struct {
+    const none: Signals = .{
+        .hovered = false,
+        .mouseover = false,
+    };
+
+    hovered: bool,
+    mouseover: bool,
 };
 
 pub const Block = struct {
@@ -316,6 +333,7 @@ pub const Block = struct {
         pub const allowOverflow: Flags = .{ .overflow = 0b11 };
 
         overflow: u2 = 0,
+        mouse: bool = false,
     };
 
     pub const empty: Block = .{
@@ -352,8 +370,8 @@ pub const Block = struct {
         if (state.stacks.get(.width_shrink).head) |node| self.shrink[0] = clamp(node.value, 0.0, 1.0);
         if (state.stacks.get(.height_shrink).head) |node| self.shrink[1] = clamp(node.value, 0.0, 1.0);
 
-        const stack_flags: u2 = if (state.stacks.get(.flags).head) |node| @bitCast(node.value) else 0;
-        self.flags = @bitCast(@as(u2, @bitCast(flags)) | stack_flags);
+        const stack_flags: u3 = if (state.stacks.get(.flags).head) |node| @bitCast(node.value) else 0;
+        self.flags = @bitCast(@as(u3, @bitCast(flags)) | stack_flags);
 
         self.touched_frame = state.frame;
 
