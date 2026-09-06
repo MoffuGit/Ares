@@ -246,7 +246,3 @@ pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
 
     render.renderFrame(&app.renderer, &window_state.render_handle, frame, sync);
 }
-//
-//window state will get moved into here because it does not make that much sense having it
-//on app, the naming is weird because app is not the app itself but the shared point between entities and the owner
-//of the loop, the renderer will get moved out of there as well
