@@ -1,9 +1,9 @@
 const std = @import("std");
 const Io = std.Io;
 
-const win = @import("window.zig");
-const global = @import("global.zig");
 const App = @import("app.zig");
+const global = @import("global.zig");
+const win = @import("window.zig");
 
 pub fn main(init: std.process.Init) !void {
     try global.init();
