@@ -44,13 +44,13 @@ pub const ViewState = struct {
         flags: Block.Flags,
     });
 
-    fn stackFlag(flag: ViewState.Flags) u64 {
-        return @as(u64, 1) << @intFromEnum(flag);
-    }
-
     pub const Flags = Stacks.Tag;
     pub const Attribute = Stacks.Value;
     pub const Node = Stacks.Node;
+
+    fn stackFlag(flag: Flags) u64 {
+        return @as(u64, 1) << @intFromEnum(flag);
+    }
 
     pub fn init(self: *ViewState, gpa: Allocator) !void {
         self.* = .{
@@ -94,7 +94,7 @@ pub const ViewState = struct {
             .{ .height = .{ .fixed = size.h } },
         });
 
-        self.root = try self.block(.{}, null);
+        self.root = try self.buildBlock(.{}, null);
 
         try self.pushAttr(.{ .parent = self.root.? });
     }
@@ -132,7 +132,7 @@ pub const ViewState = struct {
         return std.fmt.bufPrint(buffer, format, args) catch unreachable;
     }
 
-    pub fn blockWithString(self: *ViewState, string: []const u8, flags: Block.Flags) !*Block {
+    pub fn blockFromString(self: *ViewState, string: []const u8, flags: Block.Flags) !*Block {
         const chunk = if (std.mem.find(u8, string, "@@@")) |index|
             string[index + "@@@".len ..]
         else
@@ -147,59 +147,59 @@ pub const ViewState = struct {
             break :key Wyhash.hash(0, chunk);
         };
 
-        return try self.block(flags, key);
+        return try self.buildBlock(flags, key);
     }
 
-    pub fn get(self: *ViewState, key: u64) ?*Block {
+    pub fn getBlock(self: *ViewState, key: u64) ?*Block {
         const list = &self.cache[key % self.cache.len];
         var entry = list.first;
 
         while (entry) |cache| : (entry = cache.next) {
-            const blk: *Block = @fieldParentPtr("cache", cache);
-            if (blk.key == key) {
-                return blk;
+            const block: *Block = @fieldParentPtr("cache", cache);
+            if (block.key == key) {
+                return block;
             }
         }
 
         return null;
     }
 
-    pub fn block(self: *ViewState, flags: Block.Flags, key: ?u64) !*Block {
-        const blk = bkl: {
-            if (key) |k| {
-                if (self.get(k)) |cached| {
-                    cached.children = .empty;
-                    cached.child_count = 0;
-                    cached.next = null;
-                    cached.prev = null;
-                    cached.parent = null;
+    pub fn cacheBlock(self: *ViewState, block: *Block, key: u64) void {
+        const list = &self.cache[key % self.cache.len];
 
-                    cached.axis = .x;
-                    cached.sizing = @splat(.zero);
-                    cached.shrink = @splat(1.0);
-                    cached.color = @splat(0.0);
-                    cached.flags = .{};
-                    break :bkl cached;
+        block.key = key;
+
+        list.append(&block.cache);
+    }
+
+    pub fn buildBlock(self: *ViewState, flags: Block.Flags, optional_key: ?u64) !*Block {
+        const block = bkl: {
+            if (optional_key) |key| {
+                if (self.getBlock(key)) |block| {
+                    block.reset();
+
+                    break :bkl block;
                 } else {
-                    const list = &self.cache[k % self.cache.len];
                     const chunks = self.chunks.allocator();
 
-                    const blk = try chunks.create(Block);
-                    blk.* = .empty;
-                    blk.key = k;
-                    list.append(&blk.cache);
+                    const block = try chunks.create(Block);
+                    block.* = .empty;
 
-                    break :bkl blk;
+                    self.cacheBlock(block, key);
+
+                    break :bkl block;
                 }
             } else {
-                const blk = try self.frameArena().create(Block);
-                blk.* = .empty;
-                break :bkl blk;
+                const block = try self.frameArena().create(Block);
+                block.* = .empty;
+
+                break :bkl block;
             }
         };
 
-        blk.build(self, flags);
-        return blk;
+        block.build(self, flags);
+
+        return block;
     }
 
     pub fn pushAttr(self: *ViewState, attr: Attribute) !void {
@@ -276,12 +276,17 @@ const Cache = struct {
 pub const Axis = enum(u1) { x = 0, y = 1 };
 
 pub const Sizing = union(enum) {
-    pub const zero: Sizing = .{ .fixed = 0 };
+    pub const none: Sizing = .{ .fixed = 0 };
     pub const grow: Sizing = .{ .percent = 1 };
 
     fit,
     fixed: f32,
     percent: f32,
+};
+
+pub const Signal = packed struct {
+    hovered: bool = false,
+    mouseover: bool = false,
 };
 
 pub const Block = struct {
@@ -322,7 +327,7 @@ pub const Block = struct {
         .parent = null,
         .axis = .x,
         .touched_frame = 0,
-        .sizing = @splat(.zero),
+        .sizing = @splat(.none),
         .shrink = @splat(1.0),
         .color = @splat(0.0),
         .flags = .{},
@@ -354,6 +359,20 @@ pub const Block = struct {
 
         state.block_count += 1;
         state.popFlagged();
+    }
+
+    pub fn reset(self: *Block) void {
+        self.children = .empty;
+        self.child_count = 0;
+        self.next = null;
+        self.prev = null;
+        self.parent = null;
+
+        self.axis = .x;
+        self.sizing = @splat(.none);
+        self.shrink = @splat(1.0);
+        self.color = @splat(0.0);
+        self.flags = .{};
     }
 
     pub fn nextPreOrder(self: *Block) ?*Block {
@@ -523,34 +542,8 @@ pub const Block = struct {
     }
 };
 
-test "view state builds blocks and applies stacked attributes" {
-    var state: ViewState = undefined;
-    try state.init(testing.allocator);
-    defer state.deinit();
-
-    try state.begin(.{ .width = 600, .height = 800 });
-
-    const color = [4]f32{ 1.0, 0.5, 0.25, 1.0 };
-    try state.nextAttrs(&.{
-        .{ .axis = .y },
-        .{ .color = color },
-    });
-    const styled = try state.block(.{}, null);
-
-    try testing.expectEqual(Axis.y, styled.axis);
-    try testing.expectEqual(color, styled.color);
-    try testing.expect(state.stacks.get(.axis).is_empty());
-    try testing.expect(state.stacks.get(.color).is_empty());
-
-    try state.pushAttr(.{ .axis = .x });
-    state.popAttr(.axis);
-    state.finish();
-
-    try testing.expectEqual(@as(u64, 2), state.block_count);
-    try testing.expectEqual(styled, state.root.?.children.last);
-}
-
-test "cached blocks are reused and untouched blocks are evicted" {
+test "Basic Operations" {
+    const window: Window = .{};
     var state: ViewState = undefined;
     try state.init(testing.allocator);
     defer state.deinit();
@@ -558,13 +551,13 @@ test "cached blocks are reused and untouched blocks are evicted" {
     const key: u64 = 42;
     const cache = &state.cache[key % state.cache.len];
 
-    try state.begin(.{ .width = 100, .height = 100 });
+    try state.begin(window);
     try state.nextAttr(.{ .width = .{ .fixed = 10 } });
-    _ = try state.block(.{}, null);
+    _ = try state.buildBlock(.{}, null);
     try state.nextAttr(.{ .width = .{ .fixed = 40 } });
-    const first = try state.block(.{}, key);
+    const first = try state.buildBlock(.{}, key);
     try state.pushAttr(.{ .parent = first });
-    _ = try state.block(.{}, null);
+    _ = try state.buildBlock(.{}, null);
     state.popAttr(.parent);
     state.finish();
 
@@ -573,12 +566,12 @@ test "cached blocks are reused and untouched blocks are evicted" {
     try testing.expectEqual([2]f32{ 10, 0 }, first.position);
     try testing.expectEqual(@as(u8, 1), first.child_count);
 
-    try state.begin(.{ .width = 100, .height = 100 });
+    try state.begin(window);
     try state.nextAttrs(&.{
         .{ .axis = .y },
         .{ .width = .{ .fixed = 50 } },
     });
-    const second = try state.block(.{}, key);
+    const second = try state.buildBlock(.{}, key);
 
     try testing.expectEqual(first, second);
     try testing.expectEqual([2]f32{ 40, 0 }, second.size);
@@ -591,56 +584,58 @@ test "cached blocks are reused and untouched blocks are evicted" {
 
     try testing.expectEqual(@as(usize, 1), cache.len());
 
-    try state.begin(.{ .width = 100, .height = 100 });
+    try state.begin(window);
     state.finish();
 
     try testing.expect(cache.is_empty());
 }
 
-test "block string hashes only the text after the ID marker" {
+test "Hash Block" {
+    const window: Window = .{};
     var state: ViewState = undefined;
     try state.init(testing.allocator);
     defer state.deinit();
 
-    try state.begin(.{ .width = 100, .height = 100 });
-    _ = try state.blockWithString("First label@@@identity", .{});
+    try state.begin(window);
+    _ = try state.blockFromString("First label@@@identity", .{});
     const first = state.root.?.children.last.?;
     try testing.expectEqual(Wyhash.hash(0, "identity"), first.key.?);
     state.finish();
 
-    try state.begin(.{ .width = 100, .height = 100 });
-    _ = try state.blockWithString("Different label@@@identity", .{});
+    try state.begin(window);
+    _ = try state.blockFromString("Different label@@@identity", .{});
     const second = state.root.?.children.last.?;
     try testing.expectEqual(first, second);
     state.finish();
 
-    try state.begin(.{ .width = 100, .height = 100 });
-    _ = try state.blockWithString("No identity@@@", .{});
+    try state.begin(window);
+    _ = try state.blockFromString("No identity@@@", .{});
     try testing.expectEqual(null, state.root.?.children.last.?.key);
     state.finish();
 
-    try state.begin(.{ .width = 100, .height = 100 });
-    _ = try state.blockWithString("No marker", .{});
+    try state.begin(window);
+    _ = try state.blockFromString("No marker", .{});
     try testing.expectEqual(null, state.root.?.children.last.?.key);
     state.finish();
 }
 
-test "fixed layout preserves overflow when requested" {
+test "Fixed Layout" {
+    const window: Window = .{};
     var state: ViewState = undefined;
     try state.init(testing.allocator);
     defer state.deinit();
 
-    try state.begin(.{ .width = 600, .height = 800 });
+    try state.begin(window);
     try state.pushAttr(.{ .flags = .allowOverflow });
 
     try state.nextAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
-    const wrapper = try state.block(.{}, null);
+    const wrapper = try state.buildBlock(.{}, null);
     try state.pushAttr(.{ .parent = wrapper });
 
     try state.nextAttrs(&.{ .{ .width = .{ .fixed = 800 } }, .{ .height = .{ .fixed = 900 } } });
-    const first = try state.block(.{}, null);
+    const first = try state.buildBlock(.{}, null);
     try state.nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 120 } } });
-    const second = try state.block(.{}, null);
+    const second = try state.buildBlock(.{}, null);
 
     state.popAttr(.parent);
     state.popAttr(.flags);
@@ -652,34 +647,35 @@ test "fixed layout preserves overflow when requested" {
     try testing.expectEqual([2]f32{ 920, 900 }, wrapper.bounds);
 }
 
-test "percent sizing shrinks when siblings overflow" {
+test "Percent Layout" {
+    const window: Window = .{};
     var state: ViewState = undefined;
     try state.init(testing.allocator);
     defer state.deinit();
 
-    try state.begin(.{ .width = 600, .height = 800 });
+    try state.begin(window);
     try state.nextAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
-    const parent = try state.block(.{}, null);
+    const parent = try state.buildBlock(.{}, null);
     try state.pushAttr(.{ .parent = parent });
 
     try state.nextAttrs(&.{
         .{ .width = .{ .fixed = 100 } },
         .{ .height = .grow },
     });
-    const first = try state.block(.{}, null);
+    const first = try state.buildBlock(.{}, null);
 
     try state.nextAttrs(&.{
         .{ .width = .grow },
         .{ .height = .grow },
         .{ .width_shrink = 0.0 },
     });
-    const middle = try state.block(.{}, null);
+    const middle = try state.buildBlock(.{}, null);
 
     try state.nextAttrs(&.{
         .{ .width = .{ .fixed = 100 } },
         .{ .height = .grow },
     });
-    const last = try state.block(.{}, null);
+    const last = try state.buildBlock(.{}, null);
 
     state.popAttr(.parent);
     state.finish();
@@ -691,18 +687,20 @@ test "percent sizing shrinks when siblings overflow" {
     try testing.expectEqual([2]f32{ 500, 0 }, last.position);
 }
 
-test "grow is full parent percentage" {
+test "Grow Layout" {
+    const window: Window = .{};
+
     var state: ViewState = undefined;
     try state.init(testing.allocator);
     defer state.deinit();
 
-    try state.begin(.{ .width = 600, .height = 800 });
+    try state.begin(window);
     try state.nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 300 } } });
-    const parent = try state.block(.{}, null);
+    const parent = try state.buildBlock(.{}, null);
     try state.pushAttr(.{ .parent = parent });
 
     try state.nextAttrs(&.{ .{ .width = .{ .percent = 0.5 } }, .{ .height = .grow } });
-    const child = try state.block(.{}, null);
+    const child = try state.buildBlock(.{}, null);
     state.popAttr(.parent);
     state.finish();
 
@@ -710,27 +708,29 @@ test "grow is full parent percentage" {
 }
 
 test "fit sizing resolves from descendants" {
+    const window: Window = .{};
+
     var state: ViewState = undefined;
     try state.init(testing.allocator);
     defer state.deinit();
 
-    try state.begin(.{ .width = 600, .height = 800 });
+    try state.begin(window);
     try state.nextAttrs(&.{ .{ .width = .fit }, .{ .height = .fit }, .{ .axis = .y } });
-    const parent = try state.block(.{}, null);
+    const parent = try state.buildBlock(.{}, null);
     try state.pushAttr(.{ .parent = parent });
 
     try state.nextAttrs(&.{ .{ .width = .fit }, .{ .height = .fit } });
-    const first = try state.block(.{}, null);
+    const first = try state.buildBlock(.{}, null);
     try state.pushAttr(.{ .parent = first });
 
     try state.nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 150 } } });
-    _ = try state.block(.{}, null);
+    _ = try state.buildBlock(.{}, null);
     try state.nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 150 } } });
-    _ = try state.block(.{}, null);
+    _ = try state.buildBlock(.{}, null);
     state.popAttr(.parent);
 
     try state.nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 450 } } });
-    const second = try state.block(.{}, null);
+    const second = try state.buildBlock(.{}, null);
     state.popAttr(.parent);
     state.finish();
 

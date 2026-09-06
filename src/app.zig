@@ -193,21 +193,21 @@ pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
             .{ .width = .{ .fixed = 100 } },
         });
 
-        const red = try view_state.block(.{}, null);
+        const red = try view_state.buildBlock(.{}, null);
         red.color = .{ 1.0, 0.0, 0.0, 1.0 };
 
         try view_state.nextAttrs(&.{
             .{ .height_shrink = 0.0 },
             .{ .width_shrink = 0.0 },
         });
-        const green = try view_state.block(.{}, null);
+        const green = try view_state.buildBlock(.{}, null);
         green.color = .{ 0.0, 1.0, 0.0, 1.0 };
 
         try view_state.nextAttrs(&.{
             .{ .width = .{ .fixed = 100 } },
         });
 
-        const blue = try view_state.block(.{}, null);
+        const blue = try view_state.buildBlock(.{}, null);
         blue.color = .{ 0.0, 0.0, 1.0, 1.0 };
     }
 

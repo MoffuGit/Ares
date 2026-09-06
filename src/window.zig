@@ -159,6 +159,14 @@ pub const Window = window: {
         pub fn deinit(self: *@This()) void {
             _ = self;
         }
+
+        pub fn size(_: *const @This()) !struct { w: f32, h: f32 } {
+            return .{ .w = 600, .h = 800 };
+        }
+
+        pub fn mouse(_: *const @This()) !struct { x: f32, y: f32 } {
+            return .{ .x = 0, .y = 0 };
+        }
     };
 };
 
