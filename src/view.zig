@@ -8,299 +8,301 @@ const heap = std.heap;
 const meta = std.meta;
 const testing = std.testing;
 const Wyhash = std.hash.Wyhash;
-const win = @import("window.zig");
-const Window = win.Window;
 
 const chunk_pool = @import("chunk_pool.zig");
 const datastruct = @import("datastruct.zig");
 const DoublyLinkedList = datastruct.DoublyLinkedList;
 const TaggedLinkedList = datastruct.TaggedLinkedList;
+const win = @import("window.zig");
+const Window = win.Window;
 
 const log = std.log.scoped(.view);
 
-pub const ViewState = struct {
-    arena: heap.ArenaAllocator,
-    root: ?*Block,
-    block_count: u64,
+const Stacks = TaggedLinkedList(union(enum) {
+    parent: *Block,
+    axis: Axis,
+    color: [4]f32,
+    width: Sizing,
+    width_shrink: f32,
+    height: Sizing,
+    height_shrink: f32,
+    flags: Block.Flags,
+});
 
-    mouse: [2]f32,
+pub const Attribute = Stacks.Value;
+pub const Node = Stacks.Node;
+pub const StackField = Stacks.Tag;
 
-    frame: u64,
-    frame_arenas: [2]heap.ArenaAllocator,
+fn stackFlag(field: StackField) u64 {
+    return @as(u64, 1) << @intFromEnum(field);
+}
 
-    stacks: Stacks,
-    pop_flags: u64,
+pub const View = @This();
 
-    cache: []DoublyLinkedList(Cache),
+arena: heap.ArenaAllocator,
 
-    chunks: chunk_pool.ChunkAllocator,
+root: ?*Block,
 
-    const Stacks = TaggedLinkedList(union(enum) {
-        parent: *Block,
-        axis: Axis,
-        color: [4]f32,
-        width: Sizing,
-        width_shrink: f32,
-        height: Sizing,
-        height_shrink: f32,
-        flags: Block.Flags,
+block_count: u64,
+
+mouse: [2]f32,
+
+frame: u64,
+frame_arenas: [2]heap.ArenaAllocator,
+
+stacks: Stacks,
+pop_flags: u64,
+
+cache: []DoublyLinkedList(Cache),
+
+chunks: chunk_pool.ChunkAllocator,
+
+pub fn init(self: *View, gpa: Allocator) !void {
+    self.* = .{
+        .mouse = @splat(0.0),
+        .cache = undefined,
+        .arena = .init(gpa),
+        .root = null,
+        .block_count = 0,
+        .frame = 0,
+        .frame_arenas = .{ .init(gpa), .init(gpa) },
+        .stacks = .empty,
+        .pop_flags = 0,
+        .chunks = undefined,
+    };
+
+    const arena = self.arena.allocator();
+    errdefer self.arena.deinit();
+
+    self.cache = try arena.alloc(DoublyLinkedList(Cache), 2048);
+    @memset(self.cache, .empty);
+
+    try self.chunks.init(arena, &.{.{ .capacity = 2048, .chunk_size = @sizeOf(Block) }});
+}
+
+pub fn deinit(self: *View) void {
+    for (self.frame_arenas) |arena| arena.deinit();
+    self.arena.deinit();
+}
+
+pub fn begin(self: *View, window: Window) !void {
+    self.reset();
+    errdefer self.reset();
+
+    const size = try window.size();
+    const mouse = try window.mouse();
+
+    self.mouse = .{ mouse.x, mouse.y };
+
+    try self.nextAttrs(&.{
+        .{ .width = .{ .fixed = size.w } },
+        .{ .height = .{ .fixed = size.h } },
     });
 
-    pub const Flags = Stacks.Tag;
-    pub const Attribute = Stacks.Value;
-    pub const Node = Stacks.Node;
+    self.root = try self.buildBlock(.{}, null);
 
-    fn stackFlag(flag: Flags) u64 {
-        return @as(u64, 1) << @intFromEnum(flag);
+    try self.pushAttr(.{ .parent = self.root.? });
+}
+
+pub fn finish(self: *View) void {
+    const root = self.root orelse unreachable;
+
+    inline for (0..2) |axis| {
+        root.layout(axis);
     }
 
-    pub fn init(self: *ViewState, gpa: Allocator) !void {
-        self.* = .{
-            .mouse = @splat(0.0),
-            .cache = undefined,
-            .arena = .init(gpa),
-            .root = null,
-            .block_count = 0,
-            .frame = 0,
-            .frame_arenas = .{ .init(gpa), .init(gpa) },
-            .stacks = .empty,
-            .pop_flags = 0,
-            .chunks = undefined,
-        };
+    for (self.cache) |*list| {
+        var entry: ?*Cache = list.first;
+        while (entry) |cache| {
+            entry = cache.next;
+            const cached: *Block = @fieldParentPtr("cache", cache);
 
-        const arena = self.arena.allocator();
-        errdefer self.arena.deinit();
-
-        self.cache = try arena.alloc(DoublyLinkedList(Cache), 2048);
-        @memset(self.cache, .empty);
-
-        try self.chunks.init(arena, &.{.{ .capacity = 2048, .chunk_size = @sizeOf(Block) }});
-    }
-
-    pub fn deinit(self: *ViewState) void {
-        for (self.frame_arenas) |arena| arena.deinit();
-        self.arena.deinit();
-    }
-
-    pub fn begin(self: *ViewState, window: Window) !void {
-        self.reset();
-        errdefer self.reset();
-
-        const size = try window.size();
-        const mouse = try window.mouse();
-
-        self.mouse = .{ mouse.x, mouse.y };
-
-        try self.nextAttrs(&.{
-            .{ .width = .{ .fixed = size.w } },
-            .{ .height = .{ .fixed = size.h } },
-        });
-
-        self.root = try self.buildBlock(.{}, null);
-
-        try self.pushAttr(.{ .parent = self.root.? });
-    }
-
-    pub fn finish(self: *ViewState) void {
-        const root = self.root orelse unreachable;
-
-        inline for (0..2) |axis| {
-            root.layout(axis);
-        }
-
-        for (self.cache) |*list| {
-            var entry: ?*Cache = list.first;
-            while (entry) |cache| {
-                entry = cache.next;
-                const cached: *Block = @fieldParentPtr("cache", cache);
-
-                if (cached.touched_frame != self.frame) {
-                    list.remove(cache);
-                    self.chunks.allocator().destroy(cached);
-                }
+            if (cached.touched_frame != self.frame) {
+                list.remove(cache);
+                self.chunks.allocator().destroy(cached);
             }
         }
-
-        self.frame += 1;
-
-        const arena_index = self.frame % self.frame_arenas.len;
-        _ = self.frame_arenas[arena_index].reset(.retain_capacity);
     }
 
-    pub fn signalForBlock(self: *ViewState, block: *Block) Signals {
-        const flags = block.flags;
+    self.frame += 1;
 
-        var signal: Signals = .none;
+    const arena_index = self.frame % self.frame_arenas.len;
+    _ = self.frame_arenas[arena_index].reset(.retain_capacity);
+}
 
-        const mouse = self.mouse;
-        const rect = block.rect;
+pub fn signalForBlock(self: *View, block: *Block) Signals {
+    const flags = block.flags;
 
-        if (rect[0][0] <= mouse[0] and mouse[0] < rect[1][0] and
-            rect[0][1] <= mouse[1] and mouse[1] < rect[1][1])
-        {
-            signal.mouseover = true;
+    var signal: Signals = .none;
+
+    const mouse = self.mouse;
+    const rect = block.rect;
+
+    if (rect[0][0] <= mouse[0] and mouse[0] < rect[1][0] and
+        rect[0][1] <= mouse[1] and mouse[1] < rect[1][1])
+    {
+        signal.mouseover = true;
+    }
+
+    if (flags.mouse and rect[0][0] <= mouse[0] and mouse[0] < rect[1][0] and
+        rect[0][1] <= mouse[1] and mouse[1] < rect[1][1])
+    {
+        signal.hovered = true;
+    }
+
+    return signal;
+}
+
+pub fn fmt(self: *View, comptime format: []const u8, args: anytype) ![]u8 {
+    const required = std.fmt.count(format, args);
+    const frame_arena = self.frameArena();
+    const buffer = try frame_arena.alloc(u8, required);
+    return std.fmt.bufPrint(buffer, format, args) catch unreachable;
+}
+
+pub fn blockFromFmt(self: *View, comptime format: []const u8, args: anytype, flags: Block.Flags) !*Block {
+    const string = try self.fmt(format, args);
+
+    return try self.blockFromString(string, flags);
+}
+
+pub fn blockFromString(self: *View, string: []const u8, flags: Block.Flags) !*Block {
+    const chunk = if (std.mem.find(u8, string, "@@@")) |index|
+        string[index + "@@@".len ..]
+    else
+        "";
+
+    const key: ?u64 = if (chunk.len == 0) null else key: {
+        var node = self.stacks.get(.parent).head;
+        while (node) |current| : (node = current.next) {
+            if (current.value.key) |parent_key| break :key Wyhash.hash(parent_key, chunk);
         }
 
-        if (flags.mouse and rect[0][0] <= mouse[0] and mouse[0] < rect[1][0] and
-            rect[0][1] <= mouse[1] and mouse[1] < rect[1][1])
-        {
-            signal.hovered = true;
+        break :key Wyhash.hash(0, chunk);
+    };
+
+    return try self.buildBlock(flags, key);
+}
+
+pub fn getBlock(self: *View, key: u64) ?*Block {
+    const list = &self.cache[key % self.cache.len];
+    var entry = list.first;
+
+    while (entry) |cache| : (entry = cache.next) {
+        const block: *Block = @fieldParentPtr("cache", cache);
+        if (block.key == key) {
+            return block;
         }
-
-        return signal;
     }
 
-    pub fn fmt(self: *ViewState, comptime format: []const u8, args: anytype) ![]u8 {
-        const required = std.fmt.count(format, args);
-        const frame_arena = self.frameArena();
-        const buffer = try frame_arena.alloc(u8, required);
-        return std.fmt.bufPrint(buffer, format, args) catch unreachable;
-    }
+    return null;
+}
 
-    pub fn blockFromFmt(self: *ViewState, comptime format: []const u8, args: anytype, flags: Block.Flags) !*Block {
-        const string = try self.fmt(format, args);
+pub fn cacheBlock(self: *View, block: *Block, key: u64) void {
+    const list = &self.cache[key % self.cache.len];
 
-        return try self.blockFromString(string, flags);
-    }
+    block.key = key;
 
-    pub fn blockFromString(self: *ViewState, string: []const u8, flags: Block.Flags) !*Block {
-        const chunk = if (std.mem.find(u8, string, "@@@")) |index|
-            string[index + "@@@".len ..]
-        else
-            "";
+    list.append(&block.cache);
+}
 
-        const key: ?u64 = if (chunk.len == 0) null else key: {
-            var node = self.stacks.get(.parent).head;
-            while (node) |current| : (node = current.next) {
-                if (current.value.key) |parent_key| break :key Wyhash.hash(parent_key, chunk);
-            }
-
-            break :key Wyhash.hash(0, chunk);
-        };
-
-        return try self.buildBlock(flags, key);
-    }
-
-    pub fn getBlock(self: *ViewState, key: u64) ?*Block {
-        const list = &self.cache[key % self.cache.len];
-        var entry = list.first;
-
-        while (entry) |cache| : (entry = cache.next) {
-            const block: *Block = @fieldParentPtr("cache", cache);
-            if (block.key == key) {
-                return block;
-            }
-        }
-
-        return null;
-    }
-
-    pub fn cacheBlock(self: *ViewState, block: *Block, key: u64) void {
-        const list = &self.cache[key % self.cache.len];
-
-        block.key = key;
-
-        list.append(&block.cache);
-    }
-
-    pub fn buildBlock(self: *ViewState, flags: Block.Flags, optional_key: ?u64) !*Block {
-        const block = bkl: {
-            if (optional_key) |key| {
-                if (self.getBlock(key)) |cached| {
-                    if (cached.touched_frame == self.frame) {
-                        const block = try self.frameArena().create(Block);
-                        block.* = .empty;
-
-                        break :bkl block;
-                    }
-
-                    cached.reset();
-
-                    break :bkl cached;
-                } else {
-                    const chunks = self.chunks.allocator();
-
-                    const block = try chunks.create(Block);
+pub fn buildBlock(self: *View, flags: Block.Flags, optional_key: ?u64) !*Block {
+    const block = bkl: {
+        if (optional_key) |key| {
+            if (self.getBlock(key)) |cached| {
+                if (cached.touched_frame == self.frame) {
+                    const block = try self.frameArena().create(Block);
                     block.* = .empty;
-
-                    self.cacheBlock(block, key);
 
                     break :bkl block;
                 }
+
+                cached.reset();
+
+                break :bkl cached;
             } else {
-                const block = try self.frameArena().create(Block);
+                const chunks = self.chunks.allocator();
+
+                const block = try chunks.create(Block);
                 block.* = .empty;
+
+                self.cacheBlock(block, key);
 
                 break :bkl block;
             }
-        };
+        } else {
+            const block = try self.frameArena().create(Block);
+            block.* = .empty;
 
-        block.build(self, flags);
+            break :bkl block;
+        }
+    };
 
-        return block;
+    block.build(self, flags);
+
+    return block;
+}
+
+pub fn pushAttr(self: *View, attr: Attribute) !void {
+    const arena = self.frameArena();
+
+    switch (attr) {
+        inline else => |value, flag| {
+            assert(self.pop_flags & stackFlag(flag) == 0);
+
+            const node = try arena.create(Node(flag));
+            node.* = .{ .value = value };
+            self.stacks.prepend(flag, node);
+        },
     }
+}
 
-    pub fn pushAttr(self: *ViewState, attr: Attribute) !void {
-        const arena = self.frameArena();
+pub fn popAttr(self: *View, comptime field: StackField) void {
+    assert(self.pop_flags & stackFlag(field) == 0);
+    if (self.stacks.pop(field) == null) unreachable;
+}
 
-        switch (attr) {
-            inline else => |value, flag| {
-                assert(self.pop_flags & stackFlag(flag) == 0);
+pub fn nextAttr(self: *View, attr: Attribute) !void {
+    try self.pushAttr(attr);
+    self.flagStack(meta.activeTag(attr));
+}
 
-                const node = try arena.create(Node(flag));
-                node.* = .{ .value = value };
-                self.stacks.prepend(flag, node);
-            },
+pub fn pushAttrs(self: *View, attrs: []const Attribute) !void {
+    for (attrs) |attr| try self.pushAttr(attr);
+}
+
+pub fn popAttrs(self: *View, comptime fields: []const StackField) void {
+    inline for (fields) |field| self.popAttr(field);
+}
+
+pub fn nextAttrs(self: *View, attrs: []const Attribute) !void {
+    for (attrs) |attr| try self.nextAttr(attr);
+}
+
+fn frameArena(self: *View) Allocator {
+    return self.frame_arenas[self.frame % self.frame_arenas.len].allocator();
+}
+
+fn reset(self: *View) void {
+    self.root = null;
+    self.stacks = .empty;
+    self.pop_flags = 0;
+    self.block_count = 0;
+}
+
+fn flagStack(self: *View, field: StackField) void {
+    self.pop_flags |= stackFlag(field);
+}
+
+fn popFlagged(self: *View) void {
+    inline for (@typeInfo(Stacks.Tag).@"enum".fields) |field| {
+        const flag = @as(u64, 1) << field.value;
+        if (self.pop_flags & flag != 0) {
+            self.pop_flags &= ~flag;
+            if (self.stacks.pop(@enumFromInt(field.value)) == null) unreachable;
         }
     }
-
-    pub fn popAttr(self: *ViewState, comptime flag: Flags) void {
-        assert(self.pop_flags & stackFlag(flag) == 0);
-        if (self.stacks.pop(flag) == null) unreachable;
-    }
-
-    pub fn nextAttr(self: *ViewState, attr: Attribute) !void {
-        try self.pushAttr(attr);
-        self.flagStack(meta.activeTag(attr));
-    }
-
-    pub fn pushAttrs(self: *ViewState, attrs: []const Attribute) !void {
-        for (attrs) |attr| try self.pushAttr(attr);
-    }
-
-    pub fn popAttrs(self: *ViewState, comptime flags: []const Flags) void {
-        inline for (flags) |flag| self.popAttr(flag);
-    }
-
-    pub fn nextAttrs(self: *ViewState, attrs: []const Attribute) !void {
-        for (attrs) |attr| try self.nextAttr(attr);
-    }
-
-    fn frameArena(self: *ViewState) Allocator {
-        return self.frame_arenas[self.frame % self.frame_arenas.len].allocator();
-    }
-
-    fn reset(self: *ViewState) void {
-        self.root = null;
-        self.stacks = .empty;
-        self.pop_flags = 0;
-        self.block_count = 0;
-    }
-
-    fn flagStack(self: *ViewState, flag: Flags) void {
-        self.pop_flags |= stackFlag(flag);
-    }
-
-    fn popFlagged(self: *ViewState) void {
-        inline for (@typeInfo(Stacks.Tag).@"enum".fields) |field| {
-            const flag: Flags = @enumFromInt(field.value);
-            if (self.pop_flags & stackFlag(flag) != 0) {
-                self.pop_flags &= ~stackFlag(flag);
-                if (self.stacks.pop(flag) == null) unreachable;
-            }
-        }
-    }
-};
+}
 
 const Cache = struct {
     pub const _null: Cache = .{
@@ -382,27 +384,27 @@ pub const Block = struct {
         .key = null,
     };
 
-    fn build(self: *Block, state: *ViewState, flags: Flags) void {
-        if (state.stacks.get(.parent).head) |parent| {
+    fn build(self: *Block, view: *View, flags: Flags) void {
+        if (view.stacks.get(.parent).head) |parent| {
             parent.value.child_count += 1;
             parent.value.children.append(self);
             self.parent = parent.value;
         }
 
-        if (state.stacks.get(.axis).head) |node| self.axis = node.value;
-        if (state.stacks.get(.color).head) |node| self.color = node.value;
-        if (state.stacks.get(.width).head) |node| self.sizing[0] = node.value;
-        if (state.stacks.get(.height).head) |node| self.sizing[1] = node.value;
-        if (state.stacks.get(.width_shrink).head) |node| self.shrink[0] = clamp(node.value, 0.0, 1.0);
-        if (state.stacks.get(.height_shrink).head) |node| self.shrink[1] = clamp(node.value, 0.0, 1.0);
+        if (view.stacks.get(.axis).head) |node| self.axis = node.value;
+        if (view.stacks.get(.color).head) |node| self.color = node.value;
+        if (view.stacks.get(.width).head) |node| self.sizing[0] = node.value;
+        if (view.stacks.get(.height).head) |node| self.sizing[1] = node.value;
+        if (view.stacks.get(.width_shrink).head) |node| self.shrink[0] = clamp(node.value, 0.0, 1.0);
+        if (view.stacks.get(.height_shrink).head) |node| self.shrink[1] = clamp(node.value, 0.0, 1.0);
 
-        const stack_flags: u3 = if (state.stacks.get(.flags).head) |node| @bitCast(node.value) else 0;
+        const stack_flags: u3 = if (view.stacks.get(.flags).head) |node| @bitCast(node.value) else 0;
         self.flags = @bitCast(@as(u3, @bitCast(flags)) | stack_flags);
 
-        self.touched_frame = state.frame;
+        self.touched_frame = view.frame;
 
-        state.block_count += 1;
-        state.popFlagged();
+        view.block_count += 1;
+        view.popFlagged();
     }
 
     pub fn reset(self: *Block) void {
@@ -593,34 +595,34 @@ pub const Block = struct {
 
 test "Basic Operations" {
     const window: Window = .{};
-    var state: ViewState = undefined;
-    try state.init(testing.allocator);
-    defer state.deinit();
+    var view: View = undefined;
+    try view.init(testing.allocator);
+    defer view.deinit();
 
     const key: u64 = 42;
-    const cache = &state.cache[key % state.cache.len];
+    const cache = &view.cache[key % view.cache.len];
 
-    try state.begin(window);
-    try state.nextAttr(.{ .width = .{ .fixed = 10 } });
-    _ = try state.buildBlock(.{}, null);
-    try state.nextAttr(.{ .width = .{ .fixed = 40 } });
-    const first = try state.buildBlock(.{}, key);
-    try state.pushAttr(.{ .parent = first });
-    _ = try state.buildBlock(.{}, null);
-    state.popAttr(.parent);
-    state.finish();
+    try view.begin(window);
+    try view.nextAttr(.{ .width = .{ .fixed = 10 } });
+    _ = try view.buildBlock(.{}, null);
+    try view.nextAttr(.{ .width = .{ .fixed = 40 } });
+    const first = try view.buildBlock(.{}, key);
+    try view.pushAttr(.{ .parent = first });
+    _ = try view.buildBlock(.{}, null);
+    view.popAttr(.parent);
+    view.finish();
 
     try testing.expectEqual(@as(usize, 1), cache.len());
     try testing.expectEqual([2]f32{ 40, 0 }, first.size);
     try testing.expectEqual([2]f32{ 10, 0 }, first.position);
     try testing.expectEqual(@as(u8, 1), first.child_count);
 
-    try state.begin(window);
-    try state.nextAttrs(&.{
+    try view.begin(window);
+    try view.nextAttrs(&.{
         .{ .axis = .y },
         .{ .width = .{ .fixed = 50 } },
     });
-    const second = try state.buildBlock(.{}, key);
+    const second = try view.buildBlock(.{}, key);
 
     try testing.expectEqual(first, second);
     try testing.expectEqual([2]f32{ 40, 0 }, second.size);
@@ -629,66 +631,66 @@ test "Basic Operations" {
     try testing.expectEqual(Sizing{ .fixed = 50 }, second.sizing[0]);
     try testing.expect(second.children.is_empty());
     try testing.expectEqual(@as(u8, 0), second.child_count);
-    state.finish();
+    view.finish();
 
     try testing.expectEqual(@as(usize, 1), cache.len());
 
-    try state.begin(window);
-    state.finish();
+    try view.begin(window);
+    view.finish();
 
     try testing.expect(cache.is_empty());
 }
 
 test "Hash Block" {
     const window: Window = .{};
-    var state: ViewState = undefined;
-    try state.init(testing.allocator);
-    defer state.deinit();
+    var view: View = undefined;
+    try view.init(testing.allocator);
+    defer view.deinit();
 
-    try state.begin(window);
-    _ = try state.blockFromString("First label@@@identity", .{});
-    const first = state.root.?.children.last.?;
+    try view.begin(window);
+    _ = try view.blockFromString("First label@@@identity", .{});
+    const first = view.root.?.children.last.?;
     try testing.expectEqual(Wyhash.hash(0, "identity"), first.key.?);
-    state.finish();
+    view.finish();
 
-    try state.begin(window);
-    _ = try state.blockFromString("Different label@@@identity", .{});
-    const second = state.root.?.children.last.?;
+    try view.begin(window);
+    _ = try view.blockFromString("Different label@@@identity", .{});
+    const second = view.root.?.children.last.?;
     try testing.expectEqual(first, second);
-    state.finish();
+    view.finish();
 
-    try state.begin(window);
-    _ = try state.blockFromString("No identity@@@", .{});
-    try testing.expectEqual(null, state.root.?.children.last.?.key);
-    state.finish();
+    try view.begin(window);
+    _ = try view.blockFromString("No identity@@@", .{});
+    try testing.expectEqual(null, view.root.?.children.last.?.key);
+    view.finish();
 
-    try state.begin(window);
-    _ = try state.blockFromString("No marker", .{});
-    try testing.expectEqual(null, state.root.?.children.last.?.key);
-    state.finish();
+    try view.begin(window);
+    _ = try view.blockFromString("No marker", .{});
+    try testing.expectEqual(null, view.root.?.children.last.?.key);
+    view.finish();
 }
 
 test "Fixed Layout" {
     const window: Window = .{};
-    var state: ViewState = undefined;
-    try state.init(testing.allocator);
-    defer state.deinit();
+    var view: View = undefined;
+    try view.init(testing.allocator);
+    defer view.deinit();
 
-    try state.begin(window);
-    try state.pushAttr(.{ .flags = .allowOverflow });
+    try view.begin(window);
+    try view.pushAttr(.{ .flags = .allowOverflow });
 
-    try state.nextAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
-    const wrapper = try state.buildBlock(.{}, null);
-    try state.pushAttr(.{ .parent = wrapper });
+    try view.nextAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
+    const wrapper = try view.buildBlock(.{}, null);
+    try view.pushAttr(.{ .parent = wrapper });
 
-    try state.nextAttrs(&.{ .{ .width = .{ .fixed = 800 } }, .{ .height = .{ .fixed = 900 } } });
-    const first = try state.buildBlock(.{}, null);
-    try state.nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 120 } } });
-    const second = try state.buildBlock(.{}, null);
+    try view.nextAttrs(&.{ .{ .width = .{ .fixed = 800 } }, .{ .height = .{ .fixed = 900 } } });
+    const first = try view.buildBlock(.{}, null);
+    try view.nextAttrs(&.{ .{ .width = .{ .fixed = 120 } }, .{ .height = .{ .fixed = 120 } } });
+    const second = try view.buildBlock(.{}, null);
 
-    state.popAttr(.parent);
-    state.popAttr(.flags);
-    state.finish();
+    view.popAttr(.parent);
+    view.popAttr(.flags);
+    view.finish();
 
     try testing.expectEqual([2]f32{ 800, 900 }, first.size);
     try testing.expectEqual([2]f32{ 120, 120 }, second.size);
@@ -698,36 +700,36 @@ test "Fixed Layout" {
 
 test "Percent Layout" {
     const window: Window = .{};
-    var state: ViewState = undefined;
-    try state.init(testing.allocator);
-    defer state.deinit();
+    var view: View = undefined;
+    try view.init(testing.allocator);
+    defer view.deinit();
 
-    try state.begin(window);
-    try state.nextAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
-    const parent = try state.buildBlock(.{}, null);
-    try state.pushAttr(.{ .parent = parent });
+    try view.begin(window);
+    try view.nextAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
+    const parent = try view.buildBlock(.{}, null);
+    try view.pushAttr(.{ .parent = parent });
 
-    try state.nextAttrs(&.{
+    try view.nextAttrs(&.{
         .{ .width = .{ .fixed = 100 } },
         .{ .height = .grow },
     });
-    const first = try state.buildBlock(.{}, null);
+    const first = try view.buildBlock(.{}, null);
 
-    try state.nextAttrs(&.{
+    try view.nextAttrs(&.{
         .{ .width = .grow },
         .{ .height = .grow },
         .{ .width_shrink = 0.0 },
     });
-    const middle = try state.buildBlock(.{}, null);
+    const middle = try view.buildBlock(.{}, null);
 
-    try state.nextAttrs(&.{
+    try view.nextAttrs(&.{
         .{ .width = .{ .fixed = 100 } },
         .{ .height = .grow },
     });
-    const last = try state.buildBlock(.{}, null);
+    const last = try view.buildBlock(.{}, null);
 
-    state.popAttr(.parent);
-    state.finish();
+    view.popAttr(.parent);
+    view.finish();
 
     try testing.expectEqual([2]f32{ 100, 800 }, first.size);
     try testing.expectEqual([2]f32{ 400, 800 }, middle.size);
@@ -739,19 +741,19 @@ test "Percent Layout" {
 test "Grow Layout" {
     const window: Window = .{};
 
-    var state: ViewState = undefined;
-    try state.init(testing.allocator);
-    defer state.deinit();
+    var view: View = undefined;
+    try view.init(testing.allocator);
+    defer view.deinit();
 
-    try state.begin(window);
-    try state.nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 300 } } });
-    const parent = try state.buildBlock(.{}, null);
-    try state.pushAttr(.{ .parent = parent });
+    try view.begin(window);
+    try view.nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 300 } } });
+    const parent = try view.buildBlock(.{}, null);
+    try view.pushAttr(.{ .parent = parent });
 
-    try state.nextAttrs(&.{ .{ .width = .{ .percent = 0.5 } }, .{ .height = .grow } });
-    const child = try state.buildBlock(.{}, null);
-    state.popAttr(.parent);
-    state.finish();
+    try view.nextAttrs(&.{ .{ .width = .{ .percent = 0.5 } }, .{ .height = .grow } });
+    const child = try view.buildBlock(.{}, null);
+    view.popAttr(.parent);
+    view.finish();
 
     try testing.expectEqual([2]f32{ 200, 300 }, child.size);
 }
@@ -759,29 +761,29 @@ test "Grow Layout" {
 test "fit sizing resolves from descendants" {
     const window: Window = .{};
 
-    var state: ViewState = undefined;
-    try state.init(testing.allocator);
-    defer state.deinit();
+    var view: View = undefined;
+    try view.init(testing.allocator);
+    defer view.deinit();
 
-    try state.begin(window);
-    try state.nextAttrs(&.{ .{ .width = .fit }, .{ .height = .fit }, .{ .axis = .y } });
-    const parent = try state.buildBlock(.{}, null);
-    try state.pushAttr(.{ .parent = parent });
+    try view.begin(window);
+    try view.nextAttrs(&.{ .{ .width = .fit }, .{ .height = .fit }, .{ .axis = .y } });
+    const parent = try view.buildBlock(.{}, null);
+    try view.pushAttr(.{ .parent = parent });
 
-    try state.nextAttrs(&.{ .{ .width = .fit }, .{ .height = .fit } });
-    const first = try state.buildBlock(.{}, null);
-    try state.pushAttr(.{ .parent = first });
+    try view.nextAttrs(&.{ .{ .width = .fit }, .{ .height = .fit } });
+    const first = try view.buildBlock(.{}, null);
+    try view.pushAttr(.{ .parent = first });
 
-    try state.nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 150 } } });
-    _ = try state.buildBlock(.{}, null);
-    try state.nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 150 } } });
-    _ = try state.buildBlock(.{}, null);
-    state.popAttr(.parent);
+    try view.nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 150 } } });
+    _ = try view.buildBlock(.{}, null);
+    try view.nextAttrs(&.{ .{ .width = .{ .fixed = 100 } }, .{ .height = .{ .fixed = 150 } } });
+    _ = try view.buildBlock(.{}, null);
+    view.popAttr(.parent);
 
-    try state.nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 450 } } });
-    const second = try state.buildBlock(.{}, null);
-    state.popAttr(.parent);
-    state.finish();
+    try view.nextAttrs(&.{ .{ .width = .{ .fixed = 400 } }, .{ .height = .{ .fixed = 450 } } });
+    const second = try view.buildBlock(.{}, null);
+    view.popAttr(.parent);
+    view.finish();
 
     try testing.expectEqual([2]f32{ 200, 150 }, first.size);
     try testing.expectEqual([2]f32{ 400, 600 }, parent.size);

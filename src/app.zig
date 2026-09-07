@@ -12,8 +12,7 @@ const Display = @import("display.zig");
 const render = @import("render.zig");
 const Renderer = render.Renderer;
 const Handle = Renderer.Handle;
-const view = @import("view.zig");
-const ViewState = view.ViewState;
+const View = @import("view.zig");
 const win = @import("window.zig");
 const Window = win.Window;
 
@@ -83,17 +82,17 @@ pub const WindowState = struct {
 
     win: Window,
     render_handle: Handle,
-    view_state: ViewState,
+    view: View,
 
     pub fn init(self: *WindowState, app: *App, opts: win.Options) !void {
         self.* = .{
-            .view_state = undefined,
+            .view = undefined,
             .win = undefined,
             .render_handle = undefined,
         };
 
-        try self.view_state.init(app.gpa);
-        errdefer self.view_state.deinit();
+        try self.view.init(app.gpa);
+        errdefer self.view.deinit();
 
         try self.win.init(opts);
         errdefer self.win.deinit();
@@ -111,7 +110,7 @@ pub const WindowState = struct {
     pub fn deinit(self: *WindowState) void {
         self.render_handle.deinit();
         self.win.deinit();
-        self.view_state.deinit();
+        self.view.deinit();
     }
 };
 
@@ -181,28 +180,28 @@ pub fn openWindow(self: *App, opts: win.Options) !void {
 
 pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
     {
-        const view_state = &window_state.view_state;
+        const view = &window_state.view;
 
-        try view_state.begin(window_state.win);
-        defer view_state.finish();
+        try view.begin(window_state.win);
+        defer view.finish();
 
-        try view_state.pushAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
-        defer view_state.popAttrs(&.{ .width, .height });
+        try view.pushAttrs(&.{ .{ .width = .grow }, .{ .height = .grow } });
+        defer view.popAttrs(&.{ .width, .height });
 
-        try view_state.nextAttrs(&.{
+        try view.nextAttrs(&.{
             .{ .width = .{ .fixed = 100 } },
         });
 
-        const red = try view_state.buildBlock(.{}, null);
+        const red = try view.buildBlock(.{}, null);
         red.color = .{ 1.0, 0.0, 0.0, 1.0 };
 
-        try view_state.nextAttrs(&.{
+        try view.nextAttrs(&.{
             .{ .height_shrink = 0.0 },
             .{ .width_shrink = 0.0 },
         });
 
-        const green = try view_state.blockFromFmt("green@@@{}", .{1}, .{ .mouse = true });
-        const signal = view_state.signalForBlock(green);
+        const green = try view.blockFromFmt("green@@@{}", .{1}, .{ .mouse = true });
+        const signal = view.signalForBlock(green);
 
         if (signal.hovered) {
             green.color = .{ 0.0, 1.0, 0.5, 1.0 };
@@ -210,11 +209,11 @@ pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
             green.color = .{ 0.0, 1.0, 0.0, 1.0 };
         }
 
-        try view_state.nextAttrs(&.{
+        try view.nextAttrs(&.{
             .{ .width = .{ .fixed = 100 } },
         });
 
-        const blue = try view_state.buildBlock(.{}, null);
+        const blue = try view.buildBlock(.{}, null);
         blue.color = .{ 0.0, 0.0, 1.0, 1.0 };
     }
 
@@ -227,7 +226,7 @@ pub fn renderFrame(app: *App, window_state: *WindowState, sync: bool) !void {
         .viewport_size = .{ size.w, size.h },
     });
 
-    var box = window_state.view_state.root;
+    var box = window_state.view.root;
     while (box) |current| : (box = current.nextPreOrder()) {
         try frame.rect(.{
             .position = current.rect[0] ++ current.rect[1],
