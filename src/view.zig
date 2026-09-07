@@ -18,25 +18,6 @@ const Window = win.Window;
 
 const log = std.log.scoped(.view);
 
-const Stacks = TaggedLinkedList(union(enum) {
-    parent: *Block,
-    axis: Axis,
-    color: [4]f32,
-    width: Sizing,
-    width_shrink: f32,
-    height: Sizing,
-    height_shrink: f32,
-    flags: Block.Flags,
-});
-
-pub const Attribute = Stacks.Value;
-pub const Node = Stacks.Node;
-pub const StackField = Stacks.Tag;
-
-fn stackFlag(field: StackField) u64 {
-    return @as(u64, 1) << @intFromEnum(field);
-}
-
 pub const View = @This();
 
 arena: heap.ArenaAllocator,
@@ -302,6 +283,25 @@ fn popFlagged(self: *View) void {
             if (self.stacks.pop(@enumFromInt(field.value)) == null) unreachable;
         }
     }
+}
+
+const Stacks = TaggedLinkedList(union(enum) {
+    parent: *Block,
+    axis: Axis,
+    color: [4]f32,
+    width: Sizing,
+    width_shrink: f32,
+    height: Sizing,
+    height_shrink: f32,
+    flags: Block.Flags,
+});
+
+pub const Attribute = Stacks.Value;
+pub const Node = Stacks.Node;
+pub const StackField = Stacks.Tag;
+
+fn stackFlag(field: StackField) u64 {
+    return @as(u64, 1) << @intFromEnum(field);
 }
 
 const Cache = struct {
