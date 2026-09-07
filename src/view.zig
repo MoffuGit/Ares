@@ -111,10 +111,10 @@ pub fn finish(self: *View) void {
     _ = self.frame_arenas[arena_index].reset(.retain_capacity);
 }
 
-pub fn signalForBlock(self: *View, block: *Block) Signals {
+pub fn signalForBlock(self: *View, block: *Block) Signal {
     const flags = block.flags;
 
-    var signal: Signals = .none;
+    var signal: Signal = .none;
 
     const mouse = self.mouse;
     const rect = block.rect;
@@ -285,6 +285,19 @@ fn popFlagged(self: *View) void {
     }
 }
 
+pub fn spacer(self: *View, sizing: Sizing) !Signal {
+    const parent = self.stacks.get(.parent).head;
+    const axis: Axis = if (parent) |p| p.value.axis else .x;
+
+    switch (axis) {
+        .x => try self.nextAttr(.{ .width = sizing }),
+        .y => try self.nextAttr(.{ .height = sizing }),
+    }
+
+    const block = try self.buildBlock(.{}, null);
+    return self.signalForBlock(block);
+}
+
 const Stacks = TaggedLinkedList(union(enum) {
     parent: *Block,
     axis: Axis,
@@ -324,8 +337,8 @@ pub const Sizing = union(enum) {
     percent: f32,
 };
 
-pub const Signals = packed struct {
-    const none: Signals = .{
+pub const Signal = packed struct {
+    const none: Signal = .{
         .hovered = false,
         .mouseover = false,
     };

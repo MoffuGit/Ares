@@ -22,7 +22,7 @@ const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
             .{
                 .vertex_fn = "rectVertexShader",
                 .fragment_fn = "rectFragmentShader",
-                .blending_enabled = false,
+                .blending_enabled = true,
                 .step_fn = .per_instance,
                 .vertex_attributes = render.Rect,
             },
